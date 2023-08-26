@@ -1,11 +1,12 @@
-import { use } from 'i18next';
+/* eslint-disable import/no-named-as-default-member */
+import { getLocales } from 'expo-localization';
+import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import { getLocales } from 'react-native-localize';
 
 import en from './localization/locales/en/translation.json';
 import zh_CN from './localization/locales/zh_CN/translation.json';
 
-void use(initReactI18next).init({
+void i18n.use(initReactI18next).init({
   lng: getLocales()[0].languageCode,
   fallbackLng: 'en',
   resources: {
@@ -16,6 +17,7 @@ void use(initReactI18next).init({
       translation: zh_CN,
     },
   },
+  compatibilityJSON: 'v3',
 });
 
 export { default } from 'i18next';

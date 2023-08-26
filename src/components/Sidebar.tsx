@@ -6,6 +6,7 @@ import { useWikiFolders } from '../hooks/useWikiFolders';
 const SidebarContainer = styled.View`
   flex: 1;
   background-color: #f5f5f5;
+  width: 300px;
 `;
 
 const WikiItem = styled.TouchableOpacity`
@@ -25,7 +26,7 @@ const ConfigButton = styled.TouchableOpacity`
 
 export const Sidebar = () => {
   const { t } = useTranslation();
-  const wikis = useWikiFolders();
+  const wikis = []; // useWikiFolders();
 
   return (
     <SidebarContainer>
