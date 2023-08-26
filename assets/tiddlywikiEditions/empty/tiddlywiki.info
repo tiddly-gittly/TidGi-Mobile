@@ -1,0 +1,11 @@
+{
+	"description": "Empty edition",
+	"plugins": [
+	],
+	"themes": [
+		"tiddlywiki/vanilla"
+	],
+	"languages": [
+		"zh-Hans"
+	]
+}
