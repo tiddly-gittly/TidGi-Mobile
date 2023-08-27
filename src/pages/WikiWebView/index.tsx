@@ -1,6 +1,5 @@
 import React from 'react';
 import { styled } from 'styled-components/native';
-import { Sidebar } from '../../components/Sidebar';
 import { WikiViewer } from './WikiViewer';
 
 const Container = styled.View`
@@ -12,7 +11,6 @@ const Container = styled.View`
 export const WikiWebView: React.FC = () => {
   return (
     <Container>
-      <Sidebar />
       <WikiViewer />
     </Container>
   );

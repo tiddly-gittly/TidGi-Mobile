@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
-import { useWikiFolders } from '../hooks/useWikiFolders';
+import { useWikiFolders } from '../../hooks/useWikiFolders';
 
 const SidebarContainer = styled.View`
   flex: 1;
@@ -24,7 +24,7 @@ const ConfigButton = styled.TouchableOpacity`
   padding: 10px;
 `;
 
-export const Sidebar = () => {
+export const MainMenu = () => {
   const { t } = useTranslation();
   const wikis = []; // useWikiFolders();
 
