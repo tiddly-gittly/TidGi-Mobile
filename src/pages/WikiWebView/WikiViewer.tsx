@@ -13,6 +13,7 @@ const WebViewContainer = styled.View`
 class WikiStorage {
   save(data: string) {
     console.log('Saved', data);
+    return true;
   }
 }
 enum WikiStorageChannel {
@@ -25,15 +26,28 @@ export const WikiStorageIPCDescriptor: ProxyDescriptor = {
   },
 };
 const wikiStorage = new WikiStorage();
+const tryWikiStorage = `
+const wikiStorage = window.PostMessageCat(${JSON.stringify(WikiStorageIPCDescriptor)});
+wikiStorage.save('Hello World').then(console.log);
+// play with it: window.wikiStorage.save('BBB').then(console.log)
+window.wikiStorage = wikiStorage;
+`;
 
 export const WikiViewer = () => {
   const wikiHTMLString = useTiddlyWiki();
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
+    window.onerror = function(message, sourcefile, lineno, colno, error) {
+      if (error === null) return false;
+      alert("Message: " + message + " - Source: " + sourcefile + " Line: " + lineno + ":" + colno);
+      console.error(error);
+      return true;
+    };
+
     ${webviewPreloadedJS}
 
-    const wikiStorage = window.PostMessageCat(${JSON.stringify(WikiStorageIPCDescriptor)});
-    wikiStorage.save('Hello World');
+    ${tryWikiStorage}
+    
     true; // note: this is required, or you'll sometimes get silent failures
   `, []);
   return (
@@ -43,6 +57,8 @@ export const WikiViewer = () => {
         onMessage={onMessageReference.current}
         ref={webViewReference}
         injectedJavaScriptBeforeContentLoaded={preloadScript}
+        // Open chrome://inspect/#devices to debug the WebView
+        webviewDebuggingEnabled
       />
     </WebViewContainer>
   );
