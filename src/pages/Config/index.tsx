@@ -1,6 +1,8 @@
-import React from 'react';
+import { StackScreenProps } from '@react-navigation/stack';
+import React, { FC } from 'react';
 import { Switch, TextInput } from 'react-native';
 import { styled } from 'styled-components/native';
+import { RootStackParameterList } from '../../App';
 import { useConfig } from './useConfig';
 
 const ConfigContainer = styled.View`
@@ -8,7 +10,7 @@ const ConfigContainer = styled.View`
   padding: 20px;
 `;
 
-export const Config = () => {
+export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = () => {
   const [config, setConfig] = useConfig();
 
   return (

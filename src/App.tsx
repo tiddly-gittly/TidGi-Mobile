@@ -1,29 +1,36 @@
-import { NavigationContainer } from '@react-navigation/native';
+/* eslint-disable @typescript-eslint/consistent-type-definitions */
+import { NavigationContainer, NavigationProp } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import i18n from 'i18next';
 import React from 'react';
 import './i18n/index';
+import { HeaderBackButton } from '@react-navigation/elements';
 import { I18nextProvider, useTranslation } from 'react-i18next';
-import { Button } from 'react-native';
 import { Config } from './pages/Config';
 import { MainMenu } from './pages/MainMenu';
-import { WikiWebView } from './pages/WikiWebView';
+import { WikiWebView, WikiWebViewProps } from './pages/WikiWebView';
 
-const Stack = createStackNavigator();
+export type RootStackParameterList = {
+  Config: undefined;
+  MainMenu: undefined;
+  WikiWebView: WikiWebViewProps;
+};
+const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
   return (
     <I18nextProvider i18n={i18n}>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName='WikiWebView'>
+        <Stack.Navigator initialRouteName='MainMenu'>
           <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
           <Stack.Screen
             name='Config'
             component={Config}
             options={({ navigation }) => ({
               presentation: 'modal',
-              headerLeft: () => <Button title={t('Menu.Back')} onPress={navigation.goBack} />,
+              headerTitle: t('Preference.Title'),
+              headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={(navigation as NavigationProp<ReactNavigation.RootParamList>).goBack} />,
             })}
           />
           <Stack.Screen name='MainMenu' component={MainMenu} />

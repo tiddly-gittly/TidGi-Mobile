@@ -269,6 +269,7 @@
   },
   "Cancel": "Cancel",
   "Preference": {
+    "Title": "Preference",
     "ClearBrowsingData": "Clear Browsing Data (git isn't affected)",
     "General": "UI & Interact",
     "Sync": "Sync & Backup",

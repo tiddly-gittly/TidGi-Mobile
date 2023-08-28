@@ -4,6 +4,7 @@ import type { ProxyDescriptor } from 'react-native-postmessage-cat/common';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { useTiddlyWiki } from './useTiddlyWiki';
+import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 
 const WebViewContainer = styled.View`
   flex: 2;
@@ -33,7 +34,10 @@ wikiStorage.save('Hello World').then(console.log);
 window.wikiStorage = wikiStorage;
 `;
 
-export const WikiViewer = () => {
+export interface WikiViewerProps {
+  id?: string;
+}
+export const WikiViewer = ({ id }: WikiViewerProps) => {
   const wikiHTMLString = useTiddlyWiki();
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
@@ -50,6 +54,8 @@ export const WikiViewer = () => {
     
     true; // note: this is required, or you'll sometimes get silent failures
   `, []);
+
+  useWikiWebViewNotification();
   return (
     <WebViewContainer>
       <WebView
