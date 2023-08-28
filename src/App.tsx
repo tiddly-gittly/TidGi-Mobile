@@ -7,11 +7,13 @@ import './i18n/index';
 import { HeaderBackButton } from '@react-navigation/elements';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { Config } from './pages/Config';
+import { Importer } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 
 export type RootStackParameterList = {
   Config: undefined;
+  Importer: undefined;
   MainMenu: MainMenuProps;
   WikiWebView: WikiWebViewProps;
 };
@@ -34,6 +36,7 @@ export const App: React.FC = () => {
             })}
           />
           <Stack.Screen name='MainMenu' component={MainMenu} />
+          <Stack.Screen name='Importer' component={Importer} />
         </Stack.Navigator>
       </NavigationContainer>
     </I18nextProvider>

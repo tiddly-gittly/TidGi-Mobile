@@ -14,9 +14,6 @@ const WikiItem = styled.Button`
 `;
 
 const ConfigButton = styled.Button`
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
   padding: 10px;
 `;
 
@@ -51,6 +48,12 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         title={t('SideBar.Preferences')}
         onPress={() => {
           navigation.navigate('Config');
+        }}
+      />
+      <ConfigButton
+        title={t('Menu.ScanQRToSync')}
+        onPress={() => {
+          navigation.navigate('Importer');
         }}
       />
     </Container>

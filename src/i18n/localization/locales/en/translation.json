@@ -443,7 +443,8 @@
     "PrintPage": "Print Page",
     "PrintActiveTiddler": "Print Active Tiddler",
     "Wiki": "Wiki",
-    "ExportWholeWikiHTML": "Export Whole Wiki as HTML to folder"
+    "ExportWholeWikiHTML": "Export Whole Wiki as HTML to folder",
+    "ScanQRToSync": "Scan QR To Sync"
   },
   "ErrorMessage": "Error message",
   "ClickForDetails": "Click For Details",
@@ -496,5 +497,8 @@
   "Title": "Title",
   "Delete": "Delete",
   "Edit": "Edit",
-  "Open": "Open"
+  "Open": "Open",
+  "Import": {
+    "ImportWiki": "Import Wiki {{wikiUrl}}"
+  }
 }

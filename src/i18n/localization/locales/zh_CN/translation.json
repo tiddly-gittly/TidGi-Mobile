@@ -82,7 +82,8 @@
     "PrintPage": "打印页面",
     "PrintActiveTiddler": "打印当前笔记",
     "Wiki": "Wiki",
-    "ExportWholeWikiHTML": "导出整个Wiki为HTML存入文件夹"
+    "ExportWholeWikiHTML": "导出整个Wiki为HTML存入文件夹",
+    "ScanQRToSync": "扫描二维码来同步"
   },
   "AddWorkspace": {
     "AddWorkspace": "添加工作区",
@@ -473,5 +474,8 @@
     "StopWorkflow": "停止工作流",
     "ToggleDebugPanel": "切换开关调试面板",
     "ClearDebugPanel": "清空调试面板"
+  },
+  "Import": {
+    "ImportWiki": "导入Wiki {{wikiUrl}}"
   }
 }
