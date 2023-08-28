@@ -55,7 +55,7 @@ export const WikiViewer = ({ id }: WikiViewerProps) => {
     true; // note: this is required, or you'll sometimes get silent failures
   `, []);
 
-  useWikiWebViewNotification();
+  useWikiWebViewNotification({ id });
   return (
     <WebViewContainer>
       <WebView

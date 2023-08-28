@@ -7,12 +7,12 @@ import './i18n/index';
 import { HeaderBackButton } from '@react-navigation/elements';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { Config } from './pages/Config';
-import { MainMenu } from './pages/MainMenu';
-import { WikiWebView, WikiWebViewProps } from './pages/WikiWebView';
+import { MainMenu, type MainMenuProps } from './pages/MainMenu';
+import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 
 export type RootStackParameterList = {
   Config: undefined;
-  MainMenu: undefined;
+  MainMenu: MainMenuProps;
   WikiWebView: WikiWebViewProps;
 };
 const Stack = createStackNavigator<RootStackParameterList>();

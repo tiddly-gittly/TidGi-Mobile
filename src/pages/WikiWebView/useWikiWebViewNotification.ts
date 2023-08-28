@@ -21,7 +21,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import type { RootStackParameterList } from '../../App';
 
-export function useWikiWebViewNotification() {
+export function useWikiWebViewNotification({ id }: { id?: string }) {
   const responseListener = useRef<ReturnType<typeof addNotificationResponseReceivedListener>>();
   const gotoWikiListNotificationIdentifier = useRef<string | undefined>();
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'WikiWebView'>['navigation']>();
@@ -30,10 +30,10 @@ export function useWikiWebViewNotification() {
     responseListener.current = addNotificationResponseReceivedListener(response => {
       // response is like `{"actionIdentifier": "expo.modules.notifications.actions.DEFAULT", "notification": {"date": 1693231845518, "request": {"content": [Object], "identifier": "98a087f5-0383-4b8e-bda8-b386521cc999", "trigger": [Object]}}}`
       const route = response.notification.request.content.data.route as 'MainMenu';
-      if (route) {
+      if (route && id) {
         navigation.reset({
           index: 0,
-          routes: [{ name: route }],
+          routes: [{ name: route, params: { fromWikiID: id } }],
         });
       }
     });
@@ -72,7 +72,7 @@ export function useWikiWebViewNotification() {
         void dismissNotificationAsync(gotoWikiListNotificationIdentifier.current);
       }
     };
-  }, [navigation]);
+  }, [id, navigation]);
 }
 
 async function registerForPushNotifications() {

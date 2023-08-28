@@ -1,4 +1,3 @@
-import { useNavigation } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import { FC, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,19 +20,20 @@ const ConfigButton = styled.Button`
   padding: 10px;
 `;
 
-export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = () => {
+export interface MainMenuProps {
+  fromWikiID?: string;
+}
+export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
-  const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
+  const { fromWikiID } = route.params ?? {};
 
   const wikis = [{ id: 'aaa' }]; // useWikiFolders();
   useEffect(() => {
     const defaultWiki = wikis[0];
-    if (defaultWiki !== undefined) {
-      // DEBUG: console defaultWiki.id
-      console.log(`defaultWiki.id`, defaultWiki.id);
+    if (defaultWiki !== undefined && fromWikiID === undefined) {
       navigation.navigate('WikiWebView', { id: defaultWiki.id });
     }
-  }, [navigation, wikis]);
+  }, [navigation, wikis, fromWikiID]);
 
   return (
     <Container>
@@ -42,8 +42,6 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
           key={wiki.id}
           title={wiki.id}
           onPress={() => {
-            // DEBUG: console { id: wiki.id }
-            console.log(`{ id: wiki.id }`, { id: wiki.id });
             navigation.navigate('WikiWebView', { id: wiki.id });
           }}
         />
@@ -52,8 +50,6 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
       <ConfigButton
         title={t('SideBar.Preferences')}
         onPress={() => {
-          // DEBUG: console navigation.navigate
-          console.log(`navigation.navigate`, navigation.navigate);
           navigation.navigate('Config');
         }}
       />
