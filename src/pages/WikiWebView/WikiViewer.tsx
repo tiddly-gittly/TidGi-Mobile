@@ -3,6 +3,7 @@ import { ProxyPropertyType, useRegisterProxy, webviewPreloadedJS } from 'react-n
 import type { ProxyDescriptor } from 'react-native-postmessage-cat/common';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
+import { IWikiWorkspace } from '../../store/wiki';
 import { useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 
@@ -35,9 +36,9 @@ window.wikiStorage = wikiStorage;
 `;
 
 export interface WikiViewerProps {
-  id?: string;
+  wikiWorkspace: IWikiWorkspace;
 }
-export const WikiViewer = ({ id }: WikiViewerProps) => {
+export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const wikiHTMLString = useTiddlyWiki();
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
@@ -55,11 +56,11 @@ export const WikiViewer = ({ id }: WikiViewerProps) => {
     true; // note: this is required, or you'll sometimes get silent failures
   `, []);
 
-  useWikiWebViewNotification({ id });
+  useWikiWebViewNotification({ id: wikiWorkspace.id });
   return (
     <WebViewContainer>
       <WebView
-        source={{ html: wikiHTMLString }}
+        source={{ html: `${wikiWorkspace.wikiFolderLocation}/index.html` }}
         onMessage={onMessageReference.current}
         ref={webViewReference}
         injectedJavaScriptBeforeContentLoaded={preloadScript}

@@ -3,6 +3,7 @@ import { FC, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
+import { useWikiStore } from '../../store/wiki';
 
 const Container = styled.View`
   flex: 1;
@@ -24,7 +25,8 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   const { t } = useTranslation();
   const { fromWikiID } = route.params ?? {};
 
-  const wikis = [{ id: 'aaa' }]; // useWikiFolders();
+  const wikis = useWikiStore(state => state.wikis);
+
   useEffect(() => {
     const defaultWiki = wikis[0];
     if (defaultWiki !== undefined && fromWikiID === undefined) {
