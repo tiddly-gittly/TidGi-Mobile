@@ -14,7 +14,7 @@ export function useTiddlyWiki(htmlUri: string) {
     const fetchHTML = async () => {
       try {
         setHtmlContent(null);
-        const content = await fs.readAsStringAsync(htmlUri);
+        const content = await fs.readAsStringAsync(htmlUri); // 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html');
         const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
         setHtmlContent(modifiedContent);
       } catch (error) {
