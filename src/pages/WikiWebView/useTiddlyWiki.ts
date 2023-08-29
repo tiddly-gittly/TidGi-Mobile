@@ -9,17 +9,13 @@ export function useTiddlyWiki(htmlUri: string) {
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [loadHtmlError, setLoadHtmlError] = useState('');
 
-  // for debug
-  // const emptyHtmlUri = useEmptyWikiUri()
-  // htmlUri = emptyHtmlUri
-
   useEffect(() => {
     if (!htmlUri) return;
     const fetchHTML = async () => {
       try {
         setHtmlContent(null);
         const content = await fs.readAsStringAsync(htmlUri);
-        const modifiedContent = content; // .replace('</body>', '<script>console.log("loaded")</script></body>');
+        const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
         setHtmlContent(modifiedContent);
       } catch (error) {
         console.error(error, (error as Error).stack);
@@ -32,14 +28,20 @@ export function useTiddlyWiki(htmlUri: string) {
   return { htmlContent, loadHtmlError };
 }
 
-export function useEmptyWikiUri() {
-  const [htmlUri, setHtmlUri] = useState('');
+export function useEmptyTiddlyWiki() {
+  const [htmlContent, setHtmlContent] = useState('');
 
-  const [assets] = useAssets([emptyWiki]);
+  const [assets, error] = useAssets([emptyWiki]);
   useEffect(() => {
     const emptyWikiFileUri = assets?.[0]?.localUri;
-    if (!emptyWikiFileUri) return;
-    setHtmlUri(emptyWikiFileUri);
+    if (emptyWikiFileUri === undefined || emptyWikiFileUri === null) return;
+    const fetchHTML = async () => {
+      const content = await fs.readAsStringAsync(emptyWikiFileUri);
+      const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
+      setHtmlContent(modifiedContent);
+    };
+
+    void fetchHTML();
   }, [assets]);
-  return htmlUri;
+  return htmlContent;
 }

@@ -7,7 +7,7 @@ import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { getWikiFilePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
-import { useTiddlyWiki } from './useTiddlyWiki';
+import { useEmptyTiddlyWiki, useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 
 const WebViewContainer = styled.View`
@@ -60,6 +60,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   `, []);
 
   useWikiWebViewNotification({ id: wikiWorkspace.id });
+  const emptyHtmlString = useEmptyTiddlyWiki();
   return (
     <WebViewContainer>
       {wikiHTMLString === null
@@ -68,7 +69,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
           ? (
             <WebView
               originWhitelist={['*']}
-              source={{ uri: wikiHTMLString }}
+              source={{ html: emptyHtmlString }}
               onMessage={onMessageReference.current}
               ref={webViewReference}
               injectedJavaScriptBeforeContentLoaded={preloadScript}
