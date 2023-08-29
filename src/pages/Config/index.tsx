@@ -1,9 +1,12 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import React, { FC } from 'react';
-import { Switch, TextInput } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { Button } from 'react-native';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
-import { useConfig } from './useConfig';
+import { Performance } from './Performance';
+import { TiddlyWiki } from './TiddlyWiki';
+import { useOpenDirectory } from './useOpenDirectory';
 
 const ConfigContainer = styled.View`
   flex: 1;
@@ -11,21 +14,18 @@ const ConfigContainer = styled.View`
 `;
 
 export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = () => {
-  const [config, setConfig] = useConfig();
+  const { t } = useTranslation();
+
+  const { isOpeningDirectory, openDocumentDirectory } = useOpenDirectory();
 
   return (
     <ConfigContainer>
-      <Switch
-        value={config.runInBackground}
-        onValueChange={(value) => {
-          setConfig({ ...config, runInBackground: value });
-        }}
-      />
-      <TextInput
-        value={config.editorName}
-        onChangeText={(name) => {
-          setConfig({ ...config, editorName: name });
-        }}
+      <Performance />
+      <TiddlyWiki />
+      <Button
+        title={t('Preference.OpenWikisFolder')}
+        onPress={openDocumentDirectory}
+        disabled={isOpeningDirectory}
       />
     </ConfigContainer>
   );

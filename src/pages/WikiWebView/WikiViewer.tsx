@@ -39,7 +39,7 @@ export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
-  const wikiHTMLString = useTiddlyWiki();
+  const wikiHTMLString = useTiddlyWiki(`${wikiWorkspace.wikiFolderLocation}/index.html`);
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
@@ -60,7 +60,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   return (
     <WebViewContainer>
       <WebView
-        source={{ html: `${wikiWorkspace.wikiFolderLocation}/index.html` }}
+        source={{ html: wikiHTMLString }}
         onMessage={onMessageReference.current}
         ref={webViewReference}
         injectedJavaScriptBeforeContentLoaded={preloadScript}

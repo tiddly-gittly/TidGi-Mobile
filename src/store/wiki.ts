@@ -31,7 +31,7 @@ export const useWikiStore = create<WikiState & WikiActions>()(
   immer(devtools(
     persist(
       (set) => ({
-        wikis: [],
+        wikis: [] as IWikiWorkspace[],
         add: (newWikiWorkspace) => {
           let id: string | undefined;
           set((state) => {

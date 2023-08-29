@@ -298,6 +298,7 @@
     "ShowSideBarDetail": "侧边栏让你可以在工作区之间快速切换",
     "ShowSideBarText": "展示侧边栏上按钮的文本",
     "OpenLogFolder": "打开Log文件夹",
+    "OpenWikisFolder": "打开Wiki存储文件夹",
     "OpenLogFolderDetail": "上报问题时，请打开日期最新的一个 .log 文件，将其内容发送给开发者，或黏贴到 pastebin.com 后将 URL 黏贴到 Github Issue 里",
     "OpenMetaDataFolder": "打开太记工作区元信息文件夹",
     "OpenMetaDataFolderDetail": "太微的数据和太记的工作区数据是分开存放的，太记的数据包含工作区的设置等，它们以 JSON 形式存放在这个文件夹里。",
@@ -393,7 +394,9 @@
       "TimeoutDuration": "超时时长",
       "OpenModelFolder": "打开模型文件夹",
       "OpenModelFolderDescription": "推理程序将在这个文件夹里寻找模型，请将你下载的模型放到这里（或使用命令行创建软链接到这里）"
-    }
+    },
+    "RunInBackground": "后台运行",
+    "RunInBackgroundDescription": "让应用在切换到后台后保持运行，以便下次开启时不需要加载时间。"
   },
   "Error": {
     "InitWikiGitError": "E-1 笔记仓库初始化失败错误",

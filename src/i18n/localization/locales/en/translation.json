@@ -288,6 +288,7 @@
     "AttachToTaskbar": "Attach to taskbar",
     "AttachToMenuBar": "Attach to menu bar",
     "AttachToMenuBarTip": "Make  a small TidGi popup window that pop when you click appbar mini icon. Tip: Right-click on mini app icon to access context menu.",
+    "OpenWikisFolder": "Open Wikis Folder",
     "OpenLogFolder": "Open the Log folder",
     "OpenLogFolderDetail": "When reporting a problem, please open the latest .log file in the folder and send its content to the developer, or paste it to pastebin.com and then paste the URL into the Github Issue",
     "SystemDefaultTheme": "System Defalut Theme",
@@ -377,7 +378,9 @@
       "UpdateTimeoutDuration": "Unit (Second). If a language model does not respond after so long, it will automatically terminate the conversation and stop waiting, as this basically means that it has stopped running. It needs to be greater than 0 and not too small, otherwise it will not be output properly.",
       "OpenModelFolder": "Open Model Folder",
       "OpenModelFolderDescription": "The inference program will look for models in this folder, please put your downloaded models here (or use the command line to create a soft link to here)"
-    }
+    },
+    "RunInBackground": "Run In Background",
+    "RunInBackgroundDescription": "Keep the app running after switching to the background so that it doesn't take time to load the next time it's opened."
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",

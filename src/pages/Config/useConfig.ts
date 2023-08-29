@@ -1,41 +1,39 @@
-import * as fs from 'expo-file-system';
-import { useEffect, useState } from 'react';
-import { CONFIG_PATH } from '../../constants/paths';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
+import { createJSONStorage, devtools, persist } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
 
-interface IConfig {
-  editorName: string;
+export interface ConfigState {
   runInBackground: boolean;
+  userName: string;
+}
+const defaultConfig: ConfigState = {
+  runInBackground: true,
+  userName: 'TidGi User',
+};
+interface ConfigActions {
+  set: (newConfig: Partial<ConfigState>) => void;
 }
 
-export const useConfig = (): [IConfig, (newConfig: IConfig) => void] => {
-  const [config, setConfig] = useState<IConfig>({
-    runInBackground: false,
-    editorName: 'Default Editor',
-  });
-
-  useEffect(() => {
-    const loadConfig = async () => {
-      if (CONFIG_PATH === undefined) return;
-      try {
-        const savedConfig = await fs.readAsStringAsync(CONFIG_PATH);
-        setConfig(JSON.parse(savedConfig) as IConfig);
-      } catch (error) {
-        console.warn('Error loading configuration:', error);
-      }
-    };
-
-    void loadConfig();
-  }, []);
-
-  const updateConfig = async (newConfig: IConfig) => {
-    if (CONFIG_PATH === undefined) return;
-    try {
-      await fs.writeAsStringAsync(CONFIG_PATH, JSON.stringify(newConfig));
-      setConfig(newConfig);
-    } catch (error) {
-      console.error('Error saving configuration:', error);
-    }
-  };
-
-  return [config, updateConfig];
-};
+export const useConfigStore = create<ConfigState & ConfigActions>()(
+  immer(devtools(
+    persist(
+      (set) => ({
+        ...defaultConfig,
+        set: (newConfig) => {
+          set((state) => {
+            for (const key in newConfig) {
+              if (key in state) {
+                state[key as keyof ConfigState] = newConfig[key as keyof ConfigState] as never;
+              }
+            }
+          });
+        },
+      }),
+      {
+        name: 'config-storage',
+        storage: createJSONStorage(() => AsyncStorage),
+      },
+    ),
+  )),
+);
