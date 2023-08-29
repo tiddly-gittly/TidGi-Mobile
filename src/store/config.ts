@@ -4,11 +4,13 @@ import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 
 export interface ConfigState {
+  autoOpenDefaultWiki: boolean;
   runInBackground: boolean;
   userName: string;
 }
 const defaultConfig: ConfigState = {
   runInBackground: true,
+  autoOpenDefaultWiki: true,
   userName: 'TidGi User',
 };
 interface ConfigActions {

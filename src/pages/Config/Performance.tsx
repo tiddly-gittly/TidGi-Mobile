@@ -6,7 +6,7 @@ import { useConfigStore } from '../../store/config';
 export function Performance(): JSX.Element {
   const { t } = useTranslation();
 
-  const runInBackground = useConfigStore(state => state.runInBackground);
+  const [runInBackground, autoOpenDefaultWiki] = useConfigStore(state => [state.runInBackground, state.autoOpenDefaultWiki]);
   const setConfig = useConfigStore(state => state.set);
 
   return (
@@ -18,6 +18,14 @@ export function Performance(): JSX.Element {
         value={runInBackground}
         onValueChange={(value) => {
           setConfig({ runInBackground: value });
+        }}
+      />
+      <Text variant='titleLarge'>{t('Preference.AutoOpenDefaultWiki')}</Text>
+      <Text variant='titleLarge'>{t('Preference.AutoOpenDefaultWikiDescription')}</Text>
+      <Switch
+        value={autoOpenDefaultWiki}
+        onValueChange={(value) => {
+          setConfig({ autoOpenDefaultWiki: value });
         }}
       />
     </>

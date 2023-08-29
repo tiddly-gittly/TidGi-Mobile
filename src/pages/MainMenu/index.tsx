@@ -3,6 +3,7 @@ import { FC, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
+import { useConfigStore } from '../../store/config';
 import { useWikiStore } from '../../store/wiki';
 
 const Container = styled.View`
@@ -26,13 +27,15 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   const { fromWikiID } = route.params ?? {};
 
   const wikis = useWikiStore(state => state.wikis);
+  const autoOpenDefaultWiki = useConfigStore(state => state.autoOpenDefaultWiki);
 
   useEffect(() => {
+    if (!autoOpenDefaultWiki) return;
     const defaultWiki = wikis[0];
-    if (defaultWiki !== undefined && fromWikiID === undefined) {
+    if (defaultWiki !== undefined && fromWikiID === undefined && route.name === 'MainMenu') {
       navigation.navigate('WikiWebView', { id: defaultWiki.id });
     }
-  }, [navigation, wikis, fromWikiID]);
+  }, [navigation, wikis, fromWikiID, route.name, autoOpenDefaultWiki]);
 
   return (
     <Container>
