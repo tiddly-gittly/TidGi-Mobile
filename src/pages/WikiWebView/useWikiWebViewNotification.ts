@@ -66,8 +66,6 @@ export function useWikiWebViewNotification({ id }: { id?: string }) {
       if (responseListener.current !== undefined) {
         removeNotificationSubscription(responseListener.current);
       }
-      // DEBUG: console gotoWikiListNotificationIdentifier.current
-      console.log(`gotoWikiListNotificationIdentifier.current`, gotoWikiListNotificationIdentifier.current);
       if (gotoWikiListNotificationIdentifier.current !== undefined) {
         void dismissNotificationAsync(gotoWikiListNotificationIdentifier.current);
       }
