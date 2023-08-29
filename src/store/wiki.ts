@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as fs from 'expo-file-system';
-import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -42,7 +41,7 @@ export const useWikiStore = create<WikiState & WikiActions>()(
             newWikiWorkspace.name = newWikiWorkspace.name || 'wiki';
             // can have same name, but not same id
             const sameNameWorkspace = state.wikis.find((workspace) => workspace.name === newWikiWorkspace.name);
-            const id = sameNameWorkspace === undefined ? newWikiWorkspace.name : `${newWikiWorkspace.name}_${nanoid()}`;
+            const id = sameNameWorkspace === undefined ? newWikiWorkspace.name : `${newWikiWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
             const wikiFolderLocation = `${fs.documentDirectory}${id}`;
             const newWikiWorkspaceWithID = { ...newWikiWorkspace, id, wikiFolderLocation };
             state.wikis.push(newWikiWorkspaceWithID);

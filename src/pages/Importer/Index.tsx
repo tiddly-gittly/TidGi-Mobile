@@ -1,11 +1,13 @@
 /* eslint-disable unicorn/no-useless-undefined */
+import { StackScreenProps } from '@react-navigation/stack';
 import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, StyleSheet, Text, View } from 'react-native';
+import { RootStackParameterList } from '../../App';
 import { useImportHTML } from './useImportHTML';
 
-export function Importer() {
+export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation }) => {
   const { t } = useTranslation();
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [scanned, setScanned] = useState(false);
@@ -33,7 +35,7 @@ export function Importer() {
     }
   }, []);
 
-  const { error: importError, status: importStatus, storeHtml } = useImportHTML();
+  const { error: importError, status: importStatus, storeHtml, importedWikiWorkspace } = useImportHTML();
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -71,9 +73,34 @@ export function Importer() {
           <Text>{importStatus}</Text>
         </>
       )}
+      {importStatus === 'error' && (
+        <>
+          <Text>{importError}</Text>
+          <Button
+            title={'Tap to Scan Again'}
+            onPress={() => {
+              setScanned(false);
+              setWikiUrl(undefined);
+            }}
+          />
+        </>
+      )}
+      {importStatus !== 'idle' && importStatus !== 'error' && (
+        <>
+          <Text>{importStatus}</Text>
+          {importedWikiWorkspace !== undefined && (
+            <Button
+              title={`${t('Open')} ${importedWikiWorkspace.name}`}
+              onPress={() => {
+                navigation.navigate('WikiWebView', { id: importedWikiWorkspace.id });
+              }}
+            />
+          )}
+        </>
+      )}
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {

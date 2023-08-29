@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
+import { shareAsync } from 'expo-sharing';
 import { useCallback, useState } from 'react';
 import { Linking } from 'react-native';
 import { Snackbar } from 'react-native-paper';
@@ -17,7 +18,11 @@ export function useOpenDirectory() {
       const canOpen = await Linking.canOpenURL(WIKI_FOLDER_PATH);
 
       if (canOpen) {
-        await Linking.openURL(WIKI_FOLDER_PATH);
+        // await Linking.openURL(WIKI_FOLDER_PATH);
+        await shareAsync(
+          WIKI_FOLDER_PATH,
+          { dialogTitle: 'Open folder with...' },
+        );
       } else {
         setOpenDocumentDirectorySnackBarVisible(true);
         setOpenDocumentDirectorySnackBarErrorMessage('Cannot open directory in file manager.');

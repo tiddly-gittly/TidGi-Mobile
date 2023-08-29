@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useMemo } from 'react';
+import { Text } from 'react-native-paper';
 import { ProxyPropertyType, useRegisterProxy, webviewPreloadedJS } from 'react-native-postmessage-cat';
 import type { ProxyDescriptor } from 'react-native-postmessage-cat/common';
 import { WebView } from 'react-native-webview';
@@ -40,7 +42,7 @@ export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
-  const wikiHTMLString = useTiddlyWiki(getWikiFilePath(wikiWorkspace));
+  const { htmlContent: wikiHTMLString, loadHtmlError } = useTiddlyWiki(getWikiFilePath(wikiWorkspace));
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
@@ -60,14 +62,21 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   useWikiWebViewNotification({ id: wikiWorkspace.id });
   return (
     <WebViewContainer>
-      <WebView
-        source={{ html: wikiHTMLString }}
-        onMessage={onMessageReference.current}
-        ref={webViewReference}
-        injectedJavaScriptBeforeContentLoaded={preloadScript}
-        // Open chrome://inspect/#devices to debug the WebView
-        webviewDebuggingEnabled
-      />
+      {wikiHTMLString === null
+        ? <Text>{loadHtmlError || 'Loading...'}</Text>
+        : (wikiHTMLString
+          ? (
+            <WebView
+              originWhitelist={['*']}
+              source={{ uri: wikiHTMLString }}
+              onMessage={onMessageReference.current}
+              ref={webViewReference}
+              injectedJavaScriptBeforeContentLoaded={preloadScript}
+              // Open chrome://inspect/#devices to debug the WebView
+              webviewDebuggingEnabled
+            />
+          )
+          : <Text>{loadHtmlError || 'No Content'}</Text>)}
     </WebViewContainer>
   );
 };

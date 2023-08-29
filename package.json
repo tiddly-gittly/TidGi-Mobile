@@ -27,7 +27,6 @@
     "immer": "^10.0.2",
     "lodash": "^4.17.21",
     "memize": "^2.1.0",
-    "nanoid": "^4.0.2",
     "react": "18.2.0",
     "react-i18next": "^13.2.0",
     "react-native": "0.72.4",
@@ -44,7 +43,8 @@
     "styled-components": "^6.0.7",
     "tiddlywiki": "^5.3.1",
     "tw5-typed": "^0.3.9",
-    "zustand": "^4.4.1"
+    "zustand": "^4.4.1",
+    "expo-sharing": "~11.5.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
