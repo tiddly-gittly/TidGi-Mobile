@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Switch, Text } from 'react-native';
-import { useConfigStore } from './useConfig';
+import { Switch, Text } from 'react-native-paper';
+import { useConfigStore } from '../../store/config';
 
 export function Performance(): JSX.Element {
   const { t } = useTranslation();
@@ -11,8 +11,8 @@ export function Performance(): JSX.Element {
 
   return (
     <>
-      <Text>{t('Preference.Performance')}</Text>
-      <Text>{t('Preference.RunInBackground')}</Text>
+      <Text variant='headlineLarge'>{t('Preference.Performance')}</Text>
+      <Text variant='titleLarge'>{t('Preference.RunInBackground')}</Text>
       <Text>{t('Preference.RunInBackgroundDescription')}</Text>
       <Switch
         value={runInBackground}

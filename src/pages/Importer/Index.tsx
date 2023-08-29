@@ -64,11 +64,11 @@ export function Importer() {
           <Button
             title={t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
             onPress={async () => {
-              setScanned(false);
               await storeHtml(wikiUrl.href, 'wiki');
+              setWikiUrl(undefined);
             }}
           />
-          {importStatus}
+          <Text>{importStatus}</Text>
         </>
       )}
     </View>

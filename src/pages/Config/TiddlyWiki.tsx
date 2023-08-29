@@ -2,8 +2,8 @@ import useDebouncedCallback from 'beautiful-react-hooks/useDebouncedCallback';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Text, TextInput } from 'react-native';
-import { useConfigStore } from './useConfig';
+import { Text, TextInput } from 'react-native-paper';
+import { useConfigStore } from '../../store/config';
 
 export function TiddlyWiki(): JSX.Element {
   const { t } = useTranslation();
@@ -17,8 +17,8 @@ export function TiddlyWiki(): JSX.Element {
   }, []);
   return (
     <>
-      <Text>{t('Preference.TiddlyWiki')}</Text>
-      <Text>{t('Preference.DefaultUserName')}</Text>
+      <Text variant='headlineLarge'>{t('Preference.TiddlyWiki')}</Text>
+      <Text variant='titleLarge'>{t('Preference.DefaultUserName')}</Text>
       <Text>{t('Preference.DefaultUserNameDetail')}</Text>
       <TextInput
         value={userName}
