@@ -43,6 +43,20 @@ export interface WikiViewerProps {
 }
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { htmlContent: wikiHTMLString, loadHtmlError } = useTiddlyWiki(getWikiFilePath(wikiWorkspace));
+
+  useWikiWebViewNotification({ id: wikiWorkspace.id });
+  return (
+    <WebViewContainer>
+      {wikiHTMLString === null
+        ? <Text>{loadHtmlError || 'Loading...'}</Text>
+        : (wikiHTMLString
+          ? <WebViewWithPreload wikiHTMLString={wikiHTMLString} />
+          : <Text>{loadHtmlError || 'No Content'}</Text>)}
+    </WebViewContainer>
+  );
+};
+
+function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
@@ -59,24 +73,15 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
     true; // note: this is required, or you'll sometimes get silent failures
   `, []);
 
-  useWikiWebViewNotification({ id: wikiWorkspace.id });
   return (
-    <WebViewContainer>
-      {wikiHTMLString === null
-        ? <Text>{loadHtmlError || 'Loading...'}</Text>
-        : (wikiHTMLString
-          ? (
-            <WebView
-              originWhitelist={['*']}
-              source={{ html: wikiHTMLString }}
-              onMessage={onMessageReference.current}
-              ref={webViewReference}
-              injectedJavaScriptBeforeContentLoaded={preloadScript}
-              // Open chrome://inspect/#devices to debug the WebView
-              webviewDebuggingEnabled
-            />
-          )
-          : <Text>{loadHtmlError || 'No Content'}</Text>)}
-    </WebViewContainer>
+    <WebView
+      originWhitelist={['*']}
+      source={{ html: wikiHTMLString }}
+      onMessage={onMessageReference.current}
+      ref={webViewReference}
+      injectedJavaScriptBeforeContentLoaded={preloadScript}
+      // Open chrome://inspect/#devices to debug the WebView
+      webviewDebuggingEnabled
+    />
   );
-};
+}
