@@ -6,9 +6,9 @@ import { Developer } from './Developer';
 import { Performance } from './Performance';
 import { TiddlyWiki } from './TiddlyWiki';
 
-const ConfigContainer = styled.View`
-  flex: 1;
+const ConfigContainer = styled.ScrollView`
   padding: 20px;
+  padding-bottom: 50px;
 `;
 
 export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = () => {

@@ -21,7 +21,7 @@ export function Developer(): JSX.Element {
         disabled={isOpeningDirectory}
         mode='outlined'
       >
-        {t('Preference.OpenWikisFolder')}
+        <Text>{t('Preference.OpenWikisFolder')}</Text>
       </Button>
       {OpenDirectoryResultSnackBar}
     </>
