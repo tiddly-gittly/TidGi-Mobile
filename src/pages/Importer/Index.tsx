@@ -14,6 +14,26 @@ const Container = styled.View`
   height: 100%;
   overflow-y: scroll;
 `;
+const ButtonText = styled.Text`
+  height: 30px;
+`;
+const LargeBarCodeScanner = styled(BarCodeScanner)`
+  height: 80%;
+  width: 100%;
+`;
+const ImportWikiButton = styled(Button)`
+  margin-top: 20px;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+`;
+const ImportStatusText = styled.Text`
+  height: 30px;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+`;
 
 export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation }) => {
   const { t } = useTranslation();
@@ -65,18 +85,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   return (
     <Container>
       {qrScannerOpen && (
-        <BarCodeScanner
+        <LargeBarCodeScanner
           // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
           onBarCodeScanned={handleBarCodeScanned}
         />
       )}
       <Button
+        mode='contained'
         onPress={() => {
-          setQrScannerOpen(true);
+          setQrScannerOpen(!qrScannerOpen);
         }}
       >
-        <Text>Open QRCode Scanner</Text>
+        {/* eslint-disable-next-line react-native/no-raw-text */}
+        <ButtonText>Toggle QRCode Scanner</ButtonText>
       </Button>
       <TextInput
         value={scannedString}
@@ -85,27 +107,21 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         }}
       />
       {!qrScannerOpen && wikiUrl !== undefined && (
-        <>
-          <Button
-            onPress={async () => {
-              await storeHtml(wikiUrl.href, 'wiki');
-              setWikiUrl(undefined);
-            }}
-          >
-            <Text>{t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}</Text>
-          </Button>
-          <Text>{importStatus}</Text>
-        </>
+        <ImportWikiButton
+          mode='outlined'
+          onPress={async () => {
+            await storeHtml(wikiUrl.href, 'wiki');
+            setWikiUrl(undefined);
+          }}
+        >
+          {t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
+        </ImportWikiButton>
       )}
       {importStatus === 'error'
-        ? (
-          <>
-            <Text>{importError}</Text>
-          </>
-        )
+        ? <ImportStatusText>Error: {importError}</ImportStatusText>
         : (
           <>
-            <Text>{importStatus}</Text>
+            <ImportStatusText>Status: {importStatus}</ImportStatusText>
             {importedWikiWorkspace !== undefined && (
               <Button
                 onPress={() => {
