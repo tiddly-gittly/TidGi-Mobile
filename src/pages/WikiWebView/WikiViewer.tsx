@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Text } from 'react-native-paper';
 import { ProxyPropertyType, useRegisterProxy, webviewPreloadedJS } from 'react-native-postmessage-cat';
 import type { ProxyDescriptor } from 'react-native-postmessage-cat/common';
@@ -57,6 +58,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
 };
 
 function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
+  const { t } = useTranslation();
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
@@ -76,7 +78,21 @@ function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
   return (
     <WebView
       originWhitelist={['*']}
-      source={{ html: wikiHTMLString }}
+      source={{ uri: wikiHTMLString }}
+      renderError={(errorName) => <Text>{errorName}</Text>}
+      renderLoading={() => <Text>{t('Loading')}</Text>}
+      onContentProcessDidTerminate={(syntheticEvent) => {
+        const { nativeEvent } = syntheticEvent;
+        console.warn('Content process terminated, reloading', nativeEvent);
+        // this.refs.webview.reload();
+      }}
+      onRenderProcessGone={syntheticEvent => {
+        const { nativeEvent } = syntheticEvent;
+        console.warn(
+          'WebView Crashed: ',
+          nativeEvent.didCrash,
+        );
+      }}
       onMessage={onMessageReference.current}
       ref={webViewReference}
       injectedJavaScriptBeforeContentLoaded={preloadScript}
