@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TidGi-Mobile",
-    "slug": "TidGi-Mobile",
+    "slug": "tidgi-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,15 +11,24 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera to Scan QR code.",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,6 +41,12 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "55e3e534-c106-4c2e-8fa3-9c7bb1b2bcea"
+      }
+    },
+    "owner": "linonetwo012"
   }
 }
