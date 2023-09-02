@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Text } from 'react-native-paper';
 import { ProxyPropertyType, useRegisterProxy, webviewPreloadedJS } from 'react-native-postmessage-cat';
@@ -8,6 +8,7 @@ import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { getWikiFilePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
+import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 
@@ -60,6 +61,8 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
 function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
   const { t } = useTranslation();
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
+  const [loaded, setLoaded] = useState(false);
+  const [webviewSideReceiver] = useStreamChunksToWebView(webViewReference, wikiHTMLString, loaded);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
       if (error === null) return false;
@@ -71,14 +74,16 @@ function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
     ${webviewPreloadedJS}
 
     ${tryWikiStorage}
+
+    ${webviewSideReceiver}
     
     true; // note: this is required, or you'll sometimes get silent failures
-  `, []);
+  `, [webviewSideReceiver]);
 
   return (
     <WebView
       originWhitelist={['*']}
-      source={{ uri: wikiHTMLString }}
+      source={{ uri: 'about:blank' }}
       renderError={(errorName) => <Text>{errorName}</Text>}
       renderLoading={() => <Text>{t('Loading')}</Text>}
       onContentProcessDidTerminate={(syntheticEvent) => {
@@ -89,9 +94,12 @@ function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
       onRenderProcessGone={syntheticEvent => {
         const { nativeEvent } = syntheticEvent;
         console.warn(
-          'WebView Crashed: ',
+          'WebView Crashed:',
           nativeEvent.didCrash,
         );
+      }}
+      onLoadEnd={(syntheticEvent) => {
+        setLoaded(true);
       }}
       onMessage={onMessageReference.current}
       ref={webViewReference}
