@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/promise-function-async */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
 import { useCallback, useState } from 'react';
-import { getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
+import { getWikiFilePath, getWikiTiddlerStorePath, WIKI_FOLDER_PATH } from '../../constants/paths';
 import { IWikiWorkspace, useWikiStore } from '../../store/wiki';
 
 type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'storing' | 'success' | 'error';
@@ -12,14 +13,17 @@ export function useImportHTML() {
   const addWiki = useWikiStore(state => state.add);
   const [importedWikiWorkspace, setImportedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
 
-  const storeHtml = useCallback(async (url: string, wikiName: string) => {
+  const storeHtml = useCallback(async (urlString: string, wikiName: string) => {
     if (WIKI_FOLDER_PATH === undefined) return;
     setStatus('fetching');
+    const getSkinnyHTMLUrl = new URL(urlString);
+    const getSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL(urlString);
+    getSkinnyTiddlywikiTiddlerStoreScriptUrl.pathname = '/tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script';
 
     // Fetch the HTML content
     try {
-      const response = await fetch(url);
-      const html = await response.text();
+      const html = await fetch(getSkinnyHTMLUrl).then(response => response.text());
+      const tiddlerStoreScript = await fetch(getSkinnyTiddlywikiTiddlerStoreScriptUrl).then(response => response.text());
 
       setStatus('creating');
 
@@ -30,11 +34,9 @@ export function useImportHTML() {
         // make main folder
         await fs.makeDirectoryAsync(workspace.wikiFolderLocation);
       } catch {}
-      const filePath = getWikiFilePath(workspace);
       setStatus('storing');
-      await fs.writeAsStringAsync(filePath, html, {
-        encoding: fs.EncodingType.UTF8,
-      });
+      await fs.writeAsStringAsync(getWikiFilePath(workspace), html);
+      await fs.writeAsStringAsync(getWikiTiddlerStorePath(workspace), tiddlerStoreScript);
       setImportedWikiWorkspace(workspace);
 
       setStatus('success');

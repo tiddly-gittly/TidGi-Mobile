@@ -6,10 +6,9 @@ import { ProxyPropertyType, useRegisterProxy, webviewPreloadedJS } from 'react-n
 import type { ProxyDescriptor } from 'react-native-postmessage-cat/common';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
-import { getWikiFilePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
-import { useTiddlyWiki } from './useTiddlyWiki';
+import { IHtmlContent, useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 
 const WebViewContainer = styled.View`
@@ -44,25 +43,28 @@ export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
-  const { htmlContent: wikiHTMLString, loadHtmlError } = useTiddlyWiki(getWikiFilePath(wikiWorkspace));
+  const { htmlContent, loadHtmlError } = useTiddlyWiki(wikiWorkspace);
 
   useWikiWebViewNotification({ id: wikiWorkspace.id });
+  if (htmlContent === null) {
+    return <Text>{loadHtmlError || 'Loading...'}</Text>;
+  }
+  const { html, tiddlerStoreScript } = htmlContent;
+  if (!html || !tiddlerStoreScript) {
+    return <Text>{loadHtmlError || 'No Content'}</Text>;
+  }
   return (
     <WebViewContainer>
-      {wikiHTMLString === null
-        ? <Text>{loadHtmlError || 'Loading...'}</Text>
-        : (wikiHTMLString
-          ? <WebViewWithPreload wikiHTMLString={wikiHTMLString} />
-          : <Text>{loadHtmlError || 'No Content'}</Text>)}
+      <WebViewWithPreload htmlContent={htmlContent} />
     </WebViewContainer>
   );
 };
 
-function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
+function WebViewWithPreload({ htmlContent }: { htmlContent: IHtmlContent }) {
   const { t } = useTranslation();
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
   const [loaded, setLoaded] = useState(false);
-  const [webviewSideReceiver] = useStreamChunksToWebView(webViewReference, wikiHTMLString, loaded);
+  const [webviewSideReceiver] = useStreamChunksToWebView(webViewReference, htmlContent, loaded);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
       if (error === null) return false;
@@ -89,7 +91,6 @@ function WebViewWithPreload({ wikiHTMLString }: { wikiHTMLString: string }) {
       onContentProcessDidTerminate={(syntheticEvent) => {
         const { nativeEvent } = syntheticEvent;
         console.warn('Content process terminated, reloading', nativeEvent);
-        // this.refs.webview.reload();
       }}
       onRenderProcessGone={syntheticEvent => {
         const { nativeEvent } = syntheticEvent;
