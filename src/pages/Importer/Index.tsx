@@ -3,7 +3,7 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { useImportHTML } from './useImportHTML';
@@ -73,7 +73,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     }
   }, [scannedString]);
 
-  const { error: importError, status: importStatus, storeHtml, importedWikiWorkspace } = useImportHTML();
+  const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace } = useImportHTML();
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -118,21 +118,37 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         </ImportWikiButton>
       )}
       {importStatus === 'error'
-        ? <ImportStatusText>Error: {importError}</ImportStatusText>
+        ? (
+          <ImportStatusText>
+            <Text>Error:</Text>
+            {importError}
+          </ImportStatusText>
+        )
         : (
           <>
-            <ImportStatusText>Status: {importStatus}</ImportStatusText>
-            {importedWikiWorkspace !== undefined && (
-              <Button
-                onPress={() => {
-                  navigation.navigate('WikiWebView', { id: importedWikiWorkspace.id });
-                }}
-              >
-                <Text>{`${t('Open')} ${importedWikiWorkspace.name}`}</Text>
-              </Button>
-            )}
+            <ImportStatusText>
+              <Text>Status:</Text>
+              {importStatus}
+            </ImportStatusText>
           </>
         )}
+      {importStatus === 'downloading' && (
+        <>
+          <Text>HTML</Text>
+          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.error50} />
+          <Text>Tiddlers</Text>
+          <ProgressBar progress={downloadPercentage.tiddlerStoreScriptDownloadPercentage} color={MD3Colors.error50} />
+        </>
+      )}
+      {importStatus === 'success' && createdWikiWorkspace !== undefined && (
+        <Button
+          onPress={() => {
+            navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
+          }}
+        >
+          <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
+        </Button>
+      )}
     </Container>
   );
 };
