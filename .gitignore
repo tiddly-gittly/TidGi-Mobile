@@ -34,3 +34,7 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 assets/emptyWiki.html
+
+# result of fetchHTML.mjs for debugging
+jsonscript.html
+skinny.html
