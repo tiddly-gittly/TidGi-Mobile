@@ -41,6 +41,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [scannedString, setScannedString] = useState('');
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>();
+  const [wikiName, setWikiName] = useState('wiki');
 
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
@@ -107,15 +108,24 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         }}
       />
       {!qrScannerOpen && wikiUrl !== undefined && (
-        <ImportWikiButton
-          mode='outlined'
-          onPress={async () => {
-            await storeHtml(wikiUrl.href, 'wiki');
-            setWikiUrl(undefined);
-          }}
-        >
-          {t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
-        </ImportWikiButton>
+        <>
+          <TextInput
+            label={t('EditWorkspace.Name')}
+            value={wikiName}
+            onChangeText={(newText: string) => {
+              setWikiName(newText);
+            }}
+          />
+          <ImportWikiButton
+            mode='outlined'
+            onPress={async () => {
+              await storeHtml(wikiUrl.href, 'wiki');
+              setWikiUrl(undefined);
+            }}
+          >
+            {t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
+          </ImportWikiButton>
+        </>
       )}
       {importStatus === 'error'
         ? (
