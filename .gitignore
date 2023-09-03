@@ -36,5 +36,5 @@ yarn-error.*
 assets/emptyWiki.html
 
 # result of fetchHTML.mjs for debugging
-jsonscript.html
+tiddlerStore.json
 skinny.html
