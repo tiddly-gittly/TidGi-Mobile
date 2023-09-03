@@ -9,6 +9,7 @@ import { IWikiWorkspace } from '../../store/wiki';
 
 export interface IHtmlContent {
   html: string;
+  skinnyTiddlerStore: string;
   tiddlerStoreScript: string;
 }
 export function useTiddlyWiki(workspace: IWikiWorkspace) {
@@ -19,9 +20,12 @@ export function useTiddlyWiki(workspace: IWikiWorkspace) {
     const fetchHTML = async () => {
       try {
         setHtmlContent(null);
-        const html = await fs.readAsStringAsync(getWikiFilePath(workspace)); // file:///data/user/0/host.exp.exponent/files/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html');
-        const tiddlerStoreScript = await fs.readAsStringAsync(getWikiTiddlerStorePath(workspace)); // file:///data/user/0/host.exp.exponent/files/wiki/tiddlerStore.json
-        setHtmlContent({ html, tiddlerStoreScript });
+        const [html, tiddlerStoreScript, skinnyTiddlerStore] = await Promise.all([
+          fs.readAsStringAsync(getWikiFilePath(workspace)), // file:///data/user/0/host.exp.exponent/files/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
+          fs.readAsStringAsync(getWikiTiddlerStorePath(workspace, false)), // file:///data/user/0/host.exp.exponent/files/wiki/tiddlerStore.json
+          fs.readAsStringAsync(getWikiTiddlerStorePath(workspace, true)),
+        ]);
+        setHtmlContent({ html, tiddlerStoreScript, skinnyTiddlerStore });
       } catch (error) {
         console.error(error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);

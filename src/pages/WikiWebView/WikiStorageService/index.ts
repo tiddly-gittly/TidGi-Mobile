@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import omit from 'lodash/omit';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
-import { ITiddlerFields } from 'tiddlywiki';
+import type { ITiddlerFields } from 'tiddlywiki';
 import { useConfigStore } from '../../../store/config';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
 import { registerWikiStorageServiceOnWebView } from './registerWikiStorageServiceOnWebView';

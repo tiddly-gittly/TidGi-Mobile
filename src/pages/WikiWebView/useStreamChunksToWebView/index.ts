@@ -25,6 +25,24 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
    * Inject HTML and tiddlers store
    */
   useEffect(() => {
+    let skinnyStoreChunkIndex = 0;
+    const skinnyStoreScriptLength = htmlContent.skinnyTiddlerStore.length;
+    function sendNextSkinnyStoreChunk() {
+      if (webViewReference.current === null) return;
+      if (skinnyStoreChunkIndex < skinnyStoreScriptLength) {
+        const chunk = htmlContent.skinnyTiddlerStore.slice(skinnyStoreChunkIndex, skinnyStoreChunkIndex + CHUNK_SIZE);
+        sendDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK', chunk);
+        skinnyStoreChunkIndex += CHUNK_SIZE;
+
+        // If this was the last chunk, notify the WebView to replace the content
+        if (skinnyStoreChunkIndex >= skinnyStoreScriptLength) {
+          sendDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END');
+        } else {
+          // Optionally add a delay to ensure chunks are processed in order
+          setTimeout(sendNextSkinnyStoreChunk, 10);
+        }
+      }
+    }
     let storeChunkIndex = 0;
     const storeScriptLength = htmlContent.tiddlerStoreScript.length;
     function sendNextStoreChunk() {
@@ -52,6 +70,7 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
       /**
        * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
        */
+      sendNextSkinnyStoreChunk();
       sendNextStoreChunk();
     }
   }, [webViewReference, htmlContent, webviewLoaded, sendDataToWebView]);

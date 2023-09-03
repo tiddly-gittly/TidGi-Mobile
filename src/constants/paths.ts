@@ -5,4 +5,4 @@ export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${f
 export const WIKI_FILE_NAME = 'index.html';
 export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
 export const WIKI_STORE_NAME = 'tiddlerStore.json';
-export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_STORE_NAME}`;
+export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace, skinny: boolean) => `${workspace.wikiFolderLocation}/${skinny ? 'skinny-' : ''}${WIKI_STORE_NAME}`;

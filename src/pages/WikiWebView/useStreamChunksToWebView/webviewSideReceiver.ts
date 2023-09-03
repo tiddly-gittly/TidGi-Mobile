@@ -1,6 +1,8 @@
 export const webviewSideReceiver = `// Initialize an empty string to start with
 let tiddlersStoreAccumulatedContent = '';
+let skinnyTiddlersStoreAccumulatedContent = '';
 let wikiHTML = '';
+let scriptCompleteCount = 0;
 
 window.onStreamChunksToWebView = function (event) {
   const data = event.data;
@@ -14,33 +16,55 @@ window.onStreamChunksToWebView = function (event) {
       tiddlersStoreAccumulatedContent += data;
       break;
     }
+    case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK': {
+      skinnyTiddlersStoreAccumulatedContent += data;
+      break;
+    }
+    case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END':
     case 'TIDDLER_STORE_SCRIPT_CHUNK_END': {
-      /**
-       * All information needed are collected.
-       * Start using html and store.
-       */
-
-      /**
-       * Use MutationObserver to watch if wikiHTML is loaded.
-       * We execute the script tags after this.
-       */
-      const observer = new MutationObserver((mutationsList, observer) => {
-        for (let mutation of mutationsList) {
-          if (mutation.type === 'childList') {
-            executeScriptsAfterStreamChunksToWebView();
-            observer.disconnect(); // Important: disconnect the observer once done.
-          }
-        }
-      });
-
-      // Start observing the body with the configured parameters
-      observer.observe(document.body, { childList: true });
-
-      // this ignores all script tags, so we need 'executeScriptsAfterStreamChunksToWebView()' later.
-      document.body.innerHTML = wikiHTML;
+      scriptCompleteCount += 1;
+      if (scriptCompleteCount === 2) {
+        startInjectHTML();
+      }
+      break;
     }
   }
 };
+
+function startInjectHTML() {
+  /**
+   * All information needed are collected.
+   * Start using html and store.
+   */
+
+  /**
+   * Use MutationObserver to watch if wikiHTML is loaded.
+   * We execute the script tags after this.
+   */
+  const observer = new MutationObserver((mutationsList, observer) => {
+    for (let mutation of mutationsList) {
+      if (mutation.type === 'childList') {
+        executeScriptsAfterStreamChunksToWebView();
+        observer.disconnect(); // Important: disconnect the observer once done.
+      }
+    }
+  });
+
+  // Start observing the body with the configured parameters
+  observer.observe(document.body, { childList: true });
+
+  // this ignores all script tags, so we need 'executeScriptsAfterStreamChunksToWebView()' later.
+  document.body.innerHTML = wikiHTML;
+}
+
+function appendStoreScript(storeJSON) {
+  const tiddlersStoreScript = document.createElement('script');
+  tiddlersStoreScript.type = 'application/json';
+  tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store');
+  tiddlersStoreScript.textContent = storeJSON;
+  const styleAreaDiv = document.getElementById('styleArea');
+  styleAreaDiv?.insertAdjacentElement('afterend', tiddlersStoreScript);
+}
 
 /**
  * Manually execute each of the script tags.
@@ -48,12 +72,8 @@ window.onStreamChunksToWebView = function (event) {
  */
 function executeScriptsAfterStreamChunksToWebView() {
   // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
-  const tiddlersStoreScript = document.createElement('script');
-  tiddlersStoreScript.type = 'application/json';
-  tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store');
-  tiddlersStoreScript.textContent = tiddlersStoreAccumulatedContent;
-  const styleAreaDiv = document.getElementById('styleArea');
-  styleAreaDiv?.insertAdjacentElement('afterend', tiddlersStoreScript);
+  appendStoreScript(skinnyTiddlersStoreAccumulatedContent);
+  appendStoreScript(tiddlersStoreAccumulatedContent);
 
   // load other scripts
   const scriptElements = document.querySelectorAll('script');
