@@ -12,6 +12,11 @@ export interface IWikiWorkspace {
    */
   name: string;
   /**
+   * TiddlyWiki filter that used to decide a tiddler title should be synced or not.
+   * If empty, all tiddlers will be synced.
+   */
+  selectiveSyncFilter: string;
+  /**
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;

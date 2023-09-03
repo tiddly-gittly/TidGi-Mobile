@@ -148,7 +148,8 @@
     "LocalWikiHtml": "path to html file",
     "OpenLocalWikiFromHTML": "import wiki.html",
     "ExtractedWikiFolderName": "Converted WIKI folder name",
-    "BadWikiHtml": "Failed to create a wiki from this HTML file "
+    "BadWikiHtml": "Failed to create a wiki from this HTML file ",
+    "SelectiveSyncFilter": "Filter of Selective Sync"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

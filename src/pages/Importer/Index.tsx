@@ -42,6 +42,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [scannedString, setScannedString] = useState('');
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>();
   const [wikiName, setWikiName] = useState('wiki');
+  const [selectiveSyncFilter, setSelectiveSyncFilter] = useState('-[type[application/msword]] -[type[application/pdf]]');
 
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
@@ -107,6 +108,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           setScannedString(newText);
         }}
       />
+      <TextInput
+        label={t('AddWorkspace.SelectiveSyncFilter')}
+        value={selectiveSyncFilter}
+        onChangeText={(newText: string) => {
+          setSelectiveSyncFilter(newText);
+        }}
+      />
       {!qrScannerOpen && wikiUrl !== undefined && (
         <>
           <TextInput
@@ -119,7 +127,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <ImportWikiButton
             mode='outlined'
             onPress={async () => {
-              await storeHtml(wikiUrl.href, 'wiki');
+              await storeHtml(wikiUrl.href, wikiName, selectiveSyncFilter);
               setWikiUrl(undefined);
             }}
           >
@@ -147,7 +155,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <Text>HTML</Text>
           <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.error50} />
           <Text>Tiddlers</Text>
-          <ProgressBar progress={downloadPercentage.tiddlerStoreScriptDownloadPercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.error50} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
