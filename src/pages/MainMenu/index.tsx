@@ -32,7 +32,8 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   useEffect(() => {
     if (!autoOpenDefaultWiki) return;
     const defaultWiki = wikis[0];
-    if (defaultWiki !== undefined && fromWikiID === undefined && route.name === 'MainMenu') {
+    const currentScreen = navigation.getState()?.routes.at(-1)?.name;
+    if (defaultWiki !== undefined && fromWikiID === undefined && currentScreen === 'MainMenu') {
       navigation.navigate('WikiWebView', { id: defaultWiki.id });
     }
   }, [navigation, wikis, fromWikiID, route.name, autoOpenDefaultWiki]);
