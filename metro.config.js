@@ -12,6 +12,7 @@ module.exports = {
   ...config,
   resolver: {
     ...resolver,
+    unstable_enableSymlinks: true,
     sourceExts: [...sourceExts, 'mjs'],
   },
 };

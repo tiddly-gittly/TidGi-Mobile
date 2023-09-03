@@ -42,7 +42,6 @@
     "rxjs": "^7.8.1",
     "serialize-error": "^11.0.2",
     "styled-components": "^6.0.7",
-    "tiddlywiki": "^5.3.1",
     "tw5-typed": "^0.3.9",
     "zustand": "^4.4.1",
     "expo-sharing": "~11.5.0"
