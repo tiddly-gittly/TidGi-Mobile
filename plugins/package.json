@@ -16,6 +16,7 @@
     "dprint": "^0.40.2",
     "postcss": "^8.4.29",
     "rimraf": "^5.0.1",
+    "tw5-typed": "^0.3.9",
     "ts-node": "^10.9.1"
   },
   "dependencies": {

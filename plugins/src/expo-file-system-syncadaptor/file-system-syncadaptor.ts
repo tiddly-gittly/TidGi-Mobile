@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
-import type { IWikiServerStatusObject } from '@services/wiki/wikiWorker/ipcServerRoutes';
-import type { WindowMeta, WindowNames } from '@services/windows/WindowProperties';
-import debounce from 'lodash/debounce';
-import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
+import type { ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
+import type { WikiStorageService } from '../../../src/pages/WikiWebView/WikiStorageService/index.ts';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
@@ -13,8 +11,16 @@ type ISyncAdaptorPutTiddlersCallback = (error: Error | null | string, etag?: {
 type ISyncAdaptorLoadTiddlerCallback = (error: Error | null, tiddler?: ITiddlerFields) => void;
 type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { bag?: string } | null) => void;
 
-class TidGiIPCSyncAdaptor {
-  name = 'tidgi-ipc';
+declare global {
+  interface Window {
+    service?: {
+      wikiStorageService: WikiStorageService;
+    };
+  }
+}
+
+class TidGiMobileFileSystemSyncAdaptor {
+  name = 'tidgi-mobile-fs';
   supportsLazyLoading = true;
   wiki: Wiki;
   hasStatus: boolean;
@@ -23,65 +29,28 @@ class TidGiIPCSyncAdaptor {
   isAnonymous: boolean;
   isReadOnly: boolean;
   logoutIsAvailable: boolean;
-  wikiService: typeof window.service.wiki;
-  workspaceService: typeof window.service.workspace;
-  authService: typeof window.service.auth;
+  wikiStorageService: WikiStorageService;
   workspaceID: string;
   recipe?: string;
 
   constructor(options: { wiki: Wiki }) {
+    if (window.service?.wikiStorageService === undefined) {
+      throw new Error("TidGi-Mobile wikiStorageService is undefined, can't load wiki.");
+    }
+    this.wikiStorageService = window.service.wikiStorageService;
+    if (window.meta?.workspaceID === undefined) {
+      throw new Error("TidGi-Mobile workspaceID is undefined, can't load wiki.");
+    }
+    this.workspaceID = window.meta.workspaceID;
     this.wiki = options.wiki;
-    this.wikiService = window.service.wiki;
-    this.workspaceService = window.service.workspace;
-    this.authService = window.service.auth;
     this.hasStatus = false;
     this.isAnonymous = false;
-    this.logger = new $tw.utils.Logger('TidGiIPCSyncAdaptor');
+    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor');
     this.isLoggedIn = false;
     this.isReadOnly = false;
     this.logoutIsAvailable = true;
-    this.workspaceID = (window.meta as WindowMeta[WindowNames.view]).workspaceID!;
-    if (window.observables?.wiki?.getWikiChangeObserver$ !== undefined) {
-      // if install-electron-ipc-cat is faster than us, just subscribe to the observable. Otherwise we normally will wait for it to call us here.
-      this.setupSSE();
-    }
-  }
-
-  /**
-   * This should be called after install-electron-ipc-cat, so this is called in `$:/plugins/linonetwo/expo-file-system-syncadaptor/Startup/install-electron-ipc-cat.js`
-   */
-  setupSSE() {
-    if (window.observables?.wiki?.getWikiChangeObserver$ === undefined) {
-      console.error("getWikiChangeObserver$ is undefined in window.observables.wiki, can't subscribe to server changes.");
-      return;
-    }
-    const debouncedSync = debounce(() => {
-      if ($tw.syncer === undefined) {
-        console.error('Syncer is undefined in TidGiIPCSyncAdaptor. Abort the `syncFromServer` in `setupSSE debouncedSync`.');
-        return;
-      }
-      $tw.syncer.syncFromServer();
-      this.clearUpdatedTiddlers();
-    }, 500);
-    this.logger.log('setupSSE');
-
-    // After SSE is enabled, we can disable polling and else things that related to syncer. (build up complexer behavior with syncer.)
-    this.configSyncer();
-
-    window.observables?.wiki?.getWikiChangeObserver$(this.workspaceID).subscribe((change: IChangedTiddlers) => {
-      // `$tw.syncer.syncFromServer` calling `this.getUpdatedTiddlers`, so we need to update `this.updatedTiddlers` before it do so. See `core/modules/syncer.js` in the core
-      Object.keys(change).forEach(title => {
-        if (!change[title]) {
-          return;
-        }
-        if (change[title].deleted && !this.recentUpdatedTiddlersFromClient.deletions.includes(title)) {
-          this.updatedTiddlers.deletions.push(title);
-        } else if (change[title].modified && !this.recentUpdatedTiddlersFromClient.modifications.includes(title)) {
-          this.updatedTiddlers.modifications.push(title);
-        }
-      });
-      debouncedSync();
-    });
+    // React-Native don't have fs monitor, so no SSE on mobile
+    // this.setupSSE();
   }
 
   updatedTiddlers: { deletions: string[]; modifications: string[] } = {
@@ -121,7 +90,7 @@ class TidGiIPCSyncAdaptor {
 
   private configSyncer() {
     if ($tw.syncer === undefined) {
-      console.error('Syncer is undefined in TidGiIPCSyncAdaptor. Abort the configSyncer.');
+      console.error('Syncer is undefined in TidGiMobileFileSystemSyncAdaptor. Abort the configSyncer.');
       return;
     }
     $tw.syncer.pollTimerInterval = 2_147_483_647;
@@ -152,16 +121,13 @@ class TidGiIPCSyncAdaptor {
     return tiddler?.fields?.revision;
   }
 
-  /*
-  Get the current status of the TiddlyWeb connection
-  */
+  /**
+   * Get the current status of the TiddlyWeb connection
+   */
   async getStatus(callback?: ISyncAdaptorGetStatusCallback) {
     this.logger.log('Getting status');
     try {
-      const workspace = await this.workspaceService.get(this.workspaceID);
-      const userName = workspace === undefined ? '' : await this.authService.getUserName(workspace);
-      const statusResponse = await this.wikiService.callWikiIpcServerRoute(this.workspaceID, 'getStatus', userName);
-      const status = statusResponse?.data as IWikiServerStatusObject;
+      const status = await this.wikiStorageService.getStatus();
       if (status === undefined) {
         throw new Error('No status returned from callWikiIpcServerRoute getStatus');
       }
@@ -181,31 +147,32 @@ class TidGiIPCSyncAdaptor {
     }
   }
 
-  /*
-  Get an array of skinny tiddler fields from the server
-  */
-  async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
-    try {
-      this.logger.log('getSkinnyTiddlers');
-      const tiddlersJSONResponse = await this.wikiService.callWikiIpcServerRoute(
-        this.workspaceID,
-        'getTiddlersJSON',
-        '[all[tiddlers]] -[[$:/isEncrypted]] -[prefix[$:/temp/]] -[prefix[$:/status/]] -[[$:/boot/boot.js]] -[[$:/boot/bootprefix.js]] -[[$:/library/sjcl.js]] -[[$:/core]]',
-      );
+  /**
+   * Get an array of skinny tiddler fields from the server
+   * But HTML wiki already have all skinny tiddlers, so omit this. If this is necessary, maybe need mobile-sync plugin provide this, and store in asyncStorage, then provided here.
+   */
+  // async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
+  //   try {
+  //     this.logger.log('getSkinnyTiddlers');
+  //     const tiddlersJSONResponse = await this.wikiService.callWikiIpcServerRoute(
+  //       this.workspaceID,
+  //       'getTiddlersJSON',
+  //       '[all[tiddlers]] -[[$:/isEncrypted]] -[prefix[$:/temp/]] -[prefix[$:/status/]] -[[$:/boot/boot.js]] -[[$:/boot/bootprefix.js]] -[[$:/library/sjcl.js]] -[[$:/core]]',
+  //     );
 
-      // Process the tiddlers to make sure the revision is a string
-      const skinnyTiddlers = tiddlersJSONResponse?.data as Array<Omit<ITiddlerFields, 'text'>> | undefined;
-      if (skinnyTiddlers === undefined) {
-        throw new Error('No tiddlers returned from callWikiIpcServerRoute getTiddlersJSON in getSkinnyTiddlers');
-      }
-      this.logger.log('skinnyTiddlers.length', skinnyTiddlers.length);
-      // Invoke the callback with the skinny tiddlers
-      callback(null, skinnyTiddlers);
-    } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
-      callback?.(error as Error);
-    }
-  }
+  //     // Process the tiddlers to make sure the revision is a string
+  //     const skinnyTiddlers = tiddlersJSONResponse?.data as Array<Omit<ITiddlerFields, 'text'>> | undefined;
+  //     if (skinnyTiddlers === undefined) {
+  //       throw new Error('No tiddlers returned from callWikiIpcServerRoute getTiddlersJSON in getSkinnyTiddlers');
+  //     }
+  //     this.logger.log('skinnyTiddlers.length', skinnyTiddlers.length);
+  //     // Invoke the callback with the skinny tiddlers
+  //     callback(null, skinnyTiddlers);
+  //   } catch (error) {
+  //     // eslint-disable-next-line n/no-callback-literal
+  //     callback?.(error as Error);
+  //   }
+  // }
 
   /*
   Save a tiddler and invoke the callback with (err,adaptorInfo,revision)
@@ -217,19 +184,12 @@ class TidGiIPCSyncAdaptor {
     }
     try {
       const title = tiddler.fields.title;
-      this.logger.log(`loadTiddler ${title}`);
+      this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
-      const putTiddlerResponse = await this.wikiService.callWikiIpcServerRoute(
-        this.workspaceID,
-        'putTiddler',
+      const etag = await this.wikiStorageService.saveTiddler(
         title,
         tiddler.fields,
       );
-      if (putTiddlerResponse === undefined) {
-        throw new Error('saveTiddler returned undefined from callWikiIpcServerRoute putTiddler in saveTiddler');
-      }
-      // Save the details of the new revision of the tiddler
-      const etag = putTiddlerResponse?.headers?.Etag;
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
       } else {
@@ -253,15 +213,8 @@ class TidGiIPCSyncAdaptor {
   async loadTiddler(title: string, callback?: ISyncAdaptorLoadTiddlerCallback) {
     this.logger.log(`loadTiddler ${title}`);
     try {
-      const getTiddlerResponse = await this.wikiService.callWikiIpcServerRoute(
-        this.workspaceID,
-        'getTiddler',
-        title,
-      );
-      if (getTiddlerResponse?.data === undefined) {
-        throw new Error('getTiddler returned undefined from callWikiIpcServerRoute getTiddler in loadTiddler');
-      }
-      callback?.(null, getTiddlerResponse.data as ITiddlerFields);
+      const tiddlerFields: ITiddlerFields = await this.wikiStorageService.loadTiddler(title);
+      callback?.(null, tiddlerFields);
     } catch (error) {
       // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
@@ -287,13 +240,9 @@ class TidGiIPCSyncAdaptor {
       return;
     }
     this.addRecentUpdatedTiddlersFromClient('deletions', title);
-    const getTiddlerResponse = await this.wikiService.callWikiIpcServerRoute(
-      this.workspaceID,
-      'deleteTiddler',
-      title,
-    );
+    const deleted = await this.wikiStorageService.deleteTiddler(title);
     try {
-      if (getTiddlerResponse?.data === undefined) {
+      if (!deleted) {
         throw new Error('getTiddler returned undefined from callWikiIpcServerRoute getTiddler in loadTiddler');
       }
       // Invoke the callback & return null adaptorInfo
@@ -335,10 +284,10 @@ class TidGiIPCSyncAdaptor {
 
 if ($tw.browser && typeof window !== 'undefined') {
   const isInTidGi = typeof document !== 'undefined' && document?.location?.protocol?.startsWith('tidgi');
-  const servicesExposed = Boolean(window.service?.wiki);
-  const hasWorkspaceIDinMeta = Boolean((window.meta as WindowMeta[WindowNames.view] | undefined)?.workspaceID);
+  const servicesExposed = Boolean(window.service?.wikiStorageService);
+  const hasWorkspaceIDinMeta = Boolean(window.meta?.workspaceID);
   if (isInTidGi && servicesExposed && hasWorkspaceIDinMeta) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    exports.adaptorClass = TidGiIPCSyncAdaptor;
+    exports.adaptorClass = TidGiMobileFileSystemSyncAdaptor;
   }
 }

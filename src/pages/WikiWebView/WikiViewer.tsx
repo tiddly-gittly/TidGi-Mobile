@@ -2,41 +2,18 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Text } from 'react-native-paper';
-import { ProxyPropertyType, useRegisterProxy, webviewPreloadedJS } from 'react-native-postmessage-cat';
-import type { ProxyDescriptor } from 'react-native-postmessage-cat/common';
+import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { IHtmlContent, useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
+import { useWikiStorageService } from './WikiStorageService';
 
 const WebViewContainer = styled.View`
   flex: 2;
   height: 100%;
-`;
-
-class WikiStorage {
-  save(data: string) {
-    console.log('Saved', data);
-    return true;
-  }
-}
-enum WikiStorageChannel {
-  name = 'wiki-storage',
-}
-export const WikiStorageIPCDescriptor: ProxyDescriptor = {
-  channel: WikiStorageChannel.name,
-  properties: {
-    save: ProxyPropertyType.Function,
-  },
-};
-const wikiStorage = new WikiStorage();
-const tryWikiStorage = `
-const wikiStorage = window.PostMessageCat(${JSON.stringify(WikiStorageIPCDescriptor)});
-wikiStorage.save('Hello World').then(console.log);
-// play with it: window.wikiStorage.save('BBB').then(console.log)
-window.wikiStorage = wikiStorage;
 `;
 
 export interface WikiViewerProps {
@@ -55,15 +32,16 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   }
   return (
     <WebViewContainer>
-      <WebViewWithPreload htmlContent={htmlContent} />
+      <WebViewWithPreload htmlContent={htmlContent} wikiWorkspace={wikiWorkspace} />
     </WebViewContainer>
   );
 };
 
-function WebViewWithPreload({ htmlContent }: { htmlContent: IHtmlContent }) {
+function WebViewWithPreload({ htmlContent, wikiWorkspace }: { htmlContent: IHtmlContent } & WikiViewerProps) {
   const { t } = useTranslation();
-  const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorage, WikiStorageIPCDescriptor);
+
   const [loaded, setLoaded] = useState(false);
+  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useWikiStorageService(wikiWorkspace.id);
   const [webviewSideReceiver] = useStreamChunksToWebView(webViewReference, htmlContent, loaded);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
@@ -75,12 +53,12 @@ function WebViewWithPreload({ htmlContent }: { htmlContent: IHtmlContent }) {
 
     ${webviewPreloadedJS}
 
-    ${tryWikiStorage}
+    ${registerWikiStorageServiceOnWebView}
 
     ${webviewSideReceiver}
     
     true; // note: this is required, or you'll sometimes get silent failures
-  `, [webviewSideReceiver]);
+  `, [registerWikiStorageServiceOnWebView, webviewSideReceiver]);
 
   return (
     <WebView
@@ -99,7 +77,7 @@ function WebViewWithPreload({ htmlContent }: { htmlContent: IHtmlContent }) {
           nativeEvent.didCrash,
         );
       }}
-      onLoadEnd={(syntheticEvent) => {
+      onLoadEnd={() => {
         setLoaded(true);
       }}
       onMessage={onMessageReference.current}

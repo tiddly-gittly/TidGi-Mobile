@@ -19,8 +19,8 @@ export function useTiddlyWiki(workspace: IWikiWorkspace) {
     const fetchHTML = async () => {
       try {
         setHtmlContent(null);
-        const html = await fs.readAsStringAsync(getWikiFilePath(workspace)); // 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html');
-        const tiddlerStoreScript = await fs.readAsStringAsync(getWikiTiddlerStorePath(workspace));
+        const html = await fs.readAsStringAsync(getWikiFilePath(workspace)); // file:///data/user/0/host.exp.exponent/files/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html');
+        const tiddlerStoreScript = await fs.readAsStringAsync(getWikiTiddlerStorePath(workspace)); // file:///data/user/0/host.exp.exponent/files/wiki/tiddlerStore.json
         setHtmlContent({ html, tiddlerStoreScript });
       } catch (error) {
         console.error(error, (error as Error).stack);

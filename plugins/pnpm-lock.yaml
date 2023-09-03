@@ -28,6 +28,9 @@ devDependencies:
   ts-node:
     specifier: ^10.9.1
     version: 10.9.1(@types/node@20.5.9)(typescript@5.2.2)
+  tw5-typed:
+    specifier: ^0.3.9
+    version: 0.3.9
 
 packages:
 
@@ -213,9 +216,29 @@ packages:
   /@tsconfig/node16@1.0.4:
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
+  /@types/codemirror@5.60.9:
+    resolution: {integrity: sha512-8RhLhlGo9bAkytFYKDzezorY2ojvGk+4xFEso/6Hc2oR1oE2P9lI+AEkbUW7cDlKcQAK5WJkJRBLTdjBE7xQPA==}
+    dependencies:
+      '@types/tern': 0.23.4
+    dev: true
+
+  /@types/echarts@4.9.18:
+    resolution: {integrity: sha512-Qav4M1i1qmPemMywMnDGIbvIBB/9pdrDKLI1dyMho4Yz/ldCB3ry2zGeH0UhAhgmaoPgwYrCDo8xd1UeByz+rw==}
+    dependencies:
+      '@types/zrender': 4.0.4
+    dev: true
+
+  /@types/estree@1.0.1:
+    resolution: {integrity: sha512-LG4opVs2ANWZ1TJoKc937iMmNstM/d0ae1vNbnBvBhqCSezgVUOzcLCqbI5elV8Vy6WKwKjaqR+zO9VKirBBCA==}
+    dev: true
+
   /@types/less@3.0.4:
     resolution: {integrity: sha512-djlMpTdDF+tLaqVpK/0DWGNIr7BFjN8ykDLkgS0sQGYYLop51imRRE3foTjl+dMAH1zFE8bMZAG0VbYPEcSgsA==}
     dev: false
+
+  /@types/node@18.17.14:
+    resolution: {integrity: sha512-ZE/5aB73CyGqgQULkLG87N9GnyGe5TcQjv34pwS8tfBs1IkCh0ASM69mydb2znqd6v0eX+9Ytvk6oQRqu8T1Vw==}
+    dev: true
 
   /@types/node@20.5.9:
     resolution: {integrity: sha512-PcGNd//40kHAS3sTlzKB9C9XL4K0sTup8nbG5lC14kzEteTNuAFh9u5nA0o5TWnSG2r/JNPRXFVcHJIIeRlmqQ==}
@@ -232,6 +255,16 @@ packages:
     dependencies:
       '@types/node': 20.5.9
     dev: false
+
+  /@types/tern@0.23.4:
+    resolution: {integrity: sha512-JAUw1iXGO1qaWwEOzxTKJZ/5JxVeON9kvGZ/osgZaJImBnyjyn0cjovPsf6FNLmyGY8Vw9DoXZCMlfMkMwHRWg==}
+    dependencies:
+      '@types/estree': 1.0.1
+    dev: true
+
+  /@types/zrender@4.0.4:
+    resolution: {integrity: sha512-oLm5ULgmBZh2Fw3G0BbhKaES0nUkmxwC+j932+0hBX+/MrNCAkUy3vOfZ7Mhub1IuBe3ApCy6MzgTw0Atu2RwA==}
+    dev: true
 
   /acorn-walk@8.2.0:
     resolution: {integrity: sha512-k+iyHEuPgSw6SbuDpGQM+06HQUa04DZ3o+F6CSzXMvvI5KMvnaEqXe+YVe555R9nn6GPt404fos4wcgpw12SDA==}
@@ -1950,6 +1983,14 @@ packages:
   /tslib@2.6.2:
     resolution: {integrity: sha512-AEYxH93jGFPn/a2iVAwW87VuUIkR1FVUKB77NwMF7nBTDkDrrT/Hpt/IrCJ0QXhW27jTBDcf5ZY7w6RiqTMw2Q==}
     dev: false
+
+  /tw5-typed@0.3.9:
+    resolution: {integrity: sha512-FypE+YbEcpi+1vDg3EZP0jYyPYZLoH5HEDIwBvrWaLa7VhVNcMSZHCuIevZAyEAPnPT94g7gSWI08aVsWLxD7Q==}
+    dependencies:
+      '@types/codemirror': 5.60.9
+      '@types/echarts': 4.9.18
+      '@types/node': 18.17.14
+    dev: true
 
   /type-fest@0.21.3:
     resolution: {integrity: sha512-t0rzBq87m3fVcduHDUFhKmyyX+9eo6WQjZvf51Ea/M0Q7+T374Jp1aUiyUl0GKxp8M/OETVHSDvmkyPgvX+X2w==}
