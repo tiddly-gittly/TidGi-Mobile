@@ -1,0 +1,13 @@
+{
+  "title": "$:/plugins/linonetwo/expo-file-system-syncadaptor",
+  "name": "TidGi",
+  "description": "Save/load data to tidgi's main process",
+  "author": "LinOnetwo",
+  "core-version": ">=5.1.22",
+  "plugin-type": "plugin",
+  "version": "0.1.0",
+  "dependents": [],
+  "list": "readme tree",
+  "plugin-priority-comment": "lower than $:/plugins/tiddlywiki/tiddlyweb's 10, so the js load before it to register",
+  "plugin-priority": 9
+}

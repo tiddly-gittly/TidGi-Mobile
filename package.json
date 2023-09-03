@@ -5,6 +5,7 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
+    "build:plugin": "zx scripts/buildPlugins.mjs",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "tw:emptyHTML": "zx scripts/generateEmptyWikiHTML.mjs"

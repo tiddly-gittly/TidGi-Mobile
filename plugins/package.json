@@ -1,0 +1,24 @@
+{
+  "license": "MIT",
+  "version": "0.0.2",
+  "scripts": {
+    "dev": "tiddlywiki-plugin-dev dev",
+    "build": "npm run clean && tiddlywiki-plugin-dev build",
+    "reset": "rimraf ./**/node_modules",
+    "clean": "rimraf dist",
+    "new": "tiddlywiki-plugin-dev new",
+    "build:library": "npm run clean && tiddlywiki-plugin-dev build --library --output dist/library",
+    "publish:offline": "npm run clean && tiddlywiki-plugin-dev publish --offline"
+  },
+  "devDependencies": {
+    "@modern-js/tsconfig": "^2.33.1",
+    "@types/node": "^20.5.9",
+    "dprint": "^0.40.2",
+    "postcss": "^8.4.29",
+    "rimraf": "^5.0.1",
+    "ts-node": "^10.9.1"
+  },
+  "dependencies": {
+    "tiddlywiki-plugin-dev": "^0.0.39"
+  }
+}

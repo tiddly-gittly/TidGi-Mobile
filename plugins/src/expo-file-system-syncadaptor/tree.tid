@@ -1,0 +1,4 @@
+title: $:/plugins/linonetwo/expo-file-system-syncadaptor/tree
+caption: {{$:/language/SideBar/Explorer/Caption}}
+
+<<tree "$:/plugins/linonetwo/expo-file-system-syncadaptor/">>
