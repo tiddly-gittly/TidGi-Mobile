@@ -13,7 +13,7 @@ const CHUNK_SIZE = 1_000_000;
 export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>, htmlContent: IHtmlContent, webviewLoaded: boolean) {
   const sendDataToWebView = useCallback((messageType: string, data?: string) => {
     if (webViewReference.current === null) return;
-    webViewReference.current.injectJavaScript(`window.onChunk(${
+    webViewReference.current.injectJavaScript(`window.onStreamChunksToWebView(${
       JSON.stringify({
         type: messageType,
         data,
@@ -25,14 +25,6 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
    * Inject HTML and tiddlers store
    */
   useEffect(() => {
-    /**
-     * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
-     */
-    sendDataToWebView('TIDDLYWIKI_HTML', htmlContent.html);
-
-    /**
-     * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
-     */
     let storeChunkIndex = 0;
     const storeScriptLength = htmlContent.tiddlerStoreScript.length;
     function sendNextStoreChunk() {
@@ -51,7 +43,15 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
         }
       }
     }
+    // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
     if (webviewLoaded && webViewReference.current !== null) {
+      /**
+       * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
+       */
+      sendDataToWebView('TIDDLYWIKI_HTML', htmlContent.html);
+      /**
+       * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
+       */
       sendNextStoreChunk();
     }
   }, [webViewReference, htmlContent, webviewLoaded, sendDataToWebView]);

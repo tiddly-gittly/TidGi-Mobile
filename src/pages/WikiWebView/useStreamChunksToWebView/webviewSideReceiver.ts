@@ -2,7 +2,7 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
 let tiddlersStoreAccumulatedContent = '';
 let wikiHTML = '';
 
-window.onChunk = function (event) {
+window.onStreamChunksToWebView = function (event) {
   const data = event.data;
 
   switch (event.type) {
@@ -25,19 +25,19 @@ window.onChunk = function (event) {
        * We execute the script tags after this.
        */
       const observer = new MutationObserver((mutationsList, observer) => {
-      for (let mutation of mutationsList) {
-        if (mutation.type === 'childList') {
-          executeScripts();
-          observer.disconnect(); // Important: disconnect the observer once done.
+        for (let mutation of mutationsList) {
+          if (mutation.type === 'childList') {
+            executeScriptsAfterStreamChunksToWebView();
+            observer.disconnect(); // Important: disconnect the observer once done.
+          }
         }
-      }
-    });
+      });
 
-    // Start observing the body with the configured parameters
-    observer.observe(document.body, { childList: true });
+      // Start observing the body with the configured parameters
+      observer.observe(document.body, { childList: true });
 
-    // this ignores all script tags, so we need 'executeScripts()' later.
-    document.body.innerHTML = wikiHTML;
+      // this ignores all script tags, so we need 'executeScriptsAfterStreamChunksToWebView()' later.
+      document.body.innerHTML = wikiHTML;
     }
   }
 };
@@ -46,28 +46,36 @@ window.onChunk = function (event) {
  * Manually execute each of the script tags.
  * Delay the script execution slightly, until MutationObserver found document.body is ready.
  */
-function executeScripts() {
-  // load tiddlers store
-  const tiddlersStoreScript = document.createElement("script");
+function executeScriptsAfterStreamChunksToWebView() {
+  // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
+  const tiddlersStoreScript = document.createElement('script');
   tiddlersStoreScript.type = 'application/json';
-  tiddlersStoreScript.class = 'tiddlywiki-tiddler-store';
+  tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store');
   tiddlersStoreScript.textContent = tiddlersStoreAccumulatedContent;
-  document.body.appendChild(tiddlersStoreScript);
+  const styleAreaDiv = document.getElementById('styleArea');
+  styleAreaDiv?.insertAdjacentElement('afterend', tiddlersStoreScript);
 
   // load other scripts
-  const scriptElements = document.querySelectorAll("script");
+  const scriptElements = document.querySelectorAll('script');
   for (let script of scriptElements) {
-    const newScript = document.createElement("script");
+    // skip tiddlersStoreScript we just added
+    if (script.classList.contains('tiddlywiki-tiddler-store')) continue;
+    // activate other scripts in the HTML
+    const newScript = document.createElement('script');
+    // copy all attributes from the original script to the new one
+    for (const { name, value } of script.attributes) {
+      newScript.setAttribute(name, value);
+    }
     if (script.src) {
+      // if the original script has a 'src' url, load it
       newScript.src = script.src;
-      newScript.class = script.class;
-      newScript.type = script.type;
-      newScript.id = script.id;
     } else {
+      // if the script has inline content, set it
       newScript.textContent = script.textContent;
     }
-    document.body.appendChild(newScript);
-    script.parentNode.removeChild(script);  // Remove the old script element
+    // replace the old script element with the new one
+    script.parentNode?.replaceChild(newScript, script);
   }
 }
+
 `;
