@@ -2,11 +2,10 @@
 /* eslint-disable unicorn/no-null */
 import { useAssets } from 'expo-asset';
 import * as fs from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
-import { getWikiFilePath, getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerStorePath } from '../../constants/paths';
+import { getWikiFilePath, getWikiTiddlerStorePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
 import { getSkinnyTiddlersJSONFromSQLite } from './WikiStorageService';
 

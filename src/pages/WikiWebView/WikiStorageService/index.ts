@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
-import omit from 'lodash/omit';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
-import type { ITiddlerFields } from 'tiddlywiki';
 import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerPathByTitle } from '../../../constants/paths';
 import { useConfigStore } from '../../../store/config';
 import { ServerStatus, useServerStore } from '../../../store/server';
@@ -53,18 +51,22 @@ export class WikiStorageService {
   /**
    * Return the e-tag
    */
-  async saveTiddler(title: string, fields: ITiddlerFields): Promise<string> {
-    // we separate the text and fields in sqlite
-    const tiddlerFieldsToPut = omit(fields, ['text']) as Record<string, string | number>;
-    // incase the title mismatch...
-    tiddlerFieldsToPut.title = title;
-    await this.#sqlite.execAsync([{
-      sql: 'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
-      args: [title, fields.text, JSON.stringify(tiddlerFieldsToPut)],
-    }], false);
-    const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
-    const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
-    return Etag;
+  async saveTiddler(title: string, text: string, fieldStrings: string): Promise<string> {
+    try {
+      const result = await this.#sqlite.execAsync([{
+        sql: 'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
+        args: [title, text, fieldStrings],
+      }], false);
+      if ('error' in result[0]) {
+        throw result[0].error;
+      }
+      const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
+      const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
+      return Etag;
+    } catch (error) {
+      console.error(`Failed to save tiddler ${title}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      throw error;
+    }
   }
 
   async loadTiddlerText(title: string): Promise<string | undefined> {
