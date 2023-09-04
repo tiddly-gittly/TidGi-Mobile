@@ -1,3 +1,5 @@
+import { onErrorHandler } from './onErrorHandler';
+
 export const webviewSideReceiver = `// Initialize an empty string to start with
 let tiddlersStoreAccumulatedContent = '';
 let skinnyTiddlersStoreAccumulatedContent = '';
@@ -96,6 +98,9 @@ function executeScriptsAfterStreamChunksToWebView() {
     // replace the old script element with the new one
     script.parentNode?.replaceChild(newScript, script);
   }
+
+  // overwrite $tw 's default error handler, use native error window instead.
+  ${onErrorHandler}
 }
 
 `;

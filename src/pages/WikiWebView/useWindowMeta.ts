@@ -1,11 +1,17 @@
-import { IWikiWorkspace } from "../../store/wiki";
+import { IWikiWorkspace } from '../../store/wiki';
 
 export interface WindowMeta {
   workspaceID: string;
 }
 
-export function useWindowMeta(workspace: IWikiWorkspace ) {
+export function useWindowMeta(workspace: IWikiWorkspace) {
   return `
-    window.meta = 
-  `
+    window.isInTidGi = true;
+
+    window.meta = ${
+    JSON.stringify({
+      workspaceID: workspace.id,
+    })
+  };
+  `;
 }

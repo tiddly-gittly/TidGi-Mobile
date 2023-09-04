@@ -13,6 +13,7 @@ type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { b
 
 declare global {
   interface Window {
+    isInTidGi?: boolean;
     service?: {
       wikiStorageService: WikiStorageService;
     };
@@ -297,12 +298,15 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 }
 
+declare let exports: {
+  adaptorClass: typeof TidGiMobileFileSystemSyncAdaptor;
+};
+
 if ($tw.browser && typeof window !== 'undefined') {
-  const isInTidGi = typeof document !== 'undefined' && document?.location?.protocol?.startsWith('tidgi');
+  const isInTidGi = typeof document !== 'undefined' && window.isInTidGi;
   const servicesExposed = Boolean(window.service?.wikiStorageService);
   const hasWorkspaceIDinMeta = Boolean(window.meta?.workspaceID);
   if (isInTidGi && servicesExposed && hasWorkspaceIDinMeta) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     exports.adaptorClass = TidGiMobileFileSystemSyncAdaptor;
   }
 }

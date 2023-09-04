@@ -7,9 +7,11 @@ import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
+import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { IHtmlContent, useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 import { useWikiStorageService } from './WikiStorageService';
+import { useWindowMeta } from './useWindowMeta';
 
 const WebViewContainer = styled.View`
   flex: 2;
@@ -43,14 +45,13 @@ function WebViewWithPreload({ htmlContent, wikiWorkspace }: { htmlContent: IHtml
   const [loaded, setLoaded] = useState(false);
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useWikiStorageService(wikiWorkspace);
   const [webviewSideReceiver] = useStreamChunksToWebView(webViewReference, htmlContent, loaded);
+  const windowMetaScript = useWindowMeta(wikiWorkspace)
   const preloadScript = useMemo(() => `
-    window.onerror = function(message, sourcefile, lineno, colno, error) {
-      if (error === null) return false;
-      alert("Message: " + message + " - Source: " + sourcefile + " Line: " + lineno + ":" + colno);
-      console.error(error);
-      return true;
-    };
 
+    ${windowMetaScript}
+
+    ${onErrorHandler}
+    
     ${webviewPreloadedJS}
 
     ${registerWikiStorageServiceOnWebView}

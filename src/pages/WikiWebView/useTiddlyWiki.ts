@@ -31,8 +31,9 @@ export function useTiddlyWiki(workspace: IWikiWorkspace) {
           fs.readAsStringAsync(getWikiTiddlerStorePath(workspace, true)),
         ]);
 
-        const tidgiMobilePlugins = `${pluginJSONStrings.expoFileSystemSyncadaptor},${pluginJSONStrings.expoFileSystemSyncadaptorUi}`;
-        const tiddlerStoreScriptWithTidGiMobilePlugins = `${tiddlerStoreScript.slice(0, -1)},${tidgiMobilePlugins}]`;
+        // inject tidgi syncadaptor plugins
+        const tidgiMobilePlugins = `,${pluginJSONStrings.expoFileSystemSyncadaptor},${pluginJSONStrings.expoFileSystemSyncadaptorUi}`;
+        const tiddlerStoreScriptWithTidGiMobilePlugins = `${tiddlerStoreScript.slice(0, -1)}${tidgiMobilePlugins}]`;
         setHtmlContent({ html, tiddlerStoreScript: tiddlerStoreScriptWithTidGiMobilePlugins, skinnyTiddlerStore });
       } catch (error) {
         console.error(error, (error as Error).stack);
