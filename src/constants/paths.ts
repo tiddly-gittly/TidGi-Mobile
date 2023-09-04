@@ -5,4 +5,16 @@ export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${f
 export const WIKI_FILE_NAME = 'index.html';
 export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
 export const WIKI_STORE_NAME = 'tiddlerStore.json';
+/**
+ * We download json to the cache folder (batch download as a single json is faster), then move it to the sqlite later.
+ */
 export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace, skinny: boolean) => `${workspace.wikiFolderLocation}/${skinny ? 'skinny-' : ''}${WIKI_STORE_NAME}`;
+export const WIKI_SMALL_TEXT_STORE_CACHE_NAME = 'text-tiddlerStore.json';
+export const getWikiCacheFolderPath = (workspace: IWikiWorkspace) => `${fs.cacheDirectory ?? `${workspace.wikiFolderLocation}/cache/`}`;
+export const getWikiTiddlerTextStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SMALL_TEXT_STORE_CACHE_NAME}`;
+export const WIKI_SMALL_TEXT_STORE_SQLITE_NAME = 'skinnyTiddlersText.db';
+/**
+ * Will be store to `${fs.documentDirectory}/SQLite/${name}`
+ * @url https://docs.expo.dev/versions/latest/sdk/sqlite/#sqliteopendatabasename-version-description-size-callback
+ */
+export const getWikiSkinnyTiddlerTextSqliteName = (workspace: IWikiWorkspace) => `${workspace.id}-${WIKI_SMALL_TEXT_STORE_SQLITE_NAME}`;

@@ -23,6 +23,8 @@
     "expo-file-system": "~15.4.3",
     "expo-localization": "~14.3.0",
     "expo-notifications": "~0.20.1",
+    "expo-sharing": "~11.5.0",
+    "expo-sqlite": "~11.3.2",
     "expo-status-bar": "~1.6.0",
     "i18next": "^23.4.6",
     "immer": "^10.0.2",
@@ -43,8 +45,7 @@
     "serialize-error": "^11.0.2",
     "styled-components": "^6.0.7",
     "tw5-typed": "^0.3.9",
-    "zustand": "^4.4.1",
-    "expo-sharing": "~11.5.0"
+    "zustand": "^4.4.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

@@ -157,6 +157,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <Text>Tiddlers</Text>
           <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.error50} />
           <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.error50} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (

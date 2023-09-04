@@ -36,10 +36,8 @@ yarn-error.*
 assets/emptyWiki.html
 
 # result of fetchHTML.mjs for debugging
-tiddlerStore.json
-skinny.html
+scripts/fetchHTML/
 
 # generated plugin from `npm run build:plugin`
 assets/plugins/$__plugins_linonetwo_expo-file-system-syncadaptor-ui.json
 assets/plugins/$__plugins_linonetwo_expo-file-system-syncadaptor.json
-skinnyTiddlerStore.json
