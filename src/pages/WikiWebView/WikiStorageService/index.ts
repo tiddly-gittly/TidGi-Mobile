@@ -45,6 +45,11 @@ export class WikiStorageService {
     };
   }
 
+  async getSkinnyTiddlers(): Promise<string> {
+    const skinnyTiddlerStore = await getSkinnyTiddlersJSONFromSQLite(this.#workspace);
+    return skinnyTiddlerStore;
+  }
+
   /**
    * Return the e-tag
    */
@@ -124,4 +129,23 @@ export function useWikiStorageService(workspace: IWikiWorkspace) {
   const wikiStorageService = new WikiStorageService(workspace);
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorageService, WikiStorageServiceIPCDescriptor);
   return [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] as const;
+}
+
+/**
+ * get skinny tiddlers json array from sqlite, without text field to speedup initial loading and memory usage
+ * @returns json string same as what return from `tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`, with type `Promise<Array<Omit<ITiddlerFields, 'text'>> | undefined>`
+ */
+export async function getSkinnyTiddlersJSONFromSQLite(workspace: IWikiWorkspace): Promise<string> {
+  const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
+  const resultSet = await database.execAsync([{ sql: 'SELECT fields FROM tiddlers;', args: [] }], true);
+  const result = resultSet[0];
+  database.closeAsync();
+  if (result === undefined) return '[]';
+  if ('error' in result) {
+    throw new Error(`Error getting skinny tiddlers list from SQLite: ${result.error.message}`);
+  }
+  if (result.rows.length === 0) {
+    return '[]';
+  }
+  return `[${result.rows.map(row => row.fields as string | null).filter((fields): fields is string => fields !== null).join(',')}]`;
 }

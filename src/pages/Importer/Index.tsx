@@ -108,6 +108,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       )}
       <Button
         mode='contained'
+        disabled={importStatus !== 'idle'}
         onPress={() => {
           setQrScannerOpen(!qrScannerOpen);
         }}
@@ -138,7 +139,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             }}
           />
           <ImportWikiButton
-            mode='outlined'
+            mode='elevated'
+            disabled={importStatus !== 'idle'}
             onPress={addServerAndImport}
           >
             {t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
@@ -180,6 +182,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
         <Button
+          mode='elevated'
           onPress={() => {
             navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
           }}

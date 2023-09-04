@@ -152,28 +152,33 @@ class TidGiMobileFileSystemSyncAdaptor {
    * Get an array of skinny tiddler fields from the server
    * But HTML wiki already have all skinny tiddlers, so omit this. If this is necessary, maybe need mobile-sync plugin provide this, and store in asyncStorage, then provided here.
    */
-  // async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
-  //   try {
-  //     this.logger.log('getSkinnyTiddlers');
-  //     const tiddlersJSONResponse = await this.wikiService.callWikiIpcServerRoute(
-  //       this.workspaceID,
-  //       'getTiddlersJSON',
-  //       '[all[tiddlers]] -[[$:/isEncrypted]] -[prefix[$:/temp/]] -[prefix[$:/status/]] -[[$:/boot/boot.js]] -[[$:/boot/bootprefix.js]] -[[$:/library/sjcl.js]] -[[$:/core]]',
-  //     );
+  async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
+    try {
+      // const selector = 'script.tiddlywiki-tiddler-store.skinnyTiddlers'
+      // this.logger.log(`getSkinnyTiddlers from ${selector}`);
+      // const tiddlersJSONPreloadInScriptTag = document.querySelector(selector)
+      // if (tiddlersJSONPreloadInScriptTag === null) {
+      //   callback?.(new Error('No tiddler store in HTML.'));
+      //   return;
+      // }
 
-  //     // Process the tiddlers to make sure the revision is a string
-  //     const skinnyTiddlers = tiddlersJSONResponse?.data as Array<Omit<ITiddlerFields, 'text'>> | undefined;
-  //     if (skinnyTiddlers === undefined) {
-  //       throw new Error('No tiddlers returned from callWikiIpcServerRoute getTiddlersJSON in getSkinnyTiddlers');
-  //     }
-  //     this.logger.log('skinnyTiddlers.length', skinnyTiddlers.length);
-  //     // Invoke the callback with the skinny tiddlers
-  //     callback(null, skinnyTiddlers);
-  //   } catch (error) {
-  //     // eslint-disable-next-line n/no-callback-literal
-  //     callback?.(error as Error);
-  //   }
-  // }
+      const skinnyTiddlerStoreString = await this.wikiStorageService.getSkinnyTiddlers();
+      if (skinnyTiddlerStoreString === undefined) {
+        callback?.(new Error('Load tiddler store failed'));
+        return;
+      }
+      const skinnyTiddlers = JSON.parse(skinnyTiddlerStoreString) as Array<Omit<ITiddlerFields, 'text'>> | undefined;
+      if (skinnyTiddlers === undefined) {
+        throw new Error('No tiddlers returned from callWikiIpcServerRoute getTiddlersJSON in getSkinnyTiddlers');
+      }
+      this.logger.log('skinnyTiddlers.length', skinnyTiddlers.length);
+      // Invoke the callback with the skinny tiddlers
+      callback(null, skinnyTiddlers);
+    } catch (error) {
+      // eslint-disable-next-line n/no-callback-literal
+      callback?.(error as Error);
+    }
+  }
 
   /*
   Save a tiddler and invoke the callback with (err,adaptorInfo,revision)

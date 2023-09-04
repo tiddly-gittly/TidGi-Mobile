@@ -8,6 +8,7 @@ import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadap
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath, getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerStorePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
+import { getSkinnyTiddlersJSONFromSQLite } from './WikiStorageService';
 
 export interface IHtmlContent {
   html: string;
@@ -44,25 +45,6 @@ export function useTiddlyWiki(workspace: IWikiWorkspace) {
     void fetchHTML();
   }, [workspace, pluginJSONStrings]);
   return { htmlContent, loadHtmlError, pluginLoadError };
-}
-
-/**
- * get skinny tiddlers json array from sqlite, without text field to speedup initial loading and memory usage
- * @returns json string same as what return from `tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`
- */
-async function getSkinnyTiddlersJSONFromSQLite(workspace: IWikiWorkspace): Promise<string> {
-  const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
-  const resultSet = await database.execAsync([{ sql: 'SELECT fields FROM tiddlers;', args: [] }], true);
-  const result = resultSet[0];
-  database.closeAsync();
-  if (result === undefined) return '[]';
-  if ('error' in result) {
-    throw new Error(`Error getting skinny tiddlers list from SQLite: ${result.error.message}`);
-  }
-  if (result.rows.length === 0) {
-    return '[]';
-  }
-  return `[${result.rows.map(row => row.fields as string | null).filter((fields): fields is string => !!fields).join(',')}]`;
 }
 
 export interface ITidGiMobilePlugins {
