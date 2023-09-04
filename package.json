@@ -7,8 +7,7 @@
     "build:plugin": "zx scripts/buildPlugins.mjs",
     "ios": "expo start --ios",
     "start": "expo start",
-    "web": "expo start --web",
-    "tw:emptyHTML": "zx scripts/generateEmptyWikiHTML.mjs"
+    "web": "expo start --web"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.18.2",

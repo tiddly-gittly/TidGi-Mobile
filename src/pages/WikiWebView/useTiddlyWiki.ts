@@ -3,7 +3,6 @@
 import { useAssets } from 'expo-asset';
 import * as fs from 'expo-file-system';
 import { useEffect, useState } from 'react';
-import emptyWikiAssetID from '../../../assets/emptyWiki.html';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath, getWikiTiddlerStorePath } from '../../constants/paths';
@@ -74,20 +73,20 @@ export function useTidGiMobilePlugins() {
   return [pluginJSONStrings, error?.message] as const;
 }
 
-export function useEmptyTiddlyWiki() {
-  const [htmlContent, setHtmlContent] = useState('');
+// export function useEmptyTiddlyWiki() {
+//   const [htmlContent, setHtmlContent] = useState('');
 
-  const [assets, error] = useAssets([emptyWikiAssetID]);
-  useEffect(() => {
-    const emptyWikiFileUri = assets?.[0]?.localUri;
-    if (emptyWikiFileUri === undefined || emptyWikiFileUri === null) return;
-    const fetchHTML = async () => {
-      const content = await fs.readAsStringAsync(emptyWikiFileUri);
-      const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
-      setHtmlContent(modifiedContent);
-    };
+//   const [assets, error] = useAssets([emptyWikiAssetID]);
+//   useEffect(() => {
+//     const emptyWikiFileUri = assets?.[0]?.localUri;
+//     if (emptyWikiFileUri === undefined || emptyWikiFileUri === null) return;
+//     const fetchHTML = async () => {
+//       const content = await fs.readAsStringAsync(emptyWikiFileUri);
+//       const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
+//       setHtmlContent(modifiedContent);
+//     };
 
-    void fetchHTML();
-  }, [assets]);
-  return htmlContent;
-}
+//     void fetchHTML();
+//   }, [assets]);
+//   return htmlContent;
+// }
