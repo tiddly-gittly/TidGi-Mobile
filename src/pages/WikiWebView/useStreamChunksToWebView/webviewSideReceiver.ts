@@ -46,7 +46,7 @@ function startInjectHTML() {
   const observer = new MutationObserver((mutationsList, observer) => {
     for (let mutation of mutationsList) {
       if (mutation.type === 'childList') {
-        executeScriptsAfterStreamChunksToWebView();
+        executeScriptsAfterInjectHTML();
         observer.disconnect(); // Important: disconnect the observer once done.
       }
     }
@@ -55,7 +55,7 @@ function startInjectHTML() {
   // Start observing the body with the configured parameters
   observer.observe(document.body, { childList: true });
 
-  // this ignores all script tags, so we need 'executeScriptsAfterStreamChunksToWebView()' later.
+  // this ignores all script tags, so we need 'executeScriptsAfterInjectHTML()' later.
   document.body.innerHTML = wikiHTML;
 }
 
@@ -72,7 +72,7 @@ function appendStoreScript(storeJSON) {
  * Manually execute each of the script tags.
  * Delay the script execution slightly, until MutationObserver found document.body is ready.
  */
-function executeScriptsAfterStreamChunksToWebView() {
+function executeScriptsAfterInjectHTML() {
   // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
   appendStoreScript(skinnyTiddlersStoreAccumulatedContent);
   appendStoreScript(tiddlersStoreAccumulatedContent);

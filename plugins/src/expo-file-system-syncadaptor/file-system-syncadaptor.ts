@@ -221,7 +221,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       }
       if (tiddlerText === undefined) {
         // TODO: fetch large file using HTTP from TidGi-Desktop
-        throw new Error(`Tiddler "${title}" is large file, not supported yet.`);
+        throw new Error(`Tiddler "${title}" is not synced yet.`);
       }
       const tiddlerFields: ITiddlerFields = { ...tiddler.fields, text: tiddlerText, type: tiddler.fields.type ?? 'text/vnd.tiddlywiki', bag: 'default' };
 

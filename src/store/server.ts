@@ -37,7 +37,7 @@ const defaultServer: ServerState = {
   servers: {},
 };
 interface ServerActions {
-  add: (newServer: Partial<IServerInfo> & { uri: string }) => Promise<IServerInfo>;
+  add: (newServer: Partial<IServerInfo> & { uri: string }) => IServerInfo;
   update: (newServer: Partial<IServerInfo> & { id: string }) => void;
 }
 
@@ -46,13 +46,13 @@ export const useServerStore = create<ServerState & ServerActions>()(
     persist(
       (set) => ({
         ...defaultServer,
-        add: async (partialServer) => {
+        add: (partialServer) => {
           const id = String(Math.random()).substring(2, 7);
           const name = `TidGi-Desktop ${id}`;
           const newServer: IServerInfo = {
             id,
             name,
-            status: ServerStatus.disconnected,
+            status: ServerStatus.online,
             syncActive: true,
             provider: ServerProvider.TidGiDesktop,
             ...partialServer,

@@ -67,17 +67,22 @@ export class WikiStorageService {
   }
 
   async #loadFromSqlite(title: string): Promise<string | undefined> {
-    const resultSet = await this.#sqlite.execAsync([{ sql: 'SELECT text FROM tiddlers WHERE title = ?;', args: [title] }], true);
-    const result = resultSet[0];
-    if (result === undefined) return undefined;
-    if ('error' in result) {
-      console.error(result.error);
+    try {
+      const resultSet = await this.#sqlite.execAsync([{ sql: 'SELECT text FROM tiddlers WHERE title = ?;', args: [title] }], true);
+      const result = resultSet[0];
+      if (result === undefined) return undefined;
+      if ('error' in result) {
+        console.error(result.error);
+        return undefined;
+      }
+      if (result.rows.length === 0) {
+        return undefined;
+      }
+      return (result.rows as ITiddlerTextJSON)[0]?.text;
+    } catch (error) {
+      console.error(`SQL error when getting ${title} : ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       return undefined;
     }
-    if (result.rows.length === 0) {
-      return undefined;
-    }
-    return (result.rows as ITiddlerTextJSON)[0]?.text;
   }
 
   async #loadFromFS(title: string): Promise<string | undefined> {
@@ -90,13 +95,18 @@ export class WikiStorageService {
   }
 
   async #loadFromServer(title: string): Promise<string | undefined> {
-    const onlineLastSyncServer = this.#workspace.syncedServers.sort((a, b) => b.lastSync - a.lastSync).map(server => this.#serverStore.getState().servers[server.serverID]).find(
-      server => server?.status === ServerStatus.online,
-    );
-    if (onlineLastSyncServer === undefined) return;
-    const getTiddlerUrl = new URL(`/recipes/default/tiddlers/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
-    await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(this.#workspace, title));
-    return await this.#loadFromFS(title);
+    try {
+      const onlineLastSyncServer = this.#workspace.syncedServers.sort((a, b) => b.lastSync - a.lastSync).map(server => this.#serverStore.getState().servers[server.serverID]).find(
+        server => server?.status === ServerStatus.online,
+      );
+      if (onlineLastSyncServer === undefined) return;
+      const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
+      await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(this.#workspace, title));
+      return await this.#loadFromFS(title);
+    } catch (error) {
+      console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      return undefined;
+    }
   }
 
   async deleteTiddler(title: string): Promise<boolean> {

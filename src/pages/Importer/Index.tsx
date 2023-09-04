@@ -82,7 +82,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
-    const newServer = await addServer({ uri: wikiUrl.origin, name: wikiName });
+    const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
     void nativeService.getLocationWithTimeout().then(coords => {
       if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
     });
