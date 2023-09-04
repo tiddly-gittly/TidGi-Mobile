@@ -7,6 +7,9 @@ export enum WikiStorageServiceChannel {
 export const WikiStorageServiceIPCDescriptor: ProxyDescriptor = {
   channel: WikiStorageServiceChannel.name,
   properties: {
-    save: ProxyPropertyType.Function,
+    getStatus: ProxyPropertyType.Function,
+    saveTiddler: ProxyPropertyType.Function,
+    loadTiddlerText: ProxyPropertyType.Function,
+    deleteTiddler: ProxyPropertyType.Function,
   },
 };

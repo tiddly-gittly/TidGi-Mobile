@@ -17,7 +17,7 @@ import { IWikiServerStatusObject } from './types';
  * - proxy by `src/pages/WikiWebView/WikiStorageService/registerWikiStorageServiceOnWebView.ts` to be `window.service.wikiStorageService`
  * - then used in `plugins/src/expo-file-system-syncadaptor/file-system-syncadaptor.ts` inside webview
  *
- * Don't forget to register method in WikiStorageServiceIPCDescriptor.
+ * Don't forget to register method in WikiStorageServiceIPCDescriptor. Otherwise you will get `window.service.wikiStorageService.methodName is not a function` error.
  * All methods must be async.
  */
 export class WikiStorageService {
