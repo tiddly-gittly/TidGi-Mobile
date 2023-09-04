@@ -30,6 +30,8 @@ async function storeTextToSQLite(database: SQLite.SQLiteDatabase, workspace: IWi
     setProgress(0);
     const batches = createTiddlerArrayBatches(tiddlerTextsJSON, BATCH_SIZE_2);
     const batchLength = batches.length;
+    // Use temp table to speed up update. Can't directly batch update existing rows, SQLite can only batch insert non-existing rows.
+    await tx.executeSqlAsync('CREATE TEMPORARY TABLE tempTiddlers (title TEXT PRIMARY KEY, text TEXT);');
     for (let index = 0; index < batchLength; index++) {
       try {
         await insertTiddlerTextsBatch(tx, batches[index]);
@@ -38,6 +40,12 @@ async function storeTextToSQLite(database: SQLite.SQLiteDatabase, workspace: IWi
         throw new Error(`Insert text to SQLite batch error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       }
     }
+    await tx.executeSqlAsync(`
+      UPDATE tiddlers 
+      SET text = (SELECT text FROM tempTiddlers WHERE tempTiddlers.title = tiddlers.title)
+      WHERE title IN (SELECT title FROM tempTiddlers)
+  `);
+    await tx.executeSqlAsync('DROP TABLE tempTiddlers;');
   });
 }
 
@@ -60,10 +68,10 @@ function createTiddlerArrayBatches(data: ITiddlerTextJSON | ISkinnyTiddlersJSON,
  * Insert a single batch
  */
 async function insertTiddlerTextsBatch(tx: SQLite.SQLTransactionAsync, batch: ITiddlerTextOnly[]) {
-  const simpleUpdateQuery = `UPDATE tiddlers SET text = ? WHERE title = ?;`;
-  for (const tiddler of batch) {
-    await tx.executeSqlAsync(simpleUpdateQuery, [tiddler.text, tiddler.title]);
-  }
+  const placeholders = batch.map(() => '(?, ?)').join(',');
+  const query = `INSERT INTO tempTiddlers (title, text) VALUES ${placeholders};`;
+  const bindParameters = batch.flatMap(row => [row.title, row.text]);
+  await tx.executeSqlAsync(query, bindParameters);
 }
 
 export type ISkinnyTiddler = ITiddlerFields & { _is_skinny: ''; bag: 'default'; revision: '0' };
@@ -80,7 +88,7 @@ async function storeFieldsToSQLite(database: SQLite.SQLiteDatabase, workspace: I
       throw new Error(`Failed to read tiddler text store, ${(error as Error).message}`);
     }
     setProgress(0);
-    const batches = createTiddlerArrayBatches(tiddlerFieldsJSON, BATCH_SIZE_3);
+    const batches = createTiddlerArrayBatches(tiddlerFieldsJSON, BATCH_SIZE_2);
     const batchLength = batches.length;
     for (let index = 0; index < batchLength; index++) {
       try {
