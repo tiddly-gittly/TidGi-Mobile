@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/require-await */
+import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import omit from 'lodash/omit';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import type { ITiddlerFields } from 'tiddlywiki';
-import { getWikiSkinnyTiddlerTextSqliteName } from '../../../constants/paths';
+import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerPathByTitle } from '../../../constants/paths';
 import { useConfigStore } from '../../../store/config';
+import { ServerStatus, useServerStore } from '../../../store/server';
 import { IWikiWorkspace } from '../../../store/wiki';
 import { ITiddlerTextJSON } from '../../Importer/storeTextToSQLite';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
@@ -24,6 +26,7 @@ export class WikiStorageService {
   #workspace: IWikiWorkspace;
   #sqlite: SQLite.SQLiteDatabase;
   #configStore = useConfigStore;
+  #serverStore = useServerStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
@@ -46,26 +49,24 @@ export class WikiStorageService {
    * Return the e-tag
    */
   async saveTiddler(title: string, fields: ITiddlerFields): Promise<string> {
-    const tiddlerFieldsToPut = omit(fields, ['fields', 'revision', '_is_skinny']) as Record<string, string | number>;
-    // If this is a skinny tiddler, it means the client never got the full
-    // version of the tiddler to edit. So we must preserve whatever text
-    // already exists on the server, or else we'll inadvertently delete it.
-    // if (fields._is_skinny !== undefined) {
-    //   const tiddler = this.wikiInstance.wiki.getTiddler(title);
-    //   if (tiddler !== undefined) {
-    //     tiddlerFieldsToPut.text = tiddler.fields.text;
-    //   }
-    // }
-    // tiddlerFieldsToPut.title = title;
-    // this.wikiInstance.wiki.addTiddler(new this.wikiInstance.Tiddler(tiddlerFieldsToPut));
-    // TODO: save tiddler fields other than text field, to `getWikiTiddlerStorePath(workspace, true)`
-    await this.#sqlite.execAsync([{ sql: 'INSERT OR REPLACE INTO tiddlers (title, text) VALUES (?, ?);', args: [title, tiddlerFieldsToPut.text] }], false);
+    // we separate the text and fields in sqlite
+    const tiddlerFieldsToPut = omit(fields, ['text']) as Record<string, string | number>;
+    // incase the title mismatch...
+    tiddlerFieldsToPut.title = title;
+    await this.#sqlite.execAsync([{
+      sql: 'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
+      args: [title, fields.text, JSON.stringify(tiddlerFieldsToPut)],
+    }], false);
     const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
     const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
     return Etag;
   }
 
   async loadTiddlerText(title: string): Promise<string | undefined> {
+    return (await this.#loadFromSqlite(title)) ?? (await this.#loadFromFS(title)) ?? await this.#loadFromServer(title);
+  }
+
+  async #loadFromSqlite(title: string): Promise<string | undefined> {
     const resultSet = await this.#sqlite.execAsync([{ sql: 'SELECT text FROM tiddlers WHERE title = ?;', args: [title] }], true);
     const result = resultSet[0];
     if (result === undefined) return undefined;
@@ -77,6 +78,25 @@ export class WikiStorageService {
       return undefined;
     }
     return (result.rows as ITiddlerTextJSON)[0]?.text;
+  }
+
+  async #loadFromFS(title: string): Promise<string | undefined> {
+    try {
+      const tiddlerFileContent = await fs.readAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title));
+      return tiddlerFileContent;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #loadFromServer(title: string): Promise<string | undefined> {
+    const onlineLastSyncServer = this.#workspace.syncedServers.sort((a, b) => b.lastSync - a.lastSync).map(server => this.#serverStore.getState().servers[server.serverID]).find(
+      server => server?.status === ServerStatus.online,
+    );
+    if (onlineLastSyncServer === undefined) return;
+    const getTiddlerUrl = new URL(`/recipes/default/tiddlers/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
+    await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(this.#workspace, title));
+    return await this.#loadFromFS(title);
   }
 
   async deleteTiddler(title: string): Promise<boolean> {

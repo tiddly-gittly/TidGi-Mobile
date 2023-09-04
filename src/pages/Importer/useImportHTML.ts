@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import {
   getWikiCacheFolderPath,
   getWikiFilePath,
+  getWikiTiddlerFolderPath,
   getWikiTiddlerSkinnyStoreCachePath,
   getWikiTiddlerStorePath,
   getWikiTiddlerTextStoreCachePath,
@@ -29,23 +30,22 @@ export function useImportHTML() {
   const removeWiki = useWikiStore(state => state.remove);
   const [createdWikiWorkspace, setCreatedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
 
-  const storeHtml = useCallback(async (urlString: string, wikiName: string, selectiveSyncFilter: string) => {
+  const storeHtml = useCallback(async (origin: string, wikiName: string, selectiveSyncFilter: string, serverID: string) => {
     if (WIKI_FOLDER_PATH === undefined) return;
     setStatus('fetching');
-    const getSkinnyHTMLUrl = new URL(urlString);
-    const baseUrl = getSkinnyHTMLUrl.origin;
+    const getSkinnyHTMLUrl = new URL('/tw-mobile-sync/get-skinny-html', origin);
     /**
      * Get tiddlers without text field
      */
-    const getSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script', baseUrl);
+    const getSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script', origin);
     /**
      * Text field of these skinny tiddlers (but might filter ` -[is[binary]]`)
      */
-    const getSkinnyTiddlerTextCacheUrl = new URL('/tw-mobile-sync/get-skinny-tiddler-text', baseUrl);
+    const getSkinnyTiddlerTextCacheUrl = new URL('/tw-mobile-sync/get-skinny-tiddler-text', origin);
     /**
      * Some tiddlers must have text field on start, this gets them
      */
-    const getNonSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-non-skinny-tiddlywiki-tiddler-store-script', baseUrl);
+    const getNonSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-non-skinny-tiddlywiki-tiddler-store-script', origin);
 
     // Fetch the HTML content
     let newWorkspaceID: string | undefined;
@@ -53,7 +53,7 @@ export function useImportHTML() {
       setStatus('creating');
 
       // Save the HTML to a file
-      const newWorkspace = addWiki({ name: wikiName, selectiveSyncFilter });
+      const newWorkspace = addWiki({ name: wikiName, selectiveSyncFilter, syncedServers: [{ serverID, lastSync: Date.now() }] });
       if (newWorkspace === undefined) throw new Error('Failed to create workspace');
       newWorkspaceID = newWorkspace.id;
       // make main folder
@@ -61,6 +61,7 @@ export function useImportHTML() {
       await fs.deleteAsync(newWorkspace.wikiFolderLocation, { idempotent: true });
       await fs.makeDirectoryAsync(newWorkspace.wikiFolderLocation, { intermediates: true });
       await fs.makeDirectoryAsync(getWikiCacheFolderPath(newWorkspace), { intermediates: true });
+      await fs.makeDirectoryAsync(getWikiTiddlerFolderPath(newWorkspace), { intermediates: true });
       setCreatedWikiWorkspace(newWorkspace);
 
       setStatus('downloading');

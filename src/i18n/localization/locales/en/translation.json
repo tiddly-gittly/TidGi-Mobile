@@ -149,7 +149,8 @@
     "OpenLocalWikiFromHTML": "import wiki.html",
     "ExtractedWikiFolderName": "Converted WIKI folder name",
     "BadWikiHtml": "Failed to create a wiki from this HTML file ",
-    "SelectiveSyncFilter": "Filter of Selective Sync"
+    "SelectiveSyncFilter": "Filter of Selective Sync",
+    "ServerList": "Server List"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

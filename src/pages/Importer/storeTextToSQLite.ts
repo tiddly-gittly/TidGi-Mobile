@@ -49,8 +49,7 @@ async function storeTextToSQLite(database: SQLite.SQLiteDatabase, workspace: IWi
   });
 }
 
-const BATCH_SIZE_2 = 499; // Max is 999, We divide by 2 as we have 2 fields to insert (title, text) each time for each row
-const BATCH_SIZE_3 = 333; // Max is 333, We divide by 3 as we have 3 fields to insert (title, text) each time for each row
+const BATCH_SIZE_2 = 499; // Max variable count is 999 by default, We divide by 2 as we have 2 fields to insert (title, text) each time for each row
 
 /**
  * Split the data into batches

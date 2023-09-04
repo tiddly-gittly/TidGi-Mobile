@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
+import { useServerStore } from '../../store/server';
+import { nativeService } from '../WikiWebView/NativeService';
 import { useImportHTML } from './useImportHTML';
 
 const Container = styled.View`
@@ -43,6 +45,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>();
   const [wikiName, setWikiName] = useState('wiki');
   const [selectiveSyncFilter, setSelectiveSyncFilter] = useState('-[type[application/msword]] -[type[application/pdf]]');
+  const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
 
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
@@ -76,6 +79,16 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }, [scannedString]);
 
   const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace } = useImportHTML();
+
+  const addServerAndImport = useCallback(async () => {
+    if (wikiUrl?.origin === undefined) return;
+    const newServer = await addServer({ uri: wikiUrl.origin, name: wikiName });
+    void nativeService.getLocationWithTimeout().then(coords => {
+      if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
+    });
+    await storeHtml(wikiUrl.origin, wikiName, selectiveSyncFilter, newServer.id);
+    setWikiUrl(undefined);
+  }, [addServer, selectiveSyncFilter, storeHtml, updateServer, wikiName, wikiUrl]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -126,10 +139,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           />
           <ImportWikiButton
             mode='outlined'
-            onPress={async () => {
-              await storeHtml(wikiUrl.href, wikiName, selectiveSyncFilter);
-              setWikiUrl(undefined);
-            }}
+            onPress={addServerAndImport}
           >
             {t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
           </ImportWikiButton>

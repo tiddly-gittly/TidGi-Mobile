@@ -4,6 +4,8 @@ import type { IWikiWorkspace } from '../store/wiki';
 export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${fs.documentDirectory}wikis/`;
 export const WIKI_FILE_NAME = 'index.html';
 export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
+export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/tiddlers/`;
+export const getWikiTiddlerPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiTiddlerFolderPath(workspace)}${title}`;
 export const WIKI_STORE_NAME = 'tiddlerStore.json';
 /**
  * We download json to the cache folder (batch download as a single json is faster), then move it to the sqlite later.

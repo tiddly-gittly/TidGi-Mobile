@@ -162,7 +162,8 @@
     "NoGitInfoAlert": "你未选择在线Git仓库地址，或未成功登录在线Git存储服务账号（可能被墙）。点击创建按钮将创建一个不会自动同步到Github的本地仓库，请注意。",
     "WikiNotStarted": "Wiki 页面未成功启动或未成功加载",
     "Advanced": "高级设置",
-    "SelectiveSyncFilter": "选择性同步过滤器"
+    "SelectiveSyncFilter": "选择性同步过滤器",
+    "ServerList": "服务器列表"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",

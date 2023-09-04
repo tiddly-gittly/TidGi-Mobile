@@ -16,10 +16,15 @@ export interface IWikiWorkspace {
    * If empty, all tiddlers will be synced.
    */
   selectiveSyncFilter: string;
+  syncedServers: IWikiServerSync[];
   /**
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
+}
+export interface IWikiServerSync {
+  lastSync: number;
+  serverID: string;
 }
 interface WikiState {
   wikis: IWikiWorkspace[];
