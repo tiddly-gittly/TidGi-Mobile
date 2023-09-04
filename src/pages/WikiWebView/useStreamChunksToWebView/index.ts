@@ -21,59 +21,49 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
     });`);
   }, [webViewReference]);
 
+  const sendChunkedDataToWebView = useCallback((messageType: string, scriptContent: string, endMessageType: string) => {
+    let chunkIndex = 0;
+    const scriptLength = scriptContent.length;
+
+    function sendNextChunk() {
+      if (webViewReference.current === null) return;
+      if (chunkIndex < scriptLength) {
+        const chunk = scriptContent.slice(chunkIndex, chunkIndex + CHUNK_SIZE);
+        sendDataToWebView(messageType, chunk);
+        chunkIndex += CHUNK_SIZE;
+
+        // If this was the last chunk, notify the WebView to replace the content
+        if (chunkIndex >= scriptLength) {
+          sendDataToWebView(endMessageType);
+        } else {
+          // Optionally add a delay to ensure chunks are processed in order
+          setTimeout(sendNextChunk, 10);
+        }
+      }
+    }
+
+    sendNextChunk();
+  }, [sendDataToWebView, webViewReference]);
+
   /**
    * Inject HTML and tiddlers store
    */
   useEffect(() => {
-    let skinnyStoreChunkIndex = 0;
-    const skinnyStoreScriptLength = htmlContent.skinnyTiddlerStore.length;
-    function sendNextSkinnyStoreChunk() {
-      if (webViewReference.current === null) return;
-      if (skinnyStoreChunkIndex < skinnyStoreScriptLength) {
-        const chunk = htmlContent.skinnyTiddlerStore.slice(skinnyStoreChunkIndex, skinnyStoreChunkIndex + CHUNK_SIZE);
-        sendDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK', chunk);
-        skinnyStoreChunkIndex += CHUNK_SIZE;
+    const { html, skinnyTiddlerStore, tiddlerStoreScript } = htmlContent;
 
-        // If this was the last chunk, notify the WebView to replace the content
-        if (skinnyStoreChunkIndex >= skinnyStoreScriptLength) {
-          sendDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END');
-        } else {
-          // Optionally add a delay to ensure chunks are processed in order
-          setTimeout(sendNextSkinnyStoreChunk, 10);
-        }
-      }
-    }
-    let storeChunkIndex = 0;
-    const storeScriptLength = htmlContent.tiddlerStoreScript.length;
-    function sendNextStoreChunk() {
-      if (webViewReference.current === null) return;
-      if (storeChunkIndex < storeScriptLength) {
-        const chunk = htmlContent.tiddlerStoreScript.slice(storeChunkIndex, storeChunkIndex + CHUNK_SIZE);
-        sendDataToWebView('TIDDLER_STORE_SCRIPT_CHUNK', chunk);
-        storeChunkIndex += CHUNK_SIZE;
-
-        // If this was the last chunk, notify the WebView to replace the content
-        if (storeChunkIndex >= storeScriptLength) {
-          sendDataToWebView('TIDDLER_STORE_SCRIPT_CHUNK_END');
-        } else {
-          // Optionally add a delay to ensure chunks are processed in order
-          setTimeout(sendNextStoreChunk, 10);
-        }
-      }
-    }
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
     if (webviewLoaded && webViewReference.current !== null) {
       /**
        * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
        */
-      sendDataToWebView('TIDDLYWIKI_HTML', htmlContent.html);
+      sendDataToWebView('TIDDLYWIKI_HTML', html);
       /**
        * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
        */
-      sendNextSkinnyStoreChunk();
-      sendNextStoreChunk();
+      sendChunkedDataToWebView('TIDDLER_STORE_SCRIPT_CHUNK', tiddlerStoreScript, 'TIDDLER_STORE_SCRIPT_CHUNK_END');
+      sendChunkedDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK', skinnyTiddlerStore, 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END');
     }
-  }, [webViewReference, htmlContent, webviewLoaded, sendDataToWebView]);
+  }, [webViewReference, htmlContent, webviewLoaded, sendDataToWebView, sendChunkedDataToWebView]);
 
   return [webviewSideReceiver] as const;
 }

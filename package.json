@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "expo start",
     "android": "expo start --android",
     "build:plugin": "zx scripts/buildPlugins.mjs",
     "ios": "expo start --ios",
+    "start": "expo start",
     "web": "expo start --web",
     "tw:emptyHTML": "zx scripts/generateEmptyWikiHTML.mjs"
   },
