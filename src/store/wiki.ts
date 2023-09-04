@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as fs from 'expo-file-system';
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { WIKI_FOLDER_PATH } from '../constants/paths';
 
 export interface IWikiWorkspace {
   id: string;
@@ -41,13 +41,13 @@ export const useWikiStore = create<WikiState & WikiActions>()(
         add: (newWikiWorkspace) => {
           let result: IWikiWorkspace | undefined;
           set((state) => {
-            if (fs.documentDirectory === null) return;
+            if (WIKI_FOLDER_PATH === undefined) return;
             // name can't be empty
             newWikiWorkspace.name = newWikiWorkspace.name || 'wiki';
             // can have same name, but not same id
             const sameNameWorkspace = state.wikis.find((workspace) => workspace.name === newWikiWorkspace.name);
             const id = sameNameWorkspace === undefined ? newWikiWorkspace.name : `${newWikiWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
-            const wikiFolderLocation = `${fs.documentDirectory}${id}`;
+            const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
             const newWikiWorkspaceWithID = { ...newWikiWorkspace, id, wikiFolderLocation };
             state.wikis.push(newWikiWorkspaceWithID);
             result = newWikiWorkspaceWithID;

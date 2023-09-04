@@ -22,6 +22,7 @@ export function useImportHTML() {
   const [skinnyTiddlerStoreScriptDownloadPercentage, setSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [nonSkinnyTiddlerStoreScriptDownloadPercentage, setNonSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [skinnyTiddlerTextCacheDownloadPercentage, setSkinnyTiddlerTextCacheDownloadPercentage] = useState(0);
+  const [addTextToSQLitePercentage, setAddTextToSQLitePercentage] = useState(0);
   const addWiki = useWikiStore(state => state.add);
   const removeWiki = useWikiStore(state => state.remove);
   const [createdWikiWorkspace, setCreatedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
@@ -31,8 +32,6 @@ export function useImportHTML() {
     setStatus('fetching');
     const getSkinnyHTMLUrl = new URL(urlString);
     const baseUrl = getSkinnyHTMLUrl.origin;
-    // DEBUG: console baseUrl
-    console.log(`baseUrl`, baseUrl);
     /**
      * Get tiddlers without text field
      */
@@ -94,7 +93,7 @@ export function useImportHTML() {
         htmlDownloadResumable.downloadAsync(),
         skinnyTiddlerStoreDownloadResumable.downloadAsync(),
         nonSkinnyTiddlerStoreDownloadResumable.downloadAsync(),
-        skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync().then(() => storeTextToSQLite(newWorkspace)),
+        skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync().then(() => storeTextToSQLite(newWorkspace, setAddTextToSQLitePercentage)),
       ]);
       setStatus('success');
     } catch (error) {
@@ -117,11 +116,12 @@ export function useImportHTML() {
       skinnyTiddlerStoreScriptDownloadPercentage,
       nonSkinnyTiddlerStoreScriptDownloadPercentage,
       skinnyTiddlerTextCacheDownloadPercentage,
+      addTextToSQLitePercentage,
     },
   };
 }
 
-async function storeTextToSQLite(workspace: IWikiWorkspace) {
+async function storeTextToSQLite(workspace: IWikiWorkspace, setProgress: (progress: number) => void = () => {}) {
   const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
   await database.transactionAsync(async tx => {
     await tx.executeSqlAsync('CREATE TABLE IF NOT EXISTS tiddlers (title TEXT PRIMARY KEY, text TEXT);');
@@ -133,8 +133,12 @@ async function storeTextToSQLite(workspace: IWikiWorkspace) {
     } catch (error) {
       throw new Error(`Failed to read tiddler text store, ${(error as Error).message}`);
     }
+    const dataLength = tiddlerTextsJSON.length;
+    let index = 0;
+    setProgress(0);
     await Promise.all(tiddlerTextsJSON.map(async row => {
       await tx.executeSqlAsync('INSERT INTO tiddlers (title, text) VALUES (?, ?);', [row.title, row.text]);
+      setProgress(index++ / dataLength);
     }));
   });
 }
