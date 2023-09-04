@@ -222,16 +222,13 @@ class TidGiMobileFileSystemSyncAdaptor {
         // TODO: fetch large file using HTTP from TidGi-Desktop
         throw new Error(`Tiddler "${title}" is large file, not supported yet.`);
       }
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-      const tiddlerFields = { ...tiddler.fields, text: tiddlerText } satisfies ITiddlerFields;
+      const tiddlerFields: ITiddlerFields = { ...tiddler.fields, text: tiddlerText, type: tiddler.fields.type ?? 'text/vnd.tiddlywiki', bag: 'default' };
 
       // only add revision if it > 0 or exists
       // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
       // if (this.wiki.getChangeCount(title)) {
       //   tiddlerFields.revision = String(this.wiki.getChangeCount(title));
       // }
-      // tiddlerFields.bag = 'default';
-      tiddlerFields.type = tiddlerFields.type ?? 'text/vnd.tiddlywiki';
       callback?.(null, tiddlerFields);
     } catch (error) {
       // eslint-disable-next-line n/no-callback-literal

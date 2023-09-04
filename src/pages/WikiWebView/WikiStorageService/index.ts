@@ -58,6 +58,7 @@ export class WikiStorageService {
     // }
     // tiddlerFieldsToPut.title = title;
     // this.wikiInstance.wiki.addTiddler(new this.wikiInstance.Tiddler(tiddlerFieldsToPut));
+    // TODO: save tiddler fields other than text field, to `getWikiTiddlerStorePath(workspace, true)`
     await this.#sqlite.execAsync([{ sql: 'INSERT OR REPLACE INTO tiddlers (title, text) VALUES (?, ?);', args: [title, tiddlerFieldsToPut.text] }], false);
     const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
     const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
