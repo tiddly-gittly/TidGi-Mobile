@@ -3,7 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
 
-type ITiddlerTextJSON = Array<{ text: string; title: string }>;
+export type ITiddlerTextJSON = Array<{ text: string; title: string }>;
 
 export async function storeTextToSQLite(workspace: IWikiWorkspace, setProgress: (progress: number) => void = () => {}) {
   const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));

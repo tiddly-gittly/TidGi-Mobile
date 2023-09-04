@@ -213,7 +213,25 @@ class TidGiMobileFileSystemSyncAdaptor {
   async loadTiddler(title: string, callback?: ISyncAdaptorLoadTiddlerCallback) {
     this.logger.log(`loadTiddler ${title}`);
     try {
-      const tiddlerFields: ITiddlerFields = await this.wikiStorageService.loadTiddler(title);
+      const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
+      const tiddler = this.wiki.getTiddler(title);
+      if (tiddler === undefined) {
+        throw new Error(`Tiddler "${title}" not exist`);
+      }
+      if (tiddlerText === undefined) {
+        // TODO: fetch large file using HTTP from TidGi-Desktop
+        throw new Error(`Tiddler "${title}" is large file, not supported yet.`);
+      }
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      const tiddlerFields = { ...tiddler.fields, text: tiddlerText } satisfies ITiddlerFields;
+
+      // only add revision if it > 0 or exists
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+      // if (this.wiki.getChangeCount(title)) {
+      //   tiddlerFields.revision = String(this.wiki.getChangeCount(title));
+      // }
+      // tiddlerFields.bag = 'default';
+      tiddlerFields.type = tiddlerFields.type ?? 'text/vnd.tiddlywiki';
       callback?.(null, tiddlerFields);
     } catch (error) {
       // eslint-disable-next-line n/no-callback-literal

@@ -41,7 +41,7 @@ function WebViewWithPreload({ htmlContent, wikiWorkspace }: { htmlContent: IHtml
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
-  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useWikiStorageService(wikiWorkspace.id);
+  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useWikiStorageService(wikiWorkspace);
   const [webviewSideReceiver] = useStreamChunksToWebView(webViewReference, htmlContent, loaded);
   const preloadScript = useMemo(() => `
     window.onerror = function(message, sourcefile, lineno, colno, error) {
