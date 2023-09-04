@@ -1,17 +1,10 @@
 /* eslint-disable @typescript-eslint/promise-function-async */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import {
-  getWikiCacheFolderPath,
-  getWikiFilePath,
-  getWikiSkinnyTiddlerTextSqliteName,
-  getWikiTiddlerStorePath,
-  getWikiTiddlerTextStoreCachePath,
-  WIKI_FOLDER_PATH,
-} from '../../constants/paths';
+import { getWikiCacheFolderPath, getWikiFilePath, getWikiTiddlerStorePath, getWikiTiddlerTextStoreCachePath, WIKI_FOLDER_PATH } from '../../constants/paths';
 import { IWikiWorkspace, useWikiStore } from '../../store/wiki';
+import { storeTextToSQLite } from './storeTextToSQLite';
 
 type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'success' | 'error';
 
@@ -54,11 +47,11 @@ export function useImportHTML() {
       const newWorkspace = addWiki({ name: wikiName, selectiveSyncFilter });
       if (newWorkspace === undefined) throw new Error('Failed to create workspace');
       newWorkspaceID = newWorkspace.id;
-      try {
-        // make main folder
-        await fs.makeDirectoryAsync(newWorkspace.wikiFolderLocation);
-        await fs.makeDirectoryAsync(getWikiCacheFolderPath(newWorkspace));
-      } catch {}
+      // make main folder
+      // prevent error `Directory 'file:///data/user/0/host.exp.exponent/files/wikis/wiki' could not be created or already exists]`
+      await fs.deleteAsync(newWorkspace.wikiFolderLocation, { idempotent: true });
+      await fs.makeDirectoryAsync(newWorkspace.wikiFolderLocation, { intermediates: true });
+      await fs.makeDirectoryAsync(getWikiCacheFolderPath(newWorkspace), { intermediates: true });
       setCreatedWikiWorkspace(newWorkspace);
 
       setStatus('downloading');
@@ -119,26 +112,4 @@ export function useImportHTML() {
       addTextToSQLitePercentage,
     },
   };
-}
-
-async function storeTextToSQLite(workspace: IWikiWorkspace, setProgress: (progress: number) => void = () => {}) {
-  const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
-  await database.transactionAsync(async tx => {
-    await tx.executeSqlAsync('CREATE TABLE IF NOT EXISTS tiddlers (title TEXT PRIMARY KEY, text TEXT);');
-    let tiddlerTextsJSON: Array<{ text: string; title: string }>;
-    try {
-      const tiddlerTexts = await fs.readAsStringAsync(getWikiTiddlerTextStoreCachePath(workspace));
-      // TODO: stream result to prevent OOM
-      tiddlerTextsJSON = JSON.parse(tiddlerTexts) as Array<{ text: string; title: string }>;
-    } catch (error) {
-      throw new Error(`Failed to read tiddler text store, ${(error as Error).message}`);
-    }
-    const dataLength = tiddlerTextsJSON.length;
-    let index = 0;
-    setProgress(0);
-    await Promise.all(tiddlerTextsJSON.map(async row => {
-      await tx.executeSqlAsync('INSERT INTO tiddlers (title, text) VALUES (?, ?);', [row.title, row.text]);
-      setProgress(index++ / dataLength);
-    }));
-  });
 }
