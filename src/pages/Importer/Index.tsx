@@ -159,6 +159,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.error50} />
           <Text>Tiddler Text</Text>
           <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.error50} />
+        </>
+      )}
+      {importStatus === 'sqlite' && (
+        <>
+          <Text>Adding To SQLite DB</Text>
+          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.error50} />
           <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.error50} />
         </>
       )}

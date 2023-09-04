@@ -66,8 +66,8 @@ export class WikiStorageService {
   }
 
   async loadTiddlerText(title: string): Promise<string | undefined> {
-    const queryResult = await this.#sqlite.execAsync([{ sql: 'SELECT text FROM tiddlers WHERE title = ?;', args: [title] }], true);
-    const result = queryResult[0];
+    const resultSet = await this.#sqlite.execAsync([{ sql: 'SELECT text FROM tiddlers WHERE title = ?;', args: [title] }], true);
+    const result = resultSet[0];
     if (result === undefined) return undefined;
     if ('error' in result) {
       console.error(result.error);
@@ -82,6 +82,11 @@ export class WikiStorageService {
   async deleteTiddler(title: string): Promise<boolean> {
     await this.#sqlite.execAsync([{ sql: 'DELETE FROM tiddlers WHERE title = ?;', args: [title] }], false);
     return true;
+  }
+
+  destroy() {
+    // TODO: close db on leaving a wiki
+    this.#sqlite.closeAsync();
   }
 }
 

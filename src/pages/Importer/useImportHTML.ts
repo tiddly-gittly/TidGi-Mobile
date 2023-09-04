@@ -2,11 +2,19 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
 import { useCallback, useState } from 'react';
-import { getWikiCacheFolderPath, getWikiFilePath, getWikiTiddlerStorePath, getWikiTiddlerTextStoreCachePath, WIKI_FOLDER_PATH } from '../../constants/paths';
+import {
+  getWikiCacheFolderPath,
+  getWikiFilePath,
+  getWikiTiddlerSkinnyStoreCachePath,
+  getWikiTiddlerStorePath,
+  getWikiTiddlerTextStoreCachePath,
+  WIKI_FOLDER_PATH,
+} from '../../constants/paths';
 import { IWikiWorkspace, useWikiStore } from '../../store/wiki';
-import { storeTextToSQLite } from './storeTextToSQLite';
+import { createTable } from './createTable';
+import { storeTiddlersToSQLite } from './storeTextToSQLite';
 
-type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'success' | 'error';
+type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'sqlite' | 'success' | 'error';
 
 export function useImportHTML() {
   const [status, setStatus] = useState<StoreHtmlStatus>('idle');
@@ -16,6 +24,7 @@ export function useImportHTML() {
   const [nonSkinnyTiddlerStoreScriptDownloadPercentage, setNonSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [skinnyTiddlerTextCacheDownloadPercentage, setSkinnyTiddlerTextCacheDownloadPercentage] = useState(0);
   const [addTextToSQLitePercentage, setAddTextToSQLitePercentage] = useState(0);
+  const [addFieldsToSQLitePercentage, setAddFieldsToSQLitePercentage] = useState(0);
   const addWiki = useWikiStore(state => state.add);
   const removeWiki = useWikiStore(state => state.remove);
   const [createdWikiWorkspace, setCreatedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
@@ -60,7 +69,7 @@ export function useImportHTML() {
       });
       const skinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
         getSkinnyTiddlywikiTiddlerStoreScriptUrl.toString(),
-        getWikiTiddlerStorePath(newWorkspace, true),
+        getWikiTiddlerSkinnyStoreCachePath(newWorkspace),
         {},
         (progress) => {
           setSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
@@ -76,7 +85,7 @@ export function useImportHTML() {
       );
       const nonSkinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
         getNonSkinnyTiddlywikiTiddlerStoreScriptUrl.toString(),
-        getWikiTiddlerStorePath(newWorkspace, false),
+        getWikiTiddlerStorePath(newWorkspace),
         {},
         (progress) => {
           setNonSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
@@ -86,8 +95,11 @@ export function useImportHTML() {
         htmlDownloadResumable.downloadAsync(),
         skinnyTiddlerStoreDownloadResumable.downloadAsync(),
         nonSkinnyTiddlerStoreDownloadResumable.downloadAsync(),
-        skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync().then(() => storeTextToSQLite(newWorkspace, setAddTextToSQLitePercentage)),
+        skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync(),
       ]);
+      setStatus('sqlite');
+      await createTable(newWorkspace);
+      await storeTiddlersToSQLite(newWorkspace, { text: setAddTextToSQLitePercentage, fields: setAddFieldsToSQLitePercentage });
       setStatus('success');
     } catch (error) {
       console.error(error, (error as Error).stack);
@@ -110,6 +122,7 @@ export function useImportHTML() {
       nonSkinnyTiddlerStoreScriptDownloadPercentage,
       skinnyTiddlerTextCacheDownloadPercentage,
       addTextToSQLitePercentage,
+      addFieldsToSQLitePercentage,
     },
   };
 }

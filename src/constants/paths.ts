@@ -8,9 +8,11 @@ export const WIKI_STORE_NAME = 'tiddlerStore.json';
 /**
  * We download json to the cache folder (batch download as a single json is faster), then move it to the sqlite later.
  */
-export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace, skinny: boolean) => `${workspace.wikiFolderLocation}/${skinny ? 'skinny-' : ''}${WIKI_STORE_NAME}`;
+export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_STORE_NAME}`;
 export const WIKI_SMALL_TEXT_STORE_CACHE_NAME = 'text-tiddlerStore.json';
+export const WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME = 'skinny-tiddlerStore.json';
 export const getWikiCacheFolderPath = (workspace: IWikiWorkspace) => `${fs.cacheDirectory ?? `${workspace.wikiFolderLocation}/cache/`}`;
+export const getWikiTiddlerSkinnyStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME}`;
 export const getWikiTiddlerTextStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SMALL_TEXT_STORE_CACHE_NAME}`;
 export const WIKI_SMALL_TEXT_STORE_SQLITE_NAME = 'skinnyTiddlersText.db';
 /**
