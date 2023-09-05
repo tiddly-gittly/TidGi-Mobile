@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
-import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import debounce from 'lodash/debounce';
+import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
@@ -230,7 +230,8 @@ class TidGiMobileFileSystemSyncAdaptor {
       const etag = await this.wikiStorageService.saveTiddler(
         title,
         tiddler.fields.text,
-        JSON.stringify(tiddler.getFieldStrings({ exclude: ['text'] })),
+        // FIXME: now store all mobile created tiddler as skinny tiddler, this might prevent plugins and javascript to work
+        JSON.stringify({ ...tiddler.getFieldStrings({ exclude: ['text'] }), _is_skinny: '' }),
       );
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
@@ -249,9 +250,10 @@ class TidGiMobileFileSystemSyncAdaptor {
     }
   }
 
-  /*
-  Load a tiddler and invoke the callback with (err,tiddlerFields)
-  */
+  /**
+   * Load a tiddler and invoke the callback with (err,tiddlerFields)
+   * Need a tiddler with `_is_skinny: ""` to trigger this.
+   */
   async loadTiddler(title: string, callback?: ISyncAdaptorLoadTiddlerCallback) {
     this.logger.log(`loadTiddler ${title}`);
     try {
