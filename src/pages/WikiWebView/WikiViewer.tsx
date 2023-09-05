@@ -5,13 +5,13 @@ import { MD3Colors, Text } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
+import { useWikiStorageService } from '../../services/WikiStorageService';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 import { useWindowMeta } from './useWindowMeta';
-import { useWikiStorageService } from './WikiStorageService';
 
 const WebViewContainer = styled.View`
   flex: 2;

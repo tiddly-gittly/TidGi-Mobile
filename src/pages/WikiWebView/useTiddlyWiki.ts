@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath, getWikiTiddlerStorePath } from '../../constants/paths';
+import { getSkinnyTiddlersJSONFromSQLite } from '../../services/WikiStorageService';
 import { IWikiWorkspace } from '../../store/wiki';
-import { getSkinnyTiddlersJSONFromSQLite } from './WikiStorageService';
 
 export interface IHtmlContent {
   html: string;

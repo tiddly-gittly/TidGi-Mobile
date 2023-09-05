@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
+import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
-import { nativeService } from '../WikiWebView/NativeService';
 import { useImportHTML } from './useImportHTML';
 
 const Container = styled.View`

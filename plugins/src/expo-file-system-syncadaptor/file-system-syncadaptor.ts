@@ -2,7 +2,7 @@
 /* eslint-disable unicorn/no-null */
 import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import debounce from 'lodash/debounce';
-import type { WikiStorageService } from '../../../src/pages/WikiWebView/WikiStorageService/index.ts';
+import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
