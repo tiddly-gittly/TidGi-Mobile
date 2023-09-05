@@ -79,7 +79,7 @@ class BackgroundSyncService {
 
   async #getChangeLogsSinceLastSync(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
     const database = SQLite.openDatabase(getWikiMainSqliteName(wiki));
-    const lastSyncTimestamp = new Date(server.lastSync).toISOString();
+    const lastSyncTimestamp = server.lastSync / 1000;
     const resultSets = await database.execAsync(
       [{
         sql: `SELECT * FROM tiddlers_changes_log WHERE timestamp > ? ORDER BY timestamp ASC;`,
