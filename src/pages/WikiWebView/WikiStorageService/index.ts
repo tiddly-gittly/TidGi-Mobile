@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
+import { useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers } from 'tiddlywiki';
@@ -8,6 +9,7 @@ import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerPathByTitle } from '.
 import { useConfigStore } from '../../../store/config';
 import { ServerStatus, useServerStore } from '../../../store/server';
 import { IWikiWorkspace } from '../../../store/wiki';
+import { TiddlersLogOperation } from '../../Importer/createTable';
 import { ITiddlerTextJSON } from '../../Importer/storeTextToSQLite';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
 import { registerWikiStorageServiceOnWebView } from './registerWikiStorageServiceOnWebView';
@@ -55,18 +57,59 @@ export class WikiStorageService {
    */
   async saveTiddler(title: string, text: string, fieldStrings: string): Promise<string> {
     try {
-      const result = await this.#sqlite.execAsync([{
-        sql: 'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
-        args: [title, text, fieldStrings],
-      }], false);
-      if ('error' in result[0]) {
-        throw result[0].error;
-      }
+      let operation: TiddlersLogOperation = TiddlersLogOperation.DELETE;
+
+      await this.#sqlite.transactionAsync(async tx => {
+        // Check if a tiddler with the same title already exists
+        const result = await tx.executeSqlAsync(
+          'SELECT title FROM tiddlers WHERE title = ?;',
+          [title],
+        );
+
+        if ('error' in result) {
+          throw result.error;
+        }
+        if (result.rows.length > 0) {
+          // If tiddler exists, set operation to 'UPDATE'
+          operation = TiddlersLogOperation.UPDATE;
+        }
+
+        await tx.executeSqlAsync(
+          'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
+          [title, text, fieldStrings],
+        );
+
+        await tx.executeSqlAsync(
+          'INSERT INTO tiddlers_changes_log (title, operation) VALUES (?, ?);',
+          [title, operation],
+        );
+      });
+
       const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
       return Etag;
     } catch (error) {
       console.error(`Failed to save tiddler ${title}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      throw error;
+    }
+  }
+
+  async deleteTiddler(title: string): Promise<boolean> {
+    try {
+      await this.#sqlite.transactionAsync(async tx => {
+        await tx.executeSqlAsync(
+          'DELETE FROM tiddlers WHERE title = ?;',
+          [title],
+        );
+
+        await tx.executeSqlAsync(
+          'INSERT INTO tiddlers_changes_log (title, operation) VALUES (?, ?);',
+          [title, TiddlersLogOperation.DELETE],
+        );
+      });
+      return true;
+    } catch (error) {
+      console.error(`Failed to delete tiddler ${title}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       throw error;
     }
   }
@@ -118,11 +161,6 @@ export class WikiStorageService {
     }
   }
 
-  async deleteTiddler(title: string): Promise<boolean> {
-    await this.#sqlite.execAsync([{ sql: 'DELETE FROM tiddlers WHERE title = ?;', args: [title] }], false);
-    return true;
-  }
-
   destroy() {
     // TODO: close db on leaving a wiki
     this.#sqlite.closeAsync();
@@ -144,7 +182,7 @@ export class WikiStorageService {
 }
 
 export function useWikiStorageService(workspace: IWikiWorkspace) {
-  const wikiStorageService = new WikiStorageService(workspace);
+  const wikiStorageService = useMemo(() => new WikiStorageService(workspace), [workspace]);
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorageService, WikiStorageServiceIPCDescriptor);
   return [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] as const;
 }
