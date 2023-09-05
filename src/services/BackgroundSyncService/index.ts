@@ -32,6 +32,8 @@ export async function registerBackgroundSyncAsync() {
     stopOnTerminate: false, // android only,
     startOnBoot: true, // android only
   });
+  // immediately sync once
+  await backgroundSyncService.sync();
 }
 
 // 3. (Optional) Unregister tasks by specifying the task name
@@ -116,6 +118,8 @@ class BackgroundSyncService {
             return change;
           }
           const skinnyTiddlerWithText = result.rows[0] as ISkinnyTiddlerWithText;
+          // DEBUG: console skinnyTiddlerWithText.fields
+          console.log(`skinnyTiddlerWithText.fields`, skinnyTiddlerWithText.fields);
           const fieldsWithoutText = JSON.parse(skinnyTiddlerWithText.fields) as ITiddlerFieldsParam;
           const fields = {
             ...fieldsWithoutText,

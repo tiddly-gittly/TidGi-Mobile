@@ -139,7 +139,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             }}
           />
           <ImportWikiButton
-            mode='elevated'
+            mode='contained'
             disabled={importStatus !== 'idle'}
             onPress={addServerAndImport}
           >

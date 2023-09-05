@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { StackScreenProps } from '@react-navigation/stack';
 import React, { FC } from 'react';
 import { styled } from 'styled-components/native';
@@ -9,12 +10,13 @@ import { TiddlyWiki } from './TiddlyWiki';
 
 const ConfigContainer = styled.ScrollView`
   padding: 20px;
-  padding-bottom: 50px;
+  padding-top: 0px;
+  flex: 1;
 `;
 
 export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = () => {
   return (
-    <ConfigContainer>
+    <ConfigContainer contentContainerStyle={{ flexGrow: 1 }}>
       <Performance />
       <TiddlyWiki />
       <ServerAndSync />
