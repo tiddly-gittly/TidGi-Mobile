@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@babel/plugin-transform-flow-strip-types": "^7.22.5",
     "@types/react": "~18.2.21",
     "eslint-config-tidgi": "^1.1.5",
     "eslint-plugin-react-native": "^4.0.0",
