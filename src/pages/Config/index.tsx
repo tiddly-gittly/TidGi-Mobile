@@ -4,6 +4,7 @@ import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { Developer } from './Developer';
 import { Performance } from './Performance';
+import { ServerAndSync } from './ServerAndSync';
 import { TiddlyWiki } from './TiddlyWiki';
 
 const ConfigContainer = styled.ScrollView`
@@ -16,6 +17,7 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
     <ConfigContainer>
       <Performance />
       <TiddlyWiki />
+      <ServerAndSync />
       <Developer />
     </ConfigContainer>
   );

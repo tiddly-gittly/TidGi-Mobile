@@ -397,8 +397,8 @@
       "OpenModelFolder": "打开模型文件夹",
       "OpenModelFolderDescription": "推理程序将在这个文件夹里寻找模型，请将你下载的模型放到这里（或使用命令行创建软链接到这里）"
     },
-    "RunInBackground": "后台运行",
-    "RunInBackgroundDescription": "让应用在切换到后台后保持运行，以便下次开启时不需要加载时间。",
+    "KeepAliveInBackground": "后台运行",
+    "KeepAliveInBackgroundDescription": "让应用在切换到后台后保持运行，以便下次开启时不需要加载时间。",
     "RemoveAllWikiData": "清空所有 Wiki 数据",
     "RemoveAllWikiDataDetail": "在开发过程中如果数据有问题，可以直接清空内容来修复，注意先备份否则数据会全部丢失。",
     "RemoveAllWikiDataDone": "已清空所有 Wiki 数据",

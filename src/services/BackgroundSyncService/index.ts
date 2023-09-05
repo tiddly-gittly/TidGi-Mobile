@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/promise-function-async */
+import * as BackgroundFetch from 'expo-background-fetch';
 import * as SQLite from 'expo-sqlite';
+import * as TaskManager from 'expo-task-manager';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiMainSqliteName } from '../../constants/paths';
 import { ISkinnyTiddlerWithText, ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
@@ -7,6 +9,37 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWikiStore } from '../../store/wiki';
 import { ISyncEndPointRequest, ISyncEndPointResponse } from './types';
+
+export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
+// 1. Define the task by providing a name and the function that should be executed
+// Note: This needs to be called in the global scope (e.g outside of your React components)
+TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
+  const now = Date.now();
+
+  console.log(`Got background fetch call at date: ${new Date(now).toISOString()}`);
+  const haveUpdate = await backgroundSyncService.sync();
+
+  // Be sure to return the successful result type!
+  return haveUpdate ? BackgroundFetch.BackgroundFetchResult.NewData : BackgroundFetch.BackgroundFetchResult.NoData;
+});
+
+// 2. Register the task at some point in your app by providing the same name,
+// and some configuration options for how the background fetch should behave
+// Note: This does NOT need to be in the global scope and CAN be used in your React components!
+export async function registerBackgroundSyncAsync() {
+  await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK_NAME, {
+    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000, // 30 minutes in second
+    stopOnTerminate: false, // android only,
+    startOnBoot: true, // android only
+  });
+}
+
+// 3. (Optional) Unregister tasks by specifying the task name
+// This will cancel any future background fetch calls that match the given name
+// Note: This does NOT need to be in the global scope and CAN be used in your React components!
+export async function unregisterBackgroundSyncAsync() {
+  await BackgroundFetch.unregisterTaskAsync(BACKGROUND_SYNC_TASK_NAME);
+}
 
 class BackgroundSyncService {
   #serverStore = useServerStore;
@@ -18,15 +51,16 @@ class BackgroundSyncService {
     setInterval(this.sync.bind(this), syncInterval);
   }
 
-  public async sync() {
+  public async sync(): Promise<boolean> {
     const wikis = this.#wikiStore.getState().wikis;
-
+    let haveUpdate = false;
     for (const wiki of wikis) {
       const server = this.#getOnlineServerForWiki(wiki);
       if (server !== undefined) {
-        await this.syncWikiWithServer(wiki, server);
+        haveUpdate ||= await this.syncWikiWithServer(wiki, server);
       }
     }
+    return haveUpdate;
   }
 
   #getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number }) | undefined {
@@ -103,7 +137,7 @@ class BackgroundSyncService {
     }
   }
 
-  public async syncWikiWithServer(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }) {
+  public async syncWikiWithServer(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<boolean> {
     const changes = await this.#getChangeLogsSinceLastSync(wiki, server);
     const syncUrl = new URL(`tw-mobile-sync/sync`, server.uri);
 
@@ -124,12 +158,14 @@ class BackgroundSyncService {
         },
         body: JSON.stringify(request),
       }).then(response => response.json() as Promise<ISyncEndPointResponse>);
-      if (response === undefined) return;
+      if (response === undefined) return false;
       const { deletes, updates } = response;
       await this.#updateTiddlersFromServer(wiki, deletes, updates);
       this.#updateLastSyncTimestamp(wiki, server);
+      return true;
     } catch (error) {
       console.error(error, (error as Error).stack);
+      return false;
     }
   }
 

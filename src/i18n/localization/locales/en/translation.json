@@ -381,8 +381,8 @@
       "OpenModelFolder": "Open Model Folder",
       "OpenModelFolderDescription": "The inference program will look for models in this folder, please put your downloaded models here (or use the command line to create a soft link to here)"
     },
-    "RunInBackground": "Run In Background",
-    "RunInBackgroundDescription": "Keep the app running after switching to the background so that it doesn't take time to load the next time it's opened.",
+    "KeepAliveInBackground": "Keep Alive In Background",
+    "KeepAliveInBackgroundDescription": "Keep the app running after switching to the background so that it doesn't take time to load the next time it's opened.",
     "RemoveAllWikiData": "Remove All Wiki Data",
     "RemoveAllWikiDataDetail": "If there is a problem with the data during the development process, you can directly empty the content to repair, pay attention to the first backup otherwise all the data will be lost.",
     "RemoveAllWikiDataDone": "Remove All Wiki Data Done",

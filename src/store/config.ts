@@ -5,15 +5,19 @@ import { immer } from 'zustand/middleware/immer';
 
 export interface ConfigState {
   autoOpenDefaultWiki: boolean;
-  runInBackground: boolean;
+  keepAliveInBackground: boolean;
+  syncInBackground: boolean;
   syncInterval: number;
+  syncIntervalBackground: number;
   userName: string;
 }
 const defaultConfig: ConfigState = {
-  runInBackground: true,
   autoOpenDefaultWiki: true,
-  userName: 'TidGi User',
+  keepAliveInBackground: true,
+  syncInBackground: true,
   syncInterval: 60 * 1000,
+  syncIntervalBackground: 60 * 30 * 1000,
+  userName: 'TidGi User',
 };
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;

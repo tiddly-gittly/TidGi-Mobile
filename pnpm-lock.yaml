@@ -26,6 +26,9 @@ dependencies:
   expo:
     specifier: ~49.0.8
     version: 49.0.9(@babel/core@7.22.11)
+  expo-background-fetch:
+    specifier: ~11.3.0
+    version: 11.3.0(expo@49.0.9)
   expo-barcode-scanner:
     specifier: ~12.5.3
     version: 12.5.3(expo@49.0.9)
@@ -53,6 +56,9 @@ dependencies:
   expo-status-bar:
     specifier: ~1.6.0
     version: 1.6.0
+  expo-task-manager:
+    specifier: ~11.3.0
+    version: 11.3.0(expo@49.0.9)
   i18next:
     specifier: ^23.4.6
     version: 23.4.6
@@ -5026,6 +5032,15 @@ packages:
       - supports-color
     dev: false
 
+  /expo-background-fetch@11.3.0(expo@49.0.9):
+    resolution: {integrity: sha512-aRBCg+kp/5j6XJBrcww8i7TPZ7RbybTLDwmBNzsqjUUKH9M8rkTJxy+eoo1qbFp3NGGrfTSNXPyXkH59hwR1mA==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 49.0.9(@babel/core@7.22.11)
+      expo-task-manager: 11.3.0(expo@49.0.9)
+    dev: false
+
   /expo-barcode-scanner@12.5.3(expo@49.0.9):
     resolution: {integrity: sha512-aIeTiOUzPdngTIhZHhM1mOMx9CPtmYEtEkK8pAgyua3NiAKgsUN8z8bpiQWuZTrxSaqkU8fG1zGOk9E4VnNwyA==}
     peerDependencies:
@@ -5167,6 +5182,15 @@ packages:
 
   /expo-status-bar@1.6.0:
     resolution: {integrity: sha512-e//Oi2WPdomMlMDD3skE4+1ZarKCJ/suvcB4Jo/nO427niKug5oppcPNYO+csR6y3ZglGuypS+3pp/hJ+Xp6fQ==}
+    dev: false
+
+  /expo-task-manager@11.3.0(expo@49.0.9):
+    resolution: {integrity: sha512-580XaQGOC2IHLjPV3GBeIwlfxtjuBaitENsUxHvCVgWusatWkq0frq7uzG3yVpG3UHUuQwSOHvkJ6X/3EjdYXw==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 49.0.9(@babel/core@7.22.11)
+      unimodules-app-loader: 4.2.0
     dev: false
 
   /expo@49.0.9(@babel/core@7.22.11):
@@ -9466,6 +9490,10 @@ packages:
   /unicode-property-aliases-ecmascript@2.1.0:
     resolution: {integrity: sha512-6t3foTQI9qne+OZoVQB/8x8rk2k1eVy1gRXhV3oFQ5T6R1dqQ1xtin3XqSlx3+ATBkliTaR/hHyJBm+LVPNM8w==}
     engines: {node: '>=4'}
+    dev: false
+
+  /unimodules-app-loader@4.2.0:
+    resolution: {integrity: sha512-q3FHCw04JUjsDXxvTvJPl63sBseHCiqHWD/3imOseGP+PZLzW46boQmnxSaHcdIOoWK88N/npyEh6eDN9Wyvng==}
     dev: false
 
   /unique-filename@1.1.1:

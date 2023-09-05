@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { FlatList } from 'react-native';
 import { Card } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { IServerInfo, useServerStore } from '../../store/server';
+import { IServerInfo, useServerStore } from '../store/server';
 
 interface ServerListProps {
   onPress: (serverUri: string) => void;
@@ -26,11 +26,13 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress }) => {
   }, [onPress]);
 
   return (
-    <FlatList
-      data={serverList}
-      renderItem={renderItem}
-      keyExtractor={item => item[0]}
-    />
+    <>
+      <FlatList
+        data={serverList}
+        renderItem={renderItem}
+        keyExtractor={item => item[0]}
+      />
+    </>
   );
 };
 

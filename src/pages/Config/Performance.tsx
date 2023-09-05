@@ -6,18 +6,18 @@ import { useConfigStore } from '../../store/config';
 export function Performance(): JSX.Element {
   const { t } = useTranslation();
 
-  const [runInBackground, autoOpenDefaultWiki] = useConfigStore(state => [state.runInBackground, state.autoOpenDefaultWiki]);
+  const [keepAliveInBackground, autoOpenDefaultWiki] = useConfigStore(state => [state.keepAliveInBackground, state.autoOpenDefaultWiki]);
   const setConfig = useConfigStore(state => state.set);
 
   return (
     <>
       <Text variant='headlineLarge'>{t('Preference.Performance')}</Text>
-      <Text variant='titleLarge'>{t('Preference.RunInBackground')}</Text>
-      <Text>{t('Preference.RunInBackgroundDescription')}</Text>
+      <Text variant='titleLarge'>{t('Preference.KeepAliveInBackground')}</Text>
+      <Text>{t('Preference.KeepAliveInBackgroundDescription')}</Text>
       <Switch
-        value={runInBackground}
+        value={keepAliveInBackground}
         onValueChange={(value) => {
-          setConfig({ runInBackground: value });
+          setConfig({ keepAliveInBackground: value });
         }}
       />
       <Text variant='titleLarge'>{t('Preference.AutoOpenDefaultWiki')}</Text>
