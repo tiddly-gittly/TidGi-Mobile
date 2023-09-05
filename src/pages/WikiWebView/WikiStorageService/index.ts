@@ -2,6 +2,8 @@
 import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
+import { Observable } from 'rxjs';
+import type { IChangedTiddlers } from 'tiddlywiki';
 import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerPathByTitle } from '../../../constants/paths';
 import { useConfigStore } from '../../../store/config';
 import { ServerStatus, useServerStore } from '../../../store/server';
@@ -124,6 +126,20 @@ export class WikiStorageService {
   destroy() {
     // TODO: close db on leaving a wiki
     this.#sqlite.closeAsync();
+  }
+
+  // ████████ ██     ██       ███████ ███████ ███████
+  //    ██    ██     ██       ██      ██      ██
+  //    ██    ██  █  ██ █████ ███████ ███████ █████
+  //    ██    ██ ███ ██            ██      ██ ██
+  //    ██     ███ ███        ███████ ███████ ███████
+  getWikiChangeObserver$() {
+    return new Observable<IChangedTiddlers>((observer) => {
+      // TODO: react on connected active server change
+      // this.wikiInstance.wiki.addEventListener('change', (changes) => {
+      //   observer.next(changes);
+      // });
+    });
   }
 }
 

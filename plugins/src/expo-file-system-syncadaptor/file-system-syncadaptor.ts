@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
-import type { ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
+import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
+import debounce from 'lodash/debounce';
 import type { WikiStorageService } from '../../../src/pages/WikiWebView/WikiStorageService/index.ts';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
@@ -52,6 +53,40 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logoutIsAvailable = true;
     // React-Native don't have fs monitor, so no SSE on mobile
     // this.setupSSE();
+  }
+
+  setupSSE() {
+    if (this.wikiStorageService.getWikiChangeObserver$ === undefined) {
+      console.error("getWikiChangeObserver$ is undefined in wikiStorageService, can't subscribe to server changes.");
+      return;
+    }
+    const debouncedSync = debounce(() => {
+      if ($tw.syncer === undefined) {
+        console.error('Syncer is undefined in TidGiMobileFileSystemSyncAdaptor. Abort the `syncFromServer` in `setupSSE debouncedSync`.');
+        return;
+      }
+      $tw.syncer.syncFromServer();
+      this.clearUpdatedTiddlers();
+    }, 500);
+    this.logger.log('setupSSE');
+
+    // After SSE is enabled, we can disable polling and else things that related to syncer. (build up complexer behavior with syncer.)
+    this.configSyncer();
+
+    this.wikiStorageService.getWikiChangeObserver$().subscribe((change: IChangedTiddlers) => {
+      // `$tw.syncer.syncFromServer` calling `this.getUpdatedTiddlers`, so we need to update `this.updatedTiddlers` before it do so. See `core/modules/syncer.js` in the core
+      Object.keys(change).forEach(title => {
+        if (!change[title]) {
+          return;
+        }
+        if (change[title].deleted && !this.recentUpdatedTiddlersFromClient.deletions.includes(title)) {
+          this.updatedTiddlers.deletions.push(title);
+        } else if (change[title].modified && !this.recentUpdatedTiddlersFromClient.modifications.includes(title)) {
+          this.updatedTiddlers.modifications.push(title);
+        }
+      });
+      debouncedSync();
+    });
   }
 
   updatedTiddlers: { deletions: string[]; modifications: string[] } = {
