@@ -60,31 +60,29 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
     );
   }
   return (
-    <WebViewContainer>
-      <WebView
-        originWhitelist={['*']}
-        source={{ uri: 'about:blank' }}
-        renderError={(errorName) => <Text>{errorName}</Text>}
-        renderLoading={() => <Text>{t('Loading')}</Text>}
-        onContentProcessDidTerminate={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          console.warn('Content process terminated, reloading', nativeEvent);
-        }}
-        onRenderProcessGone={syntheticEvent => {
-          const { nativeEvent } = syntheticEvent;
-          console.warn(
-            'WebView Crashed:',
-            nativeEvent.didCrash,
-          );
-        }}
-        onLoadEnd={() => {
-          setLoaded(true);
-        }}
-        onMessage={onMessageReference.current}
-        ref={webViewReference}
-        injectedJavaScriptBeforeContentLoaded={preloadScript}
-        webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
-      />
-    </WebViewContainer>
+    <WebView
+      originWhitelist={['*']}
+      source={{ uri: 'about:blank' }}
+      renderError={(errorName) => <Text>{errorName}</Text>}
+      renderLoading={() => <Text>{t('Loading')}</Text>}
+      onContentProcessDidTerminate={(syntheticEvent) => {
+        const { nativeEvent } = syntheticEvent;
+        console.warn('Content process terminated, reloading', nativeEvent);
+      }}
+      onRenderProcessGone={syntheticEvent => {
+        const { nativeEvent } = syntheticEvent;
+        console.warn(
+          'WebView Crashed:',
+          nativeEvent.didCrash,
+        );
+      }}
+      onLoadEnd={() => {
+        setLoaded(true);
+      }}
+      onMessage={onMessageReference.current}
+      ref={webViewReference}
+      injectedJavaScriptBeforeContentLoaded={preloadScript}
+      webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
+    />
   );
 };
