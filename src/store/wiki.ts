@@ -36,6 +36,7 @@ interface WikiActions {
   add: (newWikiWorkspace: Omit<IWikiWorkspace, 'id' | 'wikiFolderLocation'>) => IWikiWorkspace | undefined;
   remove: (id: string) => void;
   removeAll: () => void;
+  update: (id: string, newWikiWorkspace: Partial<IWikiWorkspace>) => void;
 }
 
 export const useWikiStore = create<WikiState & WikiActions>()(
@@ -58,6 +59,15 @@ export const useWikiStore = create<WikiState & WikiActions>()(
             result = newWikiWorkspaceWithID;
           });
           return result;
+        },
+        update: (id, newWikiWorkspace) => {
+          set((state) => {
+            const oldWikiIndex = state.wikis.findIndex((workspace) => workspace.id === id)!;
+            const oldWiki = state.wikis[oldWikiIndex];
+            if (oldWiki !== undefined) {
+              state.wikis[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace };
+            }
+          });
         },
         remove: (id) => {
           set((state) => {

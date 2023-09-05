@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers } from 'tiddlywiki';
-import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiMainSqliteName, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { ITiddlerTextJSON } from '../../pages/Importer/storeTextToSQLite';
 import { useConfigStore } from '../../store/config';
@@ -32,7 +32,7 @@ export class WikiStorageService {
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
-    this.#sqlite = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(this.#workspace));
+    this.#sqlite = SQLite.openDatabase(getWikiMainSqliteName(this.#workspace));
   }
 
   async getStatus(): Promise<IWikiServerStatusObject> {
@@ -192,7 +192,7 @@ export function useWikiStorageService(workspace: IWikiWorkspace) {
  * @returns json string same as what return from `tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`, with type `Promise<Array<Omit<ITiddlerFields, 'text'>> | undefined>`
  */
 export async function getSkinnyTiddlersJSONFromSQLite(workspace: IWikiWorkspace): Promise<string> {
-  const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
+  const database = SQLite.openDatabase(getWikiMainSqliteName(workspace));
   const resultSet = await database.execAsync([{ sql: 'SELECT fields FROM tiddlers;', args: [] }], true);
   const result = resultSet[0];
   database.closeAsync();

@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Snackbar } from 'react-native-paper';
-import { getWikiSkinnyTiddlerTextSqliteName } from '../../../constants/paths';
+import { getWikiMainSqliteName } from '../../../constants/paths';
 import { useWikiStore } from '../../../store/wiki';
 
 export function useClearAllWikiData() {
@@ -17,7 +17,7 @@ export function useClearAllWikiData() {
   const clearAllWikiData = useCallback(async () => {
     try {
       await Promise.all(wikis.map(async wikiWorkspace => {
-        const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(wikiWorkspace));
+        const database = SQLite.openDatabase(getWikiMainSqliteName(wikiWorkspace));
         database.closeAsync();
         await database.deleteAsync();
       }));

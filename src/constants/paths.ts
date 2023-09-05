@@ -16,9 +16,9 @@ export const WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME = 'skinny-tiddlerStore.json';
 export const getWikiCacheFolderPath = (workspace: IWikiWorkspace) => `${fs.cacheDirectory ?? `${workspace.wikiFolderLocation}/cache/`}`;
 export const getWikiTiddlerSkinnyStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME}`;
 export const getWikiTiddlerTextStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SMALL_TEXT_STORE_CACHE_NAME}`;
-export const WIKI_SMALL_TEXT_STORE_SQLITE_NAME = 'skinnyTiddlersText.db';
+export const WIKI_MAIN_SQLITE_NAME = 'sqlite.db';
 /**
  * Will be store to `${fs.documentDirectory}/SQLite/${name}`
  * @url https://docs.expo.dev/versions/latest/sdk/sqlite/#sqliteopendatabasename-version-description-size-callback
  */
-export const getWikiSkinnyTiddlerTextSqliteName = (workspace: IWikiWorkspace) => `${workspace.id}-${WIKI_SMALL_TEXT_STORE_SQLITE_NAME}`;
+export const getWikiMainSqliteName = (workspace: IWikiWorkspace) => `${workspace.id}-${WIKI_MAIN_SQLITE_NAME}`;

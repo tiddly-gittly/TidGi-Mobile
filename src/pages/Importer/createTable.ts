@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { getWikiSkinnyTiddlerTextSqliteName } from '../../constants/paths';
+import { getWikiMainSqliteName } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
 
 export enum TiddlersLogOperation {
@@ -7,9 +7,20 @@ export enum TiddlersLogOperation {
   INSERT = 'INSERT',
   UPDATE = 'UPDATE',
 }
+export interface ISkinnyTiddlerWithText {
+  fields: string;
+  text: string;
+  title: string;
+}
+export interface ITiddlerChange {
+  id: number;
+  operation: TiddlersLogOperation;
+  timestamp: string;
+  title: string;
+}
 
 export async function createTable(workspace: IWikiWorkspace) {
-  const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
+  const database = SQLite.openDatabase(getWikiMainSqliteName(workspace));
 
   // table for storing skinny tiddlers that will change frequently and will be synced to server
   await database.execAsync([{ sql: 'CREATE TABLE IF NOT EXISTS tiddlers (title TEXT PRIMARY KEY, text TEXT, fields TEXT);', args: [] }], false);

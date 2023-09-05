@@ -1,7 +1,7 @@
 import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import type { ITiddlerFields } from 'tiddlywiki';
-import { getWikiSkinnyTiddlerTextSqliteName, getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
+import { getWikiMainSqliteName, getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/wiki';
 
 export interface ITiddlerTextOnly {
@@ -11,7 +11,7 @@ export interface ITiddlerTextOnly {
 export type ITiddlerTextJSON = ITiddlerTextOnly[];
 
 export async function storeTiddlersToSQLite(workspace: IWikiWorkspace, setProgress: { fields: (progress: number) => void; text: (progress: number) => void }) {
-  const database = SQLite.openDatabase(getWikiSkinnyTiddlerTextSqliteName(workspace));
+  const database = SQLite.openDatabase(getWikiMainSqliteName(workspace));
   // skinny tiddler >= skinny tiddler with text, so we insert skinny tiddlers first, and update text later with title as id
   await storeFieldsToSQLite(database, workspace, setProgress.fields);
   await storeTextToSQLite(database, workspace, setProgress.text);
