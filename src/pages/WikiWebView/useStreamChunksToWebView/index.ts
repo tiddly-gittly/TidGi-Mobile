@@ -1,4 +1,4 @@
-import { MutableRefObject, useCallback, useEffect } from 'react';
+import { MutableRefObject, useCallback } from 'react';
 import { WebView } from 'react-native-webview';
 import { IHtmlContent } from '../useTiddlyWiki';
 import { webviewSideReceiver } from './webviewSideReceiver';
@@ -10,7 +10,7 @@ const CHUNK_SIZE = 1_000_000;
  * @url https://github.com/react-native-webview/react-native-webview/issues/3126
  * @returns
  */
-export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>, htmlContent: IHtmlContent, webviewLoaded: boolean) {
+export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>) {
   const sendDataToWebView = useCallback((messageType: string, data?: string) => {
     if (webViewReference.current === null) return;
     webViewReference.current.injectJavaScript(`window.onStreamChunksToWebView(${
@@ -48,11 +48,11 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
   /**
    * Inject HTML and tiddlers store
    */
-  useEffect(() => {
+  const injectHtmlAndTiddlersStore = useCallback((htmlContent: IHtmlContent) => {
     const { html, skinnyTiddlerStore, tiddlerStoreScript } = htmlContent;
 
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
-    if (webviewLoaded && webViewReference.current !== null) {
+    if (webViewReference.current !== null) {
       /**
        * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
        */
@@ -63,7 +63,7 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
       sendChunkedDataToWebView('TIDDLER_STORE_SCRIPT_CHUNK', tiddlerStoreScript, 'TIDDLER_STORE_SCRIPT_CHUNK_END');
       sendChunkedDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK', skinnyTiddlerStore, 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END');
     }
-  }, [webViewReference, htmlContent, webviewLoaded, sendDataToWebView, sendChunkedDataToWebView]);
+  }, [webViewReference, sendDataToWebView, sendChunkedDataToWebView]);
 
-  return [webviewSideReceiver] as const;
+  return [injectHtmlAndTiddlersStore, webviewSideReceiver] as const;
 }
