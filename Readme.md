@@ -2,6 +2,12 @@
 
 Mobile Tiddlywiki app that lazy-load local-first tid/md file, and sync with TidGi-Desktop.
 
+<div align="center">
+
+[![GitHub Releases](https://img.shields.io/github/downloads/tiddly-gittly/TidGi-Mobile/latest/total?label=Download%20Latest%20Release&style=for-the-badge)](https://github.com/tiddly-gittly/TidGi-Mobile/releases/latest)
+
+</div>
+
 ## Usage
 
 Install [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) plugin.
