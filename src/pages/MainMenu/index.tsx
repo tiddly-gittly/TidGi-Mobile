@@ -25,11 +25,11 @@ export interface MainMenuProps {
 
 export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
   const { t } = useTranslation();
-  useAutoOpenDefaultWiki();
 
   // State variables for the modal
   const [wikiModalVisible, setWikiModalVisible] = useState(false);
   const [selectedWikiID, setSelectedWikiID] = useState<string | undefined>();
+  useAutoOpenDefaultWiki(wikiModalVisible);
 
   return (
     <PaperProvider>
