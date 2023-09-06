@@ -7,6 +7,7 @@ import { Alert, FlatList } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
+import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IWikiServerSync, useWikiStore } from '../../store/wiki';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
@@ -98,6 +99,18 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       <StyledTextInput label={t('EditWorkspace.Name')} value={editedName} onChangeText={setEditedName} />
       <StyledTextInput label={t('AddWorkspace.SelectiveSyncFilter')} value={editedSelectiveSyncFilter} onChangeText={setEditedSelectiveSyncFilter} />
       <StyledTextInput label={t('AddWorkspace.WorkspaceFolder')} value={editedWikiFolderLocation} onChangeText={setEditedWikiFolderLocation} />
+
+      <Button
+        mode='outlined'
+        onPress={async () => {
+          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+          if (server !== undefined) {
+            await backgroundSyncService.syncWikiWithServer(wiki, server);
+          }
+        }}
+      >
+        <Text>{t('ContextMenu.SyncNow')}</Text>
+      </Button>
 
       <FlatList
         data={wiki.syncedServers}
