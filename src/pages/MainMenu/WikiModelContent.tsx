@@ -1,16 +1,19 @@
+/* eslint-disable react-native/no-inline-styles */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, FlatList } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { Alert, FlatList, Modal } from 'react-native';
+import { Button, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
+import { uniqBy } from 'lodash';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IWikiServerSync, useWikiStore } from '../../store/wiki';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
+import { AddNewServerModelContent } from './AddNewServerModelContent';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -41,6 +44,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [editedSelectiveSyncFilter, setEditedSelectiveSyncFilter] = useState(wiki?.selectiveSyncFilter ?? '');
   const [editedWikiFolderLocation, setEditedWikiFolderLocation] = useState(wiki?.wikiFolderLocation ?? '');
   const [newServerID, setNewServerID] = useState<string>('');
+  const [addServerModelVisible, setAddServerModelVisible] = useState(false);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -60,10 +64,10 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
 
   const handleAddServer = () => {
     if (newServerID) {
-      // TODO: use latest sync time of one of existing server
-      const updatedServers = [...wiki.syncedServers, { serverID: newServerID, lastSync: Date.now() }];
+      const lastSync = wiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? Date.now();
+      const updatedServers = [...wiki.syncedServers, { serverID: newServerID, lastSync }];
       updateWiki(id, {
-        syncedServers: updatedServers,
+        syncedServers: uniqBy(updatedServers, 'serverID'),
       });
       setNewServerID('');
     }
@@ -112,6 +116,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         <Text>{t('ContextMenu.SyncNow')}</Text>
       </Button>
 
+      <Text style={{ textAlign: 'center' }}>{t('AddWorkspace.ToggleServerList')}</Text>
       <FlatList
         data={wiki.syncedServers}
         renderItem={renderServerItem}
@@ -127,7 +132,14 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} />)}
       </Picker>
       <Button onPress={handleAddServer}>
-        <Text>{t('EditWorkspace.AddServer')}</Text>
+        <Text>{t('EditWorkspace.AddSelectedServer')}</Text>
+      </Button>
+      <Button
+        onPress={() => {
+          setAddServerModelVisible(true);
+        }}
+      >
+        <Text>{t('EditWorkspace.AddNewServer')}</Text>
       </Button>
 
       <ButtonsContainer>
@@ -161,6 +173,21 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         </Button>
         <Button onPress={onClose}>{t('Cancel')}</Button>
       </ButtonsContainer>
+      <Portal>
+        <Modal
+          visible={addServerModelVisible}
+          onDismiss={() => {
+            setAddServerModelVisible(false);
+          }}
+        >
+          <AddNewServerModelContent
+            id={id}
+            onClose={() => {
+              setAddServerModelVisible(false);
+            }}
+          />
+        </Modal>
+      </Portal>
     </ModalContainer>
   );
 }

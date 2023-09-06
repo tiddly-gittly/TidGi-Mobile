@@ -148,6 +148,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         />
       </Collapsible>
       <TextInput
+        label={t('EditWorkspace.ServerURI')}
         value={scannedString}
         onChangeText={(newText: string) => {
           setScannedString(newText);
