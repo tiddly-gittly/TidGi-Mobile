@@ -1,6 +1,6 @@
 {
   "name": "tidgi-mobile",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "android": "expo start --android",
