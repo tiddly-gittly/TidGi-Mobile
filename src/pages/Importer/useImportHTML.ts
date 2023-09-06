@@ -29,6 +29,17 @@ export function useImportHTML() {
   const addWiki = useWikiStore(state => state.add);
   const removeWiki = useWikiStore(state => state.remove);
   const [createdWikiWorkspace, setCreatedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
+  const resetState = useCallback(() => {
+    setStatus('idle');
+    setError(undefined);
+    setSkinnyHtmlDownloadPercentage(0);
+    setSkinnyTiddlerStoreScriptDownloadPercentage(0);
+    setNonSkinnyTiddlerStoreScriptDownloadPercentage(0);
+    setSkinnyTiddlerTextCacheDownloadPercentage(0);
+    setAddTextToSQLitePercentage(0);
+    setAddFieldsToSQLitePercentage(0);
+    setCreatedWikiWorkspace(undefined);
+  }, []);
 
   const storeHtml = useCallback(async (origin: string, wikiName: string, selectiveSyncFilter: string, serverID: string) => {
     if (WIKI_FOLDER_PATH === undefined) return;
@@ -116,6 +127,7 @@ export function useImportHTML() {
     storeHtml,
     status,
     error,
+    resetState,
     createdWikiWorkspace,
     downloadPercentage: {
       skinnyHtmlDownloadPercentage,

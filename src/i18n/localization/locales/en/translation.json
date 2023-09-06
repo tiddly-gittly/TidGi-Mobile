@@ -151,7 +151,8 @@
     "BadWikiHtml": "Failed to create a wiki from this HTML file ",
     "SelectiveSyncFilter": "Filter of Selective Sync",
     "ServerList": "Server List",
-    "ToggleServerList": "Toggle Server List"
+    "ToggleServerList": "Toggle Server List",
+    "Retry": "Retry"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

@@ -164,7 +164,8 @@
     "Advanced": "高级设置",
     "SelectiveSyncFilter": "选择性同步过滤器",
     "ServerList": "服务器列表",
-    "ToggleServerList": "服务器列表"
+    "ToggleServerList": "服务器列表",
+    "Retry": "重试"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",

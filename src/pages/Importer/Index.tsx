@@ -33,7 +33,6 @@ const ImportWikiButton = styled(Button)`
   justify-content: center;
 `;
 const ImportStatusText = styled.Text`
-  height: 30px;
   width: 100%;
   display: flex;
   flex-direction: row;
@@ -82,7 +81,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     }
   }, [scannedString]);
 
-  const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace } = useImportHTML();
+  const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace, resetState } = useImportHTML();
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
@@ -150,7 +149,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           setSelectiveSyncFilter(newText);
         }}
       />
-      {!qrScannerOpen && wikiUrl !== undefined && (
+      {importStatus === 'idle' && !qrScannerOpen && wikiUrl !== undefined && (
         <>
           <TextInput
             label={t('EditWorkspace.Name')}
@@ -168,37 +167,44 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ImportWikiButton>
         </>
       )}
-      {importStatus === 'error'
-        ? (
+      {importStatus !== 'idle' && importStatus !== 'error' && (
+        <>
           <ImportStatusText>
-            <Text>Error:</Text>
+            <Text>{t('Loading')}{' '}</Text>
+            {importStatus}
+          </ImportStatusText>
+        </>
+      )}
+      {importStatus === 'error' && (
+        <>
+          <ImportStatusText style={{ color: MD3Colors.error50 }}>
+            <Text>{t('ErrorMessage')}{' '}</Text>
             {importError}
           </ImportStatusText>
-        )
-        : (
-          <>
-            <ImportStatusText>
-              <Text>Status:</Text>
-              {importStatus}
-            </ImportStatusText>
-          </>
-        )}
+          <Button
+            mode='elevated'
+            onPress={resetState}
+          >
+            <Text>{t('AddWorkspace.Retry')}</Text>
+          </Button>
+        </>
+      )}
       {importStatus === 'downloading' && (
         <>
           <Text>HTML</Text>
-          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral50} />
           <Text>Tiddlers</Text>
-          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.error50} />
-          <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
           <Text>Tiddler Text</Text>
-          <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral50} />
         </>
       )}
       {importStatus === 'sqlite' && (
         <>
           <Text>Adding To SQLite DB</Text>
-          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.error50} />
-          <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.error50} />
+          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.tertiary50} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
