@@ -62,7 +62,8 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   return (
     <WebView
       originWhitelist={['*']}
-      source={{ uri: 'about:blank' }}
+      // add DOCTYPE at load time to prevent Quirks Mode
+      source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body></body></html>` }}
       renderError={(errorName) => <Text>{errorName}</Text>}
       renderLoading={() => <Text>{t('Loading')}</Text>}
       onContentProcessDidTerminate={(syntheticEvent) => {
