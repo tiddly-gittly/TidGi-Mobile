@@ -81,10 +81,11 @@ class BackgroundSyncService {
 
   async #getChangeLogsSinceLastSync(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
     const database = SQLite.openDatabase(getWikiMainSqliteName(wiki));
-    const lastSyncTimestamp = server.lastSync / 1000;
+    // Convert the JavaScript Date number to SQLite `DATETIME DEFAULT CURRENT_TIMESTAMP` 'YYYY-MM-DD HH:MM:SS' format
+    const lastSyncTimestamp = new Date(server.lastSync).toISOString().slice(0, 19).replace('T', ' ');
     const resultSets = await database.execAsync(
       [{
-        sql: `SELECT * FROM tiddlers_changes_log WHERE timestamp > ? ORDER BY timestamp ASC;`,
+        sql: `SELECT * FROM tiddlers_changes_log WHERE strftime('%s', timestamp) > strftime('%s', ?) ORDER BY timestamp ASC;`,
         args: [lastSyncTimestamp],
       }],
       true,
