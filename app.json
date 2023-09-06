@@ -20,8 +20,12 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera to Scan QR code.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
-        "UIBackgroundModes": ["location", "fetch"]
-      }
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      },
+      "bundleIdentifier": "com.linonetwo012.tidgimobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,7 +34,8 @@
       },
       "permissions": [
         "android.permission.CAMERA"
-      ]
+      ],
+      "package": "com.linonetwo012.tidgimobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
