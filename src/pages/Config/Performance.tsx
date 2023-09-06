@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch, Text } from 'react-native-paper';
+import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
 import { useConfigStore } from '../../store/config';
 
 export function Performance(): JSX.Element {
@@ -12,21 +13,25 @@ export function Performance(): JSX.Element {
   return (
     <>
       <Text variant='titleLarge'>{t('Preference.KeepAliveInBackground')}</Text>
-      <Text>{t('Preference.KeepAliveInBackgroundDescription')}</Text>
-      <Switch
-        value={keepAliveInBackground}
-        onValueChange={(value) => {
-          setConfig({ keepAliveInBackground: value });
-        }}
-      />
+      <SwitchContainer>
+        <FlexibleText>{t('Preference.KeepAliveInBackgroundDescription')}</FlexibleText>
+        <Switch
+          value={keepAliveInBackground}
+          onValueChange={(value) => {
+            setConfig({ keepAliveInBackground: value });
+          }}
+        />
+      </SwitchContainer>
       <Text variant='titleLarge'>{t('Preference.AutoOpenDefaultWiki')}</Text>
-      <Text variant='titleLarge'>{t('Preference.AutoOpenDefaultWikiDescription')}</Text>
-      <Switch
-        value={autoOpenDefaultWiki}
-        onValueChange={(value) => {
-          setConfig({ autoOpenDefaultWiki: value });
-        }}
-      />
+      <SwitchContainer>
+        <FlexibleText>{t('Preference.AutoOpenDefaultWikiDescription')}</FlexibleText>
+        <Switch
+          value={autoOpenDefaultWiki}
+          onValueChange={(value) => {
+            setConfig({ autoOpenDefaultWiki: value });
+          }}
+        />
+      </SwitchContainer>
     </>
   );
 }
