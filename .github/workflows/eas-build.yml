@@ -44,6 +44,6 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
       - name: Install dependencies
-        run: pnpm ci
+        run: pnpm install --no-frozen-lockfile
       - name: Build on EAS
         run: eas build --platform android --non-interactive
