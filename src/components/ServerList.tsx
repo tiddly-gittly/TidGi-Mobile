@@ -6,7 +6,7 @@ import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
 
 interface ServerListProps {
   activeOnly?: boolean;
-  onPress: (serverUri: string) => void;
+  onPress: (server: IServerInfo) => void;
   onlineOnly?: boolean;
 }
 
@@ -29,7 +29,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, activeOnly, onl
       <ServerCard
         key={key}
         onPress={() => {
-          onPress(serverInfo.uri);
+          onPress(serverInfo);
         }}
       >
         <Card.Title title={serverInfo.name} subtitle={serverInfo.status} />

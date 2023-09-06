@@ -131,8 +131,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       <Collapsible collapsed={!expandServerList}>
         <ServerList
           onlineOnly
-          onPress={(serverOrigin) => {
-            setScannedString(serverOrigin);
+          onPress={(server) => {
+            setScannedString(server.uri);
           }}
         />
       </Collapsible>

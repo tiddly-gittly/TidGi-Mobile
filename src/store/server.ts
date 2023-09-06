@@ -46,6 +46,7 @@ const defaultServer: ServerState = {
 interface ServerActions {
   add: (newServer: Partial<IServerInfo> & { uri: string }) => IServerInfo;
   clearAll: () => void;
+  remove: (id: string) => void;
   update: (newServer: Partial<IServerInfo> & { id: string }) => void;
 }
 
@@ -87,6 +88,12 @@ export const useServerStore = create<ServerState & ServerActions>()(
         },
         clearAll: () => {
           set(() => defaultServer);
+        },
+        remove: (id) => {
+          set((state) => {
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete state.servers[id];
+          });
         },
       }),
       {

@@ -222,7 +222,15 @@
     "TokenAuthCurrentToken": "当前可用的鉴权凭证",
     "TokenAuthCurrentTokenEmptyText": "点击生成按钮来生成新的凭证",
     "TokenAuthCurrentTokenDescription": "机密信息，泄露给敌意实体后需要重新生成，重新生成后需要为连接的第三方应用更新凭证",
-    "Generate": "生成"
+    "Generate": "生成",
+    "SyncActive": "正用于同步",
+    "TidGiDesktop": "太记桌面版",
+    "TiddlyHost": "太微小主",
+    "ServerDisconnected": "服务器断开连接",
+    "ServerOnline": "服务器在线",
+    "ServerName": "服务器名",
+    "ServerURI": "服务器地址",
+    "ServerNotFound": "无此服务器"
   },
   "Scripting": {
     "ExecutingScript": "正在执行脚本"
@@ -491,5 +499,7 @@
   },
   "Import": {
     "ImportWiki": "导入Wiki {{wikiUrl}}"
-  }
+  },
+  "ConfirmDelete": "是否删除？",
+  "ConfirmDeleteDescription": "此操作无法撤销。"
 }
