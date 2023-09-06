@@ -5,6 +5,7 @@
   "scripts": {
     "android": "expo start --android",
     "build:plugin": "zx scripts/buildPlugins.mjs",
+    "build:android-apk": "eas build --profile preview --platform android --non-interactive",
     "ios": "expo start --ios",
     "start": "expo start",
     "web": "expo start --web"

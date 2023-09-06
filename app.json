@@ -47,7 +47,8 @@
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }
-      ]
+      ],
+      "./expo-plugins/trust-local-certs.js"
     ],
     "extra": {
       "eas": {
