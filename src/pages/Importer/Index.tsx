@@ -74,6 +74,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     if (scannedString !== '') {
       try {
         const url = new URL(scannedString);
+        setExpandServerList(false);
         setWikiUrl(new URL(url.origin));
       } catch (error) {
         console.warn('Not a valid URL', error);
@@ -128,7 +129,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       >
         <Text>{t('AddWorkspace.ToggleServerList')}</Text>
       </Button>
-      <Collapsible collapsed={expandServerList}>
+      <Collapsible collapsed={!expandServerList}>
         <ServerList
           onlineOnly
           onPress={(serverOrigin) => {

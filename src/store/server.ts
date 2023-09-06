@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LocationObjectCoords } from 'expo-location';
+import { cloneDeep } from 'lodash';
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -54,15 +55,9 @@ export const useServerStore = create<ServerState & ServerActions>()(
       (set) => ({
         ...defaultServer,
         add: (partialServer) => {
-          const existingServerWithSameOrigin = Object.values(defaultServer.servers).find(
-            (server) => server.uri === partialServer.uri,
-          );
-          if (existingServerWithSameOrigin !== undefined) {
-            return existingServerWithSameOrigin;
-          }
           const id = String(Math.random()).substring(2, 7);
           const name = `TidGi-Desktop ${id}`;
-          const newServer: IServerInfo = {
+          let newServer: IServerInfo = {
             id,
             name,
             status: ServerStatus.online,
@@ -71,6 +66,13 @@ export const useServerStore = create<ServerState & ServerActions>()(
             ...partialServer,
           };
           set((state) => {
+            const existingServerWithSameOrigin = Object.values(state.servers).find(
+              (server) => server.uri === partialServer.uri,
+            );
+            if (existingServerWithSameOrigin !== undefined) {
+              newServer = cloneDeep(existingServerWithSameOrigin);
+              return;
+            }
             state.servers[id] = newServer;
           });
           return newServer;
