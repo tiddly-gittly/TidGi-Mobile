@@ -58,7 +58,7 @@ export class WikiStorageService {
    */
   async saveTiddler(title: string, text: string, fieldStrings: string): Promise<string> {
     try {
-      let operation: TiddlersLogOperation = TiddlersLogOperation.DELETE;
+      let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
 
       await this.#sqlite.transactionAsync(async tx => {
         // Check if a tiddler with the same title already exists
@@ -80,7 +80,7 @@ export class WikiStorageService {
           [title, text, fieldStrings],
         );
 
-        if (!(getLogIgnoredTiddler().includes(title))) {
+        if (!(getLogIgnoredTiddler(title).includes(title))) {
           await tx.executeSqlAsync(
             'INSERT INTO tiddlers_changes_log (title, operation) VALUES (?, ?);',
             [title, operation],

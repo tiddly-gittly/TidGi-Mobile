@@ -60,8 +60,6 @@ class BackgroundSyncService {
     let haveUpdate = false;
     for (const wiki of wikis) {
       const server = this.#getOnlineServerForWiki(wiki);
-      // DEBUG: console server
-      console.log(`server`, server);
       if (server !== undefined) {
         haveUpdate ||= await this.syncWikiWithServer(wiki, server);
       }
@@ -103,7 +101,7 @@ class BackgroundSyncService {
         const changeLogs = resultSet.rows as ITiddlerChange[];
         const changeWithTiddlerFields: Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange> = await Promise.all(
           changeLogs
-            .filter(change => !(getLogIgnoredTiddler().includes(change.title)))
+            .filter(change => !(getLogIgnoredTiddler(change.title).includes(change.title)))
             .map(async change => {
               if (change.operation === 'DELETE') return change;
               const title = change.title;
