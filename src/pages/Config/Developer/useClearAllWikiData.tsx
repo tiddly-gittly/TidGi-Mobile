@@ -5,7 +5,14 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Snackbar } from 'react-native-paper';
 import { getWikiMainSqliteName } from '../../../constants/paths';
-import { useWikiStore } from '../../../store/wiki';
+import { IWikiWorkspace, useWikiStore } from '../../../store/wiki';
+
+export const deleteWikiFile = async (wikiWorkspace: IWikiWorkspace) => {
+  const database = SQLite.openDatabase(getWikiMainSqliteName(wikiWorkspace));
+  database.closeAsync();
+  await database.deleteAsync();
+  await fs.deleteAsync(wikiWorkspace.wikiFolderLocation);
+};
 
 export function useClearAllWikiData() {
   const { t } = useTranslation();
@@ -16,14 +23,8 @@ export function useClearAllWikiData() {
   const [clearDataSnackBarErrorMessage, setClearDataSnackBarErrorMessage] = useState('');
   const clearAllWikiData = useCallback(async () => {
     try {
-      await Promise.all(wikis.map(async wikiWorkspace => {
-        const database = SQLite.openDatabase(getWikiMainSqliteName(wikiWorkspace));
-        database.closeAsync();
-        await database.deleteAsync();
-      }));
-      await Promise.all(wikis.map(async wikiWorkspace => {
-        await fs.deleteAsync(wikiWorkspace.wikiFolderLocation);
-      }));
+      // eslint-disable-next-line unicorn/no-array-callback-reference
+      await Promise.all(wikis.map(deleteWikiFile));
       removeAllWiki();
       setClearDataSnackBarVisible(true);
     } catch (error) {

@@ -6,6 +6,7 @@ import { Alert } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useWikiStore } from '../../store/wiki';
+import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -63,7 +64,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
                 },
                 {
                   text: t('Delete'),
-                  onPress: () => {
+                  onPress: async () => {
+                    await deleteWikiFile(wiki);
                     deleteWiki(id);
                     onClose();
                   },
