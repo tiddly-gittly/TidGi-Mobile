@@ -217,7 +217,8 @@
     "ServerOnline": "Server Online",
     "ServerName": "Server Name",
     "ServerURI": "Server URI",
-    "ServerNotFound": "Server Not Found"
+    "ServerNotFound": "Server Not Found",
+    "NotFound": "Workspace Not Found"
   },
   "Dialog": {
     "CantFindWorkspaceFolderRemoveWorkspace": "Cannot find the workspace folder that was still there before! \nThe folders that should have existed here may have been removed, or there is no wiki in this folder! \nDo you want to remove the workspace?",
@@ -524,5 +525,8 @@
     "ImportWiki": "Import Wiki {{wikiUrl}}"
   },
   "ConfirmDelete": "Really want to delete?",
-  "ConfirmDeleteDescription": "This operation can't be reverted."
+  "ConfirmDeleteDescription": "This operation can't be reverted.",
+  "Sidebar": {
+    "Main": "Main Menu"
+  }
 }

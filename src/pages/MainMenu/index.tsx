@@ -1,67 +1,72 @@
 import type { StackScreenProps } from '@react-navigation/stack';
-import { FC, useEffect } from 'react';
+import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button, Modal, PaperProvider, Portal } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
-import { useConfigStore } from '../../store/config';
-import { useWikiStore } from '../../store/wiki';
+import { WikiList } from '../../components/WikiList';
+import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
+import { WikiEditModalContent } from './WikiModelContent';
 
 const Container = styled.View`
   flex: 1;
   background-color: #f5f5f5;
 `;
 
-const WikiItem = styled.Button`
-  padding: 10px;
-`;
-
-const ConfigButton = styled.Button`
-  padding: 10px;
+const MainFeatureButton = styled(Button)`
+  margin: 10px;
+  padding: 20px;
+  height: 3em;
 `;
 
 export interface MainMenuProps {
   fromWikiID?: string;
 }
-export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation, route }) => {
+
+export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
   const { t } = useTranslation();
-  const { fromWikiID } = route.params ?? {};
+  useAutoOpenDefaultWiki();
 
-  const wikis = useWikiStore(state => state.wikis);
-  const autoOpenDefaultWiki = useConfigStore(state => state.autoOpenDefaultWiki);
-
-  useEffect(() => {
-    if (!autoOpenDefaultWiki) return;
-    const defaultWiki = wikis[0];
-    const currentScreen = navigation.getState()?.routes.at(-1)?.name;
-    if (defaultWiki !== undefined && fromWikiID === undefined && currentScreen === 'MainMenu') {
-      navigation.navigate('WikiWebView', { id: defaultWiki.id });
-    }
-  }, [navigation, wikis, fromWikiID, route.name, autoOpenDefaultWiki]);
+  // State variables for the modal
+  const [wikiModalVisible, setWikiModalVisible] = useState(false);
+  const [selectedWikiID, setSelectedWikiID] = useState<string | undefined>();
 
   return (
-    <Container>
-      {wikis.map(wiki => (
-        <WikiItem
-          key={wiki.id}
-          title={wiki.id}
-          onPress={() => {
+    <PaperProvider>
+      <Container>
+        <WikiList
+          onPress={(wiki) => {
             navigation.navigate('WikiWebView', { id: wiki.id });
           }}
+          onLongPress={(wiki) => {
+            setSelectedWikiID(wiki.id);
+            setWikiModalVisible(true);
+          }}
         />
-      ))}
-
-      <ConfigButton
-        title={t('SideBar.Preferences')}
-        onPress={() => {
-          navigation.navigate('Config');
-        }}
-      />
-      <ConfigButton
-        title={t('Menu.ScanQRToSync')}
-        onPress={() => {
-          navigation.navigate('Importer');
-        }}
-      />
-    </Container>
+        <Portal>
+          <Modal
+            visible={wikiModalVisible}
+            onDismiss={() => {
+              setWikiModalVisible(false);
+            }}
+          >
+            <WikiEditModalContent
+              id={selectedWikiID}
+              onClose={() => {
+                setWikiModalVisible(false);
+              }}
+            />
+          </Modal>
+        </Portal>
+        <MainFeatureButton
+          mode='outlined'
+          onPress={() => {
+            navigation.navigate('Importer');
+          }}
+        >
+          {t('Menu.ScanQRToSync')}
+        </MainFeatureButton>
+      </Container>
+    </PaperProvider>
   );
 };

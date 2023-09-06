@@ -230,7 +230,8 @@
     "ServerOnline": "服务器在线",
     "ServerName": "服务器名",
     "ServerURI": "服务器地址",
-    "ServerNotFound": "无此服务器"
+    "ServerNotFound": "无此服务器",
+    "NotFound": "找不到该工作区"
   },
   "Scripting": {
     "ExecutingScript": "正在执行脚本"
@@ -501,5 +502,8 @@
     "ImportWiki": "导入Wiki {{wikiUrl}}"
   },
   "ConfirmDelete": "是否删除？",
-  "ConfirmDeleteDescription": "此操作无法撤销。"
+  "ConfirmDeleteDescription": "此操作无法撤销。",
+  "Sidebar": {
+    "Main": "主菜单"
+  }
 }
