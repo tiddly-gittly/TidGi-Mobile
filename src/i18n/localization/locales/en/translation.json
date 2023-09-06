@@ -152,7 +152,8 @@
     "SelectiveSyncFilter": "Filter of Selective Sync",
     "ServerList": "Server List",
     "ToggleServerList": "Toggle Server List",
-    "Retry": "Retry"
+    "Retry": "Retry",
+    "ToggleQRCodeScanner": "Toggle QRCode Scanner"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

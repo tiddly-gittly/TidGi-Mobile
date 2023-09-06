@@ -32,6 +32,17 @@ const ImportWikiButton = styled(Button)`
   flex-direction: column;
   justify-content: center;
 `;
+const ScanQRButton = styled(Button)`
+  margin: 10px;
+  padding: 20px;
+  height: 3em;
+`;
+const OpenWikiButton = styled(Button)`
+  margin: 10px;
+  margin-top: 30px;
+  padding: 20px;
+  height: 5em;
+`;
 const ImportStatusText = styled.Text`
   width: 100%;
   display: flex;
@@ -109,16 +120,16 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           onBarCodeScanned={handleBarCodeScanned}
         />
       )}
-      <Button
-        mode='contained'
+      <ScanQRButton
+        mode={importStatus === 'idle' ? 'contained' : 'outlined'}
         disabled={importStatus !== 'idle'}
         onPress={() => {
           setQrScannerOpen(!qrScannerOpen);
         }}
       >
         {/* eslint-disable-next-line react-native/no-raw-text */}
-        <ButtonText>Toggle QRCode Scanner</ButtonText>
-      </Button>
+        <ButtonText>{t('AddWorkspace.ToggleQRCodeScanner')}</ButtonText>
+      </ScanQRButton>
       <Button
         mode='text'
         disabled={importStatus !== 'idle'}
@@ -167,7 +178,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ImportWikiButton>
         </>
       )}
-      {importStatus !== 'idle' && importStatus !== 'error' && (
+      {!((['idle', 'error', 'success'] as Array<typeof importStatus>).includes(importStatus)) && (
         <>
           <ImportStatusText>
             <Text>{t('Loading')}{' '}</Text>
@@ -208,14 +219,14 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
-        <Button
+        <OpenWikiButton
           mode='elevated'
           onPress={() => {
             navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
           }}
         >
           <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
-        </Button>
+        </OpenWikiButton>
       )}
     </Container>
   );
