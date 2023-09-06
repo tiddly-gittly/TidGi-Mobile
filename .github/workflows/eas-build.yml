@@ -29,11 +29,13 @@ jobs:
     name: Install and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
       - uses: actions/setup-node@v3
         with:
           node-version: 18.x
           cache: pnpm
+
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
