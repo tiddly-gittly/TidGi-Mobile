@@ -25,7 +25,13 @@ export interface IServerInfo {
   };
   name: string;
   provider: ServerProvider;
+  /**
+   * Is it online or disconnected
+   */
   status: ServerStatus;
+  /**
+   * Is currently syncing
+   */
   syncActive: boolean;
   uri: string;
 }
@@ -38,6 +44,7 @@ const defaultServer: ServerState = {
 };
 interface ServerActions {
   add: (newServer: Partial<IServerInfo> & { uri: string }) => IServerInfo;
+  clearAll: () => void;
   update: (newServer: Partial<IServerInfo> & { id: string }) => void;
 }
 
@@ -47,6 +54,12 @@ export const useServerStore = create<ServerState & ServerActions>()(
       (set) => ({
         ...defaultServer,
         add: (partialServer) => {
+          const existingServerWithSameOrigin = Object.values(defaultServer.servers).find(
+            (server) => server.uri === partialServer.uri,
+          );
+          if (existingServerWithSameOrigin !== undefined) {
+            return existingServerWithSameOrigin;
+          }
           const id = String(Math.random()).substring(2, 7);
           const name = `TidGi-Desktop ${id}`;
           const newServer: IServerInfo = {
@@ -69,6 +82,9 @@ export const useServerStore = create<ServerState & ServerActions>()(
               state.servers[newServer.id] = { ...oldServer, ...newServer };
             }
           });
+        },
+        clearAll: () => {
+          set(() => defaultServer);
         },
       }),
       {

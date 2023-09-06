@@ -4,6 +4,14 @@ module.exports = function(api) {
   api.cache(true);
   return {
     presets: ['babel-preset-expo'],
-    plugins: ['@babel/plugin-transform-flow-strip-types', ['@babel/plugin-transform-private-methods', { loose: true }]],
+    plugins: [
+      ['import', {
+        libraryName: 'lodash',
+        libraryDirectory: '',
+        camel2DashComponentName: false, // default: true
+      }],
+      '@babel/plugin-transform-flow-strip-types',
+      ['@babel/plugin-transform-private-methods', { loose: true }],
+    ],
   };
 };

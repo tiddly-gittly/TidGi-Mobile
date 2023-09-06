@@ -163,7 +163,8 @@
     "WikiNotStarted": "Wiki 页面未成功启动或未成功加载",
     "Advanced": "高级设置",
     "SelectiveSyncFilter": "选择性同步过滤器",
-    "ServerList": "服务器列表"
+    "ServerList": "服务器列表",
+    "ToggleServerList": "服务器列表"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
@@ -403,7 +404,8 @@
     "RemoveAllWikiDataDetail": "在开发过程中如果数据有问题，可以直接清空内容来修复，注意先备份否则数据会全部丢失。",
     "RemoveAllWikiDataDone": "已清空所有 Wiki 数据",
     "AutoOpenDefaultWiki": "自动打开默认Wiki",
-    "AutoOpenDefaultWikiDescription": "应用打开时，自动打开默认Wiki，省去在列表页点击的时间"
+    "AutoOpenDefaultWikiDescription": "应用打开时，自动打开默认Wiki，省去在列表页点击的时间",
+    "ClearServerList": "清空服务器列表"
   },
   "Error": {
     "InitWikiGitError": "E-1 笔记仓库初始化失败错误",

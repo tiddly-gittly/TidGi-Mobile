@@ -80,6 +80,9 @@ dependencies:
   react-native:
     specifier: 0.72.4
     version: 0.72.4(@babel/core@7.22.11)(@babel/preset-env@7.22.14)(react@18.2.0)
+  react-native-collapsible:
+    specifier: ^1.6.1
+    version: 1.6.1(react-native@0.72.4)(react@18.2.0)
   react-native-gesture-handler:
     specifier: ~2.12.0
     version: 2.12.1(react-native@0.72.4)(react@18.2.0)
@@ -130,6 +133,9 @@ devDependencies:
   '@types/react':
     specifier: ~18.2.21
     version: 18.2.21
+  babel-plugin-import:
+    specifier: ^1.13.8
+    version: 1.13.8
   eslint-config-tidgi:
     specifier: ^1.1.5
     version: 1.1.5(typescript@5.2.2)
@@ -3281,6 +3287,12 @@ packages:
     dependencies:
       '@babel/core': 7.22.11
     dev: false
+
+  /babel-plugin-import@1.13.8:
+    resolution: {integrity: sha512-36babpjra5m3gca44V6tSTomeBlPA7cHUynrE2WiQIm3rEGD9xy28MKsx5IdO45EbnpJY7Jrgd00C6Dwt/l/2Q==}
+    dependencies:
+      '@babel/helper-module-imports': 7.22.5
+    dev: true
 
   /babel-plugin-module-resolver@5.0.0:
     resolution: {integrity: sha512-g0u+/ChLSJ5+PzYwLwP8Rp8Rcfowz58TJNCe+L/ui4rpzE/mg//JVX0EWBUYoxaextqnwuGHzfGp2hh0PPV25Q==}
@@ -8074,6 +8086,16 @@ packages:
 
   /react-is@18.2.0:
     resolution: {integrity: sha512-xWGDIW6x921xtzPkhiULtthJHoJvBbF3q26fzloPCK0hsvxtPVelvftw3zjbHWSkR2km9Z+4uxbDDK/6Zw9B8w==}
+    dev: false
+
+  /react-native-collapsible@1.6.1(react-native@0.72.4)(react@18.2.0):
+    resolution: {integrity: sha512-orF4BeiXd2hZW7fu9YcqIJXzN6TJcFcddY807D3MAOVktLuW9oQ+RIkrTJ5DR3v9ZOFfREkOjEmS79qeUTvkBQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+    dependencies:
+      react: 18.2.0
+      react-native: 0.72.4(@babel/core@7.22.11)(@babel/preset-env@7.22.14)(react@18.2.0)
     dev: false
 
   /react-native-gesture-handler@2.12.1(react-native@0.72.4)(react@18.2.0):

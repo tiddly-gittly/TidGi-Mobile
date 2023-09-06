@@ -150,7 +150,8 @@
     "ExtractedWikiFolderName": "Converted WIKI folder name",
     "BadWikiHtml": "Failed to create a wiki from this HTML file ",
     "SelectiveSyncFilter": "Filter of Selective Sync",
-    "ServerList": "Server List"
+    "ServerList": "Server List",
+    "ToggleServerList": "Toggle Server List"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",
@@ -387,7 +388,8 @@
     "RemoveAllWikiDataDetail": "If there is a problem with the data during the development process, you can directly empty the content to repair, pay attention to the first backup otherwise all the data will be lost.",
     "RemoveAllWikiDataDone": "Remove All Wiki Data Done",
     "AutoOpenDefaultWiki": "Auto Open Default Wiki",
-    "AutoOpenDefaultWikiDescription": "Automatically opens the default wiki when the app is opened, saving you from clicking on the list page."
+    "AutoOpenDefaultWikiDescription": "Automatically opens the default wiki when the app is opened, saving you from clicking on the list page.",
+    "ClearServerList": "Clear Server List"
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",

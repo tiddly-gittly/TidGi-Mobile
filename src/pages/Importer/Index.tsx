@@ -3,9 +3,11 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Collapsible from 'react-native-collapsible';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
+import { ServerList } from '../../components/ServerList';
 import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
 import { useImportHTML } from './useImportHTML';
@@ -41,6 +43,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const { t } = useTranslation();
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [expandServerList, setExpandServerList] = useState(false);
   const [scannedString, setScannedString] = useState('');
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>();
   const [wikiName, setWikiName] = useState('wiki');
@@ -71,7 +74,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     if (scannedString !== '') {
       try {
         const url = new URL(scannedString);
-        setWikiUrl(url);
+        setWikiUrl(new URL(url.origin));
       } catch (error) {
         console.warn('Not a valid URL', error);
       }
@@ -116,6 +119,23 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         {/* eslint-disable-next-line react-native/no-raw-text */}
         <ButtonText>Toggle QRCode Scanner</ButtonText>
       </Button>
+      <Button
+        mode='text'
+        disabled={importStatus !== 'idle'}
+        onPress={() => {
+          setExpandServerList(!expandServerList);
+        }}
+      >
+        <Text>{t('AddWorkspace.ToggleServerList')}</Text>
+      </Button>
+      <Collapsible collapsed={expandServerList}>
+        <ServerList
+          onlineOnly
+          onPress={(serverOrigin) => {
+            setScannedString(serverOrigin);
+          }}
+        />
+      </Collapsible>
       <TextInput
         value={scannedString}
         onChangeText={(newText: string) => {
