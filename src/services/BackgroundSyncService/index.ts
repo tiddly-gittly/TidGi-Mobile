@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/promise-function-async */
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as SQLite from 'expo-sqlite';
@@ -196,18 +197,28 @@ class BackgroundSyncService {
           );
         }));
         await Promise.all(updates.map(async tiddlerFields => {
-          const { text, ...fields } = tiddlerFields;
-          if (typeof text === 'string') {
-            await tx.executeSqlAsync(
-              'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
-              [tiddlerFields.title as string, text, JSON.stringify(fields)],
+          let { text = '', ...fields } = tiddlerFields as ITiddlerFieldsParam & { text?: string };
+          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+          if (!text) {
+            const existingTextResult = await tx.executeSqlAsync(
+              'SELECT text FROM tiddlers WHERE title = ?;',
+              [tiddlerFields.title as string],
             );
-          } else {
-            await tx.executeSqlAsync(
-              'INSERT OR REPLACE INTO tiddlers (title, fields) VALUES (?, ?);',
-              [tiddlerFields.title as string, JSON.stringify(fields)],
-            );
+            if ('rows' in existingTextResult) {
+              text = (existingTextResult.rows[0]?.text as string | undefined) ?? '';
+            } else {
+              console.warn(`Cannot find text for tiddler ${tiddlerFields.title as string} ${(existingTextResult)?.error?.message}`);
+            }
           }
+          // make sure we store skinny fields to `fields` field of SQLite, so when we get all of them later, wiki can still lazy-loading
+          fields = {
+            _is_skinny: '',
+            ...fields,
+          };
+          await tx.executeSqlAsync(
+            'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
+            [tiddlerFields.title as string, text, JSON.stringify(fields)],
+          );
         }));
       }, false);
     } catch (error) {
