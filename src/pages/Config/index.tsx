@@ -6,6 +6,7 @@ import { Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { Developer } from './Developer';
+import { Language } from './Language';
 import { Performance } from './Performance';
 import { ServerAndSync } from './ServerAndSync';
 import { TiddlyWiki } from './TiddlyWiki';
@@ -29,6 +30,7 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
     { title: t('Preference.TiddlyWiki'), data: [TiddlyWiki] },
     { title: t('Preference.Sync'), data: [ServerAndSync] },
     { title: t('Preference.DeveloperTools'), data: [Developer] },
+    { title: t('Preference.Languages'), data: [Language] },
   ], [t]);
   return (
     <PreferencesList

@@ -6,6 +6,7 @@ import { immer } from 'zustand/middleware/immer';
 export interface ConfigState {
   autoOpenDefaultWiki: boolean;
   keepAliveInBackground: boolean;
+  preferredLanguage?: string;
   syncInBackground: boolean;
   syncInterval: number;
   syncIntervalBackground: number;
@@ -15,6 +16,7 @@ const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: true,
   keepAliveInBackground: true,
   syncInBackground: true,
+  preferredLanguage: undefined,
   syncInterval: 60 * 1000,
   syncIntervalBackground: 60 * 30 * 1000,
   userName: 'TidGi User',

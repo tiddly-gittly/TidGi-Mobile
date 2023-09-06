@@ -6,14 +6,24 @@ import { initReactI18next } from 'react-i18next';
 import en from './localization/locales/en/translation.json';
 import zh_CN from './localization/locales/zh_CN/translation.json';
 
+export const supportedLanguages = [
+  { label: 'English', value: 'en' },
+  { label: '中文（简体）', value: 'zh_CN' },
+  // ... Add other languages here
+];
+export const detectedLanguage = getLocales()[0].languageCode;
 void i18n.use(initReactI18next).init({
-  lng: getLocales()[0].languageCode,
+  lng: detectedLanguage,
   fallbackLng: 'en',
   resources: {
     en: {
       translation: en,
     },
     zh_CN: {
+      translation: zh_CN,
+    },
+    // getLocales()[0].languageCode returns zh instead of zh_CN
+    zh: {
       translation: zh_CN,
     },
   },
