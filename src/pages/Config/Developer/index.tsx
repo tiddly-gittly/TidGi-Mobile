@@ -12,7 +12,6 @@ export function Developer(): JSX.Element {
 
   return (
     <>
-      <Text variant='headlineLarge'>{t('Preference.DeveloperTools')}</Text>
       <Text variant='titleLarge'>{t('Preference.RemoveAllWikiDataDetail')}</Text>
       <Button onPress={clearAllWikiData} mode='outlined'>{t('Preference.RemoveAllWikiData')}</Button>
       {ClearAllWikiDataResultSnackBar}

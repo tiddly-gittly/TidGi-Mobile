@@ -12,7 +12,6 @@ export function ServerAndSync(): JSX.Element {
 
   return (
     <>
-      <Text variant='headlineLarge'>{t('Preference.Sync')}</Text>
       <Button
         onPress={async () => {
           await backgroundSyncService.sync();
@@ -20,8 +19,8 @@ export function ServerAndSync(): JSX.Element {
       >
         {t('ContextMenu.SyncNow')}
       </Button>
+      <Text>{t('Preference.SyncNowDescription')}</Text>
       <BackgroundSyncStatus />
-      {/* FIXME: VirtualizedLists should never be nested inside plain ScrollViews with the same orientation because it can break windowing and other functionality - use another VirtualizedList-backed container instead. */}
       <ServerList
         onPress={() => {
           // TODO: open server config model

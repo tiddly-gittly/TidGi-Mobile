@@ -390,7 +390,8 @@
     "RemoveAllWikiDataDone": "Remove All Wiki Data Done",
     "AutoOpenDefaultWiki": "Auto Open Default Wiki",
     "AutoOpenDefaultWikiDescription": "Automatically opens the default wiki when the app is opened, saving you from clicking on the list page.",
-    "ClearServerList": "Clear Server List"
+    "ClearServerList": "Clear Server List",
+    "SyncNowDescription": "Try to synchronize all wikis immediately, as long as they have a connectable server now."
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",

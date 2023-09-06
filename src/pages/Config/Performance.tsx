@@ -11,7 +11,6 @@ export function Performance(): JSX.Element {
 
   return (
     <>
-      <Text variant='headlineLarge'>{t('Preference.Performance')}</Text>
       <Text variant='titleLarge'>{t('Preference.KeepAliveInBackground')}</Text>
       <Text>{t('Preference.KeepAliveInBackgroundDescription')}</Text>
       <Switch

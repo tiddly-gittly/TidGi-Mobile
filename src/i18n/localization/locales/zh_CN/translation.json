@@ -406,7 +406,8 @@
     "RemoveAllWikiDataDone": "已清空所有 Wiki 数据",
     "AutoOpenDefaultWiki": "自动打开默认Wiki",
     "AutoOpenDefaultWikiDescription": "应用打开时，自动打开默认Wiki，省去在列表页点击的时间",
-    "ClearServerList": "清空服务器列表"
+    "ClearServerList": "清空服务器列表",
+    "SyncNowDescription": "尝试立即同步所有的Wiki，只要它们有可连接的服务器就同步。"
   },
   "Error": {
     "InitWikiGitError": "E-1 笔记仓库初始化失败错误",

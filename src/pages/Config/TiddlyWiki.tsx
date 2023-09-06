@@ -17,7 +17,6 @@ export function TiddlyWiki(): JSX.Element {
   }, []);
   return (
     <>
-      <Text variant='headlineLarge'>{t('Preference.TiddlyWiki')}</Text>
       <Text variant='titleLarge'>{t('Preference.DefaultUserName')}</Text>
       <Text>{t('Preference.DefaultUserNameDetail')}</Text>
       <TextInput
