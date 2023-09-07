@@ -14,7 +14,7 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWikiStore } from '../../store/wiki';
 import { getLogIgnoredTiddler } from './ignoredTiddler';
-import { ISyncEndPointRequest, ISyncEndPointResponse } from './types';
+import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 // 1. Define the task by providing a name and the function that should be executed
@@ -62,6 +62,7 @@ class BackgroundSyncService {
   public async sync(): Promise<boolean> {
     const wikis = this.#wikiStore.getState().wikis;
     let haveUpdate = false;
+    await this.updateServerOnlineStatus();
     for (const wiki of wikis) {
       const server = this.getOnlineServerForWiki(wiki);
       if (server !== undefined) {
@@ -69,6 +70,33 @@ class BackgroundSyncService {
       }
     }
     return haveUpdate;
+  }
+
+  public async updateServerOnlineStatus() {
+    const newServers: Record<string, IServerInfo> = {};
+    await Promise.all(
+      Object.values(this.#serverStore.getState().servers).map(async server => {
+        try {
+          // TODO: add fetched server version to store
+          await this.#fetchServerStatus(server);
+          newServers[server.id] = { ...server, status: ServerStatus.online };
+        } catch {
+          newServers[server.id] = { ...server, status: ServerStatus.disconnected };
+        }
+      }),
+    );
+    this.#serverStore.setState({ servers: newServers });
+  }
+
+  async #fetchServerStatus(server: IServerInfo) {
+    const statusUrl = new URL(`status`, server.uri);
+    const controller = new AbortController();
+    const abortTimeoutID = setTimeout(() => {
+      controller.abort();
+    }, 1000);
+    const response = await fetch(statusUrl, { signal: controller.signal }).then(response => response.json() as Promise<{ status: ITiddlywikiServerStatus }>);
+    clearTimeout(abortTimeoutID);
+    return response;
   }
 
   public getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number; syncActive: boolean }) | undefined {

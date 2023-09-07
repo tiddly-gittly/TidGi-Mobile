@@ -12,3 +12,12 @@ export interface ISyncEndPointResponse {
   deletes: string[];
   updates: ITiddlerFieldsParam[];
 }
+export interface ITiddlywikiServerStatus {
+  anonymous: boolean;
+  read_only: boolean;
+  space: {
+    recipe: string;
+  };
+  tiddlywiki_version: string;
+  username: string;
+}

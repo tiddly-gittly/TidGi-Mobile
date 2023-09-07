@@ -81,6 +81,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         onPress={async () => {
           setInSyncing(true);
           try {
+            await backgroundSyncService.updateServerOnlineStatus();
             const server = backgroundSyncService.getOnlineServerForWiki(wiki);
             if (server !== undefined) {
               await backgroundSyncService.syncWikiWithServer(wiki, server);
