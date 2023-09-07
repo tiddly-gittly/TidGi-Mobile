@@ -13,7 +13,7 @@ import { ISkinnyTiddlerWithText, ITiddlerChange, TiddlersLogOperation } from '..
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWikiStore } from '../../store/wiki';
-import { getLogIgnoredTiddler } from './ignoredTiddler';
+import { getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
 import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
@@ -137,7 +137,7 @@ class BackgroundSyncService {
         const changeLogs = resultSet.rows as ITiddlerChange[];
         const changeWithTiddlerFields: Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange> = await Promise.all(
           changeLogs
-            .filter(change => !(getLogIgnoredTiddler(change.title).includes(change.title)))
+            .filter(change => !(getSyncIgnoredTiddlers(change.title).includes(change.title)))
             .map(async change => {
               if (change.operation === 'DELETE') return change;
               const title = change.title;

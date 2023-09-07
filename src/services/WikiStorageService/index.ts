@@ -11,7 +11,7 @@ import { ITiddlerTextJSON } from '../../pages/Importer/storeTextToSQLite';
 import { useConfigStore } from '../../store/config';
 import { ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/wiki';
-import { getLogIgnoredTiddler } from '../BackgroundSyncService/ignoredTiddler';
+import { getSyncIgnoredTiddlers } from './ignoredTiddler';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
 import { registerWikiStorageServiceOnWebView } from './registerWikiStorageServiceOnWebView';
 import { IWikiServerStatusObject } from './types';
@@ -80,7 +80,7 @@ export class WikiStorageService {
           [title, text, fieldStrings],
         );
 
-        if (!(getLogIgnoredTiddler(title).includes(title))) {
+        if (!(getSyncIgnoredTiddlers(title).includes(title))) {
           await tx.executeSqlAsync(
             'INSERT INTO tiddlers_changes_log (title, operation) VALUES (?, ?);',
             [title, operation],

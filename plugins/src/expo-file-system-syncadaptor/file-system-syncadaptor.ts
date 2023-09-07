@@ -3,6 +3,7 @@
 import debounce from 'lodash/debounce';
 import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
+import { getFullSaveTiddlers } from '../../../src/services/WikiStorageService/ignoredTiddler.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
@@ -227,11 +228,11 @@ class TidGiMobileFileSystemSyncAdaptor {
       const title = tiddler.fields.title;
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
+      const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
       const etag = await this.wikiStorageService.saveTiddler(
         title,
         tiddler.fields.text,
-        // FIXME: now store all mobile created tiddler as skinny tiddler, this might prevent plugins and javascript to work
-        JSON.stringify({ ...tiddler.getFieldStrings({ exclude: ['text'] }), _is_skinny: '' }),
+        saveFullTiddler ? JSON.stringify(tiddler.getFieldStrings()) : JSON.stringify({ ...tiddler.getFieldStrings({ exclude: ['text'] }), _is_skinny: '' }),
       );
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));

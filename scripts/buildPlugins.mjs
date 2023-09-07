@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 // import { escape } from 'html-escaper';
 
-await $`cd plugins && pnpm build`;
+await $`cd plugins && npm run build`;
 fs.mkdirpSync('assets/plugins');
 // use .html to prevent include its content directly in the bundle. Only .html will be recognized as asset, .txt will say "not exist"
 const syncadaptorUi = fs.readFileSync('plugins/dist/$__plugins_linonetwo_expo-file-system-syncadaptor-ui.json');
