@@ -1,4 +1,6 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { Card } from 'react-native-paper';
 import { styled } from 'styled-components/native';
@@ -6,43 +8,49 @@ import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
 
 interface ServerListProps {
   activeOnly?: boolean;
-  onPress: (server: IServerInfo) => void;
+  onPress?: (server: IServerInfo) => void;
   onlineOnly?: boolean;
+  serverIDs?: string[];
 }
 
-export const ServerList: React.FC<ServerListProps> = ({ onPress, activeOnly, onlineOnly }) => {
-  const serverList = useServerStore(state => Object.entries(state.servers));
+export const ServerList: React.FC<ServerListProps> = ({ onPress, activeOnly, onlineOnly, serverIDs }) => {
+  const { t } = useTranslation();
+  const serverList = useServerStore(state => serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]));
   const filteredServer = useMemo(() => {
     let newServerList = serverList;
     if (activeOnly === true) {
-      newServerList = serverList.filter(([, server]) => server.syncActive);
+      newServerList = serverList.filter((server) => server.syncActive);
     }
     if (onlineOnly === true) {
-      newServerList = serverList.filter(([, server]) => server.status === ServerStatus.online);
+      newServerList = serverList.filter((server) => server.status === ServerStatus.online);
     }
     return newServerList;
   }, [serverList, activeOnly, onlineOnly]);
 
-  const renderItem = useCallback(({ item }: { item: [string, IServerInfo] }) => {
-    const [key, serverInfo] = item;
+  const renderItem = useCallback(({ item }: { item: IServerInfo }) => {
+    const serverInfo = item;
     return (
       <ServerCard
-        key={key}
+        key={serverInfo.id}
         onPress={() => {
-          onPress(serverInfo);
+          onPress?.(serverInfo);
         }}
       >
-        <Card.Title title={serverInfo.name} subtitle={serverInfo.status} />
+        <Card.Title
+          left={(props) => <Ionicons name={serverInfo.status === ServerStatus.online ? 'wifi' : 'cloud-offline'} color='black' {...props} />}
+          title={serverInfo.name}
+          subtitle={serverInfo.syncActive ? t('EditWorkspace.SyncActive') : ''}
+        />
       </ServerCard>
     );
-  }, [onPress]);
+  }, [onPress, t]);
 
   return (
     <>
       <FlatList
         data={filteredServer}
         renderItem={renderItem}
-        keyExtractor={item => item[0]}
+        keyExtractor={item => item.id}
       />
     </>
   );

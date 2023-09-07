@@ -4,12 +4,13 @@
 import { Picker } from '@react-native-picker/picker';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, FlatList, Modal } from 'react-native';
+import { Alert, Modal } from 'react-native';
 import { Button, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { uniqBy } from 'lodash';
 import Collapsible from 'react-native-collapsible';
+import { ServerList } from '../../components/ServerList';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IWikiServerSync, useWikiStore } from '../../store/wiki';
@@ -137,11 +138,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         <Text>{t('AddWorkspace.ToggleServerList')}</Text>
       </Button>
       <Collapsible collapsed={!expandServerList}>
-        <FlatList
-          data={wiki.syncedServers}
-          renderItem={renderServerItem}
-          keyExtractor={(item) => item.serverID}
-        />
+        <ServerList serverIDs={wiki.syncedServers.map(server => server.serverID)} />
         <Picker
           selectedValue={newServerID}
           onValueChange={(itemValue) => {
