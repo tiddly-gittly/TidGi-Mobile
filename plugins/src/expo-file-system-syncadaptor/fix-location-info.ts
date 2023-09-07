@@ -15,9 +15,9 @@ function getInfoTiddlerFields(updateInfoTiddlersCallback: (infos: Array<{ text: 
   const infoTiddlerFields: Array<{ text: string; title: string }> = [];
   // Basics
   if (!$tw.browser || typeof window === 'undefined') return infoTiddlerFields;
-  const isInTidGi = typeof document !== 'undefined' && document?.location?.protocol?.startsWith('tidgi');
+  const isInTidGi = typeof document !== 'undefined';
   const workspaceID = (window.meta)?.workspaceID;
-  infoTiddlerFields.push({ title: '$:/info/tidgi', text: mapBoolean(isInTidGi) });
+  infoTiddlerFields.push({ title: '$:/info/tidgi', text: mapBoolean(isInTidGi) }, { title: '$:/info/tidgi-mobile', text: mapBoolean(isInTidGi) });
   if (isInTidGi && workspaceID) {
     infoTiddlerFields.push({ title: '$:/info/tidgi/workspaceID', text: workspaceID });
   }
