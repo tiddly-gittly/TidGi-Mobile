@@ -71,15 +71,18 @@ class BackgroundSyncService {
     return haveUpdate;
   }
 
-  public getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number }) | undefined {
-    const onlineLastSyncServer = wiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)
+  public getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number; syncActive: boolean }) | undefined {
+    const onlineLastSyncServer = wiki.syncedServers
+      .filter(serverInfoInWiki => serverInfoInWiki.syncActive)
+      .sort((a, b) => b.lastSync - a.lastSync)
       .map(server => this.#serverStore.getState().servers[server.serverID])
       .find(server => server?.status === ServerStatus.online);
-    const lastSync = wiki.syncedServers.find(server => server.serverID === onlineLastSyncServer?.id)?.lastSync;
-    if (onlineLastSyncServer === undefined || lastSync === undefined) return undefined;
+    const serverInfoInWiki = wiki.syncedServers.find(server => server.serverID === onlineLastSyncServer?.id);
+    if (onlineLastSyncServer === undefined || serverInfoInWiki === undefined) return undefined;
     return {
       ...onlineLastSyncServer,
-      lastSync,
+      lastSync: serverInfoInWiki.lastSync,
+      syncActive: serverInfoInWiki.syncActive,
     };
   }
 

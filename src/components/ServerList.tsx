@@ -7,25 +7,23 @@ import { styled } from 'styled-components/native';
 import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
 
 interface ServerListProps {
-  activeOnly?: boolean;
+  activeIDs?: string[];
+  onLongPress?: (server: IServerInfo) => void;
   onPress?: (server: IServerInfo) => void;
   onlineOnly?: boolean;
   serverIDs?: string[];
 }
 
-export const ServerList: React.FC<ServerListProps> = ({ onPress, activeOnly, onlineOnly, serverIDs }) => {
+export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, onlineOnly, serverIDs, activeIDs = [] }) => {
   const { t } = useTranslation();
   const serverList = useServerStore(state => serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]));
   const filteredServer = useMemo(() => {
     let newServerList = serverList;
-    if (activeOnly === true) {
-      newServerList = serverList.filter((server) => server.syncActive);
-    }
     if (onlineOnly === true) {
       newServerList = serverList.filter((server) => server.status === ServerStatus.online);
     }
     return newServerList;
-  }, [serverList, activeOnly, onlineOnly]);
+  }, [serverList, onlineOnly]);
 
   const renderItem = useCallback(({ item }: { item: IServerInfo }) => {
     const serverInfo = item;
@@ -35,15 +33,18 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, activeOnly, onl
         onPress={() => {
           onPress?.(serverInfo);
         }}
+        onLongPress={() => {
+          onLongPress?.(serverInfo);
+        }}
       >
         <Card.Title
           left={(props) => <Ionicons name={serverInfo.status === ServerStatus.online ? 'wifi' : 'cloud-offline'} color='black' {...props} />}
           title={serverInfo.name}
-          subtitle={serverInfo.syncActive ? t('EditWorkspace.SyncActive') : ''}
+          subtitle={activeIDs?.includes(serverInfo.id) ? t('EditWorkspace.SyncActive') : t('EditWorkspace.SyncNotActive')}
         />
       </ServerCard>
     );
-  }, [onPress, t]);
+  }, [activeIDs, onPress, t]);
 
   return (
     <>

@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
-import { uniqBy } from 'lodash';
 import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
 import { useWikiStore } from '../../store/wiki';
@@ -31,7 +30,7 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const wiki = useWikiStore(state => id === undefined ? undefined : state.wikis.find(w => w.id === id));
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const updateWiki = useWikiStore(state => state.update);
+  const [addServerToWiki] = useWikiStore(state => [state.addServer]);
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
   const [scannedString, setScannedString] = useState('');
   const [serverName, setServerName] = useState('');
@@ -81,12 +80,7 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     void nativeService.getLocationWithTimeout().then(coords => {
       if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
     });
-    // get latest existing server last sync
-    const lastSync = wiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? Date.now();
-    const updatedServers = [...wiki.syncedServers, { serverID: newServer.id, lastSync }];
-    updateWiki(id, {
-      syncedServers: uniqBy(updatedServers, 'serverID'),
-    });
+    addServerToWiki(id, newServer.id);
     onClose();
   };
 

@@ -235,7 +235,8 @@
     "ServerNotFound": "无此服务器",
     "NotFound": "找不到该工作区",
     "AddSelectedServer": "添加选中的服务器",
-    "AddNewServer": "添加新服务器"
+    "AddNewServer": "添加新服务器",
+    "SyncNotActive": "未使用"
   },
   "Scripting": {
     "ExecutingScript": "正在执行脚本"

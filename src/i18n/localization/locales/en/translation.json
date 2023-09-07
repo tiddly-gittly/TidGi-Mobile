@@ -222,7 +222,8 @@
     "ServerNotFound": "Server Not Found",
     "NotFound": "Workspace Not Found",
     "AddSelectedServer": "Add Selected Server",
-    "AddNewServer": "Add New Server"
+    "AddNewServer": "Add New Server",
+    "SyncNotActive": "Not Active"
   },
   "Dialog": {
     "CantFindWorkspaceFolderRemoveWorkspace": "Cannot find the workspace folder that was still there before! \nThe folders that should have existed here may have been removed, or there is no wiki in this folder! \nDo you want to remove the workspace?",

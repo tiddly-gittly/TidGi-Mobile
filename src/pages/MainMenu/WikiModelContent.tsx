@@ -2,18 +2,18 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
+import * as Haptics from 'expo-haptics';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Modal } from 'react-native';
 import { Button, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
-import { uniqBy } from 'lodash';
 import Collapsible from 'react-native-collapsible';
 import { ServerList } from '../../components/ServerList';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
-import { IServerInfo, useServerStore } from '../../store/server';
-import { IWikiServerSync, useWikiStore } from '../../store/wiki';
+import { useServerStore } from '../../store/server';
+import { useWikiStore } from '../../store/wiki';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { AddNewServerModelContent } from './AddNewServerModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
@@ -23,24 +23,10 @@ interface WikiEditModalProps {
   onClose: () => void;
 }
 
-const ServerItemContainer = styled.View`
-  flex-direction: row;
-  justify-content: space-between;
-  padding: 10px;
-  border-bottom-width: 1px;
-  border-color: #e0e0e0;
-`;
-
-const ServerIDText = styled.Text`
-  font-size: 16px;
-`;
-
 export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
   const wiki = useWikiStore(state => id === undefined ? undefined : state.wikis.find(w => w.id === id));
-  const updateWiki = useWikiStore(state => state.update);
-  const deleteWiki = useWikiStore(state => state.remove);
-  const getServer = useServerStore(state => (id: string) => state.servers[id] as IServerInfo | undefined);
+  const [updateWiki, addServerToWiki, deleteWiki, setServerActive] = useWikiStore(state => [state.update, state.addServer, state.remove, state.setServerActive]);
   const availableServersToPick = useServerStore(state => Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` })));
 
   const [editedName, setEditedName] = useState(wiki?.name ?? '');
@@ -70,11 +56,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
 
   const handleAddServer = () => {
     if (newServerID) {
-      const lastSync = wiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? Date.now();
-      const updatedServers = [...wiki.syncedServers, { serverID: newServerID, lastSync }];
-      updateWiki(id, {
-        syncedServers: uniqBy(updatedServers, 'serverID'),
-      });
+      addServerToWiki(id, newServerID);
       setNewServerID('');
     }
   };
@@ -84,24 +66,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
     updateWiki(id, {
       syncedServers: updatedServers,
     });
-  };
-
-  const renderServerItem = ({ item }: { item: IWikiServerSync }) => {
-    const server = getServer(item.serverID);
-    return (
-      <ServerItemContainer>
-        <ServerIDText>{item.serverID}</ServerIDText>
-        <ServerIDText>{server?.name ?? '-'}</ServerIDText>
-        <ServerIDText>{new Date(item.lastSync).toLocaleString()}</ServerIDText>
-        <Button
-          onPress={() => {
-            handleRemoveServer(item.serverID);
-          }}
-        >
-          <Text>{t('Delete')}</Text>
-        </Button>
-      </ServerItemContainer>
-    );
   };
 
   return (
@@ -138,7 +102,36 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         <Text>{t('AddWorkspace.ToggleServerList')}</Text>
       </Button>
       <Collapsible collapsed={!expandServerList}>
-        <ServerList serverIDs={wiki.syncedServers.map(server => server.serverID)} />
+        <ServerList
+          serverIDs={wiki.syncedServers.map(server => server.serverID)}
+          activeIDs={wiki.syncedServers.filter(serverInfoInWiki => serverInfoInWiki.syncActive).map(server => server.serverID)}
+          onPress={(server) => {
+            const serverInWiki = wiki.syncedServers.find(serverInfoInWiki => serverInfoInWiki.serverID === server.id);
+            if (serverInWiki !== undefined) {
+              setServerActive(id, server.id, !serverInWiki.syncActive);
+            }
+          }}
+          onLongPress={(server) => {
+            void Haptics.selectionAsync();
+            Alert.alert(
+              t('ConfirmDelete'),
+              t('ConfirmDeleteDescription'),
+              [
+                {
+                  text: t('EditWorkspace.Cancel'),
+                  onPress: () => {},
+                  style: 'cancel',
+                },
+                {
+                  text: t('Delete'),
+                  onPress: () => {
+                    handleRemoveServer(server.id);
+                  },
+                },
+              ],
+            );
+          }}
+        />
         <Picker
           selectedValue={newServerID}
           onValueChange={(itemValue) => {

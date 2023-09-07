@@ -30,10 +30,6 @@ export interface IServerInfo {
    * Is it online or disconnected
    */
   status: ServerStatus;
-  /**
-   * Is currently syncing
-   */
-  syncActive: boolean;
   uri: string;
 }
 
@@ -62,7 +58,6 @@ export const useServerStore = create<ServerState & ServerActions>()(
             id,
             name,
             status: ServerStatus.online,
-            syncActive: true,
             provider: ServerProvider.TidGiDesktop,
             ...partialServer,
           };
