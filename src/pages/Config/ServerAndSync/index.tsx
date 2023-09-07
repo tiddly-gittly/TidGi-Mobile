@@ -1,11 +1,11 @@
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Modal, Portal, Text } from 'react-native-paper';
 import BackgroundSyncStatus from '../../../components/BackgroundSync';
 import { ServerList } from '../../../components/ServerList';
 import { backgroundSyncService } from '../../../services/BackgroundSyncService';
-import { useServerStore } from '../../../store/server';
+import { IServerInfo, useServerStore } from '../../../store/server';
 import { useWikiStore } from '../../../store/wiki';
 import { ServerEditModalContent } from './ServerEditModal';
 
@@ -16,6 +16,11 @@ export function ServerAndSync(): JSX.Element {
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
   const [inSyncing, setInSyncing] = useState(false);
+  const onEditServer = useCallback((server: IServerInfo) => {
+    void Haptics.selectionAsync();
+    setSelectedServerID(server.id);
+    setServerModalVisible(true);
+  }, []);
 
   return (
     <>
@@ -36,11 +41,9 @@ export function ServerAndSync(): JSX.Element {
       <Text>{t('Preference.SyncNowDescription')}</Text>
       <BackgroundSyncStatus />
       <ServerList
-        onPress={(server) => {
-          void Haptics.selectionAsync();
-          setSelectedServerID(server.id);
-          setServerModalVisible(true);
-        }}
+        onLongPress={onEditServer}
+        // TODO: press to test connection or something
+        onPress={onEditServer}
         activeIDs={activeIDs}
       />
       <Portal>
