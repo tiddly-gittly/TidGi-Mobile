@@ -49,6 +49,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [addServerModelVisible, setAddServerModelVisible] = useState(false);
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
+  const [inSyncing, setInSyncing] = useState(false);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -110,10 +111,17 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
 
       <Button
         mode='outlined'
+        disabled={inSyncing}
+        loading={inSyncing}
         onPress={async () => {
-          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
-          if (server !== undefined) {
-            await backgroundSyncService.syncWikiWithServer(wiki, server);
+          setInSyncing(true);
+          try {
+            const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+            if (server !== undefined) {
+              await backgroundSyncService.syncWikiWithServer(wiki, server);
+            }
+          } finally {
+            setInSyncing(false);
           }
         }}
       >

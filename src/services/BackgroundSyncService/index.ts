@@ -1,11 +1,14 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/promise-function-async */
 import * as BackgroundFetch from 'expo-background-fetch';
+import * as Haptics from 'expo-haptics';
 import * as SQLite from 'expo-sqlite';
 import * as TaskManager from 'expo-task-manager';
 import { sortedUniqBy, uniq } from 'lodash';
+import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiMainSqliteName } from '../../constants/paths';
+import i18n from '../../i18n';
 import { ISkinnyTiddlerWithText, ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
@@ -179,9 +182,12 @@ class BackgroundSyncService {
       const { deletes, updates } = response;
       await this.#updateTiddlersFromServer(wiki, deletes, updates);
       this.#updateLastSyncTimestamp(wiki, server);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return true;
     } catch (error) {
       console.error(error, (error as Error).stack);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(i18n.t('Log.SynchronizationFailed'), `${i18n.t('Log.SynchronizationFailedDetail')} Error: ${(error as Error).message}`, undefined, { cancelable: true });
       return false;
     }
   }

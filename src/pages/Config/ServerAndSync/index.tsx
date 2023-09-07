@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Modal, Portal, Text } from 'react-native-paper';
@@ -12,12 +13,20 @@ export function ServerAndSync(): JSX.Element {
   const clearServerList = useServerStore(state => state.clearAll);
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
+  const [inSyncing, setInSyncing] = useState(false);
 
   return (
     <>
       <Button
+        disabled={inSyncing}
+        loading={inSyncing}
         onPress={async () => {
-          await backgroundSyncService.sync();
+          setInSyncing(true);
+          try {
+            await backgroundSyncService.sync();
+          } finally {
+            setInSyncing(false);
+          }
         }}
       >
         {t('ContextMenu.SyncNow')}
@@ -26,6 +35,7 @@ export function ServerAndSync(): JSX.Element {
       <BackgroundSyncStatus />
       <ServerList
         onPress={(server) => {
+          void Haptics.selectionAsync();
           setSelectedServerID(server.id);
           setServerModalVisible(true);
         }}

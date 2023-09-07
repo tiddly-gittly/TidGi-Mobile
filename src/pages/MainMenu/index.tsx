@@ -1,4 +1,5 @@
 import type { StackScreenProps } from '@react-navigation/stack';
+import * as Haptics from 'expo-haptics';
 import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Modal, PaperProvider, Portal } from 'react-native-paper';
@@ -39,6 +40,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
             navigation.navigate('WikiWebView', { id: wiki.id });
           }}
           onLongPress={(wiki) => {
+            void Haptics.selectionAsync();
             setSelectedWikiID(wiki.id);
             setWikiModalVisible(true);
           }}
