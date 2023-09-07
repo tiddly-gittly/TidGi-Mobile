@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  expo-status-bar:
+    specifier: ~1.6.0
+    version: 1.6.0
   tiddlywiki-plugin-dev:
     specifier: ^0.0.39
     version: 0.0.39(postcss@8.4.29)(ts-node@10.9.1)
@@ -871,6 +874,10 @@ packages:
   /escape-string-regexp@1.0.5:
     resolution: {integrity: sha512-vbRorB5FUQWvla16U8R/qgaFIya2qGzwDrNmCZuYKrbdSUMG6I1ZCGQRefkRVhuOkIGVne7BQ35DSfo1qvJqFg==}
     engines: {node: '>=0.8.0'}
+    dev: false
+
+  /expo-status-bar@1.6.0:
+    resolution: {integrity: sha512-e//Oi2WPdomMlMDD3skE4+1ZarKCJ/suvcB4Jo/nO427niKug5oppcPNYO+csR6y3ZglGuypS+3pp/hJ+Xp6fQ==}
     dev: false
 
   /external-editor@3.1.0:

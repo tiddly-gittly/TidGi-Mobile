@@ -3,10 +3,11 @@
 import { NavigationContainer, NavigationProp } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import i18n from 'i18next';
-import React from 'react';
 import './i18n/index';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { HeaderBackButton } from '@react-navigation/elements';
+import { StatusBar } from 'expo-status-bar';
+import React from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { Config } from './pages/Config';
 import { Importer } from './pages/Importer/Index';
@@ -26,6 +27,7 @@ export const App: React.FC = () => {
 
   return (
     <I18nextProvider i18n={i18n}>
+      <StatusBar hidden={false} />
       <NavigationContainer>
         <Stack.Navigator initialRouteName='MainMenu'>
           <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
