@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
-import { useMemo } from 'react';
-import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers } from 'tiddlywiki';
 import { getWikiMainSqliteName, getWikiTiddlerPathByTitle } from '../../constants/paths';
@@ -12,8 +10,6 @@ import { useConfigStore } from '../../store/config';
 import { ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/wiki';
 import { getSyncIgnoredTiddlers } from './ignoredTiddler';
-import { WikiStorageServiceIPCDescriptor } from './descriptor';
-import { registerWikiStorageServiceOnWebView } from './registerWikiStorageServiceOnWebView';
 import { IWikiServerStatusObject } from './types';
 
 /**
@@ -182,12 +178,6 @@ export class WikiStorageService {
       // });
     });
   }
-}
-
-export function useWikiStorageService(workspace: IWikiWorkspace) {
-  const wikiStorageService = useMemo(() => new WikiStorageService(workspace), [workspace]);
-  const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorageService, WikiStorageServiceIPCDescriptor);
-  return [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] as const;
 }
 
 /**

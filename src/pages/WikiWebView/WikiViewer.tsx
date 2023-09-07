@@ -5,7 +5,7 @@ import { MD3Colors, Text } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
-import { useWikiStorageService } from '../../services/WikiStorageService';
+import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
@@ -33,7 +33,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
-  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useWikiStorageService(wikiWorkspace);
+  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useRegisterService(wikiWorkspace);
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
