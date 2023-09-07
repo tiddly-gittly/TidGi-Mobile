@@ -25,7 +25,7 @@
           "fetch"
         ]
       },
-      "bundleIdentifier": "com.linonetwo012.tidgimobile"
+      "bundleIdentifier": "fun.tidgi.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +35,7 @@
       "permissions": [
         "android.permission.CAMERA"
       ],
-      "package": "com.linonetwo012.tidgimobile"
+      "package": "fun.tidgi.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
