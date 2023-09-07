@@ -9,11 +9,13 @@ import { Button, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { uniqBy } from 'lodash';
+import Collapsible from 'react-native-collapsible';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IWikiServerSync, useWikiStore } from '../../store/wiki';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { AddNewServerModelContent } from './AddNewServerModelContent';
+import { WikiChangesModelContent } from './WikiChangesModelContent';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -45,6 +47,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [editedWikiFolderLocation, setEditedWikiFolderLocation] = useState(wiki?.wikiFolderLocation ?? '');
   const [newServerID, setNewServerID] = useState<string>('');
   const [addServerModelVisible, setAddServerModelVisible] = useState(false);
+  const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
+  const [expandServerList, setExpandServerList] = useState(false);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -116,30 +120,47 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         <Text>{t('ContextMenu.SyncNow')}</Text>
       </Button>
 
-      <Text style={{ textAlign: 'center' }}>{t('AddWorkspace.ToggleServerList')}</Text>
-      <FlatList
-        data={wiki.syncedServers}
-        renderItem={renderServerItem}
-        keyExtractor={(item) => item.serverID}
-      />
-
-      <Picker
-        selectedValue={newServerID}
-        onValueChange={(itemValue) => {
-          setNewServerID(itemValue);
-        }}
-      >
-        {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} />)}
-      </Picker>
-      <Button onPress={handleAddServer}>
-        <Text>{t('EditWorkspace.AddSelectedServer')}</Text>
-      </Button>
       <Button
+        mode='text'
         onPress={() => {
-          setAddServerModelVisible(true);
+          setExpandServerList(!expandServerList);
         }}
       >
-        <Text>{t('EditWorkspace.AddNewServer')}</Text>
+        <Text>{t('AddWorkspace.ToggleServerList')}</Text>
+      </Button>
+      <Collapsible collapsed={!expandServerList}>
+        <FlatList
+          data={wiki.syncedServers}
+          renderItem={renderServerItem}
+          keyExtractor={(item) => item.serverID}
+        />
+        <Picker
+          selectedValue={newServerID}
+          onValueChange={(itemValue) => {
+            setNewServerID(itemValue);
+          }}
+        >
+          {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} />)}
+        </Picker>
+        <Button onPress={handleAddServer}>
+          <Text>{t('EditWorkspace.AddSelectedServer')}</Text>
+        </Button>
+        <Button
+          onPress={() => {
+            setAddServerModelVisible(true);
+          }}
+        >
+          <Text>{t('EditWorkspace.AddNewServer')}</Text>
+        </Button>
+      </Collapsible>
+
+      <Button
+        mode='text'
+        onPress={() => {
+          setWikiChangeLogModelVisible(!wikiChangeLogModelVisible);
+        }}
+      >
+        <Text>{t('AddWorkspace.OpenChangeLogList')}</Text>
       </Button>
 
       <ButtonsContainer>
@@ -184,6 +205,19 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
             id={id}
             onClose={() => {
               setAddServerModelVisible(false);
+            }}
+          />
+        </Modal>
+        <Modal
+          visible={wikiChangeLogModelVisible}
+          onDismiss={() => {
+            setWikiChangeLogModelVisible(false);
+          }}
+        >
+          <WikiChangesModelContent
+            id={id}
+            onClose={() => {
+              setWikiChangeLogModelVisible(false);
             }}
           />
         </Modal>

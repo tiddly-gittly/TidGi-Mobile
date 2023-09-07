@@ -80,13 +80,13 @@ class BackgroundSyncService {
     };
   }
 
-  async #getChangeLogsSinceLastSync(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
+  public async getChangeLogsSinceLastSync(wiki: IWikiWorkspace, lastSync: number, newerFirst?: boolean): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
     const database = SQLite.openDatabase(getWikiMainSqliteName(wiki));
     // Convert the JavaScript Date number to SQLite `DATETIME DEFAULT CURRENT_TIMESTAMP` 'YYYY-MM-DD HH:MM:SS' format
-    const lastSyncTimestamp = new Date(server.lastSync).toISOString().slice(0, 19).replace('T', ' ');
+    const lastSyncTimestamp = new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ');
     const resultSets = await database.execAsync(
       [{
-        sql: `SELECT * FROM tiddlers_changes_log WHERE strftime('%s', timestamp) > strftime('%s', ?) ORDER BY timestamp ASC;`,
+        sql: `SELECT * FROM tiddlers_changes_log WHERE strftime('%s', timestamp) > strftime('%s', ?) ORDER BY timestamp ${newerFirst === true ? 'DESC' : 'ASC'};`,
         args: [lastSyncTimestamp],
       }],
       true,
@@ -152,7 +152,7 @@ class BackgroundSyncService {
   }
 
   public async syncWikiWithServer(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<boolean> {
-    const changes = await this.#getChangeLogsSinceLastSync(wiki, server);
+    const changes = await this.getChangeLogsSinceLastSync(wiki, server.lastSync);
     const syncUrl = new URL(`tw-mobile-sync/sync`, server.uri);
 
     const request: ISyncEndPointRequest = {

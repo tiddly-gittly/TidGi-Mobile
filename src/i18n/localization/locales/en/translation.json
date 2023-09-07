@@ -153,7 +153,8 @@
     "ServerList": "Server List",
     "ToggleServerList": "Toggle Server List",
     "Retry": "Retry",
-    "ToggleQRCodeScanner": "Toggle QRCode Scanner"
+    "ToggleQRCodeScanner": "Toggle QRCode Scanner",
+    "OpenChangeLogList": "Open Change Log List"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",
@@ -531,5 +532,6 @@
   "ConfirmDeleteDescription": "This operation can't be reverted.",
   "Sidebar": {
     "Main": "Main Menu"
-  }
+  },
+  "All": "All"
 }

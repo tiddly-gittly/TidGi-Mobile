@@ -166,7 +166,8 @@
     "ServerList": "服务器列表",
     "ToggleServerList": "服务器列表",
     "Retry": "重试",
-    "ToggleQRCodeScanner": "二维码扫描器开关"
+    "ToggleQRCodeScanner": "二维码扫描器开关",
+    "OpenChangeLogList": "打开变更记录列表"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
@@ -508,5 +509,6 @@
   "ConfirmDeleteDescription": "此操作无法撤销。",
   "Sidebar": {
     "Main": "主菜单"
-  }
+  },
+  "All": "所有"
 }
