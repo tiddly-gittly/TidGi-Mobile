@@ -63,8 +63,7 @@ export function useImportHTML() {
     try {
       setStatus('creating');
 
-      // Save the HTML to a file
-      const newWorkspace = addWiki({ name: wikiName, selectiveSyncFilter, syncedServers: [{ serverID, lastSync: Date.now() }] });
+      const newWorkspace = addWiki({ name: wikiName, selectiveSyncFilter, syncedServers: [{ serverID, lastSync: Date.now(), syncActive: true }] });
       if (newWorkspace === undefined) throw new Error('Failed to create workspace');
       newWorkspaceID = newWorkspace.id;
       // make main folder
@@ -76,6 +75,7 @@ export function useImportHTML() {
       setCreatedWikiWorkspace(newWorkspace);
 
       setStatus('downloading');
+      // Save the HTML to a file
       const htmlDownloadResumable = fs.createDownloadResumable(getSkinnyHTMLUrl.toString(), getWikiFilePath(newWorkspace), {}, (progress) => {
         setSkinnyHtmlDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
       });
@@ -95,6 +95,7 @@ export function useImportHTML() {
           setSkinnyTiddlerTextCacheDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
+      // TODO: use selectiveSyncFilter to limit which non-skinny tiddlers to store
       const nonSkinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
         getNonSkinnyTiddlywikiTiddlerStoreScriptUrl.toString(),
         getWikiTiddlerStorePath(newWorkspace),
