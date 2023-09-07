@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { Card } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { backgroundSyncService } from '../services/BackgroundSyncService';
 import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
 
 interface ServerListProps {
@@ -17,6 +18,11 @@ interface ServerListProps {
 export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, onlineOnly, serverIDs, activeIDs = [] }) => {
   const { t } = useTranslation();
   const serverList = useServerStore(state => serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]));
+  useEffect(() => {
+    if (onlineOnly === true) {
+      void backgroundSyncService.updateServerOnlineStatus();
+    }
+  }, [onlineOnly]);
   const filteredServer = useMemo(() => {
     let newServerList = serverList;
     if (onlineOnly === true) {
