@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/prevent-abbreviations */
-import { MutableRefObject, useEffect, useRef } from 'react';
+import { MutableRefObject, useRef } from 'react';
 import { NativeSyntheticEvent } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { WebViewMessage } from 'react-native-webview/lib/WebViewTypes';
@@ -31,11 +31,13 @@ export function useMergedReference<T extends WebViewRefType | OnMessageRefType>(
   const mergedReference = useRef<T['current']>(null) as T;
 
   if (isFunctionReference(references)) {
-    // Update the merged reference to call all individual function references when invoked.
+    // Get an array of the original functions before we overwrite them
     mergedReference.current = ((event: NativeSyntheticEvent<WebViewMessage>) => {
-      references.forEach((reference: OnMessageRefType) => {
-        reference.current?.(event);
-      });
+      references
+        .map((ref: OnMessageRefType) => ref.current)
+        .forEach((originalOnMessageFunction) => {
+          originalOnMessageFunction?.(event);
+        });
     }) as T['current'];
   } else {
     // Update the merged reference to update all WebView references when set.
@@ -53,14 +55,6 @@ export function useMergedReference<T extends WebViewRefType | OnMessageRefType>(
       },
     });
   }
-
-  // Ensure all individual references are updated with `mergedReference.current` on mount.
-  useEffect(() => {
-    references.forEach(reference => {
-      if (!reference) return;
-      reference.current = mergedReference.current;
-    });
-  }, [references]);
 
   return mergedReference;
 }

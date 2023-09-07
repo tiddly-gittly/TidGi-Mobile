@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import { useRegisterProxy } from 'react-native-postmessage-cat/react-native';
+import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { IWikiWorkspace } from '../../store/wiki';
 import { WikiStorageService } from '.';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
 
 export function useWikiStorageService(workspace: IWikiWorkspace) {
   const wikiStorageService = useMemo(() => new WikiStorageService(workspace), [workspace]);
-  const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorageService, WikiStorageServiceIPCDescriptor);
+  const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorageService, WikiStorageServiceIPCDescriptor, { debugLog: true });
   return [webViewReference, onMessageReference] as const;
 }

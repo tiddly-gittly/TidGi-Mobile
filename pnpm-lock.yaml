@@ -102,8 +102,8 @@ dependencies:
     specifier: ^5.10.3
     version: 5.10.3(react-native-safe-area-context@4.6.3)(react-native-vector-icons@10.0.0)(react-native@0.72.4)(react@18.2.0)
   react-native-postmessage-cat:
-    specifier: ^0.2.0
-    version: 0.2.0(react-native-webview@13.2.2)(rxjs@7.8.1)
+    specifier: ^0.3.1
+    version: 0.3.1(react-native-webview@13.2.2)(rxjs@7.8.1)
   react-native-safe-area-context:
     specifier: ^4.6.3
     version: 4.6.3(react-native@0.72.4)(react@18.2.0)
@@ -8180,8 +8180,8 @@ packages:
       use-latest-callback: 0.1.6(react@18.2.0)
     dev: false
 
-  /react-native-postmessage-cat@0.2.0(react-native-webview@13.2.2)(rxjs@7.8.1):
-    resolution: {integrity: sha512-wbfuyQOJIapACaY1foliTWOY4XWqim9lkvs1jzLQ0EbM9WxDfXV+cZaLo+HuzEs49i6lZ8OycyFniWAzmfImKw==}
+  /react-native-postmessage-cat@0.3.1(react-native-webview@13.2.2)(rxjs@7.8.1):
+    resolution: {integrity: sha512-2FG1WiOw1TK6bC6GjDaMup73a8/yS3059+pH73dJmtzyzQWHXWocsIBeIHXlK8eVzqbRzdXSaP/7n0FdSe/jhg==}
     peerDependencies:
       react-native-webview: '>= 13.0.0'
       rxjs: '>= 7.5.0'

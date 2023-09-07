@@ -1,4 +1,4 @@
-import { useRegisterProxy } from 'react-native-postmessage-cat/react-native';
+import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { appDataService } from '.';
 import { AppDataServiceIPCDescriptor } from './descriptor';
 

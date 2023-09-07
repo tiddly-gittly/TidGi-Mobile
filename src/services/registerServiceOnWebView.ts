@@ -1,3 +1,4 @@
+import { useMergedReference } from 'react-native-postmessage-cat';
 import { IWikiWorkspace } from '../store/wiki';
 import { AppDataServiceIPCDescriptor } from './AppDataService/descriptor';
 import { useAppDataService } from './AppDataService/hooks';
@@ -5,7 +6,6 @@ import { BackgroundSyncServiceIPCDescriptor } from './BackgroundSyncService/desc
 import { useBackgroundSyncService } from './BackgroundSyncService/hooks';
 import { NativeServiceIPCDescriptor } from './NativeService/descriptor';
 import { useNativeService } from './NativeService/hooks';
-import { useMergedReference } from './useMergedReference';
 import { WikiStorageServiceIPCDescriptor } from './WikiStorageService/descriptor';
 import { useWikiStorageService } from './WikiStorageService/hooks';
 
