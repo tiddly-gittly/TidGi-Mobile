@@ -10,7 +10,6 @@ import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
-import { useWikiWebViewNotification } from './useWikiWebViewNotification';
 import { useWindowMeta } from './useWindowMeta';
 
 const WebViewContainer = styled.View`
@@ -29,7 +28,8 @@ export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
-  useWikiWebViewNotification({ id: wikiWorkspace.id });
+  // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
+  // useWikiWebViewNotification({ id: wikiWorkspace.id });
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
