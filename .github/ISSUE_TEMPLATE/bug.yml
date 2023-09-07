@@ -1,0 +1,35 @@
+name: Bug Report 报错问题
+description: Create a report to help us improve 有报错或者有Bug就发在这
+title: 'bug: '
+labels: ['bug']
+assignees:
+  - linonetwo
+body:
+  - type: textarea
+    id: Environment
+    attributes:
+      label: Environment 环境信息
+      description: Including Version of TidGi-Mobile, TidGi-Desktop, tw-mobile-sync plugin. Better with OS name and version. 包括以下三样的版本 TidGi-Mobile, TidGi-Desktop, tw-mobile-sync，最好带上系统名和版本 
+    validations:
+      required: false
+  - type: textarea
+    id: Description
+    attributes:
+      label: Description 描述
+      description: Describe how the bug manifests and what the behavior would be without the bug. 描述缺陷的行为，也可以说说本应该咋样
+      placeholder: Tell us what you see!
+    validations:
+      required: false
+  - type: textarea
+    id: Reproduce
+    attributes:
+      label: Steps to Reproduce 复现方式
+      description: Please explain the steps required to duplicate the issue. 精确的复现方法，需要能稳定复现
+      placeholder: Help developer to debug. Issues without this will be closed immediately by the owner. 帮助开发者高效debug。没填这个的话帖子会在看到后被立即无情关闭。
+    validations:
+      required: true
+  - type: textarea
+    id: Context
+    attributes:
+      label: Additional Context 额外上下文
+      description: List any other information that is relevant to your issue. Stack traces, related issues, suggestions on how to add, use case, forum links, screenshots, OS if applicable, etc.
