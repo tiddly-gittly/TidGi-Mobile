@@ -12,7 +12,31 @@ Mobile Tiddlywiki app that lazy-load local-first tid/md file, and sync with TidG
 
 Install [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) plugin.
 
-tw-mobile-sync >= **0.6.0** works with TidGi-Mobile **v0.0.2**
+tw-mobile-sync >= **0.6.0** works with TidGi-Mobile **v0.2**
+
+## Screenshots
+
+Adding Wiki by Scanning QR Code on [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop).
+
+<div style="display:flex;flex-direction:row;justify-content: space-between;flex-wrap:wrap">
+
+![Screenshot of Adding Wiki by Scanning QR](./docs/images/Screenshots/Screenshot-QR.jpg)
+
+![Screenshot of Wiki UI in TidGi Mobile](./docs/images/Screenshots/Screenshot-Wiki.jpg)
+
+</div>
+
+Switch Language on Preference, and edit server or wiki config in the list.
+
+<div style="display:flex;flex-direction:row;justify-content: space-between;flex-wrap:wrap">
+
+![Screenshot of Adding Wiki by Scanning QR](./docs/images/Screenshots/Screenshot-Preference.jpg)
+
+![Screenshot of Wiki UI in TidGi Mobile](./docs/images/Screenshots/Screenshot-Edit-Wiki.jpg)
+
+</div>
+
+More Screenshots on [docs/images/Screenshots](./docs/images/Screenshots)
 
 ## How it stores and uses data
 
