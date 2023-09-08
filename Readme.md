@@ -1,6 +1,6 @@
 # TidGi Mobile
 
-Mobile Tiddlywiki app that lazy-load local-first tid/md file, and sync with TidGi-Desktop.
+Mobile Tiddlywiki app that is lazy-loading, local-first, uses tid/md pure text file, all-in-one, backlink & outline & Zettelkasten, and syncs with [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop).
 
 <div align="center">
 
@@ -36,20 +36,25 @@ More Screenshots on [docs/images/Screenshots](./docs/images/Screenshots)
 
 ## How it stores and uses data
 
-When sync from a TidGi-Desktop app:
+When syncing from a TidGi-Desktop app:
 
-1. HTML, contains some of core tw things like `$:/boot` and raw HTMLs
-    1. To update tiddlywiki version or those raw HTMLs, you need to perform a full-resync
-1. SQLite, when adding wiki, we fetch all skinny-tiddlers of your tid/md file, then store them in SQLite DB to speedup booting and save memory.
-1. JSON, when adding wiki, we fetch all plugins's full content as JSON, this will not be updated
+1. HTML, contains some of core tw things like `$:/boot` and raw HTML created by [$:/tags/RawMarkup](https://tiddlywiki.com/#SystemTag%3A%20%24%3A%2Ftags%2FRawMarkup)
+    1. To update the TiddlyWiki version or the raw markup, you need to perform a full-resync (delete and recreate)
+1. SQLite, When adding wiki, we fetch all skinny-tiddlers of your tid/md file, then store them in SQLite DB to speed up booting and save memory.
+1. JSON, When adding wiki, we fetch all plugins's full content as JSON, this will not be updated
 1. Files, binary files like images are stored as files on your phone.
 
- a HTML with all plugins and skinny-tiddlers are store in the Mobile storage. And we also sync all tid/md file from your Desktop App to the Mobile storage.
+Later, we use a Sync-Adaptor to only load the file you need lazily, to increase performance on a huge wiki. Also, reduce the memory and CPU consumption of your phone.
 
-Later, we use a Sync-Adaptor to only load the file you need lazily, to increase performance on huge wiki.
+### Drawbacks
 
-Currently only tiddlers in SQLite are synced back to TidGi-Desktop, HTML and JSON is never changed. So if you want to add plugins, you need to add it on Desktop, and a full resync from TidGi-Desktop is required.
+Currently, only normal tiddlers in SQLite are certainly synced back to TidGi-Desktop. HTML Javascript tiddler, and JSON plugins are never tested (Feel free to have a try and report to me!). So if you want to add new plugins, you may need to backup data to Desktop, add plugins on Desktop, and perform a full resync (delete and recreate) from TidGi-Desktop (If this is not necessary, report to me!).
+
+And we don't support creating a new wiki, like [Tiddloid](https://github.com/donmor/Tiddloid) does. You need an existing [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop) wiki to get started.
 
 ## Permissions
 
-1. Notification: We use notification to switch between full screen wiki and menu, also allow plugin to show notification.
+All these features can be accessible from tiddlywiki plugin, so you can develop plugins to notify you about ToDo, or record locations of visited places, etc.
+
+1. Notification: We use notification to switch between full-screen wiki and menu, and also allow plugin to show notification.
+2. Location: To store server location, later can show them on a map.
