@@ -27,6 +27,9 @@ const ErrorText = styled(Text)`
 export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
+// pretending we are sending request from same origin using a Chrome browser. So image site won't block our request.
+const FAKE_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36';
+
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
@@ -62,6 +65,23 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   return (
     <WebView
       originWhitelist={['*']}
+      mediaPlaybackRequiresUserAction={false}
+      allowsInlineMediaPlayback
+      javaScriptCanOpenWindowsAutomatically
+      allowsBackForwardNavigationGestures
+      allowsProtectedMedia
+      allowFileAccess
+      allowFileAccessFromFileURLs
+      allowUniversalAccessFromFileURLs
+      focusable
+      geolocationEnabled
+      importantForAccessibility='yes'
+      keyboardDisplayRequiresUserAction={false}
+      mediaCapturePermissionGrantType='grant'
+      mixedContentMode='always'
+      allowsAirPlayForMediaPlayback
+      allowsFullscreenVideo
+      userAgent={FAKE_USER_AGENT}
       // add DOCTYPE at load time to prevent Quirks Mode
       source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body></body></html>` }}
       renderError={(errorName) => <Text>{errorName}</Text>}
