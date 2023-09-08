@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
-import React, { useState } from 'react';
+import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
@@ -12,6 +13,16 @@ interface ServerEditModalProps {
   id?: string;
   onClose: () => void;
 }
+
+const SmallBarCodeScanner = styled(BarCodeScanner)`
+  height: 80%;
+  width: 100%;
+`;
+const ScanQRButton = styled(Button)`
+  margin: 10px;
+  padding: 20px;
+  height: 3em;
+`;
 
 export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): JSX.Element {
   const { t } = useTranslation();
@@ -27,6 +38,29 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
 
   // This is for location field. You might want to implement a proper method to pick a location.
   const [editedLocation, setEditedLocation] = useState(((server?.location) != null) || {});
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [scannedString, setScannedString] = useState('');
+  useEffect(() => {
+    if (scannedString !== '') {
+      try {
+        const url = new URL(scannedString);
+        setEditedUri(url.origin);
+      } catch (error) {
+        console.warn('Not a valid URL', error);
+      }
+    }
+  }, [scannedString]);
+  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
+      try {
+        setQrScannerOpen(false);
+        setScannedString(data);
+      } catch (error) {
+        console.warn('Not a valid URL', error);
+      }
+    }
+  }, []);
 
   if (id === undefined || server === undefined) {
     return (
@@ -50,6 +84,23 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
 
   return (
     <ModalContainer>
+      {qrScannerOpen && (
+        <SmallBarCodeScanner
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
+          onBarCodeScanned={handleBarCodeScanned}
+        />
+      )}
+      <ScanQRButton
+        mode={'outlined'}
+        onPress={() => {
+          setQrScannerOpen(!qrScannerOpen);
+        }}
+      >
+        {/* eslint-disable-next-line react-native/no-raw-text */}
+        <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
+      </ScanQRButton>
+
       <StyledTextInput label={t('EditWorkspace.ServerName')} value={editedName} onChangeText={setEditedName} />
       <StyledTextInput label={t('EditWorkspace.ServerURI')} value={editedUri} onChangeText={setEditedUri} />
 
