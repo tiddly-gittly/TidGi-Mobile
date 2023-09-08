@@ -12,7 +12,7 @@ Mobile Tiddlywiki app that is lazy-loading, local-first, uses tid/md pure text f
 
 Install [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) plugin.
 
-tw-mobile-sync >= **0.6.0** works with TidGi-Mobile **v0.2**
+tw-mobile-sync >= **0.6.0** works with TidGi-Mobile >= **v0.3**
 
 ## Screenshots
 
