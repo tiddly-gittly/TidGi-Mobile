@@ -22,7 +22,9 @@ Adding Wiki by Scanning QR Code on [TidGi-Desktop](https://github.com/tiddly-git
 
 | Adding Wiki by Scanning QR                                                                       | Wiki UI in TidGi Mobile                                                                      |
 |--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| ![Screenshot of Adding Wiki by Scanning QR](./docs/images/Screenshots/Screenshot-Preference.jpg) | ![Screenshot of Wiki UI in TidGi Mobile](./docs/images/Screenshots/Screenshot-Edit-Wiki.jpg) |
+| ![Screenshot of Adding Wiki by Scanning QR](./docs/images/Screenshots/Screenshot-QR.jpg) | ![Screenshot of Wiki UI in TidGi Mobile](./docs/images/Screenshots/Screenshot-Wiki.jpg) |
+
+
 
 Switch Language on Preference, and edit server or wiki config in the list.
 
