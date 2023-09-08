@@ -1,18 +1,12 @@
 # TidGi Mobile
 
-Mobile Tiddlywiki app that is lazy-loading, local-first, uses tid/md pure text file, all-in-one, backlink & outline & Zettelkasten, and syncs with [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop).
+Mobile Tiddlywiki app is A Note App that is local-first, uses tid/md pure text file, all-in-one with calendar/todo/diary widget, lazy-loading, backlink & outline & Zettelkasten, and syncs with the open-source [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop).
 
 <div align="center">
 
 [![GitHub Releases](https://img.shields.io/github/downloads/tiddly-gittly/TidGi-Mobile/latest/total?label=Download%20Latest%20Release&style=for-the-badge)](https://github.com/tiddly-gittly/TidGi-Mobile/releases/latest)
 
 </div>
-
-## Usage
-
-Install [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) plugin.
-
-tw-mobile-sync >= **0.6.0** works with TidGi-Mobile >= **v0.3**
 
 ## Screenshots
 
@@ -22,17 +16,21 @@ Adding Wiki by Scanning QR Code on [TidGi-Desktop](https://github.com/tiddly-git
 
 | Adding Wiki by Scanning QR                                                                       | Wiki UI in TidGi Mobile                                                                      |
 |--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| ![Screenshot of Adding Wiki by Scanning QR](./docs/images/Screenshots/Screenshot-QR.jpg) | ![Screenshot of Wiki UI in TidGi Mobile](./docs/images/Screenshots/Screenshot-Wiki.jpg) |
-
-
+| ![Screenshot of Adding Wiki by Scanning QR](./metadata/en-US/images/phoneScreenshots/Screenshot-QR.jpg) | ![Screenshot of Wiki UI in TidGi Mobile](./metadata/en-US/images/phoneScreenshots/Screenshot-Wiki.jpg) |
 
 Switch Language on Preference, and edit server or wiki config in the list.
 
 | Preference                                                                                       | Edit Wiki list item by long press                                                            |
 |--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| ![Screenshot of Adding Wiki by Scanning QR](./docs/images/Screenshots/Screenshot-Preference.jpg) | ![Screenshot of Wiki UI in TidGi Mobile](./docs/images/Screenshots/Screenshot-Edit-Wiki.jpg) |
+| ![Screenshot of Adding Wiki by Scanning QR](./metadata/en-US/images/phoneScreenshots/Screenshot-Preference.jpg) | ![Screenshot of Wiki UI in TidGi Mobile](./metadata/en-US/images/phoneScreenshots/Screenshot-Edit-Wiki.jpg) |
 
-More Screenshots on [docs/images/Screenshots](./docs/images/Screenshots)
+More Screenshots on [metadata/en-US/images/phoneScreenshots/](./metadata/en-US/images/phoneScreenshots/)
+
+## Usage
+
+Install [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) plugin.
+
+tw-mobile-sync >= **0.6.0** works with TidGi-Mobile >= **v0.3**
 
 ## How it stores and uses data
 

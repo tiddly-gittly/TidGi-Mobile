@@ -1,0 +1,30 @@
+## 使用方法
+
+安装 [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) 插件。
+
+tw-mobile-sync >= **0.6.0** 适用于 TidGi-Mobile >= **v0.3**
+
+## 它如何存储和使用数据
+
+从 TidGi-Desktop 应用程序同步时：
+
+1. HTML，包含一些核心tw的东西，如`$:/boot`和由[$:/tags/RawMarkup](https://tiddlywiki.com/#SystemTag%3A%20%24%3A%2Ftags%2FRawMarkup)创建的原始HTML。
+    1. 要更新太微版本或原始标记，需要执行全同步（删除并重新创建）
+1. SQLite, 添加维基时，我们会获取你的tid/md文件中的所有skinny-tiddlers，然后将它们存储在SQLite数据库中，以加快启动速度并节省内存。
+1. JSON，添加维基时，我们会以 JSON 格式获取所有插件的完整内容，这些内容将不会更新。
+1. 文件，图片等二进制文件以文件形式存储在手机中。
+
+之后，我们会使用同步适配器（Sync-Adaptor）来懒散地只加载所需的文件，以提高庞大维基的性能。同时，减少手机内存和 CPU 的消耗。
+
+###缺点
+
+目前，只有 SQLite 中的普通 tiddler 可以同步到 TidGi-Desktop 中。HTML Javascript tiddler 和 JSON 插件从未经过测试（欢迎尝试并向我报告！）。因此，如果您想添加新插件，可能需要将数据备份到桌面，在桌面上添加插件，然后从 TidGi-Desktop 执行完全重新同步（删除并重新创建）（如果没有必要，请向我报告！）。
+
+我们不支持像 [Tiddloid](https://github.com/donmor/Tiddloid)那样创建一个新的维基。你需要一个现有的[TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop) 维基才能开始。
+
+##权限
+
+所有这些功能都可以通过太微插件访问，因此你可以开发插件来通知你待办事项，或者记录访问地点的位置等。
+
+1. 通知： 我们使用通知在全屏维基和菜单之间切换，也允许插件显示通知。
+2. 位置： 存储服务器位置，之后可在地图上显示。
