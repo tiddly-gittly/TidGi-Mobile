@@ -14,7 +14,7 @@ export interface IHtmlContent {
   skinnyTiddlerStore: string;
   tiddlerStoreScript: string;
 }
-export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersStore: (htmlContent: IHtmlContent) => void, webviewLoaded: boolean) {
+export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersStore: (htmlContent: IHtmlContent) => void, webviewLoaded: boolean, keyToTriggerReload: number) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersSt
       }
     };
     void fetchHTML();
-  }, [workspace, injectHtmlAndTiddlersStore, webviewLoaded]);
+  }, [workspace, injectHtmlAndTiddlersStore, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError };
 }
 

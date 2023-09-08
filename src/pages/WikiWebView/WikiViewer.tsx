@@ -38,9 +38,10 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
+  const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useRegisterService(wikiWorkspace);
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
-  const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null);
+  const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
   const preloadScript = useMemo(() => `
 
@@ -66,6 +67,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   }
   return (
     <WebView
+      key={webViewKeyToReloadAfterRecycleByOS}
       originWhitelist={['*']}
       mediaPlaybackRequiresUserAction={false}
       allowsInlineMediaPlayback
@@ -88,16 +90,9 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
       source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body></body></html>` }}
       renderError={(errorName) => <Text>{errorName}</Text>}
       renderLoading={() => <Text>{t('Loading')}</Text>}
-      onContentProcessDidTerminate={(syntheticEvent) => {
-        const { nativeEvent } = syntheticEvent;
-        console.warn('Content process terminated, reloading', nativeEvent);
-      }}
-      onRenderProcessGone={syntheticEvent => {
-        const { nativeEvent } = syntheticEvent;
-        console.warn(
-          'WebView Crashed:',
-          nativeEvent.didCrash,
-        );
+      onRenderProcessGone={() => {
+        // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
+        setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
       }}
       onLoadEnd={() => {
         setLoaded(true);
