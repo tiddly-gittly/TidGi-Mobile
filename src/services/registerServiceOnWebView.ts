@@ -6,6 +6,8 @@ import { BackgroundSyncServiceIPCDescriptor } from './BackgroundSyncService/desc
 import { useBackgroundSyncService } from './BackgroundSyncService/hooks';
 import { NativeServiceIPCDescriptor } from './NativeService/descriptor';
 import { useNativeService } from './NativeService/hooks';
+import { WikiHookServiceIPCDescriptor } from './WikiHookService/descriptor';
+import { useWikiHookService } from './WikiHookService/hooks';
 import { WikiStorageServiceIPCDescriptor } from './WikiStorageService/descriptor';
 import { useWikiStorageService } from './WikiStorageService/hooks';
 
@@ -19,19 +21,23 @@ var nativeService = window.PostMessageCat(${JSON.stringify(NativeServiceIPCDescr
 window.service.nativeService = nativeService;
 var appDataService = window.PostMessageCat(${JSON.stringify(AppDataServiceIPCDescriptor)});
 window.service.appDataService = appDataService;
+var wikiHookService = window.PostMessageCat(${JSON.stringify(WikiHookServiceIPCDescriptor)});
+window.service.wikiHookService = wikiHookService;
 `;
 
 export function useRegisterService(workspace: IWikiWorkspace) {
-  const [wikiStorageServiceWebViewReference, wikiStorageServiceOnMessageReference] = useWikiStorageService(workspace);
+  const [wikiStorageServiceWebViewReference, wikiStorageServiceOnMessageReference, wikiStorageService] = useWikiStorageService(workspace);
   const [backgroundSyncServiceWebViewReference, backgroundSyncServiceOnMessageReference] = useBackgroundSyncService();
   const [nativeServiceWebViewReference, nativeServiceOnMessageReference] = useNativeService();
   const [appDataServiceWebViewReference, appDataServiceOnMessageReference] = useAppDataService();
+  const [wikiHookServiceWebViewReference, wikiHookServiceOnMessageReference, wikiHookService] = useWikiHookService(workspace);
 
   const mergedWebViewReference = useMergedReference(
     wikiStorageServiceWebViewReference,
     backgroundSyncServiceWebViewReference,
     nativeServiceWebViewReference,
     appDataServiceWebViewReference,
+    wikiHookServiceWebViewReference,
   );
 
   const mergedOnMessageReference = useMergedReference(
@@ -39,7 +45,16 @@ export function useRegisterService(workspace: IWikiWorkspace) {
     backgroundSyncServiceOnMessageReference,
     nativeServiceOnMessageReference,
     appDataServiceOnMessageReference,
+    wikiHookServiceOnMessageReference,
   );
 
-  return [mergedWebViewReference, mergedOnMessageReference, registerServiceOnWebView] as const;
+  /**
+   * Services that are limited to the workspace. Can not be accessed globally.
+   */
+  const servicesOfWorkspace = {
+    wikiStorageService,
+    wikiHookService,
+  };
+
+  return [mergedWebViewReference, mergedOnMessageReference, registerServiceOnWebView, servicesOfWorkspace] as const;
 }

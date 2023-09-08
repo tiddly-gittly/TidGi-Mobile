@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath, getWikiTiddlerStorePath } from '../../constants/paths';
+import { replaceTiddlerStoreScriptToOverrideOnReload } from '../../services/WikiHookService';
 import { getSkinnyTiddlersJSONFromSQLite } from '../../services/WikiStorageService';
 import { IWikiWorkspace } from '../../store/wiki';
 
@@ -30,7 +31,7 @@ export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersSt
 
         // inject tidgi syncadaptor plugins
         const tidgiMobilePlugins = `,${pluginJSONStrings.expoFileSystemSyncadaptor},${pluginJSONStrings.expoFileSystemSyncadaptorUi}`;
-        const tiddlerStoreScriptWithTidGiMobilePlugins = `${tiddlerStoreScript.slice(0, -1)}${tidgiMobilePlugins}]`;
+        const tiddlerStoreScriptWithTidGiMobilePlugins = `${patchTiddlyWiki(tiddlerStoreScript).slice(0, -1)}${tidgiMobilePlugins}]`;
         injectHtmlAndTiddlersStore({ html, tiddlerStoreScript: tiddlerStoreScriptWithTidGiMobilePlugins, skinnyTiddlerStore });
       } catch (error) {
         console.error(error, (error as Error).stack);
@@ -40,6 +41,9 @@ export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersSt
     void fetchHTML();
   }, [workspace, injectHtmlAndTiddlersStore, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError };
+}
+function patchTiddlyWiki(tiddlyWikiHTML: string): string {
+  return replaceTiddlerStoreScriptToOverrideOnReload(tiddlyWikiHTML);
 }
 
 export interface ITidGiMobilePlugins {

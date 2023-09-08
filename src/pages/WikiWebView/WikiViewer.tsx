@@ -38,8 +38,12 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
+  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView, servicesOfWorkspace] = useRegisterService(wikiWorkspace);
   const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
-  const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView] = useRegisterService(wikiWorkspace);
+  const triggerFullReload = () => {
+    setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
+  };
+  servicesOfWorkspace.wikiHookService.setLatestOnReloadCallback(triggerFullReload);
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
@@ -87,14 +91,15 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
       allowsFullscreenVideo
       userAgent={FAKE_USER_AGENT}
       // add DOCTYPE at load time to prevent Quirks Mode
-      source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body></body></html>` }}
+      source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>` }}
       renderError={(errorName) => <Text>{errorName}</Text>}
       renderLoading={() => <Text>{t('Loading')}</Text>}
       onRenderProcessGone={() => {
         // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
-        setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
+        triggerFullReload();
       }}
       onLoadEnd={() => {
+        // this is called every time a tiddler is opened. And will be call 3 times before wiki loaded, seems including when setting innerHTML.
         setLoaded(true);
       }}
       onMessage={onMessageReference.current}
