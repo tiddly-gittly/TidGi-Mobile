@@ -21,6 +21,7 @@
     "expo": "~49.0.8",
     "expo-background-fetch": "~11.3.0",
     "expo-barcode-scanner": "~12.5.3",
+    "expo-camera": "~13.4.2",
     "expo-device": "~5.4.0",
     "expo-file-system": "~15.4.3",
     "expo-haptics": "~12.4.0",

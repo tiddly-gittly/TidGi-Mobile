@@ -1,3 +1,4 @@
+import { Camera } from 'expo-camera';
 import * as Location from 'expo-location';
 
 /**
@@ -30,6 +31,16 @@ export class NativeService {
       console.error('Error fetching location:', error);
       return undefined;
     }
+  }
+
+  async requestCameraPermission(): Promise<boolean> {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    return status === 'granted';
+  }
+
+  async requestMicrophonePermission(): Promise<boolean> {
+    const { status } = await Camera.requestMicrophonePermissionsAsync();
+    return status === 'granted';
   }
 }
 

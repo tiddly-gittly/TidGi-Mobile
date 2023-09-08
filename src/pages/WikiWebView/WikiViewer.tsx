@@ -5,6 +5,7 @@ import { MD3Colors, Text } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
+import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
@@ -33,6 +34,7 @@ const FAKE_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWe
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
+  useRequestNativePermissions();
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
