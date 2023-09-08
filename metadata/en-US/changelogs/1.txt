@@ -1,0 +1,9 @@
+Add support for wiki side plugin to call all App side methods. See code in github repo's src/services to know how to use them in the plugins.
+
+Allow editing server list.
+
+Add UI to manage wiki and server, Long Press in the list to edit an item, for example config a wiki
+
+Can scan QRCode on TidGi-Desktop to download wiki to mobile.
+
+"Sync & Backup" -> "Sync To Cloud": Sync changed tiddlers back to connected TidGi-Desktop. You can also long press a wiki to find the sync button.
