@@ -16,3 +16,9 @@ export function useRequestNativePermissions() {
     })();
   }, []);
 }
+
+export function useRegisterReceivingShareIntent() {
+  useEffect(() => {
+    nativeService.registerReceivingShareIntent();
+  }, []);
+}

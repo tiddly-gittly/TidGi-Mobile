@@ -13,6 +13,7 @@ import { Config } from './pages/Config';
 import { Importer } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
+import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 
 export type RootStackParameterList = {
   Config: undefined;
@@ -24,6 +25,7 @@ const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
+  useRegisterReceivingShareIntent();
 
   return (
     <I18nextProvider i18n={i18n}>

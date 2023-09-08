@@ -48,7 +48,16 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }
       ],
-      "./expo-plugins/trust-local-certs.js"
+      "./expo-plugins/trustHTTPRequests/trust-local-certs.js",
+      [
+        "./expo-plugins/withAndroidShareExtension/index",
+        {
+          "androidIntentFilters": [
+            "text/*",
+            "image/*"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {
