@@ -19,6 +19,14 @@ export function useRequestNativePermissions() {
 
 export function useRegisterReceivingShareIntent() {
   useEffect(() => {
-    nativeService.registerReceivingShareIntent();
+    try {
+      nativeService.registerReceivingShareIntent();
+    } catch (error) {
+      console.log(
+        `Failed to registerReceivingShareIntent, This is normal if you are using Expo Go for dev. To debug sharing feature, create a dev build "pnpm start:devClient" instead. ${
+          (error as Error).message
+        }`,
+      );
+    }
   }, []);
 }
