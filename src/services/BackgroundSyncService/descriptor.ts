@@ -9,6 +9,7 @@ export const BackgroundSyncServiceIPCDescriptor: ProxyDescriptor = {
   properties: {
     sync: ProxyPropertyType.Function,
     updateServerOnlineStatus: ProxyPropertyType.Function,
+    getOnlineServerForWiki: ProxyPropertyType.Function,
     getChangeLogsSinceLastSync: ProxyPropertyType.Function,
     syncWikiWithServer: ProxyPropertyType.Function,
   },

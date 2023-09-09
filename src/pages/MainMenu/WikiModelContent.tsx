@@ -3,10 +3,10 @@
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
 import * as Haptics from 'expo-haptics';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Modal } from 'react-native';
-import { Button, Portal, Text, TextInput } from 'react-native-paper';
+import { Button, MD3Colors, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import Collapsible from 'react-native-collapsible';
@@ -37,6 +37,14 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
   const [inSyncing, setInSyncing] = useState(false);
+  const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
+  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof backgroundSyncService.getOnlineServerForWiki>>>();
+  useEffect(() => {
+    if (wiki === undefined) return;
+    void backgroundSyncService.getOnlineServerForWiki(wiki, true).then(server => {
+      setCurrentOnlineServerToSync(server);
+    });
+  }, [wiki]);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -78,20 +86,23 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         mode='outlined'
         disabled={inSyncing}
         loading={inSyncing}
+        buttonColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80)}
         onPress={async () => {
           setInSyncing(true);
           try {
-            await backgroundSyncService.updateServerOnlineStatus();
-            const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+            const server = await backgroundSyncService.getOnlineServerForWiki(wiki, true);
             if (server !== undefined) {
               await backgroundSyncService.syncWikiWithServer(wiki, server);
+              setIsSyncSucceed(true);
             }
+          } catch {
+            setIsSyncSucceed(false);
           } finally {
             setInSyncing(false);
           }
         }}
       >
-        <Text>{t('ContextMenu.SyncNow')}</Text>
+        <Text>{currentOnlineServerToSync?.name ?? 'x'} {t('ContextMenu.SyncNow')}</Text>
       </Button>
 
       <Button

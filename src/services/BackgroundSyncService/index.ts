@@ -64,7 +64,7 @@ class BackgroundSyncService {
     let haveUpdate = false;
     await this.updateServerOnlineStatus();
     for (const wiki of wikis) {
-      const server = this.getOnlineServerForWiki(wiki);
+      const server = await this.getOnlineServerForWiki(wiki);
       if (server !== undefined) {
         haveUpdate ||= await this.syncWikiWithServer(wiki, server);
       }
@@ -99,7 +99,10 @@ class BackgroundSyncService {
     return response;
   }
 
-  public getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number; syncActive: boolean }) | undefined {
+  public async getOnlineServerForWiki(wiki: IWikiWorkspace, updated?: boolean): Promise<(IServerInfo & { lastSync: number; syncActive: boolean; }) | undefined> {
+    if (updated === true) {
+      await this.updateServerOnlineStatus();
+    }
     const onlineLastSyncServer = wiki.syncedServers
       .filter(serverInfoInWiki => serverInfoInWiki.syncActive)
       .sort((a, b) => b.lastSync - a.lastSync)
