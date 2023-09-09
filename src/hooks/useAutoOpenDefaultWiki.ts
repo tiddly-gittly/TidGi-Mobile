@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { RootStackParameterList } from '../App';
 import { useConfigStore } from '../store/config';
 import { useWikiStore } from '../store/wiki';
+import { navigateIfNotAlreadyThere } from '../utils/RootNavigation';
 
 /**
  * Can only be used in MainMenu
@@ -13,6 +14,7 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
   const route = useRoute<StackScreenProps<RootStackParameterList, 'MainMenu'>['route']>();
   const wikis = useWikiStore(state => state.wikis);
+  /** If we are just go back from a wiki, don't immediately goto default wiki. */
   const { fromWikiID } = route.params ?? {};
 
   // once model opened, we need to prevent closing model trigger the auto open
@@ -26,10 +28,20 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   useEffect(() => {
     if (hadPreventOpen) return;
     if (!autoOpenDefaultWiki) return;
-    const defaultWiki = wikis[0];
     const currentScreen = navigation.getState()?.routes.at(-1)?.name;
-    if (defaultWiki !== undefined && fromWikiID === undefined && currentScreen === 'MainMenu') {
-      navigation.navigate('WikiWebView', { id: defaultWiki.id });
+    if (fromWikiID === undefined && currentScreen === 'MainMenu') {
+      openDefaultWikiIfNotAlreadyThere(wikis);
     }
   }, [navigation, wikis, fromWikiID, route.name, autoOpenDefaultWiki, hadPreventOpen]);
+}
+
+/**
+ * @param wikis Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
+ */
+export function openDefaultWikiIfNotAlreadyThere(wikis = useWikiStore.getState().wikis) {
+  const defaultWiki = wikis[0];
+  console.log(`openDefaultWiki ${defaultWiki?.id}`);
+  if (defaultWiki !== undefined) {
+    navigateIfNotAlreadyThere('WikiWebView', { id: defaultWiki.id });
+  }
 }

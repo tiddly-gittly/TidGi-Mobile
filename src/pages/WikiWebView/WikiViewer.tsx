@@ -7,6 +7,7 @@ import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
+import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
@@ -44,6 +45,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
     setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
   };
   servicesOfWorkspace.wikiHookService.setLatestOnReloadCallback(triggerFullReload);
+  useSetWebViewReferenceToService(servicesOfWorkspace.wikiHookService, webViewReference);
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);

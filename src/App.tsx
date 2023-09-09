@@ -14,6 +14,7 @@ import { Importer } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
+import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
   Config: undefined;
@@ -30,7 +31,7 @@ export const App: React.FC = () => {
   return (
     <I18nextProvider i18n={i18n}>
       <StatusBar hidden={false} />
-      <NavigationContainer>
+      <NavigationContainer ref={navigationReference}>
         <Stack.Navigator initialRouteName='MainMenu'>
           <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
           <Stack.Screen
