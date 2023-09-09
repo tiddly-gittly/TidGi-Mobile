@@ -2,13 +2,14 @@ import useDebouncedCallback from 'beautiful-react-hooks/useDebouncedCallback';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Text, TextInput } from 'react-native-paper';
+import { Switch, Text, TextInput } from 'react-native-paper';
+import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
 import { useConfigStore } from '../../store/config';
 
 export function TiddlyWiki(): JSX.Element {
   const { t } = useTranslation();
 
-  const initialUserName = useConfigStore(state => state.userName);
+  const [initialUserName, rememberLastVisitState] = useConfigStore(state => [state.userName, state.rememberLastVisitState]);
   const [userName, userNameSetter] = useState(initialUserName);
   const setConfig = useConfigStore(state => state.set);
 
@@ -26,6 +27,15 @@ export function TiddlyWiki(): JSX.Element {
           userNameTextFieldOnChange(newText);
         }}
       />
+      <SwitchContainer>
+        <FlexibleText>{t('Preference.RememberLastVisitState')}</FlexibleText>
+        <Switch
+          value={rememberLastVisitState}
+          onValueChange={(value) => {
+            setConfig({ rememberLastVisitState: value });
+          }}
+        />
+      </SwitchContainer>
     </>
   );
 }

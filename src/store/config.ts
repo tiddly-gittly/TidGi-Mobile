@@ -7,6 +7,7 @@ export interface ConfigState {
   autoOpenDefaultWiki: boolean;
   keepAliveInBackground: boolean;
   preferredLanguage?: string;
+  rememberLastVisitState: boolean;
   syncInBackground: boolean;
   syncInterval: number;
   syncIntervalBackground: number;
@@ -14,6 +15,7 @@ export interface ConfigState {
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: true,
+  rememberLastVisitState: true,
   keepAliveInBackground: true,
   syncInBackground: true,
   preferredLanguage: undefined,

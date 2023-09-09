@@ -8,6 +8,7 @@ import { styled } from 'styled-components/native';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
+import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/wiki';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
@@ -39,6 +40,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
+  const [rememberLastVisitState] = useConfigStore(state => [state.rememberLastVisitState]);
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView, servicesOfWorkspace] = useRegisterService(wikiWorkspace);
   const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
   const triggerFullReload = () => {
@@ -50,7 +52,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
   const preloadScript = useMemo(() => `
-    var lastLocationHash = \`${wikiWorkspace.lastLocationHash ?? ''}\`;
+    var lastLocationHash = \`${rememberLastVisitState ? wikiWorkspace.lastLocationHash ?? '' : ''}\`;
     location.hash = lastLocationHash;
 
     ${windowMetaScript}
@@ -64,7 +66,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
     ${webviewSideReceiver}
     
     true; // note: this is required, or you'll sometimes get silent failures
-  `, [registerWikiStorageServiceOnWebView, webviewSideReceiver, windowMetaScript]);
+  `, [registerWikiStorageServiceOnWebView, rememberLastVisitState, webviewSideReceiver, wikiWorkspace.lastLocationHash, windowMetaScript]);
 
   if (loadHtmlError) {
     return (
