@@ -5,8 +5,10 @@
     "android": "expo start --android",
     "build:plugin": "zx scripts/buildPlugins.mjs",
     "build:android-apk": "eas build --profile preview --platform android --non-interactive",
+    "build:expo-sdk": "eas build --profile development --platform android --non-interactive",
     "ios": "expo start --ios",
     "start": "expo start",
+    "start:tunnel": "expo start --tunnel",
     "web": "expo start --web"
   },
   "dependencies": {
@@ -19,9 +21,12 @@
     "@types/lodash": "^4.14.197",
     "beautiful-react-hooks": "^5.0.0",
     "expo": "~49.0.8",
+    "expo-application": "~5.3.0",
     "expo-background-fetch": "~11.3.0",
     "expo-barcode-scanner": "~12.5.3",
     "expo-camera": "~13.4.2",
+    "expo-clipboard": "~4.3.1",
+    "expo-dev-client": "~2.4.8",
     "expo-device": "~5.4.0",
     "expo-file-system": "~15.4.3",
     "expo-haptics": "~12.4.0",

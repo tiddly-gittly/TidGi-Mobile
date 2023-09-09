@@ -1,3 +1,5 @@
+import * as Application from 'expo-application';
+import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
 import { Button, Text } from 'react-native-paper';
 
@@ -23,6 +25,26 @@ export function Developer(): JSX.Element {
         <Text>{t('Preference.OpenWikisFolder')}</Text>
       </Button>
       {OpenDirectoryResultSnackBar}
+      <Button
+        onPress={async () => {
+          const debugInfo = JSON.stringify(
+            {
+              app: {
+                appId: Application.applicationId,
+                nativeAppVersion: Application.nativeApplicationVersion,
+                nativeBuildVersion: Application.nativeBuildVersion,
+              },
+            },
+            undefined,
+            2,
+          );
+          console.log(debugInfo);
+          await Clipboard.setStringAsync(debugInfo);
+        }}
+        mode='outlined'
+      >
+        <Text>{t('ContextMenu.Copy')} v{Application.nativeApplicationVersion ?? '?-?-?'}</Text>
+      </Button>
     </>
   );
 }
