@@ -95,7 +95,11 @@ export class NativeService {
         } else {
           const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
             if (file.filePath === null) return file;
-            const text = await fs.readAsStringAsync(file.filePath.startsWith('file://') ? file.filePath : `file://${file.filePath}`);
+            /**
+             * based on tiddlywiki file type parsers `$tw.utils.registerFileType("image/jpeg","base64",[".jpg",".jpeg"],{flags:["image"]});`
+             * we need to use base64 encoding to load file
+             */
+            const text = await fs.readAsStringAsync(file.filePath.startsWith('file://') ? file.filePath : `file://${file.filePath}`, { encoding: 'base64' });
             return { ...file, text };
           }));
           script = importBinaryTiddlers(filesWithFileLoadedToText);
