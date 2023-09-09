@@ -50,6 +50,8 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
   const preloadScript = useMemo(() => `
+    var lastLocationHash = \`${wikiWorkspace.lastLocationHash ?? ''}\`;
+    location.hash = lastLocationHash;
 
     ${windowMetaScript}
 
@@ -94,6 +96,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
       userAgent={FAKE_USER_AGENT}
       // add DOCTYPE at load time to prevent Quirks Mode
       source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>` }}
+      // source={{ uri: 'about:blank#%E6%9E%97%E4%B8%80%E4%BA%8C:%E6%9E%97%E4%B8%80%E4%BA%8C%20Index' }}
       renderError={(errorName) => <Text>{errorName}</Text>}
       renderLoading={() => <Text>{t('Loading')}</Text>}
       onRenderProcessGone={() => {

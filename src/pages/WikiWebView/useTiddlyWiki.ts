@@ -29,10 +29,11 @@ export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersSt
           getTidGiMobilePlugins(),
         ]);
 
+        const htmlWithPrefix = `<!doctype html>${html}`;
         // inject tidgi syncadaptor plugins
         const tidgiMobilePlugins = `,${pluginJSONStrings.expoFileSystemSyncadaptor},${pluginJSONStrings.expoFileSystemSyncadaptorUi}`;
         const tiddlerStoreScriptWithTidGiMobilePlugins = `${patchTiddlyWiki(tiddlerStoreScript).slice(0, -1)}${tidgiMobilePlugins}]`;
-        injectHtmlAndTiddlersStore({ html, tiddlerStoreScript: tiddlerStoreScriptWithTidGiMobilePlugins, skinnyTiddlerStore });
+        injectHtmlAndTiddlersStore({ html: htmlWithPrefix, tiddlerStoreScript: tiddlerStoreScriptWithTidGiMobilePlugins, skinnyTiddlerStore });
       } catch (error) {
         console.error(error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);

@@ -2,15 +2,17 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { MutableRefObject } from 'react';
 import { WebView } from 'react-native-webview';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace, useWikiStore } from '../../store/wiki';
 
 /**
  * Provide some hook for wiki api.
  */
 export class WikiHookService {
   #onReloadCallback: () => void = () => {};
+  /** value in this maybe outdated, use #wikiStore for latest data. */
   #workspace: IWikiWorkspace;
   #webViewReference?: MutableRefObject<WebView | null>;
+  #wikiStore = useWikiStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
@@ -47,6 +49,10 @@ export class WikiHookService {
   public async overrideOnReload() {
     console.log(`overrideOnReload: ${this.#workspace.name} (${this.#workspace.id})`);
     this.#onReloadCallback();
+  }
+
+  public saveLocationInfo(hash: string) {
+    this.#wikiStore.getState().update(this.#workspace.id, { lastLocationHash: hash });
   }
 }
 

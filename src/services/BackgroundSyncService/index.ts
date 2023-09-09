@@ -49,7 +49,7 @@ export async function unregisterBackgroundSyncAsync() {
   await BackgroundFetch.unregisterTaskAsync(BACKGROUND_SYNC_TASK_NAME);
 }
 
-class BackgroundSyncService {
+export class BackgroundSyncService {
   #serverStore = useServerStore;
   #configStore = useConfigStore;
   #wikiStore = useWikiStore;
@@ -99,7 +99,7 @@ class BackgroundSyncService {
     return response;
   }
 
-  public async getOnlineServerForWiki(wiki: IWikiWorkspace, updated?: boolean): Promise<(IServerInfo & { lastSync: number; syncActive: boolean; }) | undefined> {
+  public async getOnlineServerForWiki(wiki: IWikiWorkspace, updated?: boolean): Promise<(IServerInfo & { lastSync: number; syncActive: boolean }) | undefined> {
     if (updated === true) {
       await this.updateServerOnlineStatus();
     }

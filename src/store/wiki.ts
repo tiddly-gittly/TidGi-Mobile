@@ -8,6 +8,8 @@ import { WIKI_FOLDER_PATH } from '../constants/paths';
 
 export interface IWikiWorkspace {
   id: string;
+  /** We store the hash to restore view next time. */
+  lastLocationHash?: string;
   /**
    * Display name for this wiki workspace
    */

@@ -2,8 +2,12 @@
 /* eslint-disable unicorn/no-null */
 import debounce from 'lodash/debounce';
 import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
-import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
+import type { AppDataService } from '../../../src/services/AppDataService/index.js';
+import type { BackgroundSyncService } from '../../../src/services/BackgroundSyncService/index.js';
+import type { NativeService } from '../../../src/services/NativeService/index.js';
+import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
 import { getFullSaveTiddlers } from '../../../src/services/WikiStorageService/ignoredTiddler.js';
+import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
@@ -17,6 +21,10 @@ declare global {
   interface Window {
     isInTidGi?: boolean;
     service?: {
+      appDataService: AppDataService;
+      backgroundSyncService: BackgroundSyncService;
+      nativeService: NativeService;
+      wikiHookService: WikiHookService;
       wikiStorageService: WikiStorageService;
     };
   }
@@ -342,7 +350,8 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 }
 
-declare let exports: {
+// eslint-disable-next-line no-var
+declare var exports: {
   adaptorClass: typeof TidGiMobileFileSystemSyncAdaptor;
 };
 
