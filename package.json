@@ -74,6 +74,7 @@
     "babel-plugin-transform-typescript-metadata": "^0.3.2",
     "eslint-config-tidgi": "^1.1.5",
     "eslint-plugin-react-native": "^4.0.0",
+    "react-native-reanimated": "3.3.0",
     "tw5-typed": "^0.3.10",
     "typescript": "^5.2.2",
     "zx": "^7.2.3"

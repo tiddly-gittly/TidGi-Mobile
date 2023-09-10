@@ -26,7 +26,7 @@ const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
-  // useRegisterReceivingShareIntent();
+  useRegisterReceivingShareIntent();
 
   return (
     <I18nextProvider i18n={i18n}>
