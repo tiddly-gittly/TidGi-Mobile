@@ -154,7 +154,9 @@
     "ToggleServerList": "Toggle Server List",
     "Retry": "Retry",
     "ToggleQRCodeScanner": "Toggle QRCode Scanner",
-    "OpenChangeLogList": "Open Change Log List"
+    "OpenChangeLogList": "Open Change Log List",
+    "PageUrl": "Page Url",
+    "AddWebPageWorkspace": "Add WebPage Workspace"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

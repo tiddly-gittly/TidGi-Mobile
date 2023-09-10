@@ -1,5 +1,8 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { Text } from 'react-native-paper';
+import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { useCloseSQLite } from '../../services/SQLiteService/hooks';
@@ -16,13 +19,31 @@ export interface WikiWebViewProps {
   id?: string;
 }
 export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'WikiWebView'>> = ({ route }) => {
+  const { t } = useTranslation();
   const { id } = route.params;
   const activeWikiWorkspace = useWorkspaceStore(state => state.workspaces.find(wiki => wiki.id === id));
   useCloseSQLite(activeWikiWorkspace);
 
-  return (
-    <Container>
-      {(activeWikiWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWikiWorkspace} />}
-    </Container>
-  );
+  switch (activeWikiWorkspace?.type) {
+    case 'wiki': {
+      return (
+        <Container>
+          {(activeWikiWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWikiWorkspace} />}
+        </Container>
+      );
+    }
+
+    case 'webpage': {
+      return (
+        <Container>
+          <WebView source={{ uri: activeWikiWorkspace.uri }} />
+        </Container>
+      );
+    }
+    default: {
+      <Container>
+        <Text>{t('Loading')}</Text>
+      </Container>;
+    }
+  }
 };

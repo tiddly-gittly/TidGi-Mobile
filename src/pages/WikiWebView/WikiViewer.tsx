@@ -14,6 +14,7 @@ import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 import { useWindowMeta } from './useWindowMeta';
+import { FAKE_USER_AGENT } from '../../constants/webview';
 
 const WebViewContainer = styled.View`
   flex: 2;
@@ -30,8 +31,6 @@ const ErrorText = styled(Text)`
 export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
-// pretending we are sending request from same origin using a Chrome browser. So image site won't block our request.
-const FAKE_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36';
 
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview

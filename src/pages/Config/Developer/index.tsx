@@ -1,8 +1,10 @@
 import * as Application from 'expo-application';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text, TextInput } from 'react-native-paper';
 
+import { useState } from 'react';
+import { useWorkspaceStore } from '../../../store/workspace';
 import { useClearAllWikiData } from './useClearAllWikiData';
 import { useOpenDirectory } from './useOpenDirectory';
 
@@ -11,6 +13,8 @@ export function Developer(): JSX.Element {
 
   const { isOpeningDirectory, openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
   const { ClearAllWikiDataResultSnackBar, clearAllWikiData } = useClearAllWikiData();
+  const [newPageUrl, newPageUrlSetter] = useState('');
+  const addPage = useWorkspaceStore(state => state.add);
 
   return (
     <>
@@ -44,6 +48,22 @@ export function Developer(): JSX.Element {
         mode='outlined'
       >
         <Text>{t('ContextMenu.Copy')} v{Application.nativeApplicationVersion ?? '?-?-?'}</Text>
+      </Button>
+      <TextInput
+        label={t('AddWorkspace.PageUrl')}
+        value={newPageUrl}
+        onChangeText={(newText: string) => {
+          newPageUrlSetter(newText);
+        }}
+      />
+      <Button
+        onPress={() => {
+          addPage({ type: 'webpage', uri: newPageUrl });
+        }}
+        disabled={isOpeningDirectory}
+        mode='outlined'
+      >
+        <Text>{t('AddWorkspace.AddWebPageWorkspace')}</Text>
       </Button>
     </>
   );

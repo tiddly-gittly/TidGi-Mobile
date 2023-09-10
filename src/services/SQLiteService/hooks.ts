@@ -1,18 +1,20 @@
 import { useEffect, useRef } from 'react';
-import { IWikiWorkspace } from '../../store/workspace';
+import { IWorkspace } from '../../store/workspace';
 import { sqliteServiceService } from '.';
 
-export function useCloseSQLite(workspace: IWikiWorkspace | undefined) {
+export function useCloseSQLite(workspace?: IWorkspace) {
   // use ref to prevent update to workspace.lastLocationHash trigger this effect
-  const databaseToCloseReference = useRef<IWikiWorkspace | undefined>(workspace);
+  const databaseToCloseReference = useRef<IWorkspace | undefined>(workspace);
   useEffect(() => {
     return (() => {
       void (async () => {
         try {
           if (databaseToCloseReference.current === undefined) return;
           console.log(`Closing sqlite database for ${databaseToCloseReference.current.id} in useSQLiteService`);
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-          await sqliteServiceService.closeDatabase(databaseToCloseReference.current);
+          if (databaseToCloseReference.current?.type === 'wiki') {
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+            await sqliteServiceService.closeDatabase(databaseToCloseReference.current);
+          }
         } catch (error) {
           console.error(error);
         }
