@@ -13,6 +13,9 @@ import { WikiEditModalContent } from './WikiModelContent';
 const Container = styled.View`
   flex: 1;
   background-color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 `;
 
 const MainFeatureButton = styled(Button)`
