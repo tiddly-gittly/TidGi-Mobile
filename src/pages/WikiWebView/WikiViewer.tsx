@@ -7,7 +7,6 @@ import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
-import { useSQLiteService } from '../../services/SQLiteService/hooks';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/wiki';
@@ -47,7 +46,6 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const triggerFullReload = () => {
     setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
   };
-  useSQLiteService(wikiWorkspace);
   servicesOfWorkspace.wikiHookService.setLatestOnReloadCallback(triggerFullReload);
   useSetWebViewReferenceToService(servicesOfWorkspace.wikiHookService, webViewReference);
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
