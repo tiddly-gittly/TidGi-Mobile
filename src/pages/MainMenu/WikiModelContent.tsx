@@ -174,9 +174,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       </Button>
 
       <ButtonsContainer>
-        <Button onPress={handleSave}>
-          <Text>{t('EditWorkspace.Save')}</Text>
-        </Button>
+        <Button onPress={onClose}>{t('Cancel')}</Button>
         <Button
           onPress={() => {
             Alert.alert(
@@ -202,7 +200,9 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         >
           {t('Delete')}
         </Button>
-        <Button onPress={onClose}>{t('Cancel')}</Button>
+        <Button onPress={handleSave}>
+          <Text>{t('EditWorkspace.Save')}</Text>
+        </Button>
       </ButtonsContainer>
       <Portal>
         <Modal

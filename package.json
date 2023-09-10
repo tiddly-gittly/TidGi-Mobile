@@ -46,6 +46,7 @@
     "react-i18next": "^13.2.0",
     "react-native": "0.72.4",
     "react-native-collapsible": "^1.6.1",
+    "react-native-draggable-flatlist": "^4.0.1",
     "react-native-gesture-handler": "~2.12.0",
     "react-native-localize": "^3.0.2",
     "react-native-paper": "^5.10.3",
@@ -76,5 +77,8 @@
     "tw5-typed": "^0.3.10",
     "typescript": "^5.2.2",
     "zx": "^7.2.3"
+  },
+  "resolutions": {
+    "react-native-reanimated": "3.3.0"
   }
 }

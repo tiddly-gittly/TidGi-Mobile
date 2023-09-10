@@ -7,6 +7,7 @@ import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
 import { WikiList } from '../../components/WikiList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
+import { useWikiStore } from '../../store/wiki';
 import { WikiEditModalContent } from './WikiModelContent';
 
 const Container = styled.View`
@@ -29,8 +30,10 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
 
   // State variables for the modal
   const [wikiModalVisible, setWikiModalVisible] = useState(false);
+  const [justReordered, setJustReordered] = useState(false);
   const [selectedWikiID, setSelectedWikiID] = useState<string | undefined>();
-  useAutoOpenDefaultWiki(wikiModalVisible);
+  const preventAutoOpen = justReordered || wikiModalVisible;
+  useAutoOpenDefaultWiki(preventAutoOpen);
 
   return (
     <PaperProvider>
@@ -43,6 +46,10 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
             void Haptics.selectionAsync();
             setSelectedWikiID(wiki.id);
             setWikiModalVisible(true);
+          }}
+          onReorderEnd={(wikis) => {
+            setJustReordered(true);
+            useWikiStore.setState({ wikis });
           }}
         />
         <Portal>
