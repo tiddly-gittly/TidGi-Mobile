@@ -52,7 +52,7 @@ export async function unregisterBackgroundSyncAsync() {
 export class BackgroundSyncService {
   #serverStore = useServerStore;
   #configStore = useConfigStore;
-  #wikiStore = useWorkspaceStore;
+  #workspacestore = useWorkspaceStore;
 
   public startBackgroundSync() {
     const syncInterval = this.#configStore.getState().syncInterval;
@@ -60,13 +60,15 @@ export class BackgroundSyncService {
   }
 
   public async sync(): Promise<boolean> {
-    const wikis = this.#wikiStore.getState().wikis;
+    const workspaces = this.#workspacestore.getState().workspaces;
     let haveUpdate = false;
     await this.updateServerOnlineStatus();
-    for (const wiki of wikis) {
-      const server = await this.getOnlineServerForWiki(wiki);
-      if (server !== undefined) {
-        haveUpdate ||= await this.syncWikiWithServer(wiki, server);
+    for (const wiki of workspaces) {
+      if (wiki.type === 'wiki') {
+        const server = await this.getOnlineServerForWiki(wiki);
+        if (server !== undefined) {
+          haveUpdate ||= await this.syncWikiWithServer(wiki, server);
+        }
       }
     }
     return haveUpdate;
@@ -255,7 +257,7 @@ export class BackgroundSyncService {
   #updateLastSyncTimestamp(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }) {
     const syncedServer = wiki.syncedServers.find(syncedServer => syncedServer.serverID === server.id)!;
     const newSyncedServers: IWikiServerSync = { ...syncedServer, lastSync: Date.now() };
-    const update = this.#wikiStore.getState().update;
+    const update = this.#workspacestore.getState().update;
     const newWiki = { ...wiki, syncedServers: wiki.syncedServers.map(syncedServer => syncedServer.serverID === server.id ? newSyncedServers : syncedServer) };
     update(wiki.id, newWiki);
   }

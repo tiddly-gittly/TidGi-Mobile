@@ -10,12 +10,12 @@ import { Button, MD3Colors, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import Collapsible from 'react-native-collapsible';
-import { ServerList } from '../../components/ServerList';
-import { backgroundSyncService } from '../../services/BackgroundSyncService';
-import { useServerStore } from '../../store/server';
-import { useWorkspaceStore } from '../../store/workspace';
-import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
-import { AddNewServerModelContent } from './AddNewServerModelContent';
+import { ServerList } from '../../../components/ServerList';
+import { backgroundSyncService } from '../../../services/BackgroundSyncService';
+import { useServerStore } from '../../../store/server';
+import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
+import { AddNewServerModelContent } from '../AddNewServerModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
 
 interface WikiEditModalProps {
@@ -25,7 +25,7 @@ interface WikiEditModalProps {
 
 export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find(w => w.id === id));
+  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && w.type === 'wiki'));
   const [updateWiki, addServerToWiki, deleteWiki, setServerActive] = useWorkspaceStore(state => [state.update, state.addServer, state.remove, state.setServerActive]);
   const availableServersToPick = useServerStore(state => Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` })));
 

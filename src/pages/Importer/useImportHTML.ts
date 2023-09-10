@@ -64,7 +64,9 @@ export function useImportHTML() {
     try {
       setStatus('creating');
 
-      const newWorkspace = addWiki({ type: 'wiki', name: wikiName, selectiveSyncFilter, syncedServers: [{ serverID, lastSync: Date.now(), syncActive: true }] });
+      const newWorkspace = addWiki({ type: 'wiki', name: wikiName, selectiveSyncFilter, syncedServers: [{ serverID, lastSync: Date.now(), syncActive: true }] }) as
+        | IWikiWorkspace
+        | undefined;
       if (newWorkspace === undefined) throw new Error('Failed to create workspace');
       newWorkspaceID = newWorkspace.id;
       // make main folder

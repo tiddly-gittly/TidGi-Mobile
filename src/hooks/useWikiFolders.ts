@@ -3,21 +3,21 @@ import { useEffect, useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../constants/paths';
 
 export const useWikiFolders = () => {
-  const [wikis, setWikis] = useState<string[]>([]);
+  const [foldername, setFolderName] = useState<string[]>([]);
 
   useEffect(() => {
-    const loadWikis = async () => {
+    const loadFolderName = async () => {
       if (WIKI_FOLDER_PATH === undefined) return;
       try {
         const wikiFolderNames = await fs.readDirectoryAsync(WIKI_FOLDER_PATH);
-        setWikis(wikiFolderNames);
+        setFolderName(wikiFolderNames);
       } catch (error) {
-        console.warn('Error loading wikis:', error);
+        console.warn('Error loading foldername:', error);
       }
     };
 
-    void loadWikis();
+    void loadFolderName();
   }, []);
 
-  return wikis;
+  return foldername;
 };

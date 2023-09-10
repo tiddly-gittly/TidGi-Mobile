@@ -8,7 +8,7 @@ import type { RootStackParameterList } from '../../App';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
-import { WikiEditModalContent } from './WikiModelContent';
+import { EditItemModel } from './EditItemModel';
 
 const Container = styled.View`
   flex: 1;
@@ -50,9 +50,9 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
             setSelectedWikiID(wiki.id);
             setWikiModalVisible(true);
           }}
-          onReorderEnd={(wikis) => {
+          onReorderEnd={(workspaces) => {
             setJustReordered(true);
-            useWorkspaceStore.setState({ wikis });
+            useWorkspaceStore.setState({ workspaces });
           }}
         />
         <Portal>
@@ -62,7 +62,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
               setWikiModalVisible(false);
             }}
           >
-            <WikiEditModalContent
+            <EditItemModel
               id={selectedWikiID}
               onClose={() => {
                 setWikiModalVisible(false);

@@ -38,8 +38,8 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
 /**
  * @param wikis Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
  */
-export function openDefaultWikiIfNotAlreadyThere(wikis = useWorkspaceStore.getState().wikis) {
-  const defaultWiki = wikis[0];
+export function openDefaultWikiIfNotAlreadyThere(workspaces = useWorkspaceStore.getState().workspaces) {
+  const defaultWiki = workspaces[0];
   console.log(`openDefaultWiki ${defaultWiki?.id}`);
   if (defaultWiki !== undefined) {
     navigateIfNotAlreadyThere('WikiWebView', { id: defaultWiki.id });

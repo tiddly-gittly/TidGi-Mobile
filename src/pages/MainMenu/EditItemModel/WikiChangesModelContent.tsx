@@ -4,9 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { Button, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
-import { WikiUpdateList } from '../../components/WikiUpdateList';
-import { useServerStore } from '../../store/server';
-import { useWorkspaceStore } from '../../store/workspace';
+import { WikiUpdateList } from '../../../components/WikiUpdateList';
+import { useServerStore } from '../../../store/server';
+import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -15,7 +15,7 @@ interface WikiEditModalProps {
 
 export function WikiChangesModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find(w => w.id === id));
+  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && w.type === 'wiki'));
   const availableServersToPick = useServerStore(state =>
     Object.entries(state.servers).filter(([id]) => wiki?.syncedServers?.map(item => item.serverID)?.includes?.(id)).map(([id, server]) => {
       const lastSync = wiki?.syncedServers?.find(item => item.serverID === id)?.lastSync;
