@@ -12,7 +12,7 @@ import { migrations } from './orm/migrations';
 export class SQLiteServiceService {
   private readonly dataSources = new Map<string, DataSource>();
 
-  async getDatabase(workspace: IWikiWorkspace): Promise<DataSource> {
+  async getDatabase(workspace: IWikiWorkspace, isRetry = false): Promise<DataSource> {
     const name = getWikiMainSqliteName(workspace);
     if (!this.dataSources.has(name)) {
       try {
@@ -25,6 +25,9 @@ export class SQLiteServiceService {
           migrations,
           migrationsTableName: 'migrations',
         });
+        /**
+         * Error `TypeError: Cannot read property 'transaction' of undefined` will show if run any query without initialize.
+         */
         await dataSource.initialize();
         await dataSource.runMigrations();
 
@@ -32,6 +35,14 @@ export class SQLiteServiceService {
         return dataSource;
       } catch (error) {
         console.error(`Failed to getDatabase ${name}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+        if (!isRetry) {
+          try {
+            await this.#fixLock(workspace);
+            return await this.getDatabase(workspace, true);
+          } catch (error) {
+            console.error(`Failed to retry getDatabase ${name}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+          }
+        }
         try {
           await this.dataSources.get(name)?.destroy();
         } catch (error) {
@@ -63,6 +74,27 @@ export class SQLiteServiceService {
         throw error;
       }
     }
+  }
+
+  /**
+   * Fix SQLite busy by move the file.
+   * @url https://stackoverflow.com/a/1226850
+   *
+   * Fixes this:
+   *
+   * ```error
+   * [Error: Error getting skinny tiddlers list from SQLite: Call to function 'ExpoSQLite.exec' has been rejected.
+   *  → Caused by: android.database.sqlite.SQLiteDatabaseLockedException: database is locked (code 5 SQLITE_BUSY): , while compiling: PRAGMA journal_mode] Error: Error getting skinny tiddlers list from SQLite: Call to function 'ExpoSQLite.exec' has been rejected.
+   *  → Caused by: android.database.sqlite.SQLiteDatabaseLockedException: database is locked (code 5 SQLITE_BUSY): , while compiling: PRAGMA journal_mode
+   * ```
+   */
+  async #fixLock(workspace: IWikiWorkspace) {
+    const oldSqlitePath = getWikiMainSqlitePath(workspace);
+    const temporarySqlitePath = `${oldSqlitePath}.temp`;
+    await fs.copyAsync({ from: oldSqlitePath, to: temporarySqlitePath });
+    await fs.deleteAsync(oldSqlitePath);
+    await fs.copyAsync({ from: temporarySqlitePath, to: oldSqlitePath });
+    await fs.deleteAsync(temporarySqlitePath);
   }
 }
 
