@@ -4,6 +4,14 @@ import { sqliteServiceService } from '.';
 
 export function useSQLiteService(workspace: IWikiWorkspace) {
   useEffect(() => {
-    return (() => void sqliteServiceService.closeDatabase(workspace));
+    return (() => {
+      void (async () => {
+        try {
+          await sqliteServiceService.closeDatabase(workspace);
+        } catch (error) {
+          console.error(error);
+        }
+      })();
+    });
   }, [workspace]);
 }

@@ -3,8 +3,9 @@
 module.exports = function(api) {
   api.cache(true);
   return {
-    presets: ['@babel/preset-typescript', 'babel-preset-expo'],
+    presets: ['babel-preset-expo'],
     plugins: [
+      ['@babel/plugin-proposal-decorators', { version: 'legacy' }],
       ['import', {
         libraryName: 'lodash',
         libraryDirectory: '',

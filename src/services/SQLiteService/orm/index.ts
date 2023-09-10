@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
-import { TiddlersLogOperation } from '../../pages/Importer/createTable';
+import { TiddlersLogOperation } from '../../../pages/Importer/createTable';
 
 @Entity('tiddlers')
 export class TiddlerSQLModel {

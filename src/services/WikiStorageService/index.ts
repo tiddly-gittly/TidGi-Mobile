@@ -50,12 +50,12 @@ export class WikiStorageService {
   /**
    * Return the e-tag
    */
-  async saveTiddler(workspace: IWikiWorkspace, title: string, text: string, fieldStrings: string): Promise<string> {
+  async saveTiddler(title: string, text: string, fieldStrings: string): Promise<string> {
     try {
       let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
 
       // Get the database connection for the workspace
-      const dataSource = await sqliteServiceService.getDatabase(workspace);
+      const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
 
       // Transaction
       await dataSource.transaction(async transactionalEntityManager => {
@@ -92,15 +92,26 @@ export class WikiStorageService {
     }
   }
 
-  async deleteTiddler(workspace: IWikiWorkspace, title: string): Promise<boolean> {
+  async deleteTiddler(title: string): Promise<boolean> {
     try {
-      const dataSource = await sqliteServiceService.getDatabase(workspace);
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+      if (!title) {
+        console.warn(`Failed to delete tiddler with no title ${title}`);
+        return false;
+      }
+      const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
       // Begin a transaction
       await dataSource.transaction(async transactionalEntityManager => {
         const tiddlerRepo = transactionalEntityManager.getRepository(TiddlerSQLModel);
 
-        // Delete the tiddler with the specified title
-        await transactionalEntityManager.remove(tiddlerRepo.create({ title }));
+        // Fetch the tiddler with the specified title
+        const tiddler = await tiddlerRepo.findOne({ where: { title } });
+        if (tiddler === null) {
+          throw new Error(`Failed to delete tiddler, Tiddler with title "${title}" not found.`);
+        }
+
+        // Delete the fetched tiddler
+        await transactionalEntityManager.remove(tiddler);
 
         // Insert into tiddlers_changes_log
         const changeLog = new TiddlerChangeSQLModel();

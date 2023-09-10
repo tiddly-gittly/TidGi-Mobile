@@ -15,24 +15,29 @@ export type ISkinnyTiddler = ITiddlerFields & { _is_skinny: ''; bag: 'default'; 
 export type ISkinnyTiddlersJSON = ISkinnyTiddler[];
 
 export async function storeTiddlersToSQLite(workspace: IWikiWorkspace, setProgress: { fields: (progress: number) => void; text: (progress: number) => void }) {
-  const dataSource = await sqliteServiceService.getDatabase(workspace);
-  const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
+  try {
+    const dataSource = await sqliteServiceService.getDatabase(workspace);
+    const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
 
-  // Use the helper functions to get data and then save it
-  const fieldsData = await getSkinnyDataFromPath(getWikiTiddlerSkinnyStoreCachePath(workspace));
-  await saveWithProgress(tiddlerRepo, fieldsData, setProgress.fields);
-  const textData = await getTextDataFromPath(getWikiTiddlerTextStoreCachePath(workspace));
-  await saveWithProgress(tiddlerRepo, textData, setProgress.text);
+    // Use the helper functions to get data and then save it
+    const fieldsData = await getSkinnyDataFromPath(getWikiTiddlerSkinnyStoreCachePath(workspace));
+    await saveWithProgress(tiddlerRepo, fieldsData, setProgress.fields);
+    const textData = await getTextDataFromPath(getWikiTiddlerTextStoreCachePath(workspace));
+    await saveWithProgress(tiddlerRepo, textData, setProgress.text);
+  } catch (error) {
+    console.error(`Failed to storeTiddlersToSQLite ${workspace.name}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+    throw error;
+  }
 }
 
+const CHUNK_SIZE = 500;
 async function saveWithProgress(repo: Repository<TiddlerSQLModel>, data: TiddlerSQLModel[], setProgress: (progress: number) => void = () => {}) {
-  const CHUNK_SIZE = 500;
-  const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
-  for (let index = 0; index < totalChunks; index++) {
-    const chunk = data.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
-    await repo.save(chunk);
-    setProgress((index + 1) / totalChunks);
-  }
+  await repo.save(data, { chunk: CHUNK_SIZE });
+  // const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
+  // for (let index = 0; index < totalChunks; index++) {
+  //   const chunk = data.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
+  //   setProgress((index + 1) / totalChunks);
+  // }
 }
 
 async function getSkinnyDataFromPath(path: string): Promise<TiddlerSQLModel[]> {

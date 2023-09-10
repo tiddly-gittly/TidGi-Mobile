@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import {
   getWikiCacheFolderPath,
   getWikiFilePath,
+  getWikiMainSqlitePath,
   getWikiTiddlerFolderPath,
   getWikiTiddlerSkinnyStoreCachePath,
   getWikiTiddlerStorePath,
@@ -69,6 +70,9 @@ export function useImportHTML() {
       // make main folder
       // prevent error `Directory 'file:///data/user/0/host.exp.exponent/files/wikis/wiki' could not be created or already exists]`
       await fs.deleteAsync(newWorkspace.wikiFolderLocation, { idempotent: true });
+      try {
+        await fs.deleteAsync(getWikiMainSqlitePath(newWorkspace));
+      } catch {}
       await fs.makeDirectoryAsync(newWorkspace.wikiFolderLocation, { intermediates: true });
       await fs.makeDirectoryAsync(getWikiCacheFolderPath(newWorkspace), { intermediates: true });
       await fs.makeDirectoryAsync(getWikiTiddlerFolderPath(newWorkspace), { intermediates: true });

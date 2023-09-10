@@ -22,3 +22,4 @@ export const WIKI_MAIN_SQLITE_NAME = 'sqlite.db';
  * @url https://docs.expo.dev/versions/latest/sdk/sqlite/#sqliteopendatabasename-version-description-size-callback
  */
 export const getWikiMainSqliteName = (workspace: IWikiWorkspace) => `${workspace.id}-${WIKI_MAIN_SQLITE_NAME}`;
+export const getWikiMainSqlitePath = (workspace: IWikiWorkspace) => `${fs.documentDirectory!}/SQLite/${getWikiMainSqliteName(workspace)}`;
