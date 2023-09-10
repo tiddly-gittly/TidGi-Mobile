@@ -13,7 +13,7 @@ import {
   WIKI_FOLDER_PATH,
 } from '../../constants/paths';
 import { sqliteServiceService } from '../../services/SQLiteService';
-import { IWikiWorkspace, useWikiStore } from '../../store/wiki';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { storeTiddlersToSQLite } from './storeTextToSQLite';
 
 type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'sqlite' | 'success' | 'error';
@@ -27,8 +27,8 @@ export function useImportHTML() {
   const [skinnyTiddlerTextCacheDownloadPercentage, setSkinnyTiddlerTextCacheDownloadPercentage] = useState(0);
   const [addTextToSQLitePercentage, setAddTextToSQLitePercentage] = useState(0);
   const [addFieldsToSQLitePercentage, setAddFieldsToSQLitePercentage] = useState(0);
-  const addWiki = useWikiStore(state => state.add);
-  const removeWiki = useWikiStore(state => state.remove);
+  const addWiki = useWorkspaceStore(state => state.add);
+  const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWikiWorkspace, setCreatedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
   const resetState = useCallback(() => {
     setStatus('idle');

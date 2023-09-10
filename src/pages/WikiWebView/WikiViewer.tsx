@@ -9,7 +9,7 @@ import { useRequestNativePermissions } from '../../services/NativeService/hooks'
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { useConfigStore } from '../../store/config';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';

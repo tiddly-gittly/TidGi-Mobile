@@ -25,6 +25,12 @@ export interface IWikiWorkspace {
    */
   wikiFolderLocation: string;
 }
+export interface IPageWorkspace {
+  id: string;
+  name: string;
+  type: 'webpage';
+  uri: string;
+}
 export interface IWikiServerSync {
   lastSync: number;
   serverID: string;
@@ -34,7 +40,7 @@ export interface IWikiServerSync {
   syncActive: boolean;
 }
 interface WikiState {
-  wikis: IWikiWorkspace[];
+  workspaces: IWikiWorkspace[];
 }
 interface WikiActions {
   /**
@@ -48,11 +54,11 @@ interface WikiActions {
   update: (id: string, newWikiWorkspace: Partial<IWikiWorkspace>) => void;
 }
 
-export const useWikiStore = create<WikiState & WikiActions>()(
+export const useWorkspaceStore = create<WikiState & WikiActions>()(
   immer(devtools(
     persist(
       (set) => ({
-        wikis: [] as IWikiWorkspace[],
+        workspaces: [] as IWikiWorkspace[],
         add: (newWikiWorkspace) => {
           let result: IWikiWorkspace | undefined;
           set((state) => {
@@ -60,28 +66,28 @@ export const useWikiStore = create<WikiState & WikiActions>()(
             // name can't be empty
             newWikiWorkspace.name = newWikiWorkspace.name || 'wiki';
             // can have same name, but not same id
-            const sameNameWorkspace = state.wikis.find((workspace) => workspace.name === newWikiWorkspace.name);
+            const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWikiWorkspace.name);
             const id = sameNameWorkspace === undefined ? newWikiWorkspace.name : `${newWikiWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
             const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
             const newWikiWorkspaceWithID = { ...newWikiWorkspace, id, wikiFolderLocation };
-            state.wikis.push(newWikiWorkspaceWithID);
+            state.workspaces.push(newWikiWorkspaceWithID);
             result = newWikiWorkspaceWithID;
           });
           return result;
         },
         update: (id, newWikiWorkspace) => {
           set((state) => {
-            const oldWikiIndex = state.wikis.findIndex((workspace) => workspace.id === id)!;
-            const oldWiki = state.wikis[oldWikiIndex];
+            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
+            const oldWiki = state.workspaces[oldWikiIndex];
             if (oldWiki !== undefined) {
-              state.wikis[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace };
+              state.workspaces[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace };
             }
           });
         },
         addServer: (id, newServerID) => {
           set((state) => {
-            const oldWikiIndex = state.wikis.findIndex((workspace) => workspace.id === id)!;
-            const oldWiki = state.wikis[oldWikiIndex];
+            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
+            const oldWiki = state.workspaces[oldWikiIndex];
             if (oldWiki !== undefined) {
               // get latest existing server last sync
               const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? Date.now();
@@ -90,14 +96,14 @@ export const useWikiStore = create<WikiState & WikiActions>()(
                 lastSync,
                 syncActive: true,
               }];
-              state.wikis[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
+              state.workspaces[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
             }
           });
         },
         setServerActive: (id, serverIDToActive, isActive = true) => {
           set((state) => {
-            const oldWikiIndex = state.wikis.findIndex((workspace) => workspace.id === id)!;
-            const oldWiki = state.wikis[oldWikiIndex];
+            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
+            const oldWiki = state.workspaces[oldWikiIndex];
             const serverToChange = oldWiki?.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
             if (serverToChange !== undefined) {
               serverToChange.syncActive = isActive;
@@ -106,12 +112,12 @@ export const useWikiStore = create<WikiState & WikiActions>()(
         },
         remove: (id) => {
           set((state) => {
-            state.wikis = state.wikis.filter((workspace) => workspace.id !== id);
+            state.workspaces = state.workspaces.filter((workspace) => workspace.id !== id);
           });
         },
         removeAll: () => {
           set((state) => {
-            state.wikis = [];
+            state.workspaces = [];
           });
         },
       }),

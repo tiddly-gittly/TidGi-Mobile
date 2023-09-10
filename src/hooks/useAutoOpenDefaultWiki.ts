@@ -3,7 +3,7 @@ import type { StackScreenProps } from '@react-navigation/stack';
 import { useEffect, useState } from 'react';
 import type { RootStackParameterList } from '../App';
 import { useConfigStore } from '../store/config';
-import { useWikiStore } from '../store/wiki';
+import { useWorkspaceStore } from '../store/workspace';
 import { navigateIfNotAlreadyThere } from '../utils/RootNavigation';
 
 /**
@@ -13,7 +13,7 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   const autoOpenDefaultWiki = useConfigStore(state => state.autoOpenDefaultWiki);
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
   const route = useRoute<StackScreenProps<RootStackParameterList, 'MainMenu'>['route']>();
-  const wikis = useWikiStore(state => state.wikis);
+  const wikis = useWorkspaceStore(state => state.workspaces);
   /** If we are just go back from a wiki, don't immediately goto default wiki. */
   const { fromWikiID } = route.params ?? {};
 
@@ -38,7 +38,7 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
 /**
  * @param wikis Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
  */
-export function openDefaultWikiIfNotAlreadyThere(wikis = useWikiStore.getState().wikis) {
+export function openDefaultWikiIfNotAlreadyThere(wikis = useWorkspaceStore.getState().wikis) {
   const defaultWiki = wikis[0];
   console.log(`openDefaultWiki ${defaultWiki?.id}`);
   if (defaultWiki !== undefined) {

@@ -6,7 +6,7 @@ import { styled } from 'styled-components/native';
 import type { LastArrayElement } from 'type-fest';
 import { ITiddlerChange, TiddlersLogOperation } from '../pages/Importer/createTable';
 import { backgroundSyncService } from '../services/BackgroundSyncService';
-import { IWikiWorkspace } from '../store/wiki';
+import { IWikiWorkspace } from '../store/workspace';
 
 interface WikiListProps {
   lastSyncDate: Date | undefined;

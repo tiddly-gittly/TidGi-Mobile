@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Snackbar } from 'react-native-paper';
 import { sqliteServiceService } from '../../../services/SQLiteService';
-import { IWikiWorkspace, useWikiStore } from '../../../store/wiki';
+import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
 export const deleteWikiFile = async (wikiWorkspace: IWikiWorkspace) => {
   await sqliteServiceService.closeDatabase(wikiWorkspace, true);
@@ -13,8 +13,8 @@ export const deleteWikiFile = async (wikiWorkspace: IWikiWorkspace) => {
 
 export function useClearAllWikiData() {
   const { t } = useTranslation();
-  const wikis = useWikiStore(state => state.wikis);
-  const removeAllWiki = useWikiStore(state => state.removeAll);
+  const wikis = useWorkspaceStore(state => state.workspaces);
+  const removeAllWiki = useWorkspaceStore(state => state.removeAll);
 
   const [clearDataSnackBarVisible, setClearDataSnackBarVisible] = useState(false);
   const [clearDataSnackBarErrorMessage, setClearDataSnackBarErrorMessage] = useState('');

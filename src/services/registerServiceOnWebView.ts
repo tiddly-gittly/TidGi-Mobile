@@ -1,5 +1,5 @@
 import { useMergedReference } from 'react-native-postmessage-cat';
-import { IWikiWorkspace } from '../store/wiki';
+import { IWikiWorkspace } from '../store/workspace';
 import { AppDataServiceIPCDescriptor } from './AppDataService/descriptor';
 import { useAppDataService } from './AppDataService/hooks';
 import { BackgroundSyncServiceIPCDescriptor } from './BackgroundSyncService/descriptor';

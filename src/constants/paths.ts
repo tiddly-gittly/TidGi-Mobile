@@ -1,5 +1,5 @@
 import * as fs from 'expo-file-system';
-import type { IWikiWorkspace } from '../store/wiki';
+import type { IWikiWorkspace } from '../store/workspace';
 
 export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${fs.documentDirectory}wikis/`;
 export const WIKI_FILE_NAME = 'index.html';

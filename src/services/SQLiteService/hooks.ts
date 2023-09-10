@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 import { sqliteServiceService } from '.';
 
 export function useCloseSQLite(workspace: IWikiWorkspace | undefined) {

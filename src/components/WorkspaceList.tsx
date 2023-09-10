@@ -4,16 +4,16 @@ import React, { useCallback } from 'react';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Card } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { IWikiWorkspace, useWikiStore } from '../store/wiki';
+import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 
-interface WikiListProps {
+interface WorkspaceListProps {
   onLongPress?: (wiki: IWikiWorkspace) => void;
   onPress?: (wiki: IWikiWorkspace) => void;
   onReorderEnd?: (wikis: IWikiWorkspace[]) => void;
 }
 
-export const WikiList: React.FC<WikiListProps> = ({ onPress, onLongPress, onReorderEnd }) => {
-  const wikiList = useWikiStore(state => state.wikis);
+export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd }) => {
+  const workspacesList = useWorkspaceStore(state => state.workspaces);
 
   const renderItem = useCallback(({ item, drag }: { drag: () => void; item: IWikiWorkspace }) => {
     return (
@@ -50,7 +50,7 @@ export const WikiList: React.FC<WikiListProps> = ({ onPress, onLongPress, onReor
   return (
     <>
       <DraggableFlatList
-        data={wikiList}
+        data={workspacesList}
         renderItem={renderItem}
         keyExtractor={item => item.id}
         onDragEnd={({ data: wikis }) => {

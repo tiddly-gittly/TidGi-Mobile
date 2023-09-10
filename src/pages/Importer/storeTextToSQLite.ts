@@ -3,7 +3,7 @@ import type { ITiddlerFields } from 'tiddlywiki';
 import { DataSource, EntityManager } from 'typeorm';
 import { getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
 import { sqliteServiceService } from '../../services/SQLiteService';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 
 export interface ITiddlerTextOnly {
   text: string;

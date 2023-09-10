@@ -3,7 +3,7 @@ import React from 'react';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { useCloseSQLite } from '../../services/SQLiteService/hooks';
-import { useWikiStore } from '../../store/wiki';
+import { useWorkspaceStore } from '../../store/workspace';
 import { WikiViewer } from './WikiViewer';
 
 const Container = styled.View`
@@ -17,7 +17,7 @@ export interface WikiWebViewProps {
 }
 export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'WikiWebView'>> = ({ route }) => {
   const { id } = route.params;
-  const activeWikiWorkspace = useWikiStore(state => state.wikis.find(wiki => wiki.id === id));
+  const activeWikiWorkspace = useWorkspaceStore(state => state.workspaces.find(wiki => wiki.id === id));
   useCloseSQLite(activeWikiWorkspace);
 
   return (

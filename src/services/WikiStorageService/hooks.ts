@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 import { WikiStorageService } from '.';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
 

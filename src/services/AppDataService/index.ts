@@ -1,7 +1,7 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 import { useConfigStore } from '../../store/config';
 import { useServerStore } from '../../store/server';
-import { useWikiStore } from '../../store/wiki';
+import { useWorkspaceStore } from '../../store/workspace';
 
 /**
  * Get app stores in wiki.
@@ -9,7 +9,7 @@ import { useWikiStore } from '../../store/wiki';
 export class AppDataService {
   #serverStore = useServerStore;
   #configStore = useConfigStore;
-  #wikiStore = useWikiStore;
+  #wikiStore = useWorkspaceStore;
 
   // Using BehaviorSubject to manage and emit state changes as Observables
   #serverSubject = new BehaviorSubject(this.#serverStore.getState());
@@ -79,7 +79,7 @@ export class AppDataService {
    *
    * @returns Observable of the wiki store state.
    */
-  $getWikiState(): Observable<ReturnType<typeof useWikiStore.getState>> {
+  $getWikiState(): Observable<ReturnType<typeof useWorkspaceStore.getState>> {
     return this.#wikiSubject.asObservable();
   }
 }

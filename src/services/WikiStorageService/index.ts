@@ -6,7 +6,7 @@ import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { ServerStatus, useServerStore } from '../../store/server';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
 import { getSyncIgnoredTiddlers } from './ignoredTiddler';

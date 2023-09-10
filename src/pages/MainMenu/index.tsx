@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { Button, Modal, PaperProvider, Portal } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
-import { WikiList } from '../../components/WikiList';
+import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
-import { useWikiStore } from '../../store/wiki';
+import { useWorkspaceStore } from '../../store/workspace';
 import { WikiEditModalContent } from './WikiModelContent';
 
 const Container = styled.View`
@@ -41,7 +41,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   return (
     <PaperProvider>
       <Container>
-        <WikiList
+        <WorkspaceList
           onPress={(wiki) => {
             navigation.navigate('WikiWebView', { id: wiki.id });
           }}
@@ -52,7 +52,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
           }}
           onReorderEnd={(wikis) => {
             setJustReordered(true);
-            useWikiStore.setState({ wikis });
+            useWorkspaceStore.setState({ wikis });
           }}
         />
         <Portal>

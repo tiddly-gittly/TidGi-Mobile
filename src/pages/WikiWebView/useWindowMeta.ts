@@ -1,4 +1,4 @@
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 
 export interface WindowMeta {
   workspaceID: string;

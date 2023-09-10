@@ -8,7 +8,7 @@ import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadapto
 import { getWikiFilePath, getWikiTiddlerStorePath } from '../../constants/paths';
 import { replaceTiddlerStoreScriptToOverrideOnReload } from '../../services/WikiHookService';
 import { getSkinnyTiddlersJSONFromSQLite } from '../../services/WikiStorageService';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 
 export interface IHtmlContent {
   html: string;

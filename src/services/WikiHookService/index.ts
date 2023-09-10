@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { MutableRefObject } from 'react';
 import { WebView } from 'react-native-webview';
-import { IWikiWorkspace, useWikiStore } from '../../store/wiki';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 /**
  * Provide some hook for wiki api.
@@ -12,7 +12,7 @@ export class WikiHookService {
   /** value in this maybe outdated, use #wikiStore for latest data. */
   #workspace: IWikiWorkspace;
   #webViewReference?: MutableRefObject<WebView | null>;
-  #wikiStore = useWikiStore;
+  #wikiStore = useWorkspaceStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;

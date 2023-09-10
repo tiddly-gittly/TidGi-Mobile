@@ -8,7 +8,7 @@ import { styled } from 'styled-components/native';
 
 import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
-import { useWikiStore } from '../../store/wiki';
+import { useWorkspaceStore } from '../../store/workspace';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -27,10 +27,10 @@ const ScanQRButton = styled(Button)`
 
 export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWikiStore(state => id === undefined ? undefined : state.wikis.find(w => w.id === id));
+  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find(w => w.id === id));
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [addServerToWiki] = useWikiStore(state => [state.addServer]);
+  const [addServerToWiki] = useWorkspaceStore(state => [state.addServer]);
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
   const [scannedString, setScannedString] = useState('');
   const [serverName, setServerName] = useState('');

@@ -2,7 +2,7 @@ import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import { DataSource } from 'typeorm';
 import { getWikiMainSqliteName, getWikiMainSqlitePath } from '../../constants/paths';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from './orm';
 import { migrations } from './orm/migrations';
 

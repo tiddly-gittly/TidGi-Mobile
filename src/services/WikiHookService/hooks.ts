@@ -1,7 +1,7 @@
 import { MutableRefObject, useEffect, useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
-import { IWikiWorkspace } from '../../store/wiki';
+import { IWikiWorkspace } from '../../store/workspace';
 import { nativeService } from '../NativeService';
 import { WikiHookService } from '.';
 import { WikiHookServiceIPCDescriptor } from './descriptor';

@@ -10,7 +10,7 @@ import i18n from '../../i18n';
 import { ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
-import { IWikiServerSync, IWikiWorkspace, useWikiStore } from '../../store/wiki';
+import { IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
 import { getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
@@ -52,7 +52,7 @@ export async function unregisterBackgroundSyncAsync() {
 export class BackgroundSyncService {
   #serverStore = useServerStore;
   #configStore = useConfigStore;
-  #wikiStore = useWikiStore;
+  #wikiStore = useWorkspaceStore;
 
   public startBackgroundSync() {
     const syncInterval = this.#configStore.getState().syncInterval;

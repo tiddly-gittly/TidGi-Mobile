@@ -6,13 +6,13 @@ import BackgroundSyncStatus from '../../../components/BackgroundSync';
 import { ServerList } from '../../../components/ServerList';
 import { backgroundSyncService } from '../../../services/BackgroundSyncService';
 import { IServerInfo, useServerStore } from '../../../store/server';
-import { useWikiStore } from '../../../store/wiki';
+import { useWorkspaceStore } from '../../../store/workspace';
 import { ServerEditModalContent } from './ServerEditModal';
 
 export function ServerAndSync(): JSX.Element {
   const { t } = useTranslation();
   const clearServerList = useServerStore(state => state.clearAll);
-  const activeIDs = useWikiStore(state => state.wikis.flatMap(wiki => wiki.syncedServers?.filter(item => item.syncActive)?.map(item => item.serverID) ?? []));
+  const activeIDs = useWorkspaceStore(state => state.workspaces.flatMap(wiki => wiki.syncedServers?.filter(item => item.syncActive)?.map(item => item.serverID) ?? []));
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
   const [inSyncing, setInSyncing] = useState(false);

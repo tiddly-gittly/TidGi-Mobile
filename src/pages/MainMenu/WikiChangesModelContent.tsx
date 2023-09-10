@@ -6,7 +6,7 @@ import { styled } from 'styled-components/native';
 
 import { WikiUpdateList } from '../../components/WikiUpdateList';
 import { useServerStore } from '../../store/server';
-import { useWikiStore } from '../../store/wiki';
+import { useWorkspaceStore } from '../../store/workspace';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -15,7 +15,7 @@ interface WikiEditModalProps {
 
 export function WikiChangesModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWikiStore(state => id === undefined ? undefined : state.wikis.find(w => w.id === id));
+  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find(w => w.id === id));
   const availableServersToPick = useServerStore(state =>
     Object.entries(state.servers).filter(([id]) => wiki?.syncedServers?.map(item => item.serverID)?.includes?.(id)).map(([id, server]) => {
       const lastSync = wiki?.syncedServers?.find(item => item.serverID === id)?.lastSync;
