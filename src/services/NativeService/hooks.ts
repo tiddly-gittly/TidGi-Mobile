@@ -20,6 +20,9 @@ export function useRequestNativePermissions() {
 export function useRegisterReceivingShareIntent() {
   useEffect(() => {
     try {
+      if (process.env.NODE_ENV === 'development') {
+        return;
+      }
       nativeService.registerReceivingShareIntent();
     } catch (error) {
       console.log(

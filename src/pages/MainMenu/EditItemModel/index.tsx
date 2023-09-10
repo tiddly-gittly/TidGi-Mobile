@@ -8,6 +8,7 @@ export function EditItemModel({ id, onClose }: { id?: string; onClose: () => voi
   const workspace = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w) => w.id === id));
 
   switch (workspace?.type) {
+    case undefined:
     case 'wiki': {
       return <WikiEditModalContent id={id} onClose={onClose} />;
     }

@@ -44,12 +44,8 @@ export const WebPageViewer = ({ webPageWorkspace }: WikiViewerProps) => {
       originWhitelist={['*']}
       mediaPlaybackRequiresUserAction={false}
       allowsInlineMediaPlayback
-      javaScriptCanOpenWindowsAutomatically
       allowsBackForwardNavigationGestures
       allowsProtectedMedia
-      allowFileAccess
-      allowFileAccessFromFileURLs
-      allowUniversalAccessFromFileURLs
       focusable
       geolocationEnabled
       importantForAccessibility='yes'
@@ -58,6 +54,8 @@ export const WebPageViewer = ({ webPageWorkspace }: WikiViewerProps) => {
       mixedContentMode='always'
       allowsAirPlayForMediaPlayback
       allowsFullscreenVideo
+      cacheEnabled={false}
+      cacheMode='LOAD_NO_CACHE'
       userAgent={FAKE_USER_AGENT}
       source={{ uri: webPageWorkspace.uri }}
       renderError={(errorName) => <Text>{errorName}</Text>}

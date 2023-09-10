@@ -25,7 +25,9 @@ interface WikiEditModalProps {
 
 export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && w.type === 'wiki'));
+  const wiki = useWorkspaceStore(state =>
+    id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
+  );
   const [updateWiki, addServerToWiki, deleteWiki, setServerActive] = useWorkspaceStore(state => [state.update, state.addServer, state.remove, state.setServerActive]);
   const availableServersToPick = useServerStore(state => Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` })));
 

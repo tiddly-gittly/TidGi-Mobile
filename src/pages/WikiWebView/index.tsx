@@ -25,6 +25,7 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
   useCloseSQLite(activeWikiWorkspace);
 
   switch (activeWikiWorkspace?.type) {
+    case undefined:
     case 'wiki': {
       return (
         <Container>

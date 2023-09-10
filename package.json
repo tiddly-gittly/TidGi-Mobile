@@ -2,7 +2,7 @@
   "name": "tidgi-mobile",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "android": "expo start --go --android",
+    "android": "cross-env NODE_ENV=development expo start --go --android",
     "build:plugin": "zx scripts/buildPlugins.mjs",
     "build:android-apk": "eas build --profile preview --platform android --non-interactive",
     "build:expo-sdk": "eas build --profile development --platform android --non-interactive",
@@ -72,6 +72,7 @@
     "@types/react": "~18.2.21",
     "babel-plugin-import": "^1.13.8",
     "babel-plugin-transform-typescript-metadata": "^0.3.2",
+    "cross-env": "^7.0.3",
     "eslint-config-tidgi": "^1.1.5",
     "eslint-plugin-react-native": "^4.0.0",
     "react-native-reanimated": "3.3.0",

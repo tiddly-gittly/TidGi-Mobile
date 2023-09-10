@@ -10,8 +10,8 @@ export function useCloseSQLite(workspace?: IWorkspace) {
       void (async () => {
         try {
           if (databaseToCloseReference.current === undefined) return;
-          console.log(`Closing sqlite database for ${databaseToCloseReference.current.id} in useSQLiteService`);
           if (databaseToCloseReference.current?.type === 'wiki') {
+            console.log(`Closing sqlite database for ${databaseToCloseReference.current.id} in useSQLiteService`);
             // eslint-disable-next-line react-hooks/exhaustive-deps
             await sqliteServiceService.closeDatabase(databaseToCloseReference.current);
           }
