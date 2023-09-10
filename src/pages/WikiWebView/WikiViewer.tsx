@@ -5,6 +5,7 @@ import { MD3Colors, Text } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
+import { FAKE_USER_AGENT } from '../../constants/webview';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
@@ -14,7 +15,6 @@ import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 import { useWindowMeta } from './useWindowMeta';
-import { FAKE_USER_AGENT } from '../../constants/webview';
 
 const WebViewContainer = styled.View`
   flex: 2;
