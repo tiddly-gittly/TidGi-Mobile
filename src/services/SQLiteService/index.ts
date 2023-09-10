@@ -52,6 +52,7 @@ export class SQLiteServiceService {
         this.dataSources.delete(name);
         if (drop === true) {
           await dataSource.dropDatabase();
+          // need to delete the file. May encounter SQLITE_BUSY error if not deleted.
           await fs.deleteAsync(getWikiMainSqlitePath(workspace));
         } else {
           await dataSource.destroy();
