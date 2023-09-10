@@ -1,16 +1,13 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Snackbar } from 'react-native-paper';
-import { getWikiMainSqliteName } from '../../../constants/paths';
+import { sqliteServiceService } from '../../../services/SQLiteService';
 import { IWikiWorkspace, useWikiStore } from '../../../store/wiki';
 
 export const deleteWikiFile = async (wikiWorkspace: IWikiWorkspace) => {
-  const database = SQLite.openDatabase(getWikiMainSqliteName(wikiWorkspace));
-  database.closeAsync();
-  await database.deleteAsync();
+  await sqliteServiceService.closeDatabase(wikiWorkspace, true);
   await fs.deleteAsync(wikiWorkspace.wikiFolderLocation);
 };
 

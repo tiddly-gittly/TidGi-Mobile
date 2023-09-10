@@ -2,17 +2,17 @@
 /* eslint-disable @typescript-eslint/promise-function-async */
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Haptics from 'expo-haptics';
-import * as SQLite from 'expo-sqlite';
 import * as TaskManager from 'expo-task-manager';
 import { sortedUniqBy, uniq } from 'lodash';
 import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiMainSqliteName } from '../../constants/paths';
 import i18n from '../../i18n';
-import { ISkinnyTiddlerWithText, ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
+import { ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWikiStore } from '../../store/wiki';
+import { sqliteServiceService } from '../SQLiteService';
+import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
 import { getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
 import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
 
@@ -118,73 +118,53 @@ export class BackgroundSyncService {
   }
 
   public async getChangeLogsSinceLastSync(wiki: IWikiWorkspace, lastSync: number, newerFirst?: boolean): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
-    const database = SQLite.openDatabase(getWikiMainSqliteName(wiki));
-    // Convert the JavaScript Date number to SQLite `DATETIME DEFAULT CURRENT_TIMESTAMP` 'YYYY-MM-DD HH:MM:SS' format
-    const lastSyncTimestamp = new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ');
-    const resultSets = await database.execAsync(
-      [{
-        sql: `SELECT * FROM tiddlers_changes_log WHERE strftime('%s', timestamp) > strftime('%s', ?) ORDER BY timestamp ${newerFirst === true ? 'DESC' : 'ASC'};`,
-        args: [lastSyncTimestamp],
-      }],
-      true,
-    );
-
     try {
-      const resultSet = resultSets[0];
-      if (resultSet === undefined) return [];
-      if ('error' in resultSet) {
-        console.error(resultSet.error);
-        return [];
-      }
-      if (resultSet.rows.length > 0) {
-        const changeLogs = resultSet.rows as ITiddlerChange[];
-        const changeWithTiddlerFields: Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange> = await Promise.all(
-          changeLogs
-            .filter(change => !(getSyncIgnoredTiddlers(change.title).includes(change.title)))
-            .map(async change => {
-              if (change.operation === 'DELETE') return change;
-              const title = change.title;
-              // get text and fields from sqlite
-              const resultSet = await database.execAsync(
-                [{
-                  sql: `SELECT text, fields FROM tiddlers WHERE title = ?;`,
-                  args: [title],
-                }],
-                true,
-              );
-              const result = resultSet[0];
-              if (result === undefined) return change;
-              if ('error' in result) {
-                console.error(result.error);
-                return change;
-              }
-              if (result.rows.length === 0) {
-                return change;
-              }
-              const skinnyTiddlerWithText = result.rows[0] as ISkinnyTiddlerWithText;
-              const fieldsWithoutText = JSON.parse(skinnyTiddlerWithText.fields) as ITiddlerFieldsParam;
-              // delete skinny tiddler related fields
-              if ('_is_skinny' in fieldsWithoutText) delete fieldsWithoutText._is_skinny;
-              if ('bag' in fieldsWithoutText) delete fieldsWithoutText.bag;
-              if ('revision' in fieldsWithoutText) delete fieldsWithoutText.revision;
-              const fields = {
-                ...fieldsWithoutText,
-                text: skinnyTiddlerWithText.text,
-              } satisfies ITiddlerFieldsParam;
-              return {
-                ...change,
-                fields,
-              };
-            }),
-        );
-        return changeWithTiddlerFields;
-      }
-      return [];
+      const dataSource = await sqliteServiceService.getDatabase(wiki);
+      const tiddlerChangeRepo = dataSource.getRepository(TiddlerChangeSQLModel);
+      const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
+
+      const lastSyncTimestamp = new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ');
+
+      const changeLogs = await tiddlerChangeRepo.createQueryBuilder('change')
+        .where("strftime('%s', change.timestamp) > strftime('%s', :lastSyncTimestamp)", { lastSyncTimestamp })
+        .orderBy('change.timestamp', newerFirst === true ? 'DESC' : 'ASC')
+        .getMany();
+
+      const filteredChangeLogs = changeLogs.filter(change => !getSyncIgnoredTiddlers(change.title).includes(change.title));
+
+      const changeWithTiddlerFields: Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange> = await Promise.all(
+        filteredChangeLogs.map(async change => {
+          const result: { fields?: ITiddlerFieldsParam } & ITiddlerChange = {
+            id: change.id,
+            title: change.title,
+            operation: change.operation,
+            timestamp: change.timestamp.toISOString(), // Convert Date to string
+          };
+          if (change.operation === TiddlersLogOperation.DELETE) return result;
+          // for update and insert, add text and fields to it
+          const title = change.title;
+          const skinnyTiddlerWithText = await tiddlerRepo.findOne({ where: { title } });
+          if (skinnyTiddlerWithText === null) return result;
+
+          const fieldsWithoutText = JSON.parse(skinnyTiddlerWithText.fields ?? '{}') as ITiddlerFieldsParam;
+          if ('_is_skinny' in fieldsWithoutText) delete fieldsWithoutText._is_skinny;
+          if ('bag' in fieldsWithoutText) delete fieldsWithoutText.bag;
+          if ('revision' in fieldsWithoutText) delete fieldsWithoutText.revision;
+
+          const fields = {
+            ...fieldsWithoutText,
+            text: skinnyTiddlerWithText.text,
+          } satisfies ITiddlerFieldsParam;
+
+          result.fields = fields;
+          return result;
+        }),
+      );
+
+      return changeWithTiddlerFields;
     } catch (error) {
       console.error(error, (error as Error).stack);
       return [];
-    } finally {
-      database.closeAsync();
     }
   }
 
@@ -229,44 +209,46 @@ export class BackgroundSyncService {
   }
 
   async #updateTiddlersFromServer(wiki: IWikiWorkspace, deletes: string[], updates: ITiddlerFieldsParam[]) {
-    const database = SQLite.openDatabase(getWikiMainSqliteName(wiki));
     try {
-      await database.transactionAsync(async (tx) => {
-        await Promise.all(deletes.map(async title => {
-          await tx.executeSqlAsync(
-            'DELETE FROM tiddlers WHERE title = ?;',
-            [title],
-          );
-        }));
-        await Promise.all(updates.map(async tiddlerFields => {
-          let { text = '', ...fields } = tiddlerFields as ITiddlerFieldsParam & { text?: string };
+      const dataSource = await sqliteServiceService.getDatabase(wiki);
+      await dataSource.transaction(async (transactionalEntityManager) => {
+        const tiddlerRepo = transactionalEntityManager.getRepository(TiddlerSQLModel);
+        // Delete Tiddlers
+        for (const title of deletes) {
+          await tiddlerRepo.delete({ title });
+        }
+
+        // Update Tiddlers
+        for (const tiddlerFields of updates) {
+          let { text, ...fields } = tiddlerFields as ITiddlerFieldsParam & { text?: string };
+
+          // If no text is provided, fetch from existing tiddler
           // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
           if (!text) {
-            const existingTextResult = await tx.executeSqlAsync(
-              'SELECT text FROM tiddlers WHERE title = ?;',
-              [tiddlerFields.title as string],
-            );
-            if ('rows' in existingTextResult) {
-              text = (existingTextResult.rows[0]?.text as string | undefined) ?? '';
+            const existingTiddler = await tiddlerRepo.findOne({ where: { title: tiddlerFields.title as string } });
+            if (existingTiddler == null) {
+              console.warn(`Cannot find text for tiddler ${tiddlerFields.title as string}`);
             } else {
-              console.warn(`Cannot find text for tiddler ${tiddlerFields.title as string} ${(existingTextResult)?.error?.message}`);
+              text = existingTiddler.text ?? '';
             }
           }
-          // make sure we store skinny fields to `fields` field of SQLite, so when we get all of them later, wiki can still lazy-loading
+
+          // Update or insert the tiddler
           fields = {
             _is_skinny: '',
             ...fields,
           };
-          await tx.executeSqlAsync(
-            'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
-            [tiddlerFields.title as string, text, JSON.stringify(fields)],
-          );
-        }));
-      }, false);
+
+          const tiddler = new TiddlerSQLModel();
+          tiddler.title = tiddlerFields.title as string;
+          tiddler.text = text;
+          tiddler.fields = JSON.stringify(fields);
+
+          await tiddlerRepo.save(tiddler);
+        }
+      });
     } catch (error) {
       console.error(error, (error as Error).stack);
-    } finally {
-      database.closeAsync();
     }
   }
 

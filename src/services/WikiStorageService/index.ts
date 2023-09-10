@@ -1,14 +1,14 @@
 /* eslint-disable @typescript-eslint/require-await */
 import * as fs from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers } from 'tiddlywiki';
-import { getWikiMainSqliteName, getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { TiddlersLogOperation } from '../../pages/Importer/createTable';
-import { ITiddlerTextJSON } from '../../pages/Importer/storeTextToSQLite';
 import { useConfigStore } from '../../store/config';
 import { ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/wiki';
+import { sqliteServiceService } from '../SQLiteService';
+import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
 import { getSyncIgnoredTiddlers } from './ignoredTiddler';
 import { IWikiServerStatusObject } from './types';
 
@@ -23,13 +23,11 @@ import { IWikiServerStatusObject } from './types';
  */
 export class WikiStorageService {
   #workspace: IWikiWorkspace;
-  #sqlite: SQLite.SQLiteDatabase;
   #configStore = useConfigStore;
   #serverStore = useServerStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
-    this.#sqlite = SQLite.openDatabase(getWikiMainSqliteName(this.#workspace));
   }
 
   async getStatus(): Promise<IWikiServerStatusObject> {
@@ -52,35 +50,36 @@ export class WikiStorageService {
   /**
    * Return the e-tag
    */
-  async saveTiddler(title: string, text: string, fieldStrings: string): Promise<string> {
+  async saveTiddler(workspace: IWikiWorkspace, title: string, text: string, fieldStrings: string): Promise<string> {
     try {
       let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
 
-      await this.#sqlite.transactionAsync(async tx => {
-        // Check if a tiddler with the same title already exists
-        const result = await tx.executeSqlAsync(
-          'SELECT title FROM tiddlers WHERE title = ?;',
-          [title],
-        );
+      // Get the database connection for the workspace
+      const dataSource = await sqliteServiceService.getDatabase(workspace);
 
-        if ('error' in result) {
-          throw result.error;
-        }
-        if (result.rows.length > 0) {
-          // If tiddler exists, set operation to 'UPDATE'
-          operation = TiddlersLogOperation.UPDATE;
-        }
+      // Transaction
+      await dataSource.transaction(async transactionalEntityManager => {
+        // Get repositories
+        const tiddlerRepo = transactionalEntityManager.getRepository(TiddlerSQLModel);
+        const tiddlerChangeRepo = transactionalEntityManager.getRepository(TiddlerChangeSQLModel);
 
-        await tx.executeSqlAsync(
-          'INSERT OR REPLACE INTO tiddlers (title, text, fields) VALUES (?, ?, ?);',
-          [title, text, fieldStrings],
-        );
-
+        // Save or update tiddler
+        await tiddlerRepo.save({
+          title,
+          text,
+          fields: fieldStrings,
+        });
         if (!(getSyncIgnoredTiddlers(title).includes(title))) {
-          await tx.executeSqlAsync(
-            'INSERT INTO tiddlers_changes_log (title, operation) VALUES (?, ?);',
-            [title, operation],
-          );
+          // Check if a tiddler with the same title already exists
+          const existingTiddler = await tiddlerRepo.findOne({ where: { title } });
+          if (existingTiddler !== null) {
+            // If tiddler exists, set operation to 'UPDATE'
+            operation = TiddlersLogOperation.UPDATE;
+          }
+          await tiddlerChangeRepo.save({
+            title,
+            operation,
+          });
         }
       });
 
@@ -93,19 +92,23 @@ export class WikiStorageService {
     }
   }
 
-  async deleteTiddler(title: string): Promise<boolean> {
+  async deleteTiddler(workspace: IWikiWorkspace, title: string): Promise<boolean> {
     try {
-      await this.#sqlite.transactionAsync(async tx => {
-        await tx.executeSqlAsync(
-          'DELETE FROM tiddlers WHERE title = ?;',
-          [title],
-        );
+      const dataSource = await sqliteServiceService.getDatabase(workspace);
+      // Begin a transaction
+      await dataSource.transaction(async transactionalEntityManager => {
+        const tiddlerRepo = transactionalEntityManager.getRepository(TiddlerSQLModel);
 
-        await tx.executeSqlAsync(
-          'INSERT INTO tiddlers_changes_log (title, operation) VALUES (?, ?);',
-          [title, TiddlersLogOperation.DELETE],
-        );
+        // Delete the tiddler with the specified title
+        await transactionalEntityManager.remove(tiddlerRepo.create({ title }));
+
+        // Insert into tiddlers_changes_log
+        const changeLog = new TiddlerChangeSQLModel();
+        changeLog.title = title;
+        changeLog.operation = TiddlersLogOperation.DELETE;
+        await transactionalEntityManager.save(changeLog);
       });
+
       return true;
     } catch (error) {
       console.error(`Failed to delete tiddler ${title}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
@@ -119,17 +122,10 @@ export class WikiStorageService {
 
   async #loadFromSqlite(title: string): Promise<string | undefined> {
     try {
-      const resultSet = await this.#sqlite.execAsync([{ sql: 'SELECT text FROM tiddlers WHERE title = ?;', args: [title] }], true);
-      const result = resultSet[0];
-      if (result === undefined) return undefined;
-      if ('error' in result) {
-        console.error(result.error);
-        return undefined;
-      }
-      if (result.rows.length === 0) {
-        return undefined;
-      }
-      return (result.rows as ITiddlerTextJSON)[0]?.text;
+      const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
+      const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
+      const tiddler = await tiddlerRepo.findOne({ where: { title } });
+      return tiddler?.text;
     } catch (error) {
       console.error(`SQL error when getting ${title} : ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       return undefined;
@@ -160,11 +156,6 @@ export class WikiStorageService {
     }
   }
 
-  destroy() {
-    // TODO: close db on leaving a wiki
-    this.#sqlite.closeAsync();
-  }
-
   // ████████ ██     ██       ███████ ███████ ███████
   //    ██    ██     ██       ██      ██      ██
   //    ██    ██  █  ██ █████ ███████ ███████ █████
@@ -185,16 +176,16 @@ export class WikiStorageService {
  * @returns json string same as what return from `tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`, with type `Promise<Array<Omit<ITiddlerFields, 'text'>> | undefined>`
  */
 export async function getSkinnyTiddlersJSONFromSQLite(workspace: IWikiWorkspace): Promise<string> {
-  const database = SQLite.openDatabase(getWikiMainSqliteName(workspace));
-  const resultSet = await database.execAsync([{ sql: 'SELECT fields FROM tiddlers;', args: [] }], true);
-  const result = resultSet[0];
-  database.closeAsync();
-  if (result === undefined) return '[]';
-  if ('error' in result) {
-    throw new Error(`Error getting skinny tiddlers list from SQLite: ${result.error.message}`);
+  try {
+    const dataSource = await sqliteServiceService.getDatabase(workspace);
+    const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
+
+    const tiddlers = await tiddlerRepo.find({ select: ['fields'] });
+    if (tiddlers.length === 0) {
+      return '[]';
+    }
+    return `[${tiddlers.map(tiddler => tiddler.fields).filter((fields): fields is string => fields !== null).join(',')}]`;
+  } catch (error) {
+    throw new Error(`Error getting skinny tiddlers list from SQLite: ${(error as Error).message}`);
   }
-  if (result.rows.length === 0) {
-    return '[]';
-  }
-  return `[${result.rows.map(row => row.fields as string | null).filter((fields): fields is string => fields !== null).join(',')}]`;
 }
