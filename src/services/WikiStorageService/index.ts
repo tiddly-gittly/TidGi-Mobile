@@ -5,8 +5,9 @@ import type { IChangedTiddlers } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
-import { ServerStatus, useServerStore } from '../../store/server';
+import { useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/workspace';
+import { backgroundSyncService } from '../BackgroundSyncService';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
 import { getSyncIgnoredTiddlers } from './ignoredTiddler';
@@ -154,9 +155,7 @@ export class WikiStorageService {
 
   async #loadFromServer(title: string): Promise<string | undefined> {
     try {
-      const onlineLastSyncServer = this.#workspace.syncedServers.sort((a, b) => b.lastSync - a.lastSync).map(server => this.#serverStore.getState().servers[server.serverID]).find(
-        server => server?.status === ServerStatus.online,
-      );
+      const onlineLastSyncServer = await backgroundSyncService.getOnlineServerForWiki(this.#workspace);
       if (onlineLastSyncServer === undefined) return;
       const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
       await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(this.#workspace, title));
@@ -184,13 +183,14 @@ export class WikiStorageService {
 
 /**
  * get skinny tiddlers json array from sqlite, without text field to speedup initial loading and memory usage
+ * If you want some tiddlers not being skinny (For example, `$:/` tiddlers), make sure to save text field in the `fields` field when saving, in the plugins\src\expo-file-system-syncadaptor\file-system-syncadaptor.ts , see logic of `saveFullTiddler`
  * @returns json string same as what return from `tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`, with type `Promise<Array<Omit<ITiddlerFields, 'text'>> | undefined>`
  */
 export async function getSkinnyTiddlersJSONFromSQLite(workspace: IWikiWorkspace): Promise<string> {
   try {
     const dataSource = await sqliteServiceService.getDatabase(workspace);
     const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
-
+    /** skinny tiddlers + full tiddlers judged by `saveFullTiddler` */
     const tiddlers = await tiddlerRepo.find({ select: ['fields'] });
     if (tiddlers.length === 0) {
       return '[]';

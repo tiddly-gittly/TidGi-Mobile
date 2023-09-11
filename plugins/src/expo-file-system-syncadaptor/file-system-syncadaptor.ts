@@ -266,11 +266,11 @@ class TidGiMobileFileSystemSyncAdaptor {
   async loadTiddler(title: string, callback?: ISyncAdaptorLoadTiddlerCallback) {
     this.logger.log(`loadTiddler ${title}`);
     try {
-      const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
       const tiddler = this.wiki.getTiddler(title);
       if (tiddler === undefined) {
         throw new Error(`Tiddler "${title}" not exist`);
       }
+      const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
       if (tiddlerText === undefined) {
         // TODO: fetch large file using HTTP from TidGi-Desktop
         throw new Error(`Tiddler "${title}" is not synced yet.`);

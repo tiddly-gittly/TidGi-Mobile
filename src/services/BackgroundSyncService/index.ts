@@ -13,7 +13,7 @@ import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
-import { getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
+import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
 import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
@@ -222,29 +222,44 @@ export class BackgroundSyncService {
 
         // Update Tiddlers
         for (const tiddlerFields of updates) {
-          let { text, ...fields } = tiddlerFields as ITiddlerFieldsParam & { text?: string };
+          let { text, title, ...fieldsToSave } = tiddlerFields as ITiddlerFieldsParam & { text?: string; title: string };
+          const ignore = getSyncIgnoredTiddlers(title).includes(title);
+          if (ignore) continue;
+          const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
 
-          // If no text is provided, fetch from existing tiddler
+          // If no text is provided, fetch from existing tiddler. This should not happened in tw-mobile-sync, just in case.
           // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
           if (!text) {
-            const existingTiddler = await tiddlerRepo.findOne({ where: { title: tiddlerFields.title as string } });
-            if (existingTiddler == null) {
-              console.warn(`Cannot find text for tiddler ${tiddlerFields.title as string}`);
+            const existingTiddler = await tiddlerRepo.findOne({ where: { title } });
+            if (existingTiddler === null) {
+              console.warn(`Cannot find text for tiddler ${title}`);
             } else {
               text = existingTiddler.text ?? '';
             }
           }
 
-          // Update or insert the tiddler
-          fields = {
-            _is_skinny: '',
-            ...fields,
-          };
+          // for `$:/` tiddlers, if being skinny will throw error like `"Linked List only accepts string values, not " + value;`
+          if (saveFullTiddler) {
+            fieldsToSave = {
+              text,
+              title,
+              ...fieldsToSave,
+            };
+          } else {
+            fieldsToSave = {
+              _is_skinny: '',
+              title,
+              ...fieldsToSave,
+            };
+          }
 
           const tiddler = new TiddlerSQLModel();
-          tiddler.title = tiddlerFields.title as string;
-          tiddler.text = text;
-          tiddler.fields = JSON.stringify(fields);
+          tiddler.title = title;
+          // prevent save huge duplicated content to SQLite, if not necessary
+          if (!saveFullTiddler) {
+            tiddler.text = text;
+          }
+          tiddler.fields = JSON.stringify(fieldsToSave);
 
           await tiddlerRepo.save(tiddler);
         }
