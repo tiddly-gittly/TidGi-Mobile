@@ -129,7 +129,7 @@ export class WikiStorageService {
   }
 
   async loadTiddlerText(title: string): Promise<string | undefined> {
-    return (await this.#loadFromSqlite(title)) ?? (await this.#loadFromFS(title)) ?? await this.#loadFromServer(title);
+    return (await this.#loadFromSqlite(title)) ?? (await this.#loadFromFS(title)) ?? await this.#loadFromServerAndSaveToFS(title);
   }
 
   async #loadFromSqlite(title: string): Promise<string | undefined> {
@@ -153,12 +153,9 @@ export class WikiStorageService {
     }
   }
 
-  async #loadFromServer(title: string): Promise<string | undefined> {
+  async #loadFromServerAndSaveToFS(title: string): Promise<string | undefined> {
     try {
-      const onlineLastSyncServer = await backgroundSyncService.getOnlineServerForWiki(this.#workspace);
-      if (onlineLastSyncServer === undefined) return;
-      const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
-      await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(this.#workspace, title));
+      await backgroundSyncService.saveToFSFromServer(this.#workspace, title);
       return await this.#loadFromFS(title);
     } catch (error) {
       console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);

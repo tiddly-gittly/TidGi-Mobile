@@ -1,11 +1,13 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/promise-function-async */
 import * as BackgroundFetch from 'expo-background-fetch';
+import * as fs from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
 import { sortedUniqBy, uniq } from 'lodash';
 import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
+import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
 import { ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
@@ -238,34 +240,51 @@ export class BackgroundSyncService {
             }
           }
 
+          const tiddler = new TiddlerSQLModel();
+          tiddler.title = title;
           // for `$:/` tiddlers, if being skinny will throw error like `"Linked List only accepts string values, not " + value;`
           if (saveFullTiddler) {
-            fieldsToSave = {
+            tiddler.fields = JSON.stringify({
               text,
               title,
               ...fieldsToSave,
-            };
+            });
           } else {
-            fieldsToSave = {
+            // prevent save huge duplicated content to SQLite, if not necessary
+            if (text !== undefined && this.checkIsLargeText(text, fieldsToSave.type as string)) {
+              // save to fs instead of sqlite. See `WikiStorageService.#loadFromServer` for how we load it later.
+              await this.saveToFSFromServer(wiki, title);
+            } else {
+              tiddler.text = text;
+            }
+            tiddler.fields = JSON.stringify({
               _is_skinny: '',
               title,
               ...fieldsToSave,
-            };
+            });
           }
-
-          const tiddler = new TiddlerSQLModel();
-          tiddler.title = title;
-          // prevent save huge duplicated content to SQLite, if not necessary
-          if (!saveFullTiddler) {
-            tiddler.text = text;
-          }
-          tiddler.fields = JSON.stringify(fieldsToSave);
-
           await tiddlerRepo.save(tiddler);
         }
       });
     } catch (error) {
       console.error(error, (error as Error).stack);
+    }
+  }
+
+  public checkIsLargeText(text: string, mimeType = 'text/plain') {
+    const blob = new Blob([text], { type: mimeType });
+    return blob.size > 200 * 1024; // 200KB
+  }
+
+  public async saveToFSFromServer(workspace: IWikiWorkspace, title: string) {
+    try {
+      const onlineLastSyncServer = await this.getOnlineServerForWiki(workspace);
+      if (onlineLastSyncServer === undefined) return;
+      const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
+      await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(workspace, title));
+    } catch (error) {
+      console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      throw error;
     }
   }
 
