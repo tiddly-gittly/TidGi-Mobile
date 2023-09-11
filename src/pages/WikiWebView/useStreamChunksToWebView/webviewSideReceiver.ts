@@ -45,8 +45,9 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
     const observer = new MutationObserver((mutationsList, observer) => {
       for (let mutation of mutationsList) {
         if (mutation.type === 'childList') {
-          executeScriptsAfterInjectHTML();
           observer.disconnect(); // Important: disconnect the observer once done.
+          // use timeout to give splash screen a chance to execute and show
+          setTimeout(executeScriptsAfterInjectHTML, 1)
         }
       }
     });
