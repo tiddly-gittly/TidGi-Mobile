@@ -71,11 +71,11 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 // name can't be empty
                 newWorkspace.name = newWorkspace.name || 'wiki';
                 // can have same name, but not same id
-                const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name);
+                const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name || workspace.id === newWorkspace.name);
                 const id = sameNameWorkspace === undefined ? newWorkspace.name : `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
                 const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
                 const newWikiWorkspaceWithID = { ...(newWorkspace as IWikiWorkspace), id, wikiFolderLocation };
-                state.workspaces = [...state.workspaces, newWikiWorkspaceWithID];
+                state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];
                 result = cloneDeep(newWikiWorkspaceWithID);
                 return;
               }
@@ -83,7 +83,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 const id = String(Math.random()).substring(2, 7);
                 const name = `Webpage ${id}`;
                 const newPageWorkspace = { ...(newWorkspace as IPageWorkspace), id, name };
-                state.workspaces = [...state.workspaces, newPageWorkspace];
+                state.workspaces = [newPageWorkspace, ...state.workspaces];
                 result = cloneDeep(newPageWorkspace);
               }
             }
