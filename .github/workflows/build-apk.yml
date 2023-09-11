@@ -68,9 +68,8 @@ jobs:
         run: npx expo prebuild -p android --clean
       - name: Build apk
         run: |
-          cd android
-          chmod +x ./gradlew
-          ./gradle assembleRelease --no-daemon
+          cd android/app
+          gradle assembleRelease --no-daemon
 
       ## sign generated apk
       - name: Sign APK
