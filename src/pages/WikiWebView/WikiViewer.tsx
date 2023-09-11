@@ -33,20 +33,30 @@ export interface WikiViewerProps {
 }
 
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
+  const { t } = useTranslation();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
   useRequestNativePermissions();
-  const { t } = useTranslation();
 
   const [loaded, setLoaded] = useState(false);
   const [rememberLastVisitState] = useConfigStore(state => [state.rememberLastVisitState]);
+  /**
+   * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
+   */
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView, servicesOfWorkspace] = useRegisterService(wikiWorkspace);
+  useSetWebViewReferenceToService(servicesOfWorkspace.wikiHookService, webViewReference);
+  /**
+   * When app is in background for a while, system will recycle the webview, and auto refresh it when app is back to foreground. We need to retrigger the initialization process by assigning different react key to the webview, otherwise it will white screen.
+   */
   const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
   const triggerFullReload = () => {
     setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
   };
   servicesOfWorkspace.wikiHookService.setLatestOnReloadCallback(triggerFullReload);
-  useSetWebViewReferenceToService(servicesOfWorkspace.wikiHookService, webViewReference);
+  /**
+   * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
+   * @url https://github.com/react-native-webview/react-native-webview/issues/3126
+   */
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
