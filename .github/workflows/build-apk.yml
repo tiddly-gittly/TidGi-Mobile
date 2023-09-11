@@ -47,13 +47,13 @@ jobs:
           curl -s "https://get.sdkman.io" | bash
           source "$HOME/.sdkman/bin/sdkman-init.sh"
           sdk version
-      - name: Install Kotlin 1.9.0 with SDKMAN
+      - name: Install Kotlin 1.7.1 with SDKMAN
         run: |
           source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk install kotlin 1.9.0
+          sdk install kotlin 1.7.1
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install
 
       ## configure cash for gradle : will help to reduce build time
       - name: Cache Gradle Wrapper
