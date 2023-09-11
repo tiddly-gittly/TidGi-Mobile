@@ -57,11 +57,15 @@ interface WikiActions {
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
 
+const defaultWorkspaces = [
+  { type: 'webpage', id: 'help', name: '?', uri: 'https://tidgi.fun/#TidGi-Mobile' },
+] satisfies IWorkspace[];
+
 export const useWorkspaceStore = create<WikiState & WikiActions>()(
   immer(devtools(
     persist(
       (set) => ({
-        workspaces: [] as IWorkspace[],
+        workspaces: defaultWorkspaces,
         add: (newWorkspace) => {
           let result: IWorkspace | undefined;
           set((state) => {
