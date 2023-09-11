@@ -81,6 +81,7 @@
     "zx": "^7.2.3"
   },
   "resolutions": {
-    "react-native-reanimated": "3.3.0"
+    "react-native-reanimated": "$react-native-reanimated",
+    "tw5-typed": "$tw5-typed"
   }
 }

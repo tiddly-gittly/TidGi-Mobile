@@ -196,10 +196,6 @@ export class BackgroundSyncService {
         },
         body: JSON.stringify(request),
       }).then(response => response.json() as Promise<ISyncEndPointResponse>);
-      // DEBUG: console request
-      console.log(`request`, request);
-      // DEBUG: console response
-      console.log(`response`, response);
       if (response === undefined) return false;
       const { deletes, updates } = response;
       await this.#updateTiddlersFromServer(wiki, deletes, updates);
@@ -259,6 +255,7 @@ export class BackgroundSyncService {
             if (text !== undefined && this.checkIsLargeText(text, fieldsToSave.type as string)) {
               // save to fs instead of sqlite. See `WikiStorageService.#loadFromServer` for how we load it later.
               await this.saveToFSFromServer(wiki, title);
+              tiddler.text = null;
             } else {
               tiddler.text = text;
             }

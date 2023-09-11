@@ -1,7 +1,8 @@
+/* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
 import * as fs from 'expo-file-system';
 import { Observable } from 'rxjs';
-import type { IChangedTiddlers } from 'tiddlywiki';
+import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
 import { TiddlersLogOperation } from '../../pages/Importer/createTable';
@@ -11,7 +12,7 @@ import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
-import { getSyncIgnoredTiddlers } from './ignoredTiddler';
+import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from './ignoredTiddler';
 import { IWikiServerStatusObject } from './types';
 
 /**
@@ -52,9 +53,11 @@ export class WikiStorageService {
   /**
    * Return the e-tag
    */
-  async saveTiddler(title: string, text: string, fieldStrings: string): Promise<string> {
+  async saveTiddler(title: string, fields: ITiddlerFieldsParam, encoding?: 'utf8' | 'base64'): Promise<string> {
     try {
       let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
+      const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
+      const { text, title: _, ...fieldsToSave } = fields as ITiddlerFieldsParam & { text?: string; title: string };
 
       // Get the database connection for the workspace
       const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
@@ -65,12 +68,37 @@ export class WikiStorageService {
         const tiddlerRepo = transactionalEntityManager.getRepository(TiddlerSQLModel);
         const tiddlerChangeRepo = transactionalEntityManager.getRepository(TiddlerChangeSQLModel);
 
-        // Save or update tiddler
-        await tiddlerRepo.save({
-          title,
-          text,
-          fields: fieldStrings,
-        });
+        /**
+         * Save or update tiddler
+         * See `BackgroundSyncService.#updateTiddlersFromServer` for a similar logic
+         */
+        const tiddler = new TiddlerSQLModel();
+        tiddler.title = title;
+        // for `$:/` tiddlers, if being skinny will throw error like `"Linked List only accepts string values, not " + value;`
+        if (saveFullTiddler) {
+          tiddler.fields = JSON.stringify({
+            text,
+            title,
+            ...fieldsToSave,
+          });
+        } else {
+          // prevent save huge duplicated content to SQLite, if not necessary
+          if (text !== undefined && backgroundSyncService.checkIsLargeText(text, fieldsToSave.type as string)) {
+            // save to fs instead of sqlite. See `WikiStorageService.#loadFromServer` for how we load it later.
+            // `BackgroundSyncService.#updateTiddlersFromServer` will use saveToFSFromServer, but here we already have the text, so we can save it directly
+            await fs.writeAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title), text, { encoding });
+            tiddler.text = null;
+          } else {
+            tiddler.text = text;
+          }
+          tiddler.fields = JSON.stringify({
+            _is_skinny: '',
+            title,
+            ...fieldsToSave,
+          });
+        }
+        await tiddlerRepo.save(tiddler);
+
         if (!(getSyncIgnoredTiddlers(title).includes(title))) {
           // Check if a tiddler with the same title already exists
           const existingTiddler = await tiddlerRepo.findOne({ where: { title } });
@@ -142,7 +170,7 @@ export class WikiStorageService {
       const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
       const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
       const tiddler = await tiddlerRepo.findOne({ where: { title } });
-      return tiddler?.text;
+      return tiddler?.text ?? undefined;
     } catch (error) {
       console.error(`SQL error when getting ${title} : ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       return undefined;

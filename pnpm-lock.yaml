@@ -6,6 +6,7 @@ settings:
 
 overrides:
   react-native-reanimated: 3.3.0
+  tw5-typed: ^0.3.10
 
 dependencies:
   '@react-native-async-storage/async-storage':
@@ -2673,8 +2674,8 @@ packages:
     resolution: {integrity: sha512-Uy0+khmZqUrUGm5dmMqVlnvufZRSK0FbYzVgp0UMstm+F5+W2/jnEEQyc9vo1ZR/E5ZI/B1WjjoTqBqwJL6Krw==}
     dev: false
 
-  /@types/codemirror@5.60.9:
-    resolution: {integrity: sha512-8RhLhlGo9bAkytFYKDzezorY2ojvGk+4xFEso/6Hc2oR1oE2P9lI+AEkbUW7cDlKcQAK5WJkJRBLTdjBE7xQPA==}
+  /@types/codemirror@5.60.10:
+    resolution: {integrity: sha512-ZTA3teiCWKT8HUUofqlGPlShu5ojdIajizsS0HpH6GL0/iEdjRt7fXbCLHHqKYP5k7dC/HnnWIjZAiELUwBdjQ==}
     dependencies:
       '@types/tern': 0.23.4
     dev: true
@@ -9338,7 +9339,7 @@ packages:
   /tw5-typed@0.3.10:
     resolution: {integrity: sha512-c/NEOxuiGS75spVzT88BgAQORDg9l9z2g4HWCOmAoVQN27t0B910K4Db7IN5W7PF3BF88Zn4n+tjxqIwuDg2uQ==}
     dependencies:
-      '@types/codemirror': 5.60.9
+      '@types/codemirror': 5.60.10
       '@types/echarts': 4.9.18
       '@types/node': 18.17.14
     dev: true

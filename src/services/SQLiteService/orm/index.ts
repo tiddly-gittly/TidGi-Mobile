@@ -7,7 +7,7 @@ export class TiddlerSQLModel {
   title!: string;
 
   @Column('text')
-  text?: string;
+  text?: string | null;
 
   @Column('text')
   fields?: string;

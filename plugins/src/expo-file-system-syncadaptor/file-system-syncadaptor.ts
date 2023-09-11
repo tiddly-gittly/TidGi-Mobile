@@ -6,7 +6,6 @@ import type { AppDataService } from '../../../src/services/AppDataService/index.
 import type { BackgroundSyncService } from '../../../src/services/BackgroundSyncService/index.js';
 import type { NativeService } from '../../../src/services/NativeService/index.js';
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
-import { getFullSaveTiddlers } from '../../../src/services/WikiStorageService/ignoredTiddler.js';
 import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
@@ -236,11 +235,10 @@ class TidGiMobileFileSystemSyncAdaptor {
       const title = tiddler.fields.title;
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
-      const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
       const etag = await this.wikiStorageService.saveTiddler(
         title,
-        tiddler.fields.text,
-        saveFullTiddler ? JSON.stringify(tiddler.getFieldStrings()) : JSON.stringify({ ...tiddler.getFieldStrings({ exclude: ['text'] }), _is_skinny: '' }),
+        tiddler.getFieldStrings(),
+        $tw.wiki.isBinaryTiddler(title) ? 'base64' : undefined,
       );
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
