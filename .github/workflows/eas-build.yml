@@ -4,23 +4,12 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*.*.*'
+      - 'eas-v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
       - 'public/**'
       - 'scripts/**'
-      - '.vscode'
-      - '.idea'
-  pull_request:
-    branches:
-      - master
-      - main
-    paths-ignore:
-      - 'README.md'
-      - 'wiki/**'
-      - 'public/**'
-      - '.scripts/**'
       - '.vscode'
       - '.idea'
 

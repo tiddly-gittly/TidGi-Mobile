@@ -1,4 +1,4 @@
-name: EAS Build
+name: Build APK
 
 on:
   workflow_dispatch:
@@ -42,7 +42,16 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-  
+      - name: Install SDKMAN
+        run: |
+          curl -s "https://get.sdkman.io" | bash
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk version
+      - name: Install Kotlin 1.9.0 with SDKMAN
+        run: |
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk install kotlin 1.9.0
+
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
@@ -66,6 +75,17 @@ jobs:
         run: npx expo prebuild
       - name: Build apk
         run: cd android/app && gradle assembleRelease
+
+      ## sign generated apk
+      - name: Sign APK
+        id: sign_app
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+          alias: ${{ secrets.ANDROID_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

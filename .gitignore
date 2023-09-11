@@ -41,3 +41,4 @@ scripts/fetchHTML/
 # generated plugin from `npm run build:plugin`
 # Not ignoring this, to prevent [stderr] None of these files exist:  * syncadaptor-ui.html
 # assets/plugins/
+@tiddly-gittly__tidgi-mobile.jks.base64.txt
