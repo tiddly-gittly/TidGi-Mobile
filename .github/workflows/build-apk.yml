@@ -72,7 +72,7 @@ jobs:
 
 
       - name: Build by eject eas
-        run: npx expo prebuild
+        run: npx expo prebuild -p android --clean
       - name: Build apk
         run: cd android/app && gradle assembleRelease
 
