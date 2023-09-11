@@ -1,0 +1,78 @@
+name: EAS Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+    paths-ignore:
+      - 'README.md'
+      - 'wiki/**'
+      - 'public/**'
+      - 'scripts/**'
+      - '.vscode'
+      - '.idea'
+  pull_request:
+    branches:
+      - master
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'wiki/**'
+      - 'public/**'
+      - '.scripts/**'
+      - '.vscode'
+      - '.idea'
+
+jobs:
+  build:
+    name: Install and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+          cache: pnpm
+      - name: Set up JDK environment
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+  
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      ## configure cash for gradle : will help to reduce build time
+      - name: Cache Gradle Wrapper
+        uses: actions/cache@v2
+        with:
+          path: ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-caches-
+
+
+      - name: Build by eject eas
+        run: npx expo prebuild
+      - name: Build apk
+        run: cd android/app && gradle assembleRelease
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/release/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
