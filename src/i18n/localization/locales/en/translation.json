@@ -286,7 +286,8 @@
     "GitTokenExpireOrWrong": "The Git credential (Token) has expired and you need to log in again, or the credential does not correspond to the user name",
     "InitializeWorkspaceViewDone": "Created successfully, content will be loaded soon",
     "FailedToOpenFile": "Failed To Open File {{path}} {{errorMessage}}",
-    "FailedToOpenDirectory": "Failed To Open Directory {{path}} {{errorMessage}}"
+    "FailedToOpenDirectory": "Failed To Open Directory {{path}} {{errorMessage}}",
+    "FileNotSyncedYet": "File not sync to here yet, connect to a server with this file retry to receive it."
   },
   "Cancel": "Cancel",
   "Preference": {

@@ -271,10 +271,6 @@ class TidGiMobileFileSystemSyncAdaptor {
         throw new Error(`Tiddler "${title}" not exist`);
       }
       const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
-      if (tiddlerText === undefined) {
-        // TODO: fetch large file using HTTP from TidGi-Desktop
-        throw new Error(`Tiddler "${title}" is not synced yet.`);
-      }
       const tiddlerFields: ITiddlerFields = { ...tiddler.fields, text: tiddlerText, type: tiddler.fields.type ?? 'text/vnd.tiddlywiki', bag: 'default' };
 
       // only add revision if it > 0 or exists

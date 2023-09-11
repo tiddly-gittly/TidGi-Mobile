@@ -3,6 +3,7 @@ import * as fs from 'expo-file-system';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
+import i18n from '../../i18n';
 import { TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { useServerStore } from '../../store/server';
@@ -128,8 +129,12 @@ export class WikiStorageService {
     }
   }
 
-  async loadTiddlerText(title: string): Promise<string | undefined> {
-    return (await this.#loadFromSqlite(title)) ?? (await this.#loadFromFS(title)) ?? await this.#loadFromServerAndSaveToFS(title);
+  async loadTiddlerText(title: string): Promise<string> {
+    const tiddlerText = (await this.#loadFromSqlite(title)) ?? (await this.#loadFromFS(title)) ?? await this.#loadFromServerAndSaveToFS(title);
+    if (tiddlerText === undefined) {
+      throw new Error(`${title} ${i18n.t('Log.FileNotSyncedYet')}`);
+    }
+    return tiddlerText;
   }
 
   async #loadFromSqlite(title: string): Promise<string | undefined> {
