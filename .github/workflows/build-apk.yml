@@ -37,20 +37,20 @@ jobs:
         with:
           node-version: 18.x
           cache: pnpm
-      - name: Set up JDK environment
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Install SDKMAN
-        run: |
-          curl -s "https://get.sdkman.io" | bash
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk version
-      - name: Install Kotlin 1.7.1 with SDKMAN
-        run: |
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk install kotlin 1.7.1
+      # - name: Set up JDK environment
+      #   uses: actions/setup-java@v3
+      #   with:
+      #     distribution: 'temurin'
+      #     java-version: '17'
+      # - name: Install SDKMAN
+      #   run: |
+      #     curl -s "https://get.sdkman.io" | bash
+      #     source "$HOME/.sdkman/bin/sdkman-init.sh"
+      #     sdk version
+      # - name: Install Kotlin 1.7.1 with SDKMAN
+      #   run: |
+      #     source "$HOME/.sdkman/bin/sdkman-init.sh"
+      #     sdk install kotlin 1.7.1
 
       - name: Install dependencies
         run: pnpm install
@@ -74,7 +74,9 @@ jobs:
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
       - name: Build apk
-        run: cd android/app && gradle assembleRelease
+        run: |
+          cd android/app
+          gradle assembleRelease
 
       ## sign generated apk
       - name: Sign APK
