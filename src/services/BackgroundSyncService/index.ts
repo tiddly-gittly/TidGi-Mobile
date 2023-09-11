@@ -155,9 +155,15 @@ export class BackgroundSyncService {
           if ('bag' in fieldsWithoutText) delete fieldsWithoutText.bag;
           if ('revision' in fieldsWithoutText) delete fieldsWithoutText.revision;
 
+          let text;
+          try {
+            text = skinnyTiddlerWithText.text ?? (await fs.readAsStringAsync(getWikiTiddlerPathByTitle(wiki, title)));
+          } catch (error) {
+            console.error(`Failed to load file ${title} in getChangeLogsSinceLastSync ${(error as Error).message}`);
+          }
           const fields = {
             ...fieldsWithoutText,
-            text: skinnyTiddlerWithText.text ?? (await fs.readAsStringAsync(getWikiTiddlerPathByTitle(wiki, title))),
+            text,
           } satisfies ITiddlerFieldsParam;
 
           result.fields = fields;

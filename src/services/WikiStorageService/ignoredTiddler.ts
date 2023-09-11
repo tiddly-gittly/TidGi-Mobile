@@ -5,7 +5,7 @@
  */
 export const getSyncIgnoredTiddlers = (
   title?: string,
-) => [...((title?.startsWith('Draft of ') || title?.startsWith('$:/temp') || title?.startsWith('$:/state')) ? [title] : []), '$:/StoryList', '$:/layout'];
+) => [...((title?.startsWith('Draft of ') || title?.startsWith('$:/temp') || title?.startsWith('$:/state')) ? [title] : []), '$:/StoryList', '$:/layout', '$:/Import'];
 /**
  * Tiddlers that should save to SQLite as full tiddlers. Like plugins that starts with `$:/`.
  *
