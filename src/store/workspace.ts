@@ -58,7 +58,7 @@ interface WikiActions {
 }
 
 const defaultWorkspaces = [
-  { type: 'webpage', id: 'help', name: '?', uri: 'https://tidgi.fun/#TidGi-Mobile' },
+  { type: 'webpage', id: 'help', name: '?', uri: 'https://tidgi.fun/#:TidGi-Mobile' },
 ] satisfies IWorkspace[];
 
 export const useWorkspaceStore = create<WikiState & WikiActions>()(
