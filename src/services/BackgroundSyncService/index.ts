@@ -157,7 +157,7 @@ export class BackgroundSyncService {
 
           const fields = {
             ...fieldsWithoutText,
-            text: skinnyTiddlerWithText.text,
+            text: skinnyTiddlerWithText.text ?? (await fs.readAsStringAsync(getWikiTiddlerPathByTitle(wiki, title))),
           } satisfies ITiddlerFieldsParam;
 
           result.fields = fields;
