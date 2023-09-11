@@ -53,11 +53,11 @@ export class WikiStorageService {
   /**
    * Return the e-tag
    */
-  async saveTiddler(title: string, fields: ITiddlerFieldsParam, encoding?: 'utf8' | 'base64'): Promise<string> {
+  async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
     try {
       let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
       const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
-      const { text, title: _, ...fieldsToSave } = fields as ITiddlerFieldsParam & { text?: string; title: string };
+      const { text, title: _, ...fieldsToSave } = fields as (ITiddlerFieldsParam & { text?: string; title: string });
 
       // Get the database connection for the workspace
       const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
@@ -86,7 +86,8 @@ export class WikiStorageService {
           if (text !== undefined && backgroundSyncService.checkIsLargeText(text, fieldsToSave.type as string)) {
             // save to fs instead of sqlite. See `WikiStorageService.#loadFromServer` for how we load it later.
             // `BackgroundSyncService.#updateTiddlersFromServer` will use saveToFSFromServer, but here we already have the text, so we can save it directly
-            await fs.writeAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title), text, { encoding });
+            // don't set encoding here, otherwise read as utf8 will failed.
+            await fs.writeAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title), text);
             tiddler.text = null;
           } else {
             tiddler.text = text;

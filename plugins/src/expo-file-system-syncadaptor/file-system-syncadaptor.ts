@@ -235,11 +235,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       const title = tiddler.fields.title;
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
-      const etag = await this.wikiStorageService.saveTiddler(
-        title,
-        tiddler.getFieldStrings(),
-        $tw.wiki.isBinaryTiddler(title) ? 'base64' : undefined,
-      );
+      const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings());
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
       } else {
