@@ -196,6 +196,10 @@ export class BackgroundSyncService {
         },
         body: JSON.stringify(request),
       }).then(response => response.json() as Promise<ISyncEndPointResponse>);
+      // DEBUG: console request
+      console.log(`request`, request);
+      // DEBUG: console response
+      console.log(`response`, response);
       if (response === undefined) return false;
       const { deletes, updates } = response;
       await this.#updateTiddlersFromServer(wiki, deletes, updates);
@@ -224,21 +228,22 @@ export class BackgroundSyncService {
 
         // Update Tiddlers
         for (const tiddlerFields of updates) {
-          let { text, title, ...fieldsToSave } = tiddlerFields as ITiddlerFieldsParam & { text?: string; title: string };
+          const { text, title, ...fieldsToSave } = tiddlerFields as ITiddlerFieldsParam & { text?: string; title: string };
           const ignore = getSyncIgnoredTiddlers(title).includes(title);
           if (ignore) continue;
           const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
 
-          // If no text is provided, fetch from existing tiddler. This should not happened in tw-mobile-sync, just in case.
-          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-          if (!text) {
-            const existingTiddler = await tiddlerRepo.findOne({ where: { title } });
-            if (existingTiddler === null) {
-              console.warn(`Cannot find text for tiddler ${title}`);
-            } else {
-              text = existingTiddler.text ?? '';
-            }
-          }
+          // If no text is provided, means user delete the text on the Desktop. But not deleting this tiddler. fixes #18
+          // // If no text is provided, fetch from existing tiddler. This should not happened in tw-mobile-sync, just in case.
+          // // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+          // if (!text) {
+          //   const existingTiddler = await tiddlerRepo.findOne({ where: { title } });
+          //   if (existingTiddler === null) {
+          //     console.warn(`Cannot find text for tiddler ${title}`);
+          //   } else {
+          //     text = existingTiddler.text ?? '';
+          //   }
+          // }
 
           const tiddler = new TiddlerSQLModel();
           tiddler.title = title;
