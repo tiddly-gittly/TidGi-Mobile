@@ -2,7 +2,7 @@
   "expo": {
     "name": "TidGi",
     "slug": "tidgi-mobile",
-    "version": "0.3.8",
+    "version": "0.3.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
