@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MD3Colors, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { FAKE_USER_AGENT } from '../../constants/webview';
+import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
@@ -59,6 +60,9 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
   const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
+  useEffect(() => {
+    void backgroundSyncService.updateServerOnlineStatus();
+  }, [webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
   const preloadScript = useMemo(() => `
