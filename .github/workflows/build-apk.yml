@@ -90,6 +90,6 @@ jobs:
         with:
           draft: true
           generate_release_notes: true
-          files: android/app/build/outputs/apk/release/**/*
+          files: android/app/build/outputs/apk/release/app-release-signed.apk 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
