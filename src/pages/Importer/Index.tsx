@@ -8,6 +8,7 @@ import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-pa
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { ServerList } from '../../components/ServerList';
+import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
 import { useImportHTML } from './useImportHTML';
@@ -134,6 +135,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         mode='text'
         disabled={importStatus !== 'idle'}
         onPress={() => {
+          void backgroundSyncService.updateServerOnlineStatus();
           setExpandServerList(!expandServerList);
         }}
       >

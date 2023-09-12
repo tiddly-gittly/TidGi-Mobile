@@ -112,6 +112,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       <Button
         mode='text'
         onPress={() => {
+          void backgroundSyncService.updateServerOnlineStatus();
           setExpandServerList(!expandServerList);
         }}
       >
