@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ColorSchemeName } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -12,16 +13,18 @@ export interface ConfigState {
   syncInBackground: boolean;
   syncInterval: number;
   syncIntervalBackground: number;
+  theme: ColorSchemeName | 'default';
   userName: string;
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: undefined,
-  rememberLastVisitState: true,
   keepAliveInBackground: true,
-  syncInBackground: true,
   preferredLanguage: undefined,
+  rememberLastVisitState: true,
+  syncInBackground: true,
   syncInterval: 60 * 1000,
   syncIntervalBackground: 60 * 30 * 1000,
+  theme: 'default',
   userName: '',
 };
 interface ConfigActions {

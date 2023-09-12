@@ -6,6 +6,7 @@ import { Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { Developer } from './Developer';
+import { General } from './General';
 import { Language } from './Language';
 import { Performance } from './Performance';
 import { ServerAndSync } from './ServerAndSync';
@@ -26,6 +27,7 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
   const { t } = useTranslation();
 
   const sections = useMemo(() => [
+    { title: t('Preference.General'), data: [General] },
     { title: t('Preference.Performance'), data: [Performance] },
     { title: t('Preference.TiddlyWiki'), data: [TiddlyWiki] },
     { title: t('Preference.Sync'), data: [ServerAndSync] },

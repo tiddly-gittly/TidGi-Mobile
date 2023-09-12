@@ -18,6 +18,7 @@ import { Importer } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
+import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
@@ -30,8 +31,9 @@ const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
+  const themeConfig = useConfigStore(state => state.theme);
   const colorScheme = useColorScheme();
-  const theme = colorScheme === 'light' ? lightTheme : darkTheme;
+  const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
   useRegisterReceivingShareIntent();
 
   return (
