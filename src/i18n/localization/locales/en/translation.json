@@ -239,7 +239,7 @@
     "RestartMessage": "You need to restart the app for this change to take affect.",
     "Later": "Later",
     "RestartNow": "Restart Now",
-    "MadeWithLove": "<0>Made with </0><1>❤</1><2> by </2>",
+    "MadeWithLove": "Made with ❤ by ",
     "ReportBug": "Report Bug",
     "ReportBugDetail": "If you have read the tutorial, and carefully read the error output text, and wisely check your input, you can click on the button."
   },

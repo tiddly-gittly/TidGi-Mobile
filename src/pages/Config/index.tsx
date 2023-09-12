@@ -5,6 +5,7 @@ import { SectionList } from 'react-native';
 import { Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
+import { About } from './About';
 import { Developer } from './Developer';
 import { General } from './General';
 import { Language } from './Language';
@@ -32,6 +33,7 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
     { title: t('Preference.TiddlyWiki'), data: [TiddlyWiki] },
     { title: t('Preference.Sync'), data: [ServerAndSync] },
     { title: t('Preference.Languages'), data: [Language] },
+    { title: t('ContextMenu.About'), data: [About] },
     { title: t('Preference.DeveloperTools'), data: [Developer] },
   ], [t]);
   return (
