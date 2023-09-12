@@ -127,8 +127,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
 }
 
 const ModalContainer = styled.View`
-  background-color: white;
+  background-color: ${({ theme }) => theme.colors.background};
   padding: 20px;
+  height: 100%;
 `;
 const ButtonsContainer = styled.View`
   flex-direction: row;

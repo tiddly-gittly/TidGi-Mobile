@@ -78,7 +78,7 @@ export function WebPageEditModelContent({ id, onClose }: WikiEditModalProps): JS
 }
 
 const ModalContainer = styled.View`
-  background-color: white;
+  background-color: ${({ theme }) => theme.colors.background};
   padding: 20px;
 `;
 

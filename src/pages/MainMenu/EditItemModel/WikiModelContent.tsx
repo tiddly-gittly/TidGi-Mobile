@@ -6,8 +6,8 @@ import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Modal } from 'react-native';
-import { Button, MD3Colors, Portal, Text, TextInput } from 'react-native-paper';
-import { styled } from 'styled-components/native';
+import { Button, MD3Colors, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { styled, ThemeProvider } from 'styled-components/native';
 
 import Collapsible from 'react-native-collapsible';
 import { ServerList } from '../../../components/ServerList';
@@ -25,6 +25,8 @@ interface WikiEditModalProps {
 
 export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
   const wiki = useWorkspaceStore(state =>
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
@@ -147,12 +149,13 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
           }}
         />
         <Picker
+          style={pickerStyle}
           selectedValue={newServerID}
           onValueChange={(itemValue) => {
             setNewServerID(itemValue);
           }}
         >
-          {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} />)}
+          {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} style={pickerStyle} />)}
         </Picker>
         <Button onPress={handleAddServer}>
           <Text>{t('EditWorkspace.AddSelectedServer')}</Text>
@@ -207,39 +210,41 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         </Button>
       </ButtonsContainer>
       <Portal>
-        <Modal
-          visible={addServerModelVisible}
-          onDismiss={() => {
-            setAddServerModelVisible(false);
-          }}
-        >
-          <AddNewServerModelContent
-            id={id}
-            onClose={() => {
+        <ThemeProvider theme={theme}>
+          <Modal
+            visible={addServerModelVisible}
+            onDismiss={() => {
               setAddServerModelVisible(false);
             }}
-          />
-        </Modal>
-        <Modal
-          visible={wikiChangeLogModelVisible}
-          onDismiss={() => {
-            setWikiChangeLogModelVisible(false);
-          }}
-        >
-          <WikiChangesModelContent
-            id={id}
-            onClose={() => {
+          >
+            <AddNewServerModelContent
+              id={id}
+              onClose={() => {
+                setAddServerModelVisible(false);
+              }}
+            />
+          </Modal>
+          <Modal
+            visible={wikiChangeLogModelVisible}
+            onDismiss={() => {
               setWikiChangeLogModelVisible(false);
             }}
-          />
-        </Modal>
+          >
+            <WikiChangesModelContent
+              id={id}
+              onClose={() => {
+                setWikiChangeLogModelVisible(false);
+              }}
+            />
+          </Modal>
+        </ThemeProvider>
       </Portal>
     </ModalContainer>
   );
 }
 
 const ModalContainer = styled.View`
-  background-color: white;
+  background-color: ${({ theme }) => theme.colors.background};
   padding: 20px;
 `;
 

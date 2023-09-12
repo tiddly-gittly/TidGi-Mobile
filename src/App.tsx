@@ -9,6 +9,10 @@ import { HeaderBackButton } from '@react-navigation/elements';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
+import { useColorScheme } from 'react-native';
+import { PaperProvider } from 'react-native-paper';
+import { ThemeProvider } from 'styled-components';
+import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
 import { Importer } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
@@ -26,44 +30,59 @@ const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'light' ? lightTheme : darkTheme;
   useRegisterReceivingShareIntent();
 
   return (
     <I18nextProvider i18n={i18n}>
-      <StatusBar hidden={false} />
-      <NavigationContainer ref={navigationReference}>
-        <Stack.Navigator initialRouteName='MainMenu'>
-          <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
-          <Stack.Screen
-            name='Config'
-            component={Config}
-            options={({ navigation }) => ({
-              presentation: 'modal',
-              headerTitle: t('Preference.Title'),
-              headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={(navigation as NavigationProp<ReactNavigation.RootParamList>).goBack} />,
-            })}
-          />
-          <Stack.Screen
-            name='MainMenu'
-            component={MainMenu}
-            options={({ navigation }) => ({
-              headerTitle: t('Sidebar.Main'),
-              headerRight: () => (
-                <Ionicons
-                  name='settings'
-                  size={32}
-                  color='black'
-                  style={{ marginRight: 10 }}
-                  onPress={() => {
-                    (navigation as NavigationProp<ReactNavigation.RootParamList>).navigate('Config' as never);
-                  }}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen name='Importer' component={Importer} />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <PaperProvider theme={theme}>
+        <ThemeProvider theme={theme}>
+          <StatusBar hidden={false} />
+          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
+            <Stack.Navigator initialRouteName='MainMenu'>
+              <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
+              <Stack.Screen
+                name='Config'
+                component={Config}
+                options={({ navigation }) => ({
+                  presentation: 'modal',
+                  headerTitle: t('Preference.Title'),
+                  headerTitleStyle: { color: theme.colors.primary },
+                  headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={(navigation as NavigationProp<ReactNavigation.RootParamList>).goBack} />,
+                })}
+              />
+              <Stack.Screen
+                name='MainMenu'
+                component={MainMenu}
+                options={({ navigation }) => ({
+                  headerTitle: t('Sidebar.Main'),
+                  headerTitleStyle: { color: theme.colors.primary },
+                  headerRight: () => (
+                    <Ionicons
+                      name='settings'
+                      size={32}
+                      color={theme.colors.primary}
+                      style={{ marginRight: 10 }}
+                      onPress={() => {
+                        (navigation as NavigationProp<ReactNavigation.RootParamList>).navigate('Config' as never);
+                      }}
+                    />
+                  ),
+                })}
+              />
+              <Stack.Screen
+                name='Importer'
+                options={() => ({
+                  headerTitle: t('AddWorkspace.ImportWiki'),
+                  headerTitleStyle: { color: theme.colors.primary },
+                })}
+                component={Importer}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </ThemeProvider>
+      </PaperProvider>
     </I18nextProvider>
   );
 };

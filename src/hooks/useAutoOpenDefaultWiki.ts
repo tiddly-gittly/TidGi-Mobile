@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import { useEffect, useState } from 'react';

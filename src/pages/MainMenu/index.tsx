@@ -2,8 +2,8 @@ import type { StackScreenProps } from '@react-navigation/stack';
 import * as Haptics from 'expo-haptics';
 import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Modal, PaperProvider, Portal } from 'react-native-paper';
-import { styled } from 'styled-components/native';
+import { Button, Modal, Portal, useTheme } from 'react-native-paper';
+import { ThemeProvider, styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
@@ -12,7 +12,7 @@ import { EditItemModel } from './EditItemModel';
 
 const Container = styled.View`
   flex: 1;
-  background-color: #f5f5f5;
+  background-color: ${({ theme }) => theme.colors.background};
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -30,6 +30,7 @@ export interface MainMenuProps {
 
 export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
   const { t } = useTranslation();
+  const theme = useTheme();
 
   // State variables for the modal
   const [wikiModalVisible, setWikiModalVisible] = useState(false);
@@ -39,23 +40,23 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   useAutoOpenDefaultWiki(preventAutoOpen);
 
   return (
-    <PaperProvider>
-      <Container>
-        <WorkspaceList
-          onPress={(wiki) => {
-            navigation.navigate('WikiWebView', { id: wiki.id });
-          }}
-          onLongPress={(wiki) => {
-            void Haptics.selectionAsync();
-            setSelectedWikiID(wiki.id);
-            setWikiModalVisible(true);
-          }}
-          onReorderEnd={(workspaces) => {
-            setJustReordered(true);
-            useWorkspaceStore.setState({ workspaces });
-          }}
-        />
-        <Portal>
+    <Container>
+      <WorkspaceList
+        onPress={(wiki) => {
+          navigation.navigate('WikiWebView', { id: wiki.id });
+        }}
+        onLongPress={(wiki) => {
+          void Haptics.selectionAsync();
+          setSelectedWikiID(wiki.id);
+          setWikiModalVisible(true);
+        }}
+        onReorderEnd={(workspaces) => {
+          setJustReordered(true);
+          useWorkspaceStore.setState({ workspaces });
+        }}
+      />
+      <Portal>
+        <ThemeProvider theme={theme}>
           <Modal
             visible={wikiModalVisible}
             onDismiss={() => {
@@ -69,16 +70,16 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
               }}
             />
           </Modal>
-        </Portal>
-        <MainFeatureButton
-          mode='outlined'
-          onPress={() => {
-            navigation.navigate('Importer');
-          }}
-        >
-          {t('Menu.ScanQRToSync')}
-        </MainFeatureButton>
-      </Container>
-    </PaperProvider>
+        </ThemeProvider>
+      </Portal>
+      <MainFeatureButton
+        mode='outlined'
+        onPress={() => {
+          navigation.navigate('Importer');
+        }}
+      >
+        {t('Menu.ScanQRToSync')}
+      </MainFeatureButton>
+    </Container>
   );
 };

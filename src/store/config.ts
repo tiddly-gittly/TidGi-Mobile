@@ -4,7 +4,8 @@ import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 
 export interface ConfigState {
-  autoOpenDefaultWiki: boolean;
+  /** the initial value should be undefined, so an initial true value won't immediately trigger autoOpen */
+  autoOpenDefaultWiki?: boolean;
   keepAliveInBackground: boolean;
   preferredLanguage?: string;
   rememberLastVisitState: boolean;
@@ -14,14 +15,14 @@ export interface ConfigState {
   userName: string;
 }
 const defaultConfig: ConfigState = {
-  autoOpenDefaultWiki: true,
+  autoOpenDefaultWiki: undefined,
   rememberLastVisitState: true,
   keepAliveInBackground: true,
   syncInBackground: true,
   preferredLanguage: undefined,
   syncInterval: 60 * 1000,
   syncIntervalBackground: 60 * 30 * 1000,
-  userName: 'TidGi User',
+  userName: '',
 };
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;

@@ -121,7 +121,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         />
       )}
       <ScanQRButton
-        mode={importStatus === 'idle' ? 'contained' : 'outlined'}
+        mode={importStatus === 'idle' ? 'elevated' : 'outlined'}
         disabled={importStatus !== 'idle'}
         onPress={() => {
           setQrScannerOpen(!qrScannerOpen);
@@ -171,7 +171,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             }}
           />
           <ImportWikiButton
-            mode='contained'
+            mode='elevated'
             disabled={importStatus !== 'idle'}
             onPress={addServerAndImport}
           >

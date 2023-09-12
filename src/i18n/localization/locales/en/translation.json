@@ -78,9 +78,9 @@
     "NotFilled": "Not Filled",
     "GitRepoUrl": "Git repo online url",
     "AndLinkToMainWorkspace": "and link to main Wiki",
-    "CreateWiki": "Create Wiki: ",
-    "CloneWiki": "Import Online Wiki: ",
-    "ImportWiki": "Import Wiki: ",
+    "CreateWiki": "Create Wiki",
+    "CloneWiki": "Import Online Wiki",
+    "ImportWiki": "Import Wiki",
     "LoginGithubAccount": "Login Github Account",
     "LogoutGithubAccount": "Log out of Github account",
     "MainWorkspaceDescription": "Contains TiddlyWiki's configuration files and public content when published as a blog.",
@@ -409,7 +409,14 @@
     "AutoOpenDefaultWiki": "Auto Open Default Wiki",
     "AutoOpenDefaultWikiDescription": "Automatically opens the default wiki when the app is opened, saving you from clicking on the list page.",
     "ClearServerList": "Clear Server List",
-    "SyncNowDescription": "Try to synchronize all wikis immediately, as long as they have a connectable server now."
+    "SyncNowDescription": "Try to synchronize all wikis immediately, as long as they have a connectable server now.",
+    "RegisterBackgroundSyncTask": "Register Background Sync Task",
+    "UnregisterBackgroundSyncTask": "Unregister Background Sync Task",
+    "Registered": "Registered",
+    "NotRegistered": "Not registered yet!",
+    "BackgroundSyncStatus": "Background Sync Status",
+    "Available": "Available",
+    "NotAvailable": "Not Available"
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",

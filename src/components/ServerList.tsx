@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
-import { Card } from 'react-native-paper';
+import { Card, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { backgroundSyncService } from '../services/BackgroundSyncService';
 import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
@@ -17,6 +17,7 @@ interface ServerListProps {
 
 export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, onlineOnly, serverIDs, activeIDs = [] }) => {
   const { t } = useTranslation();
+  const theme = useTheme();
   const serverList = useServerStore(state => serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]));
   useEffect(() => {
     if (onlineOnly === true) {
@@ -44,13 +45,13 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, on
         }}
       >
         <Card.Title
-          left={(props) => <Ionicons name={serverInfo.status === ServerStatus.online ? 'wifi' : 'cloud-offline'} color='black' {...props} />}
+          left={(props) => <Ionicons name={serverInfo.status === ServerStatus.online ? 'wifi' : 'cloud-offline'} color={theme.colors.primary} {...props} />}
           title={serverInfo.name}
           subtitle={activeIDs?.includes(serverInfo.id) ? t('EditWorkspace.SyncActive') : t('EditWorkspace.SyncNotActive')}
         />
       </ServerCard>
     );
-  }, [activeIDs, onPress, t]);
+  }, [activeIDs, onLongPress, onPress, t, theme]);
 
   return (
     <>

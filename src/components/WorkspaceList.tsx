@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback } from 'react';
 import DraggableFlatList from 'react-native-draggable-flatlist';
-import { Card } from 'react-native-paper';
+import { Card, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IWorkspace, useWorkspaceStore } from '../store/workspace';
 
@@ -14,6 +14,7 @@ interface WorkspaceListProps {
 
 export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd }) => {
   const workspacesList = useWorkspaceStore(state => state.workspaces);
+  const theme = useTheme();
 
   const renderItem = useCallback(({ item, drag }: { drag: () => void; item: IWorkspace }) => {
     return (
@@ -39,13 +40,13 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
               }}
               name='md-reorder-three-sharp'
               size={24}
-              color='black'
+              color={theme.colors.onSecondary}
             />
           )}
         />
       </WorkspaceCard>
     );
-  }, [onLongPress, onPress]);
+  }, [onLongPress, onPress, theme]);
 
   return (
     <>

@@ -2,7 +2,7 @@ import { StackScreenProps } from '@react-navigation/stack';
 import React, { FC, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SectionList } from 'react-native';
-import { PaperProvider, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { Developer } from './Developer';
@@ -29,16 +29,14 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
     { title: t('Preference.Performance'), data: [Performance] },
     { title: t('Preference.TiddlyWiki'), data: [TiddlyWiki] },
     { title: t('Preference.Sync'), data: [ServerAndSync] },
-    { title: t('Preference.DeveloperTools'), data: [Developer] },
     { title: t('Preference.Languages'), data: [Language] },
+    { title: t('Preference.DeveloperTools'), data: [Developer] },
   ], [t]);
   return (
-    <PaperProvider>
-      <PreferencesList
-        sections={sections}
-        renderSectionHeader={({ section: { title } }) => <TitleText variant='headlineLarge'>{title}</TitleText>}
-        renderItem={({ item }) => item()}
-      />
-    </PaperProvider>
+    <PreferencesList
+      sections={sections}
+      renderSectionHeader={({ section: { title } }) => <TitleText variant='headlineLarge'>{title}</TitleText>}
+      renderItem={({ item }) => item()}
+    />
   );
 };

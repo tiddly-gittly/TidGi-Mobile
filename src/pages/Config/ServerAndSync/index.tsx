@@ -33,6 +33,7 @@ export function ServerAndSync(): JSX.Element {
   return (
     <>
       <Button
+        mode='elevated'
         disabled={inSyncing}
         loading={inSyncing}
         onPress={async () => {
@@ -48,6 +49,7 @@ export function ServerAndSync(): JSX.Element {
       </Button>
       <Text>{t('Preference.SyncNowDescription')}</Text>
       <BackgroundSyncStatus />
+      <Text variant='titleLarge'>{t('AddWorkspace.ServerList')}</Text>
       <ServerList
         onLongPress={onEditServer}
         // TODO: press to test connection or something

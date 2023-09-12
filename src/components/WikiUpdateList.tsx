@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList } from 'react-native';
-import { Card } from 'react-native-paper';
+import { Card, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import type { LastArrayElement } from 'type-fest';
 import { ITiddlerChange, TiddlersLogOperation } from '../pages/Importer/createTable';
@@ -16,6 +16,7 @@ interface WikiListProps {
 }
 
 export const WikiUpdateList: React.FC<WikiListProps> = ({ onPress, onLongPress, wiki, lastSyncDate }) => {
+  const theme = useTheme();
   const [changesAfterLastSync, setChangesAfterLastSync] = useState<Awaited<ReturnType<typeof backgroundSyncService.getChangeLogsSinceLastSync>>>([]);
   useEffect(() => {
     void (async () => {
@@ -41,10 +42,14 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onPress, onLongPress, 
           onLongPress?.(item);
         }}
       >
-        <Card.Title left={(props) => <Ionicons name={iconName} color='black' {...props} />} title={item.title} subtitle={new Date(item.timestamp).toLocaleString()} />
+        <Card.Title
+          left={(props) => <Ionicons name={iconName} color={theme.colors.onSecondary} {...props} />}
+          title={item.title}
+          subtitle={new Date(item.timestamp).toLocaleString()}
+        />
       </WikiCard>
     );
-  }, [onLongPress, onPress]);
+  }, [onLongPress, onPress, theme]);
 
   return (
     <>
