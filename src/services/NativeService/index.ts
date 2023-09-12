@@ -26,9 +26,7 @@ export class NativeService {
 
       // this usually last for a very long time. So we use a timeout to prevent it from blocking the app
       const locationPromise = (async () => {
-        const location = (await Location.getLastKnownPositionAsync()) ?? await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Lowest,
-        });
+        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
         return location.coords;
       })();
 
