@@ -50,8 +50,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: remove prorietary bits (for f-droid)
-        run: npx zx scripts/fit-f-droid.mjs
+      # - name: remove prorietary bits (for f-droid)
+      #   run: npx zx scripts/fit-f-droid.mjs
 
       ## configure cash for gradle : will help to reduce build time
       - name: Cache Gradle Wrapper
