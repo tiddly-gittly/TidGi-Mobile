@@ -150,19 +150,22 @@ export class BackgroundSyncService {
           const skinnyTiddlerWithText = await tiddlerRepo.findOne({ where: { title } });
           if (skinnyTiddlerWithText === null) return result;
 
-          const fieldsWithoutText = JSON.parse(skinnyTiddlerWithText.fields ?? '{}') as ITiddlerFieldsParam;
-          if ('_is_skinny' in fieldsWithoutText) delete fieldsWithoutText._is_skinny;
-          if ('bag' in fieldsWithoutText) delete fieldsWithoutText.bag;
-          if ('revision' in fieldsWithoutText) delete fieldsWithoutText.revision;
+          /**
+           * This may have text if it is `getFullSaveTiddlers` tiddler, otherwise it is skinny tiddler without text.
+           */
+          const fieldsParameter = JSON.parse(skinnyTiddlerWithText.fields ?? '{}') as ITiddlerFieldsParam;
+          if ('_is_skinny' in fieldsParameter) delete fieldsParameter._is_skinny;
+          if ('bag' in fieldsParameter) delete fieldsParameter.bag;
+          if ('revision' in fieldsParameter) delete fieldsParameter.revision;
 
           let text;
           try {
-            text = skinnyTiddlerWithText.text ?? (await fs.readAsStringAsync(getWikiTiddlerPathByTitle(wiki, title)));
+            text = skinnyTiddlerWithText.text ?? fieldsParameter.text ?? (await fs.readAsStringAsync(getWikiTiddlerPathByTitle(wiki, title)));
           } catch (error) {
             console.error(`Failed to load file ${title} in getChangeLogsSinceLastSync ${(error as Error).message}`);
           }
           const fields = {
-            ...fieldsWithoutText,
+            ...fieldsParameter,
             text,
           } satisfies ITiddlerFieldsParam;
 
