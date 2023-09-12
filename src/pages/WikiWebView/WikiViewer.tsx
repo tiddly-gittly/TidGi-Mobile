@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MD3Colors, Text } from 'react-native-paper';
+import { MD3Colors, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
@@ -34,6 +34,7 @@ export interface WikiViewerProps {
 
 export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   const { t } = useTranslation();
+  const theme = useTheme();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
   useRequestNativePermissions();
@@ -86,6 +87,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   }
   return (
     <WebView
+      style={{ backgroundColor: theme.colors.background }}
       key={webViewKeyToReloadAfterRecycleByOS}
       originWhitelist={['*']}
       mediaPlaybackRequiresUserAction={false}

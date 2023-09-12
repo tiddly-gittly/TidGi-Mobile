@@ -11,6 +11,8 @@ import { WikiViewer } from './WikiViewer';
 
 const Container = styled.View`
   height: 100%;
+  width: 100%;
+  background-color: ${({ theme }) => theme.colors.background};
   display: flex;
   flex-direction: row;
 `;

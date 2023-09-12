@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MD3Colors, Text } from 'react-native-paper';
+import { MD3Colors, Text, useTheme } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { FAKE_USER_AGENT } from '../../constants/webview';
@@ -25,6 +25,7 @@ export interface WikiViewerProps {
 
 export const WebPageViewer = ({ webPageWorkspace }: WikiViewerProps) => {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [loadHtmlError, setLoadHtmlError] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
@@ -40,6 +41,7 @@ export const WebPageViewer = ({ webPageWorkspace }: WikiViewerProps) => {
   }
   return (
     <WebView
+      style={{ backgroundColor: theme.colors.background }}
       key={webViewKeyToReloadAfterRecycleByOS}
       originWhitelist={['*']}
       mediaPlaybackRequiresUserAction={false}
