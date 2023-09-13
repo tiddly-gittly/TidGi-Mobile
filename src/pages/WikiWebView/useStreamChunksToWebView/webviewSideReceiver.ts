@@ -77,30 +77,35 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
    * Delay the script execution slightly, until MutationObserver found document.body is ready.
    */
   function executeScriptsAfterInjectHTML() {
-    // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
-    appendStoreScript(skinnyTiddlersStoreAccumulatedContent, 'skinnyTiddlers');
-    appendStoreScript(tiddlersStoreAccumulatedContent, 'pluginsAndJS');
+    console.log('executeScriptsAfterInjectHTML');
+    try {
+      // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
+      appendStoreScript(skinnyTiddlersStoreAccumulatedContent, 'skinnyTiddlers');
+      appendStoreScript(tiddlersStoreAccumulatedContent, 'pluginsAndJS');
 
-    // load other scripts
-    const scriptElements = document.querySelectorAll('script');
-    for (let script of scriptElements) {
-      // skip tiddlersStoreScript we just added
-      if (script.classList.contains('tiddlywiki-tiddler-store')) continue;
-      // activate other scripts in the HTML
-      const newScript = document.createElement('script');
-      // copy all attributes from the original script to the new one
-      for (const { name, value } of script.attributes) {
-        newScript.setAttribute(name, value);
+      // load other scripts
+      const scriptElements = document.querySelectorAll('script');
+      for (let script of scriptElements) {
+        // skip tiddlersStoreScript we just added
+        if (script.classList.contains('tiddlywiki-tiddler-store')) continue;
+        // activate other scripts in the HTML
+        const newScript = document.createElement('script');
+        // copy all attributes from the original script to the new one
+        for (const { name, value } of script.attributes) {
+          newScript.setAttribute(name, value);
+        }
+        if (script.src) {
+          // if the original script has a 'src' url, load it
+          newScript.src = script.src;
+        } else {
+          // if the script has inline content, set it
+          newScript.textContent = script.textContent;
+        }
+        // replace the old script element with the new one
+        script.parentNode?.replaceChild(newScript, script);
       }
-      if (script.src) {
-        // if the original script has a 'src' url, load it
-        newScript.src = script.src;
-      } else {
-        // if the script has inline content, set it
-        newScript.textContent = script.textContent;
-      }
-      // replace the old script element with the new one
-      script.parentNode?.replaceChild(newScript, script);
+    } catch (e) {
+      console.error('executeScriptsAfterInjectHTML error', e);
     }
   }
 })();
