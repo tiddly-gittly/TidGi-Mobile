@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Modal, Portal, useTheme } from 'react-native-paper';
-import { ThemeProvider, styled } from 'styled-components/native';
+import { styled, ThemeProvider } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';

@@ -1,7 +1,8 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Modal, Portal, Text } from 'react-native-paper';
+import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
+import { ThemeProvider } from 'styled-components/native';
 import BackgroundSyncStatus from '../../../components/BackgroundSync';
 import { ServerList } from '../../../components/ServerList';
 import { backgroundSyncService } from '../../../services/BackgroundSyncService';
@@ -11,6 +12,7 @@ import { ServerEditModalContent } from './ServerEditModal';
 
 export function ServerAndSync(): JSX.Element {
   const { t } = useTranslation();
+  const theme = useTheme();
   const clearServerList = useServerStore(state => state.clearAll);
   const activeIDs = useWorkspaceStore(state =>
     state.workspaces
@@ -57,19 +59,21 @@ export function ServerAndSync(): JSX.Element {
         activeIDs={activeIDs}
       />
       <Portal>
-        <Modal
-          visible={serverModalVisible}
-          onDismiss={() => {
-            setServerModalVisible(false);
-          }}
-        >
-          <ServerEditModalContent
-            id={selectedServerID}
-            onClose={() => {
+        <ThemeProvider theme={theme}>
+          <Modal
+            visible={serverModalVisible}
+            onDismiss={() => {
               setServerModalVisible(false);
             }}
-          />
-        </Modal>
+          >
+            <ServerEditModalContent
+              id={selectedServerID}
+              onClose={() => {
+                setServerModalVisible(false);
+              }}
+            />
+          </Modal>
+        </ThemeProvider>
       </Portal>
       <Button
         onPress={clearServerList}
