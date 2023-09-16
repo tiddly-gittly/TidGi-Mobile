@@ -265,7 +265,14 @@ class TidGiMobileFileSystemSyncAdaptor {
         throw new Error(`Tiddler "${title}" not exist`);
       }
       const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
-      const tiddlerFields: ITiddlerFields = { ...tiddler.fields, text: tiddlerText, type: tiddler.fields.type ?? 'text/vnd.tiddlywiki', bag: 'default' };
+      const tiddlerFields: ITiddlerFields = {
+        ...tiddler.fields,
+        text: tiddlerText,
+        type: tiddler.fields.type ?? 'text/vnd.tiddlywiki',
+        _is_skinny: undefined,
+        revision: undefined,
+        bag: undefined,
+      };
 
       // only add revision if it > 0 or exists
       // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
