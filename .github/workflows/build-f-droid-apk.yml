@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*.*.*'
+      - 'fdroid-v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
@@ -65,9 +65,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-caches-
 
-
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
+
+      - name: remove prorietary bits (for f-droid)
+        run: npx zx scripts/fit-f-droid.mjs
+
       - name: Build apk
         run: |
           cd android/app

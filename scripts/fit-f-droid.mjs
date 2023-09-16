@@ -1,4 +1,10 @@
 import fs from 'fs-extra';
+import path from 'path';
 
-await Promise.all([fs.unlink('node_modules/expo-location'), fs.unlink('node_modules/expo-application')]);
-await Promise.all([fs.copy('libs/expo-location', 'node_modules/expo-location'), fs.copy('libs/expo-application', 'node_modules/expo-application')]);
+const projectRoot = path.join(__dirname, '..');
+
+const expoLocationPath = path.join(projectRoot, 'node_modules', 'expo-location');
+const expoApplicationPath = path.join(projectRoot, 'node_modules', 'expo-application');
+
+await Promise.all([fs.unlink(expoLocationPath), fs.unlink(expoApplicationPath)]);
+await Promise.all([fs.copy(path.join(projectRoot, 'libs', 'expo-location'), expoLocationPath), fs.copy(path.join(projectRoot, 'libs', 'expo-application'), expoApplicationPath)]);
