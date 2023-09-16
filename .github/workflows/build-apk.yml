@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*.*.*'
+      - 'fdroid-v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
@@ -47,27 +47,39 @@ jobs:
         with:
           gradle-version: 8.0.1 # use the gradle version I saw on eas build's console, which might match the kotlin version?
 
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v3
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
       - name: Install dependencies
         run: pnpm install
 
       ## configure cash for gradle : will help to reduce build time
-      - name: Cache Gradle Wrapper
+      - name: Cache Gradle Wrapper and Dependencies
         uses: actions/cache@v2
         with:
-          path: ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
-
-      - name: Cache Gradle Dependencies
-        uses: actions/cache@v2
-        with:
-          path: ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-caches-
-
+            ${{ runner.os }}-gradle-
 
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
+
+      # - name: remove prorietary bits (for f-droid)
+      #   run: npx zx scripts/fit-f-droid.mjs
+
       - name: Build apk
         run: |
           cd android/app
