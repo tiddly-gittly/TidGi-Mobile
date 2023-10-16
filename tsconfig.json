@@ -2,7 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "types": ["tw5-typed"],
+    "typeRoots" : ["node_modules/@types", "node_modules/tw5-typed"],
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
   }
