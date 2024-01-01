@@ -4,7 +4,7 @@ import type { WindowMeta } from '../../../src/pages/WikiWebView/useWindowMeta';
 
 declare global {
   interface Window {
-    meta?: WindowMeta;
+    meta?: () => WindowMeta;
   }
 }
 
@@ -16,7 +16,7 @@ function getInfoTiddlerFields(updateInfoTiddlersCallback: (infos: Array<{ text: 
   // Basics
   if (!$tw.browser || typeof window === 'undefined') return infoTiddlerFields;
   const isInTidGi = typeof document !== 'undefined';
-  const workspaceID = (window.meta)?.workspaceID;
+  const workspaceID = window.meta?.()?.workspaceID;
   infoTiddlerFields.push({ title: '$:/info/tidgi', text: mapBoolean(isInTidGi) }, { title: '$:/info/tidgi-mobile', text: mapBoolean(isInTidGi) });
   if (isInTidGi && workspaceID) {
     infoTiddlerFields.push({ title: '$:/info/tidgi/workspaceID', text: workspaceID });

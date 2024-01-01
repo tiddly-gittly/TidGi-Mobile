@@ -8,10 +8,10 @@ export function useWindowMeta(workspace: IWikiWorkspace) {
   return `
     window.isInTidGi = true;
 
-    window.meta = ${
+    window.meta = () => (${
     JSON.stringify({
       workspaceID: workspace.id,
     })
-  };
+  });
   `;
 }

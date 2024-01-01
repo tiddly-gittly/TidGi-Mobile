@@ -48,10 +48,10 @@ class TidGiMobileFileSystemSyncAdaptor {
       throw new Error("TidGi-Mobile wikiStorageService is undefined, can't load wiki.");
     }
     this.wikiStorageService = window.service.wikiStorageService;
-    if (window.meta?.workspaceID === undefined) {
+    if (window.meta?.()?.workspaceID === undefined) {
       throw new Error("TidGi-Mobile workspaceID is undefined, can't load wiki.");
     }
-    this.workspaceID = window.meta.workspaceID;
+    this.workspaceID = window.meta?.()?.workspaceID;
     this.wiki = options.wiki;
     this.hasStatus = false;
     this.isAnonymous = false;
