@@ -85,10 +85,5 @@
     "tw5-typed": "^0.4.3",
     "typescript": "^5.3.3",
     "zx": "^7.2.3"
-  },
-  "resolutions": {
-    "stream": "$readable-stream",
-    "react-native-reanimated": "$react-native-reanimated",
-    "tw5-typed": "$tw5-typed"
   }
 }
