@@ -152,11 +152,11 @@
     "SelectiveSyncFilter": "Filter of Selective Sync",
     "ServerList": "Server List",
     "ToggleServerList": "Toggle Server List",
-    "Retry": "Retry",
     "ToggleQRCodeScanner": "Toggle QRCode Scanner",
     "OpenChangeLogList": "Open Change Log List",
     "PageUrl": "Page Url",
-    "AddWebPageWorkspace": "Add WebPage Workspace"
+    "AddWebPageWorkspace": "Add WebPage Workspace",
+    "Reset": "Reset"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

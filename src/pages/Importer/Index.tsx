@@ -199,7 +199,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             mode='elevated'
             onPress={resetState}
           >
-            <Text>{t('AddWorkspace.Retry')}</Text>
+            <Text>{t('AddWorkspace.Reset')}</Text>
           </Button>
         </>
       )}

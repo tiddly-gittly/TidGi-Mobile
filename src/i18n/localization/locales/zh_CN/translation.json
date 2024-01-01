@@ -165,11 +165,11 @@
     "SelectiveSyncFilter": "选择性同步过滤器",
     "ServerList": "服务器列表",
     "ToggleServerList": "服务器列表",
-    "Retry": "重试",
     "ToggleQRCodeScanner": "二维码扫描器开关",
     "OpenChangeLogList": "打开变更记录列表",
     "PageUrl": "页面地址",
-    "AddWebPageWorkspace": "新增网页工作区"
+    "AddWebPageWorkspace": "新增网页工作区",
+    "Reset": "重置"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
