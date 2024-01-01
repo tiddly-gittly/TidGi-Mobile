@@ -355,7 +355,7 @@ declare var exports: {
 if ($tw.browser && typeof window !== 'undefined') {
   const isInTidGi = typeof document !== 'undefined' && window.isInTidGi;
   const servicesExposed = Boolean(window.service?.wikiStorageService);
-  const hasWorkspaceIDinMeta = Boolean(window.meta?.workspaceID);
+  const hasWorkspaceIDinMeta = Boolean(window.meta?.()?.workspaceID);
   if (isInTidGi && servicesExposed && hasWorkspaceIDinMeta) {
     exports.adaptorClass = TidGiMobileFileSystemSyncAdaptor;
   }
