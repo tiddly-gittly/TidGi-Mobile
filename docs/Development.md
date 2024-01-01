@@ -20,6 +20,22 @@ pnpm android
 
 The development App is Expo Go, so it won't overwrite your production TidGi-Mobile App.
 
+### Dev app with native features
+
+```sh
+pnpm build:expo-sdk
+```
+
+This will use EAS to create an Expo Go that has our native features.
+
+## Release
+
+```sh
+pnpm build:android-apk
+```
+
+This will use Expo's EAS to build. It only have limited free tries, so be sure tested locally before run this.
+
 ## FAQ on setting up development environment
 
 ### None of these files exist: \* node_modules/expo/AppEntry
