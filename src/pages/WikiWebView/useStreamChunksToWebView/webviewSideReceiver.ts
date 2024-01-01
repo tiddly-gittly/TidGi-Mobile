@@ -4,6 +4,12 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
   let skinnyTiddlersStoreAccumulatedContent = '';
   let wikiHTML = '';
   let scriptCompleteCount = 0;
+  function resetUseStreamChunksToWebViewWebviewSideReceiverIIFE() {
+    tiddlersStoreAccumulatedContent = '';
+    skinnyTiddlersStoreAccumulatedContent = '';
+    wikiHTML = '';
+    scriptCompleteCount = 0;
+  }
 
   window.onStreamChunksToWebView = function (event) {
     const data = event.data;
@@ -25,6 +31,7 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
       case 'TIDDLER_STORE_SCRIPT_CHUNK_END': {
         scriptCompleteCount += 1;
         if (scriptCompleteCount === 2) {
+          // start jobs
           startInjectHTML();
         }
         break;
@@ -33,6 +40,7 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
   };
 
   function startInjectHTML() {
+    console.log('startInjectHTML');
     /**
      * All information needed are collected.
      * Start using html and store.
@@ -107,6 +115,7 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
     } catch (e) {
       console.error('executeScriptsAfterInjectHTML error', e);
     }
+    resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
   }
 })();
 
