@@ -14,5 +14,9 @@ module.exports = {
     ...resolver,
     unstable_enableSymlinks: true,
     sourceExts: [...sourceExts, 'mjs'],
+    extraNodeModules: {
+      stream: require.resolve('readable-stream'),
+      // crypto: require.resolve('react-native-crypto-js'),
+    },
   },
 };

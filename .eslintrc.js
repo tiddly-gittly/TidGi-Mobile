@@ -17,4 +17,7 @@ module.exports = {
   env: {
     'react-native/react-native': true,
   },
+  rules: {
+    'security-node/detect-unhandled-event-errors': 'off',
+  },
 };
