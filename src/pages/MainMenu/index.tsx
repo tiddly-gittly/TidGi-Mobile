@@ -1,10 +1,10 @@
 import type { StackScreenProps } from '@react-navigation/stack';
 import * as Haptics from 'expo-haptics';
 import { FC, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Button, Modal, Portal, useTheme } from 'react-native-paper';
+import { Modal, Portal, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
+import { ImporterButton } from '../../components/NavigationButtons';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
@@ -18,18 +18,11 @@ const Container = styled.View`
   justify-content: space-between;
 `;
 
-const MainFeatureButton = styled(Button)`
-  margin: 10px;
-  padding: 20px;
-  height: 3em;
-`;
-
 export interface MainMenuProps {
   fromWikiID?: string;
 }
 
 export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
-  const { t } = useTranslation();
   const theme = useTheme();
 
   // State variables for the modal
@@ -72,14 +65,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
           </Modal>
         </ThemeProvider>
       </Portal>
-      <MainFeatureButton
-        mode='outlined'
-        onPress={() => {
-          navigation.navigate('Importer');
-        }}
-      >
-        {t('Menu.ScanQRToSync')}
-      </MainFeatureButton>
+      <ImporterButton />
     </Container>
   );
 };

@@ -1,9 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { ThemeProvider } from 'styled-components/native';
 import BackgroundSyncStatus from '../../../components/BackgroundSync';
+import { ImporterButton } from '../../../components/NavigationButtons';
 import { ServerList } from '../../../components/ServerList';
 import { backgroundSyncService } from '../../../services/BackgroundSyncService';
 import { IServerInfo, useServerStore } from '../../../store/server';
@@ -34,6 +35,7 @@ export function ServerAndSync(): JSX.Element {
 
   return (
     <>
+      <ImporterButton />
       <Button
         mode='elevated'
         disabled={inSyncing}
