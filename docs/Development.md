@@ -28,13 +28,25 @@ pnpm build:expo-sdk
 
 This will use EAS to create an Expo Go that has our native features.
 
+### Update build-in tiddlywiki plugins
+
+There are some plugins in `plugins/src` folder. You can build them by running `pnpm build:plugin`.
+
+The generated `.html` file should be commit to the git.
+
 ## Release
+
+Update version number in `app.json`, and tag commit with `eas-vx.x.x`, then it will use eas cli to ask EAS to build the apk.
+
+You cal also run this locally to test it.
 
 ```sh
 pnpm build:android-apk
 ```
 
 This will use Expo's EAS to build. It only have limited free tries, so be sure tested locally before run this.
+
+Build the api in the github action can be triggered by tagging `fdroid-v*.*.*`, but this is still a WIP.
 
 ## FAQ on setting up development environment
 
