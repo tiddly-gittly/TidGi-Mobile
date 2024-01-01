@@ -25,19 +25,6 @@ export async function storeTiddlersToSQLite(workspace: IWikiWorkspace, setProgre
 
 const BATCH_SIZE_2 = 499; // Max variable count is 999 by default, We divide by 2 as we have 2 fields to insert (title, text) each time for each row
 
-/**
- * Split the data into batches
- */
-function createTiddlerArrayBatches(data: ISkinnyTiddlersJSON, batchSize: number): ISkinnyTiddler[][];
-function createTiddlerArrayBatches(data: ITiddlerTextJSON, batchSize: number): ITiddlerTextOnly[][];
-function createTiddlerArrayBatches(data: ITiddlerTextJSON | ISkinnyTiddlersJSON, batchSize: number) {
-  const batches = [];
-  for (let index = 0; index < data.length; index += batchSize) {
-    batches.push(data.slice(index, index + batchSize));
-  }
-  return batches;
-}
-
 export type ISkinnyTiddler = ITiddlerFields & { _is_skinny: ''; bag: 'default'; revision: '0' };
 export type ISkinnyTiddlersJSON = ISkinnyTiddler[];
 export type ISkinnyTiddlersJSONBatch = Array<{ key: number; value: ISkinnyTiddler }>;
@@ -107,13 +94,6 @@ async function storeTextToSQLite(database: DataSource, workspace: IWikiWorkspace
       },
     });
     batchedTiddlerTextStream.pipe(sqliteWriteStream);
-    setProgress(1);
-    await tx.query(`
-        UPDATE tiddlers 
-        SET text = (SELECT text FROM tempTiddlers WHERE tempTiddlers.title = tiddlers.title)
-        WHERE title IN (SELECT title FROM tempTiddlers)
-    `);
-    await tx.query('DROP TABLE tempTiddlers;');
     // wait for stream to finish before exit the transaction
     await new Promise<void>((resolve, reject) => {
       batchedTiddlerTextStream.on('end', () => {
@@ -123,6 +103,13 @@ async function storeTextToSQLite(database: DataSource, workspace: IWikiWorkspace
         reject(error);
       });
     });
+    await tx.query(`
+        UPDATE tiddlers 
+        SET text = (SELECT text FROM tempTiddlers WHERE tempTiddlers.title = tiddlers.title)
+        WHERE title IN (SELECT title FROM tempTiddlers)
+    `);
+    await tx.query('DROP TABLE tempTiddlers;');
+    setProgress(1);
   });
 }
 
@@ -145,5 +132,6 @@ async function insertTiddlerTextsBatch(tx: EntityManager, batch: ITiddlerTextOnl
   const placeholders = batch.map(() => '(?, ?)').join(',');
   const query = `INSERT INTO tempTiddlers (title, text) VALUES ${placeholders};`;
   const bindParameters = batch.flatMap(row => [row.title, row.text]);
+
   await tx.query(query, bindParameters);
 }

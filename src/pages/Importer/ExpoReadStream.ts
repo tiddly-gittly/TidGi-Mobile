@@ -10,8 +10,6 @@ class ExpoReadStream extends Readable {
 
   constructor(fileUri: string, options: fs.ReadingOptions) {
     super();
-    // DEBUG: console options
-    console.log(`ExpoReadStream options`, options);
     this.fileUri = fileUri;
     this.fileSize = 0; // Initialize file size (could be fetched if necessary)
     this.currentPosition = options.position ?? 0;
@@ -34,18 +32,17 @@ class ExpoReadStream extends Readable {
 
   _read() {
     const readingOptions = {
-      encoding: fs.EncodingType.UTF8,
+      encoding: fs.EncodingType.Base64,
       position: this.currentPosition,
       length: this.chunkSize,
     } satisfies fs.ReadingOptions;
-    // FIXME: chunking is not working https://github.com/expo/expo/issues/20291#issuecomment-1873449972
     fs.readAsStringAsync(this.fileUri, readingOptions).then(chunk => {
       if (chunk.length === 0) {
         // End of the stream
         this.push(null);
       } else {
         this.currentPosition += this.chunkSize;
-        this.push(chunk);
+        this.push(Buffer.from(chunk, 'base64'));
       }
     }).catch(error => {
       this.emit('error', error);
