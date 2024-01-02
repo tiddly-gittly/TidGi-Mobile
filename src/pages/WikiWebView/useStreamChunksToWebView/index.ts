@@ -1,7 +1,7 @@
 import { MutableRefObject, useCallback } from 'react';
 import { WebView } from 'react-native-webview';
 import { IHtmlContent } from '../useTiddlyWiki';
-import { webviewSideReceiver } from './webviewSideReceiver';
+import { OnStreamChunksToWebViewEventTypes, webviewSideReceiver } from './webviewSideReceiver';
 
 const CHUNK_SIZE = 1_000_000;
 
@@ -11,7 +11,7 @@ const CHUNK_SIZE = 1_000_000;
  * @returns
  */
 export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>) {
-  const sendDataToWebView = useCallback((messageType: string, data?: string) => {
+  const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
     if (webViewReference.current === null) return;
     webViewReference.current.injectJavaScript(`window.onStreamChunksToWebView(${
       JSON.stringify({
@@ -21,10 +21,9 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
     });`);
   }, [webViewReference]);
 
-  const sendChunkedDataToWebView = useCallback((messageType: string, scriptContent: string, endMessageType: string) => {
+  const sendChunkedDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, scriptContent: string, endMessageType: OnStreamChunksToWebViewEventTypes) => {
     let chunkIndex = 0;
     const scriptLength = scriptContent.length;
-
     function sendNextChunk() {
       if (webViewReference.current === null) return;
       if (chunkIndex < scriptLength) {
@@ -56,12 +55,20 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
       /**
        * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
        */
-      sendDataToWebView('TIDDLYWIKI_HTML', html);
+      sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
       /**
        * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
        */
-      sendChunkedDataToWebView('TIDDLER_STORE_SCRIPT_CHUNK', tiddlerStoreScript, 'TIDDLER_STORE_SCRIPT_CHUNK_END');
-      sendChunkedDataToWebView('TIDDLER_SKINNY_STORE_SCRIPT_CHUNK', skinnyTiddlerStore, 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END');
+      sendChunkedDataToWebView(
+        OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK,
+        tiddlerStoreScript,
+        OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END,
+      );
+      sendChunkedDataToWebView(
+        OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK,
+        skinnyTiddlerStore,
+        OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END,
+      );
     }
   }, [webViewReference, sendDataToWebView, sendChunkedDataToWebView]);
 

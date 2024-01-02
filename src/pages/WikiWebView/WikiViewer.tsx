@@ -52,6 +52,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
    */
   const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
   const triggerFullReload = () => {
+    console.info('triggerFullReload due to WebViewKeyToReloadAfterRecycleByOS');
     setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
   };
   servicesOfWorkspace.wikiHookService.setLatestOnReloadCallback(triggerFullReload);
@@ -60,6 +61,10 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
   const { injectHtmlAndTiddlersStore, webviewSideReceiver } = useStreamChunksToWebView(webViewReference);
+  // show error on src/pages/WikiWebView/useStreamChunksToWebView/webviewSideReceiver.ts implicitly
+  if (webviewSideReceiver.includes('[bytecode]')) {
+    throw new Error("Can't init webview StreamChunksHandler properly.");
+  }
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
   }, [webViewKeyToReloadAfterRecycleByOS]);

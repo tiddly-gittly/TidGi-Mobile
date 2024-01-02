@@ -22,8 +22,24 @@ declare global {
   }
 }
 
+/**
+ * If you encounter "Can't init webview StreamChunksHandler properly." or
+ *
+ * ```error
+ * VM3:41  Uncaught ReferenceError: bytecode is not defined
+ *    at useStreamChunksToWebViewWebviewSideReceiverIIFE (<anonymous>:41:63)
+ *    at <anonymous>:42:1
+ *    at <anonymous>:47:3
+ * VM4:1  Uncaught TypeError: window.onStreamChunksToWebView is not a function
+ *    at <anonymous>:1:8
+    ```
+
+    And webview is white screen, then error comes from here. Maybe `'show source';` is not working properly. See https://github.com/facebook/hermes/issues/114#issuecomment-887106990
+ */
+
 function useStreamChunksToWebViewWebviewSideReceiverIIFE() {
-  'show source'; // https://github.com/facebook/hermes/issues/114#issuecomment-887106990
+  'show source';
+
   let tiddlersStoreAccumulatedContent = '';
   let skinnyTiddlersStoreAccumulatedContent = '';
   let wikiHTML = '';

@@ -47,7 +47,7 @@ export class WikiHookService {
   }
 
   public async overrideOnReload() {
-    console.log(`overrideOnReload: ${this.#workspace.name} (${this.#workspace.id})`);
+    console.info(`overrideOnReload: ${this.#workspace.name} (${this.#workspace.id})`);
     this.#onReloadCallback();
   }
 
