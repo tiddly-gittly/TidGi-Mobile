@@ -4,7 +4,7 @@ export interface WindowMeta {
   workspaceID: string;
 }
 
-export function useWindowMeta(workspace: IWikiWorkspace) {
+export function getWindowMeta(workspace: IWikiWorkspace) {
   return `
     window.isInTidGi = true;
 

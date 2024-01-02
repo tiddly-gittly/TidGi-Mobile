@@ -12,10 +12,10 @@ import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
+import { getWindowMeta } from './getWindowMeta';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
-import { useWindowMeta } from './useWindowMeta';
 
 const WebViewContainer = styled.View`
   flex: 2;
@@ -30,10 +30,15 @@ const ErrorText = styled(Text)`
 `;
 
 export interface WikiViewerProps {
+  /**
+   * Preload script for `injectHtmlAndTiddlersStore`.
+   * This can't load async in this component. This component need to load at once.
+   */
+  webviewSideReceiver: string;
   wikiWorkspace: IWikiWorkspace;
 }
 
-export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
+export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
@@ -58,43 +63,38 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
   servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
+   * This need to use with `webviewSideReceiver`.
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
-  const { injectHtmlAndTiddlersStore, webviewSideReceiver } = useStreamChunksToWebView(webViewReference);
+  const injectHtmlAndTiddlersStore = useStreamChunksToWebView(webViewReference);
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
   }, [webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
-  const windowMetaScript = useWindowMeta(wikiWorkspace);
-  const preloadScript = useMemo(() =>
-    webviewSideReceiver === undefined ? undefined : `
-    var lastLocationHash = \`${rememberLastVisitState ? wikiWorkspace.lastLocationHash ?? '' : ''}\`;
-    location.hash = lastLocationHash;
+  const preloadScript = useMemo(() => {
+    const windowMetaScript = getWindowMeta(wikiWorkspace);
+    return `
+      var lastLocationHash = \`${rememberLastVisitState ? wikiWorkspace.lastLocationHash ?? '' : ''}\`;
+      location.hash = lastLocationHash;
 
-    ${windowMetaScript}
+      ${windowMetaScript}
 
-    ${onErrorHandler}
-    
-    ${webviewPreloadedJS}
+      ${onErrorHandler}
+      
+      ${webviewPreloadedJS}
 
-    ${registerWikiStorageServiceOnWebView}
+      ${registerWikiStorageServiceOnWebView}
 
-    ${webviewSideReceiver}
-    
-    true; // note: this is required, or you'll sometimes get silent failures
-  `, [registerWikiStorageServiceOnWebView, rememberLastVisitState, webviewSideReceiver, wikiWorkspace.lastLocationHash, windowMetaScript]);
+      ${webviewSideReceiver}
+      
+      true; // note: this is required, or you'll sometimes get silent failures
+  `;
+  }, [registerWikiStorageServiceOnWebView, rememberLastVisitState, webviewSideReceiver, wikiWorkspace]);
 
   if (loadHtmlError) {
     return (
       <WebViewContainer>
         <ErrorText variant='titleLarge'>{loadHtmlError}</ErrorText>
-      </WebViewContainer>
-    );
-  }
-  if (preloadScript === undefined) {
-    return (
-      <WebViewContainer>
-        <Text>{t('Loading')}</Text>
       </WebViewContainer>
     );
   }

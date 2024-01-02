@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import type { WindowMeta } from '../../../src/pages/WikiWebView/useWindowMeta';
+import type { WindowMeta } from '../../../src/pages/WikiWebView/getWindowMeta';
 
 declare global {
   interface Window {
