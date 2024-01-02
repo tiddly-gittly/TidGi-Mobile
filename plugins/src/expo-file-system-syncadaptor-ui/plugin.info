@@ -8,6 +8,5 @@
   "version": "0.1.0",
   "dependents": ["$:/plugins/linonetwo/expo-file-system-syncadaptor"],
   "list": "readme tree",
-  "plugin-priority-comment": "use 11, higher than $:/plugins/tiddlywiki/tiddlyweb's 10, so we load after it to overwrite it",
-  "plugin-priority": 12
+  "plugin-priority-comment": "Shouldn't add priority, otherwise content won't load."
 }
