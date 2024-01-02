@@ -61,16 +61,13 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
   const { injectHtmlAndTiddlersStore, webviewSideReceiver } = useStreamChunksToWebView(webViewReference);
-  // show error on src/pages/WikiWebView/useStreamChunksToWebView/webviewSideReceiver.ts implicitly
-  if (webviewSideReceiver.includes('[bytecode]')) {
-    throw new Error("Can't init webview StreamChunksHandler properly.");
-  }
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
   }, [webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
   const windowMetaScript = useWindowMeta(wikiWorkspace);
-  const preloadScript = useMemo(() => `
+  const preloadScript = useMemo(() =>
+    webviewSideReceiver === undefined ? undefined : `
     var lastLocationHash = \`${rememberLastVisitState ? wikiWorkspace.lastLocationHash ?? '' : ''}\`;
     location.hash = lastLocationHash;
 
@@ -91,6 +88,13 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
     return (
       <WebViewContainer>
         <ErrorText variant='titleLarge'>{loadHtmlError}</ErrorText>
+      </WebViewContainer>
+    );
+  }
+  if (preloadScript === undefined) {
+    return (
+      <WebViewContainer>
+        <Text>{t('Loading')}</Text>
       </WebViewContainer>
     );
   }

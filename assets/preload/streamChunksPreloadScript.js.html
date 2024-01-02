@@ -1,0 +1,127 @@
+/* eslint-disable @typescript-eslint/prefer-ts-expect-error */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable unicorn/prefer-spread */
+(function useStreamChunksToWebViewWebviewSideReceiverIIFE() {
+    var tiddlersStoreAccumulatedContent = '';
+    var skinnyTiddlersStoreAccumulatedContent = '';
+    var wikiHTML = '';
+    var skinnyStoreCompleteCount = 0;
+    var storeCompleteCount = 0;
+    function resetUseStreamChunksToWebViewWebviewSideReceiverIIFE() {
+        tiddlersStoreAccumulatedContent = '';
+        skinnyTiddlersStoreAccumulatedContent = '';
+        wikiHTML = '';
+        skinnyStoreCompleteCount = 0;
+        storeCompleteCount = 0;
+    }
+    // @ts-ignore
+    window.onStreamChunksToWebView = function (event) {
+        switch (event.type) {
+            case 'TIDDLYWIKI_HTML': {
+                wikiHTML += event.data;
+                break;
+            }
+            case 'TIDDLER_STORE_SCRIPT_CHUNK': {
+                tiddlersStoreAccumulatedContent += event.data;
+                break;
+            }
+            case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK': {
+                skinnyTiddlersStoreAccumulatedContent += event.data;
+                break;
+            }
+            case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END': {
+                skinnyStoreCompleteCount += 1;
+                break;
+            }
+            case 'TIDDLER_STORE_SCRIPT_CHUNK_END': {
+                storeCompleteCount += 1;
+                break;
+            }
+        }
+        if (skinnyStoreCompleteCount === 1 && storeCompleteCount === 1) {
+            // start jobs
+            startInjectHTML();
+        }
+    };
+    function startInjectHTML() {
+        console.log('startInjectHTML');
+        /**
+         * All information needed are collected.
+         * Start using html and store.
+         */
+        /**
+         * Use MutationObserver to watch if wikiHTML is loaded.
+         * We execute the script tags after this.
+         */
+        var observer = new MutationObserver(function (mutationsList, observer) {
+            var hasChange = false;
+            for (var _i = 0, mutationsList_1 = mutationsList; _i < mutationsList_1.length; _i++) {
+                var mutation = mutationsList_1[_i];
+                if (mutation.type === 'childList') {
+                    hasChange = true;
+                }
+            }
+            if (hasChange) {
+                observer.disconnect(); // Important: disconnect the observer once done.
+                // use timeout to give splash screen a chance to execute and show
+                setTimeout(executeScriptsAfterInjectHTML, 100);
+            }
+        });
+        // Start observing the body with the configured parameters
+        observer.observe(document.body, { childList: true });
+        // this ignores all script tags, so we need 'executeScriptsAfterInjectHTML()' later.
+        document.body.innerHTML = wikiHTML;
+    }
+    function appendStoreScript(storeJSON, name) {
+        var tiddlersStoreScript = document.createElement('script');
+        tiddlersStoreScript.type = 'application/json';
+        tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store', name);
+        tiddlersStoreScript.textContent = storeJSON;
+        var styleAreaDiv = document.querySelector('#styleArea');
+        styleAreaDiv === null || styleAreaDiv === void 0 ? void 0 : styleAreaDiv.insertAdjacentElement('afterend', tiddlersStoreScript);
+    }
+    /**
+     * Manually execute each of the script tags.
+     * Delay the script execution slightly, until MutationObserver found document.body is ready.
+     */
+    function executeScriptsAfterInjectHTML() {
+        var _a;
+        console.log('executeScriptsAfterInjectHTML');
+        try {
+            // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
+            appendStoreScript(skinnyTiddlersStoreAccumulatedContent, 'skinnyTiddlers');
+            appendStoreScript(tiddlersStoreAccumulatedContent, 'pluginsAndJS');
+            // load other scripts
+            var scriptElements = Array.from(document.querySelectorAll('script'));
+            for (var _i = 0, scriptElements_1 = scriptElements; _i < scriptElements_1.length; _i++) {
+                var script = scriptElements_1[_i];
+                // skip tiddlersStoreScript we just added
+                if (script.classList.contains('tiddlywiki-tiddler-store'))
+                    continue;
+                // activate other scripts in the HTML
+                var newScript = document.createElement('script');
+                // copy all attributes from the original script to the new one
+                var scriptTagAttributes = Array.from(script.attributes);
+                for (var _b = 0, scriptTagAttributes_1 = scriptTagAttributes; _b < scriptTagAttributes_1.length; _b++) {
+                    var _c = scriptTagAttributes_1[_b], name_1 = _c.name, value = _c.value;
+                    newScript.setAttribute(name_1, value);
+                }
+                if (script.src) {
+                    // if the original script has a 'src' url, load it
+                    newScript.src = script.src;
+                }
+                else {
+                    // if the script has inline content, set it
+                    newScript.textContent = script.textContent;
+                }
+                // replace the old script element with the new one
+                (_a = script.parentNode) === null || _a === void 0 ? void 0 : _a.replaceChild(newScript, script);
+            }
+        }
+        catch (error) {
+            console.error('executeScriptsAfterInjectHTML error', error);
+        }
+        resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
+    }
+})();

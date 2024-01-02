@@ -1,7 +1,7 @@
-import { MutableRefObject, useCallback } from 'react';
+import { MutableRefObject, useCallback, useEffect, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { IHtmlContent } from '../useTiddlyWiki';
-import { OnStreamChunksToWebViewEventTypes, webviewSideReceiver } from './webviewSideReceiver';
+import { getWebviewSideReceiver, OnStreamChunksToWebViewEventTypes } from './webviewSideReceiver';
 
 const CHUNK_SIZE = 1_000_000;
 
@@ -71,6 +71,11 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
       );
     }
   }, [webViewReference, sendDataToWebView, sendChunkedDataToWebView]);
+
+  const [webviewSideReceiver, webviewSideReceiverSetter] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    void getWebviewSideReceiver().then(webviewSideReceiverSetter);
+  }, []);
 
   return { injectHtmlAndTiddlersStore, webviewSideReceiver } as const;
 }
