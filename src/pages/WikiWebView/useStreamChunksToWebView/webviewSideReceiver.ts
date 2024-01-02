@@ -1,41 +1,69 @@
-export const webviewSideReceiver = `// Initialize an empty string to start with
-(function useStreamChunksToWebViewWebviewSideReceiverIIFE() {
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable unicorn/prefer-spread */
+export enum OnStreamChunksToWebViewEventTypes {
+  TIDDLER_SKINNY_STORE_SCRIPT_CHUNK = 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK',
+  TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END = 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END',
+  TIDDLER_STORE_SCRIPT_CHUNK = 'TIDDLER_STORE_SCRIPT_CHUNK',
+  TIDDLER_STORE_SCRIPT_CHUNK_END = 'TIDDLER_STORE_SCRIPT_CHUNK_END',
+  TIDDLYWIKI_HTML = 'TIDDLYWIKI_HTML',
+}
+type OnStreamChunksToWebViewEvents = {
+  data: string;
+  type:
+    | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML
+    | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK
+    | OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK;
+} | {
+  type: OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END;
+};
+declare global {
+  interface Window {
+    onStreamChunksToWebView: (event: OnStreamChunksToWebViewEvents) => void;
+  }
+}
+
+function useStreamChunksToWebViewWebviewSideReceiverIIFE() {
+  'show source'; // https://github.com/facebook/hermes/issues/114#issuecomment-887106990
   let tiddlersStoreAccumulatedContent = '';
   let skinnyTiddlersStoreAccumulatedContent = '';
   let wikiHTML = '';
-  let scriptCompleteCount = 0;
+  let skinnyStoreCompleteCount = 0;
+  let storeCompleteCount = 0;
   function resetUseStreamChunksToWebViewWebviewSideReceiverIIFE() {
     tiddlersStoreAccumulatedContent = '';
     skinnyTiddlersStoreAccumulatedContent = '';
     wikiHTML = '';
-    scriptCompleteCount = 0;
+    skinnyStoreCompleteCount = 0;
+    storeCompleteCount = 0;
   }
 
-  window.onStreamChunksToWebView = function (event) {
-    const data = event.data;
-
+  window.onStreamChunksToWebView = function(event) {
     switch (event.type) {
       case 'TIDDLYWIKI_HTML': {
-        wikiHTML += data;
+        wikiHTML += event.data;
         break;
       }
       case 'TIDDLER_STORE_SCRIPT_CHUNK': {
-        tiddlersStoreAccumulatedContent += data;
+        tiddlersStoreAccumulatedContent += event.data;
         break;
       }
       case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK': {
-        skinnyTiddlersStoreAccumulatedContent += data;
+        skinnyTiddlersStoreAccumulatedContent += event.data;
         break;
       }
-      case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END':
+      case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END': {
+        skinnyStoreCompleteCount += 1;
+        break;
+      }
       case 'TIDDLER_STORE_SCRIPT_CHUNK_END': {
-        scriptCompleteCount += 1;
-        if (scriptCompleteCount === 2) {
-          // start jobs
-          startInjectHTML();
-        }
+        storeCompleteCount += 1;
         break;
       }
+    }
+
+    if (skinnyStoreCompleteCount === 1 && storeCompleteCount === 1) {
+      // start jobs
+      startInjectHTML();
     }
   };
 
@@ -52,7 +80,7 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
      */
     const observer = new MutationObserver((mutationsList, observer) => {
       let hasChange = false;
-      for (let mutation of mutationsList) {
+      for (const mutation of mutationsList) {
         if (mutation.type === 'childList') {
           hasChange = true;
         }
@@ -71,12 +99,12 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
     document.body.innerHTML = wikiHTML;
   }
 
-  function appendStoreScript(storeJSON, name) {
+  function appendStoreScript(storeJSON: string, name: string) {
     const tiddlersStoreScript = document.createElement('script');
     tiddlersStoreScript.type = 'application/json';
     tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store', name);
     tiddlersStoreScript.textContent = storeJSON;
-    const styleAreaDiv = document.getElementById('styleArea');
+    const styleAreaDiv = document.querySelector('#styleArea');
     styleAreaDiv?.insertAdjacentElement('afterend', tiddlersStoreScript);
   }
 
@@ -92,14 +120,15 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
       appendStoreScript(tiddlersStoreAccumulatedContent, 'pluginsAndJS');
 
       // load other scripts
-      const scriptElements = document.querySelectorAll('script');
-      for (let script of scriptElements) {
+      const scriptElements = Array.from(document.querySelectorAll('script'));
+      for (const script of scriptElements) {
         // skip tiddlersStoreScript we just added
         if (script.classList.contains('tiddlywiki-tiddler-store')) continue;
         // activate other scripts in the HTML
         const newScript = document.createElement('script');
         // copy all attributes from the original script to the new one
-        for (const { name, value } of script.attributes) {
+        const scriptTagAttributes = Array.from(script.attributes);
+        for (const { name, value } of scriptTagAttributes) {
           newScript.setAttribute(name, value);
         }
         if (script.src) {
@@ -112,11 +141,14 @@ export const webviewSideReceiver = `// Initialize an empty string to start with
         // replace the old script element with the new one
         script.parentNode?.replaceChild(newScript, script);
       }
-    } catch (e) {
-      console.error('executeScriptsAfterInjectHTML error', e);
+    } catch (error) {
+      console.error('executeScriptsAfterInjectHTML error', error);
     }
     resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
   }
-})();
+}
 
+export const webviewSideReceiver = `// Initialize an empty string to start with
+${useStreamChunksToWebViewWebviewSideReceiverIIFE.toString()}
+useStreamChunksToWebViewWebviewSideReceiverIIFE();
 `;

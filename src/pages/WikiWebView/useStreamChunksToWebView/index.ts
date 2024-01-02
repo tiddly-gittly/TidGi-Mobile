@@ -65,5 +65,5 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
     }
   }, [webViewReference, sendDataToWebView, sendChunkedDataToWebView]);
 
-  return [injectHtmlAndTiddlersStore, webviewSideReceiver] as const;
+  return { injectHtmlAndTiddlersStore, webviewSideReceiver } as const;
 }

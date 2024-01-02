@@ -59,7 +59,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
-  const [injectHtmlAndTiddlersStore, webviewSideReceiver] = useStreamChunksToWebView(webViewReference);
+  const { injectHtmlAndTiddlersStore, webviewSideReceiver } = useStreamChunksToWebView(webViewReference);
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
   }, [webViewKeyToReloadAfterRecycleByOS]);
