@@ -8,7 +8,7 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
  * Provide some hook for wiki api.
  */
 export class WikiHookService {
-  #onReloadCallback: () => void = () => {};
+  #triggerFullReloadCallback: () => void = () => {};
   /** value in this maybe outdated, use #wikiStore for latest data. */
   #workspace: IWikiWorkspace;
   #webViewReference?: MutableRefObject<WebView | null>;
@@ -18,8 +18,8 @@ export class WikiHookService {
     this.#workspace = workspace;
   }
 
-  public setLatestOnReloadCallback(onReloadCallback: () => void) {
-    this.#onReloadCallback = onReloadCallback;
+  public setLatestTriggerFullReloadCallback(triggerFullReloadCallback: () => void) {
+    this.#triggerFullReloadCallback = triggerFullReloadCallback;
   }
 
   public setLatestWebViewReference(webViewReference: MutableRefObject<WebView | null>) {
@@ -46,9 +46,9 @@ export class WikiHookService {
     webViewReference.current?.injectJavaScript(wrapScriptToWaitTwReady(script));
   }
 
-  public async overrideOnReload() {
-    console.info(`overrideOnReload: ${this.#workspace.name} (${this.#workspace.id})`);
-    this.#onReloadCallback();
+  public async triggerFullReload() {
+    console.info(`triggerFullReload: ${this.#workspace.name} (${this.#workspace.id})`);
+    this.#triggerFullReloadCallback();
   }
 
   public saveLocationInfo(hash: string) {
@@ -56,8 +56,8 @@ export class WikiHookService {
   }
 }
 
-export function replaceTiddlerStoreScriptToOverrideOnReload(tiddlerStoreScript: string): string {
-  return tiddlerStoreScript.replaceAll('window.location.reload', 'window.service.wikiHookService.overrideOnReload');
+export function replaceTiddlerStoreScriptToTriggerFullReload(tiddlerStoreScript: string): string {
+  return tiddlerStoreScript.replaceAll('window.location.reload', 'window.service.wikiHookService.triggerFullReload');
 }
 
 export function wrapScriptToWaitTwReady(script: string): string {

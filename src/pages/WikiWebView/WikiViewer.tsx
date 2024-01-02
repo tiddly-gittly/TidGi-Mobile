@@ -55,7 +55,7 @@ export const WikiViewer = ({ wikiWorkspace }: WikiViewerProps) => {
     console.info('triggerFullReload due to WebViewKeyToReloadAfterRecycleByOS');
     setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
   };
-  servicesOfWorkspace.wikiHookService.setLatestOnReloadCallback(triggerFullReload);
+  servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126

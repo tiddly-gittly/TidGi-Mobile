@@ -7,7 +7,7 @@ export enum WikiHookServiceChannel {
 export const WikiHookServiceIPCDescriptor: ProxyDescriptor = {
   channel: WikiHookServiceChannel.name,
   properties: {
-    overrideOnReload: ProxyPropertyType.Function,
+    triggerFullReload: ProxyPropertyType.Function,
     saveLocationInfo: ProxyPropertyType.Function,
   },
 };

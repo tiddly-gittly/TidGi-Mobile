@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath, getWikiTiddlerStorePath } from '../../constants/paths';
-import { replaceTiddlerStoreScriptToOverrideOnReload } from '../../services/WikiHookService';
+import { replaceTiddlerStoreScriptToTriggerFullReload } from '../../services/WikiHookService';
 import { getSkinnyTiddlersJSONFromSQLite } from '../../services/WikiStorageService';
 import { IWikiWorkspace } from '../../store/workspace';
 
@@ -44,7 +44,7 @@ export function useTiddlyWiki(workspace: IWikiWorkspace, injectHtmlAndTiddlersSt
   return { loadHtmlError };
 }
 function patchTiddlyWiki(tiddlyWikiHTML: string): string {
-  return replaceTiddlerStoreScriptToOverrideOnReload(tiddlyWikiHTML);
+  return replaceTiddlerStoreScriptToTriggerFullReload(tiddlyWikiHTML);
 }
 
 export interface ITidGiMobilePlugins {
