@@ -196,6 +196,7 @@ class TidGiMobileFileSystemSyncAdaptor {
    * But HTML wiki already have all skinny tiddlers, so omit this. If this is necessary, maybe need mobile-sync plugin provide this, and store in asyncStorage, then provided here.
    */
   async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
+    this.logger.log('getSkinnyTiddlers');
     try {
       // const selector = 'script.tiddlywiki-tiddler-store.skinnyTiddlers'
       // this.logger.log(`getSkinnyTiddlers from ${selector}`);
@@ -233,6 +234,13 @@ class TidGiMobileFileSystemSyncAdaptor {
     }
     try {
       const title = tiddler.fields.title;
+      const tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
+      if (tiddlersToNotSave.includes(title)) {
+        this.logger.log(`Ignore saveTiddler ${title}, config in TiddlersToNotSave`);
+        // if not calling callback in sync adaptor, will cause it waiting forever
+        callback(null);
+        return;
+      }
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
       const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings());
@@ -240,7 +248,9 @@ class TidGiMobileFileSystemSyncAdaptor {
         callback(new Error('Response from server is missing required `etag` header'));
       } else {
         const etagInfo = this.parseEtag(etag);
-        if (etagInfo !== undefined) {
+        if (etagInfo === undefined) {
+          callback(new Error(`Response from server etag header failed to parsed from ${etag}`));
+        } else {
           // Invoke the callback
           callback(null, {
             bag: etagInfo.bag,

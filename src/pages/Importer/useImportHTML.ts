@@ -55,7 +55,8 @@ export function useImportHTML() {
      */
     const getSkinnyTiddlerTextCacheUrl = new URL('/tw-mobile-sync/get-skinny-tiddler-text', origin);
     /**
-     * Some tiddlers must have text field on start, this gets them
+     * Some tiddlers must have text field on start, this gets them.
+     * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.
      */
     const getNonSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-non-skinny-tiddlywiki-tiddler-store-script', origin);
 
