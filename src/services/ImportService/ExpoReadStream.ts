@@ -13,7 +13,11 @@ class ExpoReadStream extends Readable {
     this.fileUri = fileUri;
     this.fileSize = 0; // Initialize file size (could be fetched if necessary)
     this.currentPosition = options.position ?? 0;
-    this.chunkSize = options.length ?? 1024; // Default chunk size
+    /**
+     * Default chunk size in bytes. React Native Expo will OOM at 110MB, so we set this to 1/50 of it to balance speed and memory usage and importantly the feedback for user.
+     * If this is too large, the progress bar will be stuck when down stream processing this chunk, but too small will waste too much time in fs hand shake.
+     */
+    this.chunkSize = options.length ?? 1024 * 1024 * 5;
     void this._init();
   }
 
@@ -39,9 +43,11 @@ class ExpoReadStream extends Readable {
     fs.readAsStringAsync(this.fileUri, readingOptions).then(chunk => {
       if (chunk.length === 0) {
         // End of the stream
+        this.emit('progress', 1);
         this.push(null);
       } else {
-        this.currentPosition += this.chunkSize;
+        this.currentPosition = Math.min(this.chunkSize + this.currentPosition, this.fileSize);
+        this.emit('progress', this.fileSize === 0 ? 0.5 : (this.currentPosition / this.fileSize));
         this.push(Buffer.from(chunk, 'base64'));
       }
     }).catch(error => {

@@ -21,15 +21,20 @@ export class ImportService {
     await sqliteServiceService.closeDatabase(workspace);
   }
 
-  BATCH_SIZE_2 = 499; // Max variable count is 999 by default, We divide by 2 as we have 2 fields to insert (title, text) each time for each row
+  /** Max variable count is 999 by default, We divide by 2 as we have 2 fields to insert (title, text) each time for each row */
+  BATCH_SIZE_2 = 499;
 
   private async storeFieldsToSQLite(database: DataSource, workspace: IWikiWorkspace, setProgress: (progress: number) => void = () => {}) {
     setProgress(0);
     await database.transaction(async tx => {
       let batchedTiddlerFieldsStream: Chain;
       try {
+        const readStream = createReadStream(getWikiTiddlerSkinnyStoreCachePath(workspace));
+        readStream.on('progress', (progress: number) => {
+          setProgress(progress);
+        });
         batchedTiddlerFieldsStream = chain([
-          createReadStream(getWikiTiddlerSkinnyStoreCachePath(workspace)),
+          readStream,
           new JsonlParser(),
           new Batch({ batchSize: this.BATCH_SIZE_2 }),
         ]);
@@ -66,8 +71,12 @@ export class ImportService {
       let batchedTiddlerTextStream: Chain;
       try {
         // stream result to prevent OOM
+        const readStream = createReadStream(getWikiTiddlerTextStoreCachePath(workspace));
+        readStream.on('progress', (progress: number) => {
+          setProgress(progress);
+        });
         batchedTiddlerTextStream = chain([
-          createReadStream(getWikiTiddlerTextStoreCachePath(workspace)),
+          readStream,
           new JsonlParser(),
           new Batch({ batchSize: this.BATCH_SIZE_2 }),
         ]);
