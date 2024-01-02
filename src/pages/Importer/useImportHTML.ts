@@ -12,9 +12,9 @@ import {
   getWikiTiddlerTextStoreCachePath,
   WIKI_FOLDER_PATH,
 } from '../../constants/paths';
+import { importService } from '../../services/ImportService';
 import { sqliteServiceService } from '../../services/SQLiteService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { storeTiddlersToSQLite } from './storeTextToSQLite';
 
 type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'sqlite' | 'success' | 'error';
 
@@ -117,7 +117,7 @@ export function useImportHTML() {
         skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync(),
       ]);
       setStatus('sqlite');
-      await storeTiddlersToSQLite(newWorkspace, { text: setAddTextToSQLitePercentage, fields: setAddFieldsToSQLitePercentage });
+      await importService.storeTiddlersToSQLite(newWorkspace, { text: setAddTextToSQLitePercentage, fields: setAddFieldsToSQLitePercentage });
       await sqliteServiceService.closeDatabase(newWorkspace);
       setStatus('success');
     } catch (error) {

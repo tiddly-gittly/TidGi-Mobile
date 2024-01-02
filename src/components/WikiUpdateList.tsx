@@ -4,8 +4,8 @@ import { FlatList } from 'react-native';
 import { Card, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import type { LastArrayElement } from 'type-fest';
-import { ITiddlerChange, TiddlersLogOperation } from '../pages/Importer/createTable';
 import { backgroundSyncService } from '../services/BackgroundSyncService';
+import { ITiddlerChange, TiddlersLogOperation } from '../services/WikiStorageService/types';
 import { IWikiWorkspace } from '../store/workspace';
 
 interface WikiListProps {

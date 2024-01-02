@@ -9,13 +9,13 @@ import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
-import { ITiddlerChange, TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
 import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
+import { ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
 import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
@@ -154,8 +154,11 @@ export class BackgroundSyncService {
            * This may have text if it is `getFullSaveTiddlers` tiddler, otherwise it is skinny tiddler without text.
            */
           const fieldsParameter = JSON.parse(skinnyTiddlerWithText.fields ?? '{}') as ITiddlerFieldsParam;
+          // @ts-expect-error Index signature in type 'ITiddlerFieldsParam' only permits reading.ts(2542)
           if ('_is_skinny' in fieldsParameter) delete fieldsParameter._is_skinny;
+          // @ts-expect-error Index signature in type 'ITiddlerFieldsParam' only permits reading.ts(2542)
           if ('bag' in fieldsParameter) delete fieldsParameter.bag;
+          // @ts-expect-error Index signature in type 'ITiddlerFieldsParam' only permits reading.ts(2542)
           if ('revision' in fieldsParameter) delete fieldsParameter.revision;
 
           let text;

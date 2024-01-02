@@ -5,15 +5,14 @@ import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
-import { TiddlersLogOperation } from '../../pages/Importer/createTable';
 import { useConfigStore } from '../../store/config';
 import { useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
+import { IWikiServerStatusObject, TiddlersLogOperation } from '../WikiStorageService/types';
 import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from './ignoredTiddler';
-import { IWikiServerStatusObject } from './types';
 
 /**
  * Service that can be used to save/load wiki data

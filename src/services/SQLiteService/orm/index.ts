@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
-import { TiddlersLogOperation } from '../../../pages/Importer/createTable';
+import { TiddlersLogOperation } from '../../WikiStorageService/types';
 
 @Entity('tiddlers')
 export class TiddlerSQLModel {

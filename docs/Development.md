@@ -44,7 +44,7 @@ You cal also run this locally to test it.
 pnpm build:android-apk
 ```
 
-This will use Expo's EAS to build. It only have limited free tries, so be sure tested locally before run this.
+This will use Expo's EAS to build. It only have limited free tries, so be sure tested locally before run this. But this needs secrets like `./@tiddly-gittly__tidgi-mobile.jks`, that only exists in maintainer's side.
 
 Build the api in the github action can be triggered by tagging `fdroid-v*.*.*`, but this is still a WIP.
 
