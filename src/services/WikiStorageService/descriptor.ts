@@ -12,6 +12,7 @@ export const WikiStorageServiceIPCDescriptor: ProxyDescriptor = {
     getStatus: ProxyPropertyType.Function,
     getWikiChangeObserver$: ProxyPropertyType.Function$,
     loadTiddlerText: ProxyPropertyType.Function,
+    loadTiddlersAsFileFromServer: ProxyPropertyType.Function,
     saveTiddler: ProxyPropertyType.Function,
   },
 };

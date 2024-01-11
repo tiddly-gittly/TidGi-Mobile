@@ -1,11 +1,14 @@
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+import { chunk } from 'lodash';
 import { Writable } from 'readable-stream';
 import Chain, { chain } from 'stream-chain';
 import JsonlParser from 'stream-json/jsonl/Parser';
 import Batch from 'stream-json/utils/Batch';
 import { DataSource, EntityManager } from 'typeorm';
-import { getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
+import { getWikiBinaryTiddlersListCachePath, getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
 import { sqliteServiceService } from '../../services/SQLiteService';
 import { IWikiWorkspace } from '../../store/workspace';
+import { backgroundSyncService } from '../BackgroundSyncService';
 import { createReadStream } from './ExpoReadStream';
 import { ISkinnyTiddler, ISkinnyTiddlersJSONBatch, ITiddlerTextOnly, ITiddlerTextsJSONBatch } from './types';
 
@@ -138,6 +141,69 @@ export class ImportService {
     const bindParameters = batch.flatMap(row => [row.title, row.text]);
 
     await tx.query(query, bindParameters);
+  }
+
+  /**
+   * Load tiddler's text as file, save to file system.
+   * This usually used for preloading all binary files when importing wiki.
+   * @param tiddlers skinny tiddlers json array
+   */
+  public async loadBinaryTiddlersAsFilesFromServer(
+    workspace: IWikiWorkspace,
+    setProgress: { setFetchAndWritProgress: (progress: number) => void; setReadListProgress: (progress: number) => void },
+    options?: { chunkSize?: number },
+  ): Promise<void> {
+    /**
+     * We can concurrently load multiple binary files from server.
+     * Concurrency is determined by the read stream and chunk number.
+     */
+    const MAX_CHUNK_SIZE = options?.chunkSize ?? 20;
+    let batchedBinaryTiddlerFieldsStream: Chain;
+    try {
+      const readStream = createReadStream(getWikiBinaryTiddlersListCachePath(workspace));
+      readStream.on('progress', (progress: number) => {
+        setProgress.setReadListProgress(progress);
+      });
+      batchedBinaryTiddlerFieldsStream = chain([
+        readStream,
+        new JsonlParser(),
+        new Batch({ batchSize: this.BATCH_SIZE_2 }),
+      ]);
+    } catch (error) {
+      throw new Error(`storeFieldsToSQLite() Failed to read tiddler text store, ${(error as Error).message}`);
+    }
+    const fetchAndWriteStream = new Writable({
+      objectMode: true,
+      write: async (tiddlerListChunkRaw: ISkinnyTiddlersJSONBatch) => {
+        const tiddlerListChunk = tiddlerListChunkRaw.map(item => item.value);
+        const chunkedTiddlerListChunk = chunk(tiddlerListChunk, MAX_CHUNK_SIZE);
+        let completedCount = 0;
+        for (const tiddlersToFetchChunk of chunkedTiddlerListChunk) {
+          await Promise.all(
+            tiddlersToFetchChunk.map(async tiddler => {
+              try {
+                if (!tiddler.title) return;
+                await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title);
+                completedCount += 1;
+                setProgress.setFetchAndWritProgress(completedCount / tiddlerListChunk.length);
+              } catch (error) {
+                console.error(`loadTiddlersAsFileFromServer: Failed to load tiddler ${tiddler.title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+              }
+            }),
+          );
+        }
+      },
+    });
+    batchedBinaryTiddlerFieldsStream.pipe(fetchAndWriteStream);
+    // wait for stream to finish before exit the method
+    await new Promise<void>((resolve, reject) => {
+      batchedBinaryTiddlerFieldsStream.on('end', () => {
+        resolve();
+      });
+      batchedBinaryTiddlerFieldsStream.on('error', (error) => {
+        reject(error);
+      });
+    });
   }
 }
 

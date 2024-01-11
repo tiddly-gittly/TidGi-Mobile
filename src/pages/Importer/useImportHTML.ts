@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
 import { useCallback, useState } from 'react';
-import { defaultTextBasedTiddlerFilter } from '../../constants/filters';
+import { defaultBinaryFilter, defaultTextBasedTiddlerFilter } from '../../constants/filters';
 import {
   getWikiBinaryTiddlersListCachePath,
   getWikiCacheFolderPath,
@@ -63,7 +63,7 @@ export function useImportHTML() {
     /**
      * Get binary tiddlers metadata without text field. We later can use this to prefetch all binary tiddlers.
      */
-    const getBinaryTiddlersListUrl = new URL(`/recipes/default/tiddlers.json?filter=${encodeURIComponent(defaultTextBasedTiddlerFilter)}`, origin);
+    const getBinaryTiddlersListUrl = new URL(`/recipes/default/tiddlers.json?filter=${encodeURIComponent(defaultBinaryFilter)}`, origin);
     /**
      * Some tiddlers must have text field on start, this gets them.
      * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.

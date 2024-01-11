@@ -11,6 +11,7 @@ import { ServerList } from '../../components/ServerList';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
+import { useImportBinary } from './useImportBinary';
 import { useImportHTML } from './useImportHTML';
 
 const Container = styled.View`
@@ -95,6 +96,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }, [scannedString]);
 
   const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace, resetState } = useImportHTML();
+  const { importBinary, importingBinary, importPercentage, importBinaryError, resetState: resetImportBinaryState } = useImportBinary(createdWikiWorkspace);
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
@@ -232,13 +234,32 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <Text>{t('AddWorkspace.ImportBinaryFilesDescription')}</Text>
           <Button
             mode='outlined'
-            onPress={() => {
-              void backgroundSyncService.updateServerOnlineStatus();
-              setExpandServerList(!expandServerList);
-            }}
+            disabled={importingBinary}
+            onPress={importBinary}
           >
             <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
           </Button>
+          {importingBinary && (
+            <>
+              <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
+              <ProgressBar progress={importPercentage.importBinaryReadListPercentage} color={MD3Colors.tertiary50} />
+              <ProgressBar progress={importPercentage.importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
+            </>
+          )}
+          {importBinaryError !== undefined && (
+            <>
+              <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                <Text>{t('ErrorMessage')}{' '}</Text>
+                {importBinaryError}
+              </ImportStatusText>
+              <Button
+                mode='elevated'
+                onPress={resetImportBinaryState}
+              >
+                <Text>{t('AddWorkspace.Reset')}</Text>
+              </Button>
+            </>
+          )}
         </>
       )}
     </Container>
