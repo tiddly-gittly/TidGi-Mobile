@@ -96,7 +96,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }, [scannedString]);
 
   const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace, resetState } = useImportHTML();
-  const { importBinary, importingBinary, importPercentage, importBinaryError, resetState: resetImportBinaryState } = useImportBinary(createdWikiWorkspace);
+  const { importBinary, importingBinary, importPercentage, importBinaryError, resetState: resetImportBinaryState, importSuccess: importBinarySuccess } = useImportBinary(
+    createdWikiWorkspace,
+  );
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
@@ -234,10 +236,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <Text>{t('AddWorkspace.ImportBinaryFilesDescription')}</Text>
           <Button
             mode='outlined'
-            disabled={importingBinary}
+            disabled={importingBinary || importBinarySuccess || importBinaryError !== undefined}
             onPress={importBinary}
           >
-            <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
+            <Text>{importBinarySuccess ? t('AddWorkspace.Success') : t('AddWorkspace.ImportBinaryFiles')}</Text>
           </Button>
           {importingBinary && (
             <>

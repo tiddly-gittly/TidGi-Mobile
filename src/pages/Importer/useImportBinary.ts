@@ -5,6 +5,7 @@ import { IWikiWorkspace } from '../../store/workspace';
 export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
   const [error, setError] = useState<string | undefined>();
   const [importingBinary, setImportingBinary] = useState<boolean>(false);
+  const [importSuccess, setImportSuccess] = useState<boolean>(false);
   const [importBinaryFetchAndWritPercentage, setImportBinaryFetchAndWritPercentage] = useState(0);
   const [importBinaryReadListPercentage, setImportBinaryReadListPercentage] = useState(0);
   const resetState = useCallback(() => {
@@ -21,6 +22,7 @@ export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
         setFetchAndWritProgress: setImportBinaryFetchAndWritPercentage,
         setReadListProgress: setImportBinaryReadListPercentage,
       });
+      setImportSuccess(true);
     } catch (error) {
       setError(`Failed to import binary tiddlers: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
     } finally {
@@ -32,6 +34,7 @@ export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
     resetState,
     importBinary,
     importingBinary,
+    importSuccess,
     importPercentage: {
       importBinaryFetchAndWritPercentage,
       importBinaryReadListPercentage,

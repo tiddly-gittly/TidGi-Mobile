@@ -170,10 +170,6 @@ export class WikiStorageService {
       const dataSource = await sqliteServiceService.getDatabase(this.#workspace);
       const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
       const tiddler = await tiddlerRepo.findOne({ where: { title } });
-      // DEBUG: console title
-      console.log(`title`, title);
-      // DEBUG: console tiddler
-      console.log(`tiddler`, tiddler);
       return tiddler?.text ?? undefined;
     } catch (error) {
       console.error(`SQL error when getting ${title} : ${(error as Error).message} ${(error as Error).stack ?? ''}`);
@@ -192,8 +188,6 @@ export class WikiStorageService {
 
   async #loadFromServerAndSaveToFS(title: string): Promise<string | undefined> {
     try {
-      // DEBUG: console
-      console.log(`#loadFromServerAndSaveToFS`, title);
       await backgroundSyncService.saveToFSFromServer(this.#workspace, title);
       return await this.#loadFromFS(title);
     } catch (error) {

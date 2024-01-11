@@ -293,7 +293,10 @@ export class BackgroundSyncService {
   public async saveToFSFromServer(workspace: IWikiWorkspace, title: string) {
     try {
       const onlineLastSyncServer = await this.getOnlineServerForWiki(workspace);
-      if (onlineLastSyncServer === undefined) return;
+      if (onlineLastSyncServer === undefined) {
+        console.error(`saveToFSFromServer: Cannot find online server for workspace ${workspace.id}`);
+        return;
+      }
       const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
       await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(workspace, title));
     } catch (error) {

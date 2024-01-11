@@ -158,7 +158,8 @@
     "AddWebPageWorkspace": "Add WebPage Workspace",
     "Reset": "Reset",
     "ImportBinaryFiles": "Import Binary Files",
-    "ImportBinaryFilesDescription": "Large files such as images are by default loaded from the connected server only when in use, so as not to take up too much mobile storage. If you wish to have them loaded in advance, you can click this button."
+    "ImportBinaryFilesDescription": "Large files such as images are by default loaded from the connected server only when in use, so as not to take up too much mobile storage. If you wish to have them loaded in advance, you can click this button.",
+    "Success": "Import Success"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

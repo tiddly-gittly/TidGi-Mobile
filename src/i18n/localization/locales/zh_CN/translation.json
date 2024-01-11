@@ -171,7 +171,8 @@
     "AddWebPageWorkspace": "新增网页工作区",
     "Reset": "重置",
     "ImportBinaryFiles": "导入二进制文件",
-    "ImportBinaryFilesDescription": "图片等大文件默认在使用时才从连接的服务器加载，以免占用过多移动端存储。如果你希望提前加载好，可以点击此按钮。"
+    "ImportBinaryFilesDescription": "图片等大文件默认在使用时才从连接的服务器加载，以免占用过多移动端存储。如果你希望提前加载好，可以点击此按钮。",
+    "Success": "导入成功"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
