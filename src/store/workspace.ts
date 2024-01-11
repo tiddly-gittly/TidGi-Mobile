@@ -5,6 +5,7 @@ import { cloneDeep, uniqBy } from 'lodash';
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { defaultTextBasedTiddlerFilter } from '../constants/filters';
 import { WIKI_FOLDER_PATH } from '../constants/paths';
 
 export interface IWikiWorkspace {
@@ -19,7 +20,7 @@ export interface IWikiWorkspace {
    * TiddlyWiki filter that used to decide a tiddler title should be synced or not.
    * If empty, all tiddlers will be synced.
    */
-  selectiveSyncFilter: string;
+  selectiveSyncFilter?: string;
   syncedServers: IWikiServerSync[];
   type?: 'wiki';
   /**
@@ -78,7 +79,12 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name || workspace.id === newWorkspace.name);
                 const id = sameNameWorkspace === undefined ? newWorkspace.name : `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
                 const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
-                const newWikiWorkspaceWithID = { ...(newWorkspace as IWikiWorkspace), id, wikiFolderLocation } satisfies IWikiWorkspace;
+                const newWikiWorkspaceWithID = {
+                  ...(newWorkspace as IWikiWorkspace),
+                  id,
+                  wikiFolderLocation,
+                  selectiveSyncFilter: defaultTextBasedTiddlerFilter,
+                } satisfies IWikiWorkspace;
                 state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];
                 result = cloneDeep(newWikiWorkspaceWithID);
                 return;

@@ -39,10 +39,12 @@ const ScanQRButton = styled(Button)`
   height: 3em;
 `;
 const OpenWikiButton = styled(Button)`
-  margin: 10px;
-  margin-top: 30px;
   padding: 20px;
   height: 5em;
+  margin-top: 5px;
+`;
+const DoneImportActionsTitleText = styled(Text)`
+  margin-top: 30px;
 `;
 const ImportStatusText = styled.Text`
   width: 100%;
@@ -58,7 +60,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [scannedString, setScannedString] = useState('');
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>();
   const [wikiName, setWikiName] = useState('wiki');
-  const [selectiveSyncFilter, setSelectiveSyncFilter] = useState('-[type[application/msword]] -[type[application/pdf]]');
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
 
   useEffect(() => {
@@ -101,9 +102,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     void nativeService.getLocationWithTimeout().then(coords => {
       if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
     });
-    await storeHtml(wikiUrl.origin, wikiName, selectiveSyncFilter, newServer.id);
+    await storeHtml(wikiUrl.origin, wikiName, newServer.id);
     setWikiUrl(undefined);
-  }, [addServer, selectiveSyncFilter, storeHtml, updateServer, wikiName, wikiUrl]);
+  }, [addServer, storeHtml, updateServer, wikiName, wikiUrl]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -156,13 +157,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           setScannedString(newText);
         }}
       />
-      <TextInput
-        label={t('AddWorkspace.SelectiveSyncFilter')}
-        value={selectiveSyncFilter}
-        onChangeText={(newText: string) => {
-          setSelectiveSyncFilter(newText);
-        }}
-      />
       {importStatus === 'idle' && !qrScannerOpen && wikiUrl !== undefined && (
         <>
           <TextInput
@@ -205,31 +199,47 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       )}
       {importStatus === 'downloading' && (
         <>
-          <Text>HTML</Text>
+          <Text variant='titleLarge'>{t('Loading')}</Text>
+          <Text>{t('Downloading.HTML')}</Text>
           <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral50} />
-          <Text>Tiddlers</Text>
-          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral50} />
+          <Text>{t('Downloading.TiddlersListAndEssential')}</Text>
+          <ProgressBar progress={downloadPercentage.skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
           <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
-          <Text>Tiddler Text</Text>
+          <ProgressBar progress={downloadPercentage.binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral50} />
+          <Text>{t('Downloading.TiddlerTexts')}</Text>
           <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral50} />
         </>
       )}
       {importStatus === 'sqlite' && (
         <>
-          <Text>Adding To SQLite DB</Text>
+          <Text>{t('Downloading.AddToSQLite')}</Text>
           <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
           <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.tertiary50} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
-        <OpenWikiButton
-          mode='elevated'
-          onPress={() => {
-            navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
-          }}
-        >
-          <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
-        </OpenWikiButton>
+        <>
+          <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
+          <OpenWikiButton
+            mode='elevated'
+            onPress={() => {
+              navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
+            }}
+          >
+            <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
+          </OpenWikiButton>
+          <DoneImportActionsTitleText variant='titleLarge'>{t('OptionalActions')}</DoneImportActionsTitleText>
+          <Text>{t('AddWorkspace.ImportBinaryFilesDescription')}</Text>
+          <Button
+            mode='outlined'
+            onPress={() => {
+              void backgroundSyncService.updateServerOnlineStatus();
+              setExpandServerList(!expandServerList);
+            }}
+          >
+            <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
+          </Button>
+        </>
       )}
     </Container>
   );

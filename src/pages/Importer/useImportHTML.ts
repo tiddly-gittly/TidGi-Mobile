@@ -2,7 +2,9 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
 import { useCallback, useState } from 'react';
+import { defaultTextBasedTiddlerFilter } from '../../constants/filters';
 import {
+  getWikiBinaryTiddlersListCachePath,
   getWikiCacheFolderPath,
   getWikiFilePath,
   getWikiMainSqlitePath,
@@ -25,6 +27,7 @@ export function useImportHTML() {
   const [skinnyTiddlerStoreScriptDownloadPercentage, setSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [nonSkinnyTiddlerStoreScriptDownloadPercentage, setNonSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [skinnyTiddlerTextCacheDownloadPercentage, setSkinnyTiddlerTextCacheDownloadPercentage] = useState(0);
+  const [binaryTiddlersListDownloadPercentage, setBinaryTiddlersListDownloadPercentage] = useState(0);
   const [addTextToSQLitePercentage, setAddTextToSQLitePercentage] = useState(0);
   const [addFieldsToSQLitePercentage, setAddFieldsToSQLitePercentage] = useState(0);
   const addWiki = useWorkspaceStore(state => state.add);
@@ -37,12 +40,13 @@ export function useImportHTML() {
     setSkinnyTiddlerStoreScriptDownloadPercentage(0);
     setNonSkinnyTiddlerStoreScriptDownloadPercentage(0);
     setSkinnyTiddlerTextCacheDownloadPercentage(0);
+    setBinaryTiddlersListDownloadPercentage(0);
     setAddTextToSQLitePercentage(0);
     setAddFieldsToSQLitePercentage(0);
     setCreatedWikiWorkspace(undefined);
   }, []);
 
-  const storeHtml = useCallback(async (origin: string, wikiName: string, selectiveSyncFilter: string, serverID: string) => {
+  const storeHtml = useCallback(async (origin: string, wikiName: string, serverID: string) => {
     if (WIKI_FOLDER_PATH === undefined) return;
     setStatus('fetching');
     const getSkinnyHTMLUrl = new URL('/tw-mobile-sync/get-skinny-html', origin);
@@ -51,9 +55,15 @@ export function useImportHTML() {
      */
     const getSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script', origin);
     /**
-     * Text field of these skinny tiddlers (but might filter ` -[is[binary]]`)
+     * This will basically get non-binary text tiddlers's text field as a large JSON.
+     * Only get text field of these skinny tiddlers, excluding all binary tiddlers, by adding filter to the path
+     * `/^\/tw-mobile-sync\/get-skinny-tiddler-text\/(.+)$/;`
      */
-    const getSkinnyTiddlerTextCacheUrl = new URL('/tw-mobile-sync/get-skinny-tiddler-text', origin);
+    const getSkinnyTiddlerTextCacheUrl = new URL(`/tw-mobile-sync/get-skinny-tiddler-text/${encodeURIComponent(defaultTextBasedTiddlerFilter)}`, origin);
+    /**
+     * Get binary tiddlers metadata without text field. We later can use this to prefetch all binary tiddlers.
+     */
+    const getBinaryTiddlersListUrl = new URL(`/recipes/default/tiddlers.json?filter=${encodeURIComponent(defaultTextBasedTiddlerFilter)}`, origin);
     /**
      * Some tiddlers must have text field on start, this gets them.
      * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.
@@ -65,7 +75,7 @@ export function useImportHTML() {
     try {
       setStatus('creating');
 
-      const newWorkspace = addWiki({ type: 'wiki', name: wikiName, selectiveSyncFilter, syncedServers: [{ serverID, lastSync: Date.now(), syncActive: true }] }) as
+      const newWorkspace = addWiki({ type: 'wiki', name: wikiName, syncedServers: [{ serverID, lastSync: Date.now(), syncActive: true }] }) as
         | IWikiWorkspace
         | undefined;
       if (newWorkspace === undefined) throw new Error('Failed to create workspace');
@@ -102,7 +112,6 @@ export function useImportHTML() {
           setSkinnyTiddlerTextCacheDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
-      // TODO: use selectiveSyncFilter to limit which non-skinny tiddlers to store
       const nonSkinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
         getNonSkinnyTiddlywikiTiddlerStoreScriptUrl.toString(),
         getWikiTiddlerStorePath(newWorkspace),
@@ -111,11 +120,20 @@ export function useImportHTML() {
           setNonSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
+      const binaryTiddlersListDownloadResumable = fs.createDownloadResumable(
+        getBinaryTiddlersListUrl.toString(),
+        getWikiBinaryTiddlersListCachePath(newWorkspace),
+        {},
+        (progress) => {
+          setBinaryTiddlersListDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
+        },
+      );
       await Promise.all([
         htmlDownloadResumable.downloadAsync(),
         skinnyTiddlerStoreDownloadResumable.downloadAsync(),
         nonSkinnyTiddlerStoreDownloadResumable.downloadAsync(),
         skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync(),
+        binaryTiddlersListDownloadResumable.downloadAsync(),
       ]);
       setStatus('sqlite');
       await importService.storeTiddlersToSQLite(newWorkspace, { text: setAddTextToSQLitePercentage, fields: setAddFieldsToSQLitePercentage });
@@ -142,6 +160,7 @@ export function useImportHTML() {
       skinnyTiddlerStoreScriptDownloadPercentage,
       nonSkinnyTiddlerStoreScriptDownloadPercentage,
       skinnyTiddlerTextCacheDownloadPercentage,
+      binaryTiddlersListDownloadPercentage,
       addTextToSQLitePercentage,
       addFieldsToSQLitePercentage,
     },
