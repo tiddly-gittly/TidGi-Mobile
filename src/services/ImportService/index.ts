@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { chunk } from 'lodash';
 import { Writable } from 'readable-stream';
 import Chain, { chain } from 'stream-chain';
 import JsonlParser from 'stream-json/jsonl/Parser';
@@ -10,7 +9,7 @@ import { sqliteServiceService } from '../../services/SQLiteService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
 import { createReadStream } from './ExpoReadStream';
-import { ISkinnyTiddler, ISkinnyTiddlersJSONBatch, ITiddlerTextOnly, ITiddlerTextsJSONBatch } from './types';
+import { ISkinnyTiddler, ISkinnyTiddlersJSONBatch, ISkinnyTiddlersListJSONBatch, ITiddlerTextOnly, ITiddlerTextsJSONBatch } from './types';
 
 /**
  * Service for importing wiki from TidGi Desktop or nodejs server
@@ -167,18 +166,17 @@ export class ImportService {
       batchedBinaryTiddlerFieldsStream = chain([
         readStream,
         new JsonlParser(),
-        new Batch({ batchSize: this.BATCH_SIZE_2 }),
+        new Batch({ batchSize: MAX_CHUNK_SIZE }),
       ]);
     } catch (error) {
       throw new Error(`storeFieldsToSQLite() Failed to read tiddler text store, ${(error as Error).message}`);
     }
     const fetchAndWriteStream = new Writable({
       objectMode: true,
-      write: async (tiddlerListChunkRaw: ISkinnyTiddlersJSONBatch) => {
+      write: async (tiddlerListChunkRaw: ISkinnyTiddlersListJSONBatch) => {
         const tiddlerListChunk = tiddlerListChunkRaw.map(item => item.value);
-        const chunkedTiddlerListChunk = chunk(tiddlerListChunk, MAX_CHUNK_SIZE);
         let completedCount = 0;
-        for (const tiddlersToFetchChunk of chunkedTiddlerListChunk) {
+        for (const tiddlersToFetchChunk of tiddlerListChunk) {
           await Promise.all(
             tiddlersToFetchChunk.map(async tiddler => {
               try {
