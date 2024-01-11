@@ -2,6 +2,7 @@
 import { Writable } from 'readable-stream';
 import Chain, { chain } from 'stream-chain';
 import JsonlParser from 'stream-json/jsonl/Parser';
+import StreamArray from 'stream-json/streamers/StreamArray';
 import Batch from 'stream-json/utils/Batch';
 import { DataSource, EntityManager } from 'typeorm';
 import { getWikiBinaryTiddlersListCachePath, getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
@@ -9,7 +10,7 @@ import { sqliteServiceService } from '../../services/SQLiteService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
 import { createReadStream } from './ExpoReadStream';
-import { ISkinnyTiddler, ISkinnyTiddlersJSONBatch, ISkinnyTiddlersListJSONBatch, ITiddlerTextOnly, ITiddlerTextsJSONBatch } from './types';
+import { ISkinnyTiddler, ISkinnyTiddlersJSONBatch, ITiddlerTextOnly, ITiddlerTextsJSONBatch } from './types';
 
 /**
  * Service for importing wiki from TidGi Desktop or nodejs server
@@ -179,7 +180,7 @@ export class ImportService {
       });
       batchedBinaryTiddlerFieldsStream = chain([
         readStream,
-        new JsonlParser(),
+        StreamArray.withParser(),
         new Batch({ batchSize: MAX_CHUNK_SIZE }),
       ]);
     } catch (error) {
@@ -187,25 +188,23 @@ export class ImportService {
     }
     const fetchAndWriteStream = new Writable({
       objectMode: true,
-      write: async (tiddlerListChunkRaw: ISkinnyTiddlersListJSONBatch) => {
-        const tiddlerListChunk = tiddlerListChunkRaw.map(item => item.value);
+      write: async (tiddlerListChunk: ISkinnyTiddlersJSONBatch) => {
         let completedCount = 0;
-        const taskLength = tiddlerListChunk.reduce((previous, current) => previous + current.length, 0);
-        for (const tiddlersToFetchChunk of tiddlerListChunk) {
-          await Promise.all(
-            tiddlersToFetchChunk.map(async tiddler => {
-              try {
-                if (!tiddler.title) return;
-                await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title);
-              } catch (error) {
-                console.error(`loadTiddlersAsFileFromServer: Failed to load tiddler ${tiddler.title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
-              } finally {
-                completedCount += 1;
-                setProgress.setFetchAndWritProgress(completedCount / taskLength);
-              }
-            }),
-          );
-        }
+        const taskLength = tiddlerListChunk.length;
+        await Promise.all(
+          tiddlerListChunk.map(item => item.value).map(async tiddler => {
+            try {
+              if (!tiddler.title) return;
+              // TODO: check if file already exists, skip importing.
+              await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title);
+            } catch (error) {
+              console.error(`loadTiddlersAsFileFromServer: Failed to load tiddler ${tiddler.title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+            } finally {
+              completedCount += 1;
+              setProgress.setFetchAndWritProgress(completedCount / taskLength);
+            }
+          }),
+        );
       },
     });
     batchedBinaryTiddlerFieldsStream.pipe(fetchAndWriteStream);
