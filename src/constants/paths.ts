@@ -9,7 +9,7 @@ export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${worksp
  * Get file path like `file:///data/user/0/host.exp.exponent/files/wikis/wiki_88370/tiddlers/TiddlyWikiIconBlack.png`
  * Will make sure filename don't have invalid characters.
  */
-export const getWikiTiddlerPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiTiddlerFolderPath(workspace)}${title.replaceAll(/[%/\\{}]/g, '_')}`;
+export const getWikiTiddlerPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiTiddlerFolderPath(workspace)}${title.replaceAll(/["'*/:<>?\\{}]/g, '_')}`;
 export const WIKI_STORE_NAME = 'tiddlerStore.json';
 /**
  * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.
