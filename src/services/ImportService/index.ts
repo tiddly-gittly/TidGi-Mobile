@@ -188,7 +188,9 @@ export class ImportService {
     }
     const fetchAndWriteStream = new Writable({
       objectMode: true,
+      // FIXME: after first batch, not getting next batch data
       write: async (tiddlerListChunk: ISkinnyTiddlersJSONBatch) => {
+        setProgress.setFetchAndWritProgress(0);
         let completedCount = 0;
         const taskLength = tiddlerListChunk.length;
         await Promise.all(
