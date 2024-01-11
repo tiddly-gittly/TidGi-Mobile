@@ -1,0 +1,55 @@
+/* eslint-disable unicorn/no-useless-undefined */
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button, MD3Colors, ProgressBar, Text } from 'react-native-paper';
+import { styled } from 'styled-components/native';
+
+import { IWikiWorkspace } from '../../store/workspace';
+import { useImportBinary } from './useImportBinary';
+
+const ImportStatusText = styled.Text`
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+`;
+
+export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
+  const { t } = useTranslation();
+  const { importBinary, importingBinary, importPercentage, importBinaryError, resetState: resetImportBinaryState, importSuccess: importBinarySuccess } = useImportBinary(
+    props.wikiWorkspace,
+  );
+
+  return (
+    <>
+      <Text>{t('AddWorkspace.ImportBinaryFilesDescription')}</Text>
+      <Button
+        mode='outlined'
+        disabled={importingBinary || importBinarySuccess || importBinaryError !== undefined}
+        onPress={importBinary}
+      >
+        <Text>{importBinarySuccess ? t('AddWorkspace.Success') : t('AddWorkspace.ImportBinaryFiles')}</Text>
+      </Button>
+      {importingBinary && (
+        <>
+          <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
+          <ProgressBar progress={importPercentage.importBinaryReadListPercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={importPercentage.importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
+        </>
+      )}
+      {importBinaryError !== undefined && (
+        <>
+          <ImportStatusText style={{ color: MD3Colors.error50 }}>
+            <Text>{t('ErrorMessage')}{' '}</Text>
+            {importBinaryError}
+          </ImportStatusText>
+          <Button
+            mode='elevated'
+            onPress={resetImportBinaryState}
+          >
+            <Text>{t('AddWorkspace.Reset')}</Text>
+          </Button>
+        </>
+      )}
+    </>
+  );
+}

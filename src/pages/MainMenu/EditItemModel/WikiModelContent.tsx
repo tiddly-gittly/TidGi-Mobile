@@ -17,6 +17,7 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
 import { AddNewServerModelContent } from '../AddNewServerModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
+import { ImportBinary } from '../../Importer/ImportBinary';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -178,6 +179,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       >
         <Text>{t('AddWorkspace.OpenChangeLogList')}</Text>
       </Button>
+
+      <ImportBinary wikiWorkspace={wiki} />
 
       <ButtonsContainer>
         <Button onPress={onClose}>{t('Cancel')}</Button>
