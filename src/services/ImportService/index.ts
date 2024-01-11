@@ -56,9 +56,16 @@ export class ImportService {
       });
       batchedTiddlerFieldsStream.pipe(sqliteWriteStream);
       // wait for stream to finish before exit the transaction
+      let readEnded = false;
+      let writeEnded = false;
       await new Promise<void>((resolve, reject) => {
         batchedTiddlerFieldsStream.on('end', () => {
-          resolve();
+          readEnded = true;
+          if (writeEnded) resolve();
+        });
+        sqliteWriteStream.on('finish', () => {
+          writeEnded = true;
+          if (readEnded) resolve();
         });
         batchedTiddlerFieldsStream.on('error', (error) => {
           reject(error);
@@ -100,9 +107,16 @@ export class ImportService {
       });
       batchedTiddlerTextStream.pipe(sqliteWriteStream);
       // wait for stream to finish before exit the transaction
+      let readEnded = false;
+      let writeEnded = false;
       await new Promise<void>((resolve, reject) => {
         batchedTiddlerTextStream.on('end', () => {
-          resolve();
+          readEnded = true;
+          if (writeEnded) resolve();
+        });
+        sqliteWriteStream.on('finish', () => {
+          writeEnded = true;
+          if (readEnded) resolve();
         });
         batchedTiddlerTextStream.on('error', (error) => {
           reject(error);
@@ -176,16 +190,18 @@ export class ImportService {
       write: async (tiddlerListChunkRaw: ISkinnyTiddlersListJSONBatch) => {
         const tiddlerListChunk = tiddlerListChunkRaw.map(item => item.value);
         let completedCount = 0;
+        const taskLength = tiddlerListChunk.reduce((previous, current) => previous + current.length, 0);
         for (const tiddlersToFetchChunk of tiddlerListChunk) {
           await Promise.all(
             tiddlersToFetchChunk.map(async tiddler => {
               try {
                 if (!tiddler.title) return;
                 await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title);
-                completedCount += 1;
-                setProgress.setFetchAndWritProgress(completedCount / tiddlerListChunk.length);
               } catch (error) {
                 console.error(`loadTiddlersAsFileFromServer: Failed to load tiddler ${tiddler.title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+              } finally {
+                completedCount += 1;
+                setProgress.setFetchAndWritProgress(completedCount / taskLength);
               }
             }),
           );
@@ -193,10 +209,17 @@ export class ImportService {
       },
     });
     batchedBinaryTiddlerFieldsStream.pipe(fetchAndWriteStream);
+    let readEnded = false;
+    let writeEnded = false;
     // wait for stream to finish before exit the method
     await new Promise<void>((resolve, reject) => {
       batchedBinaryTiddlerFieldsStream.on('end', () => {
-        resolve();
+        readEnded = true;
+        if (writeEnded) resolve();
+      });
+      fetchAndWriteStream.on('finish', () => {
+        writeEnded = true;
+        if (readEnded) resolve();
       });
       batchedBinaryTiddlerFieldsStream.on('error', (error) => {
         reject(error);
