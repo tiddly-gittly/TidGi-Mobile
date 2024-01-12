@@ -46,11 +46,12 @@ export class ImportService {
       }
       const sqliteWriteStream = new Writable({
         objectMode: true,
-        write: async (chunk: ISkinnyTiddlersJSONBatch, encoding, callback) => {
+        write: async (chunk: ISkinnyTiddlersJSONBatch, encoding, next) => {
           try {
             await this.insertTiddlerFieldsBatch(tx, chunk.map(item => item.value));
-            callback();
+            next();
           } catch (error) {
+            // if have any error, end the batch, not calling `next()`, to prevent dirty data
             throw new Error(`storeFieldsToSQLite() Insert text to SQLite batch error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
           }
         },
@@ -97,11 +98,12 @@ export class ImportService {
       await tx.query('CREATE TEMPORARY TABLE tempTiddlers (title TEXT PRIMARY KEY, text TEXT);');
       const sqliteWriteStream = new Writable({
         objectMode: true,
-        write: async (chunk: ITiddlerTextsJSONBatch, encoding, callback) => {
+        write: async (chunk: ITiddlerTextsJSONBatch, encoding, next) => {
           try {
             await this.insertTiddlerTextsBatch(tx, chunk.map(item => item.value));
-            callback();
+            next();
           } catch (error) {
+            // if have any error, end the batch, not calling `next()`, to prevent dirty data
             throw new Error(`storeTextToSQLite() Insert text to SQLite batch error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
           }
         },
@@ -189,7 +191,7 @@ export class ImportService {
     const fetchAndWriteStream = new Writable({
       objectMode: true,
       // FIXME: after first batch, not getting next batch data
-      write: async (tiddlerListChunk: ISkinnyTiddlersJSONBatch) => {
+      write: async (tiddlerListChunk: ISkinnyTiddlersJSONBatch, encoding, next) => {
         setProgress.setFetchAndWritProgress(0);
         let completedCount = 0;
         const taskLength = tiddlerListChunk.length;
@@ -207,6 +209,8 @@ export class ImportService {
             }
           }),
         );
+        // don't forget to call the `next()` to let stream go to next batch
+        next();
       },
     });
     batchedBinaryTiddlerFieldsStream.pipe(fetchAndWriteStream);
