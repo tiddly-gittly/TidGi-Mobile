@@ -224,6 +224,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <OpenWikiButton
             mode='elevated'
             onPress={() => {
+              navigation.navigate('MainMenu', { fromWikiID: createdWikiWorkspace.id });
               navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
             }}
           >
