@@ -43,6 +43,7 @@
     "immer": "^10.0.3",
     "lodash": "^4.17.21",
     "memize": "^2.1.0",
+    "p-timeout": "^6.1.2",
     "react": "18.2.0",
     "react-i18next": "^14.0.0",
     "react-native": "0.72.6",

@@ -92,6 +92,9 @@ dependencies:
   memize:
     specifier: ^2.1.0
     version: 2.1.0
+  p-timeout:
+    specifier: ^6.1.2
+    version: 6.1.2
   react:
     specifier: 18.2.0
     version: 18.2.0
@@ -7472,6 +7475,11 @@ packages:
     engines: {node: '>=10'}
     dependencies:
       aggregate-error: 3.1.0
+    dev: false
+
+  /p-timeout@6.1.2:
+    resolution: {integrity: sha512-UbD77BuZ9Bc9aABo74gfXhNvzC9Tx7SxtHSh1fxvx3jTLLYvmVhiQZZrJzqqU0jKbN32kb5VOKiLEQI/3bIjgQ==}
+    engines: {node: '>=14.16'}
     dev: false
 
   /p-try@2.2.0:

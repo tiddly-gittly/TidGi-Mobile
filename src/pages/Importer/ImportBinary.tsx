@@ -15,7 +15,7 @@ const ImportStatusText = styled.Text`
 
 export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
   const { t } = useTranslation();
-  const { importBinary, importingBinary, importPercentage, importBinaryError, resetState: resetImportBinaryState, importSuccess: importBinarySuccess } = useImportBinary(
+  const { importBinary, importingBinary, importPercentage, importBinaryError, resetState, importSuccess, importWarning } = useImportBinary(
     props.wikiWorkspace,
   );
 
@@ -24,10 +24,10 @@ export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
       <Text>{t('AddWorkspace.ImportBinaryFilesDescription')}</Text>
       <Button
         mode='outlined'
-        disabled={importingBinary || importBinarySuccess || importBinaryError !== undefined}
+        disabled={importingBinary || importSuccess || importBinaryError !== undefined}
         onPress={importBinary}
       >
-        <Text>{importBinarySuccess ? t('AddWorkspace.Success') : t('AddWorkspace.ImportBinaryFiles')}</Text>
+        <Text>{importSuccess ? t('AddWorkspace.Success') : t('AddWorkspace.ImportBinaryFiles')}</Text>
       </Button>
       {importingBinary && (
         <>
@@ -38,16 +38,25 @@ export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
       )}
       {importBinaryError !== undefined && (
         <>
+          <Button
+            mode='elevated'
+            onPress={resetState}
+          >
+            <Text>{t('AddWorkspace.Reset')}</Text>
+          </Button>
           <ImportStatusText style={{ color: MD3Colors.error50 }}>
             <Text>{t('ErrorMessage')}{' '}</Text>
             {importBinaryError}
           </ImportStatusText>
-          <Button
-            mode='elevated'
-            onPress={resetImportBinaryState}
-          >
-            <Text>{t('AddWorkspace.Reset')}</Text>
-          </Button>
+        </>
+      )}
+      {importWarning !== undefined && (
+        <>
+          <Text>{t('AddWorkspace.WarningMessageDescription')}</Text>
+          <ImportStatusText style={{ color: MD3Colors.tertiary50 }}>
+            <Text>{t('WarningMessage')}{' '}</Text>
+            {importWarning}
+          </ImportStatusText>
         </>
       )}
     </>

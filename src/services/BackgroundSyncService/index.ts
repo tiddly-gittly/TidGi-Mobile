@@ -5,6 +5,7 @@ import * as fs from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
 import { sortedUniqBy, uniq } from 'lodash';
+import pTimeout from 'p-timeout';
 import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
@@ -294,7 +295,8 @@ export class BackgroundSyncService {
         return;
       }
       const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
-      await fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(workspace, title));
+      const downloadPromise = fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(workspace, title));
+      await pTimeout(downloadPromise, { milliseconds: 10_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
     } catch (error) {
       console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       throw error;
