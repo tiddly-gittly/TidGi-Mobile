@@ -15,9 +15,9 @@ import { backgroundSyncService } from '../../../services/BackgroundSyncService';
 import { useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
+import { ImportBinary } from '../../Importer/ImportBinary';
 import { AddNewServerModelContent } from '../AddNewServerModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
-import { ImportBinary } from '../../Importer/ImportBinary';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -46,7 +46,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof backgroundSyncService.getOnlineServerForWiki>>>();
   useEffect(() => {
     if (wiki === undefined) return;
-    void backgroundSyncService.getOnlineServerForWiki(wiki, true).then(server => {
+    void backgroundSyncService.updateServerOnlineStatus().then(async () => {
+      const server = await backgroundSyncService.getOnlineServerForWiki(wiki);
       setCurrentOnlineServerToSync(server);
     });
   }, [wiki]);
@@ -95,7 +96,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         onPress={async () => {
           setInSyncing(true);
           try {
-            const server = await backgroundSyncService.getOnlineServerForWiki(wiki, true);
+            await backgroundSyncService.updateServerOnlineStatus();
+            const server = await backgroundSyncService.getOnlineServerForWiki(wiki);
             if (server !== undefined) {
               await backgroundSyncService.syncWikiWithServer(wiki, server);
               setIsSyncSucceed(true);

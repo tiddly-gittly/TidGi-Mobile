@@ -56,6 +56,6 @@ class ExpoReadStream extends Readable {
   }
 }
 
-export function createReadStream(fileUri: string, options: { encoding?: fs.EncodingType; end?: number; highWaterMark?: number; start?: number } = {}): ExpoReadStream {
+export function createReadStream(fileUri: string, options: fs.ReadingOptions = {}): ExpoReadStream {
   return new ExpoReadStream(fileUri, options);
 }

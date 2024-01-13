@@ -172,7 +172,9 @@
     "Reset": "重置",
     "ImportBinaryFiles": "导入二进制文件",
     "ImportBinaryFilesDescription": "图片等大文件默认在使用时才从连接的服务器加载，以免占用过多移动端存储。如果你希望提前加载好，可以点击此按钮。",
-    "Success": "导入成功"
+    "Success": "导入成功",
+    "DownloadBinaryTimeout": "下载一个资源文件时超时",
+    "WarningMessageDescription": "你可以忽略警告信息。因为导入失败的内容，之后可以在进入知识库后正常按需加载。"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
@@ -534,5 +536,6 @@
     "TiddlersListAndEssential": "条目列表和关键条目内容",
     "TiddlerTexts": "条目文本内容",
     "AddToSQLite": "添加到本地SQLite快取数据库"
-  }
+  },
+  "WarningMessage": "警告信息"
 }

@@ -166,17 +166,53 @@ export class ImportService {
    */
   public async loadBinaryTiddlersAsFilesFromServer(
     workspace: IWikiWorkspace,
-    setProgress: { setFetchAndWritProgress: (progress: number) => void; setReadListProgress: (progress: number) => void },
+    setProgress: { setFetchAndWritProgress: (progress: number) => void; setReadListProgress: (progress: number) => void; setWarning: (latestWarning: string) => void },
     options?: { chunkSize?: number },
   ): Promise<void> {
     /**
      * We can concurrently load multiple binary files from server.
      * Concurrency is determined by the read stream and chunk number.
      */
-    const MAX_CHUNK_SIZE = options?.chunkSize ?? 20;
+    const MAX_CHUNK_SIZE = options?.chunkSize ?? 50;
+    /** Read 0.5M each time, to slow down the progress of fs read, because the bottom neck is net request. */
+    const JSON_READ_LENGTH = 512 * 1024;
+    // get content length use first pass
+    let dataCount = 0;
+    try {
+      const readStream = createReadStream(getWikiBinaryTiddlersListCachePath(workspace), { length: JSON_READ_LENGTH * 2 });
+      readStream.on('progress', (progress: number) => {
+        setProgress.setReadListProgress(progress);
+      });
+      const countBinaryTiddlerFieldsStream = chain([
+        readStream,
+        StreamArray.withParser(),
+      ]);
+      let lastData: ISkinnyTiddlersJSONBatch[number] | undefined;
+      countBinaryTiddlerFieldsStream.on('data', (data: ISkinnyTiddlersJSONBatch[number]) => {
+        lastData = data;
+      });
+      await new Promise<void>((resolve, reject) => {
+        countBinaryTiddlerFieldsStream.on('end', () => {
+          const lastIndex = lastData?.key;
+          if (lastIndex === undefined) {
+            reject(new Error('loadBinaryTiddlersAsFilesFromServer() Failed to count task, no data'));
+          } else {
+            dataCount = lastIndex + 1;
+            resolve();
+          }
+        });
+        countBinaryTiddlerFieldsStream.on('error', (error) => {
+          reject(error);
+        });
+      });
+    } catch (error) {
+      throw new Error(`loadBinaryTiddlersAsFilesFromServer() Failed to read tiddler text store, ${(error as Error).message}`);
+    }
+    // reset progress, start really processing data.
+    setProgress.setReadListProgress(0);
     let batchedBinaryTiddlerFieldsStream: Chain;
     try {
-      const readStream = createReadStream(getWikiBinaryTiddlersListCachePath(workspace));
+      const readStream = createReadStream(getWikiBinaryTiddlersListCachePath(workspace), { length: JSON_READ_LENGTH });
       readStream.on('progress', (progress: number) => {
         setProgress.setReadListProgress(progress);
       });
@@ -186,26 +222,26 @@ export class ImportService {
         new Batch({ batchSize: MAX_CHUNK_SIZE }),
       ]);
     } catch (error) {
-      throw new Error(`storeFieldsToSQLite() Failed to read tiddler text store, ${(error as Error).message}`);
+      throw new Error(`loadBinaryTiddlersAsFilesFromServer() Failed to read tiddler text store, ${(error as Error).message}`);
     }
+    let completedCount = 0;
+    const onlineLastSyncServer = backgroundSyncService.getOnlineServerForWiki(workspace);
+    setProgress.setFetchAndWritProgress(0);
     const fetchAndWriteStream = new Writable({
       objectMode: true,
-      // FIXME: after first batch, not getting next batch data
       write: async (tiddlerListChunk: ISkinnyTiddlersJSONBatch, encoding, next) => {
-        setProgress.setFetchAndWritProgress(0);
-        let completedCount = 0;
-        const taskLength = tiddlerListChunk.length;
         await Promise.all(
           tiddlerListChunk.map(item => item.value).map(async tiddler => {
             try {
               if (!tiddler.title) return;
-              // TODO: check if file already exists, skip importing.
-              await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title);
+              // TODO: check if file already exists, skip importing. Maybe read the folder, and use that list to compare? Or can skip the compare if folder is empty (first time import)
+              await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title, onlineLastSyncServer);
             } catch (error) {
               console.error(`loadTiddlersAsFileFromServer: Failed to load tiddler ${tiddler.title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+              setProgress.setWarning((error as Error).message);
             } finally {
               completedCount += 1;
-              setProgress.setFetchAndWritProgress(completedCount / taskLength);
+              setProgress.setFetchAndWritProgress(completedCount / dataCount);
             }
           }),
         );

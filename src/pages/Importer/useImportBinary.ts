@@ -8,6 +8,7 @@ export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
   const [importSuccess, setImportSuccess] = useState<boolean>(false);
   const [importBinaryFetchAndWritPercentage, setImportBinaryFetchAndWritPercentage] = useState(0);
   const [importBinaryReadListPercentage, setImportBinaryReadListPercentage] = useState(0);
+  const [importWarning, setImportWarning] = useState<string | undefined>();
   const resetState = useCallback(() => {
     setImportBinaryFetchAndWritPercentage(0);
     setImportBinaryReadListPercentage(0);
@@ -21,6 +22,7 @@ export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
       await importService.loadBinaryTiddlersAsFilesFromServer(newWorkspace, {
         setFetchAndWritProgress: setImportBinaryFetchAndWritPercentage,
         setReadListProgress: setImportBinaryReadListPercentage,
+        setWarning: setImportWarning,
       });
       setImportSuccess(true);
     } catch (error) {
@@ -35,6 +37,7 @@ export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
     importBinary,
     importingBinary,
     importSuccess,
+    importWarning,
     importPercentage: {
       importBinaryFetchAndWritPercentage,
       importBinaryReadListPercentage,

@@ -67,7 +67,7 @@ export class BackgroundSyncService {
     await this.updateServerOnlineStatus();
     for (const wiki of workspaces) {
       if (wiki.type === 'wiki') {
-        const server = await this.getOnlineServerForWiki(wiki);
+        const server = this.getOnlineServerForWiki(wiki);
         if (server !== undefined) {
           haveUpdate ||= await this.syncWikiWithServer(wiki, server);
         }
@@ -103,10 +103,7 @@ export class BackgroundSyncService {
     return response;
   }
 
-  public async getOnlineServerForWiki(wiki: IWikiWorkspace, updated?: boolean): Promise<(IServerInfo & { lastSync: number; syncActive: boolean }) | undefined> {
-    if (updated === true) {
-      await this.updateServerOnlineStatus();
-    }
+  public getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number; syncActive: boolean }) | undefined {
     const onlineLastSyncServer = wiki.syncedServers
       .filter(serverInfoInWiki => serverInfoInWiki.syncActive)
       .sort((a, b) => b.lastSync - a.lastSync)
@@ -290,9 +287,8 @@ export class BackgroundSyncService {
     return blob.size > 200 * 1024; // 200KB
   }
 
-  public async saveToFSFromServer(workspace: IWikiWorkspace, title: string) {
+  public async saveToFSFromServer(workspace: IWikiWorkspace, title: string, onlineLastSyncServer = this.getOnlineServerForWiki(workspace)) {
     try {
-      const onlineLastSyncServer = await this.getOnlineServerForWiki(workspace);
       if (onlineLastSyncServer === undefined) {
         console.error(`saveToFSFromServer: Cannot find online server for workspace ${workspace.id}`);
         return;

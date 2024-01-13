@@ -159,7 +159,9 @@
     "Reset": "Reset",
     "ImportBinaryFiles": "Import Binary Files",
     "ImportBinaryFilesDescription": "Large files such as images are by default loaded from the connected server only when in use, so as not to take up too much mobile storage. If you wish to have them loaded in advance, you can click this button.",
-    "Success": "Import Success"
+    "Success": "Import Success",
+    "DownloadBinaryTimeout": "Timeout download an asset file.",
+    "WarningMessageDescription": "You can ignore the warning message, since after this it can still be loaded normally on demand, when entering the wiki."
   },
   "EditWorkspace": {
     "Path": "Wiki Path",
@@ -557,5 +559,6 @@
     "TiddlersListAndEssential": "Tiddlers List and Essential Tiddlers",
     "TiddlerTexts": "Tiddler Texts",
     "AddToSQLite": "Adding To local SQLite cache DB"
-  }
+  },
+  "WarningMessage": "Warning Message"
 }
