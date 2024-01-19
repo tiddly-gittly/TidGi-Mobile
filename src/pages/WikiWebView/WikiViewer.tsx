@@ -5,6 +5,7 @@ import { MD3Colors, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
+import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { FAKE_USER_AGENT } from '../../constants/webview';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
@@ -56,10 +57,10 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerPro
    * When app is in background for a while, system will recycle the webview, and auto refresh it when app is back to foreground. We need to retrigger the initialization process by assigning different react key to the webview, otherwise it will white screen.
    */
   const [webViewKeyToReloadAfterRecycleByOS, setWebViewKeyToReloadAfterRecycleByOS] = useState(0);
-  const triggerFullReload = () => {
+  const triggerFullReload = useThrottledCallback(() => {
     console.info('triggerFullReload due to WebViewKeyToReloadAfterRecycleByOS');
-    setWebViewKeyToReloadAfterRecycleByOS(webViewKeyToReloadAfterRecycleByOS + 1);
-  };
+    setWebViewKeyToReloadAfterRecycleByOS(latest => latest + 1);
+  });
   servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
@@ -126,7 +127,13 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerPro
       renderError={(errorName) => <Text>{errorName}</Text>}
       renderLoading={() => <Text>{t('Loading')}</Text>}
       onRenderProcessGone={() => {
+        console.warn('onRenderProcessGone triggerFullReload');
         // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
+        triggerFullReload();
+      }}
+      onContentProcessDidTerminate={() => {
+        console.warn('onContentProcessDidTerminate triggerFullReload');
+        // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1838563135
         triggerFullReload();
       }}
       onLoadEnd={() => {
