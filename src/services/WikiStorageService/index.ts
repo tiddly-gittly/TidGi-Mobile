@@ -152,6 +152,7 @@ export class WikiStorageService {
 
       return true;
     } catch (error) {
+      // for example, `Failed to delete tiddler, Tiddler with title "$:/Deck/new 1/study" not found.`
       console.error(`Failed to delete tiddler ${title}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       throw error;
     }
