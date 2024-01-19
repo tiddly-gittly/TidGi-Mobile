@@ -301,27 +301,21 @@ class TidGiMobileFileSystemSyncAdaptor {
   options include:
   tiddlerInfo: the syncer's tiddlerInfo for this tiddler
   */
-  async deleteTiddler(title: string, callback: ISyncAdaptorDeleteTiddlerCallback, options: { tiddlerInfo: { adaptorInfo: { bag?: string } } }) {
+  async deleteTiddler(title: string, callback: ISyncAdaptorDeleteTiddlerCallback, _options: { tiddlerInfo: { adaptorInfo: { bag?: string } } }) {
     if (this.isReadOnly) {
       callback(null);
       return;
     }
-    // If we don't have a bag it means that the tiddler hasn't been seen by the server, so we don't need to delete it
-    const bag = options?.tiddlerInfo?.adaptorInfo?.bag;
-    this.logger.log('deleteTiddler', bag);
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-    if (!bag) {
-      callback(null, options.tiddlerInfo.adaptorInfo);
-      return;
-    }
-    this.addRecentUpdatedTiddlersFromClient('deletions', title);
-    const deleted = await this.wikiStorageService.deleteTiddler(title);
+    this.logger.log('deleteTiddler', title);
     try {
-      if (!deleted) {
-        throw new Error('getTiddler returned undefined from callWikiIpcServerRoute getTiddler in loadTiddler');
+      this.addRecentUpdatedTiddlersFromClient('deletions', title);
+      const deleted = await this.wikiStorageService.deleteTiddler(title);
+      if (deleted) {
+        // Invoke the callback & return null adaptorInfo
+        callback(null, null);
+      } else {
+        callback(new Error('getTiddler returned undefined from callWikiIpcServerRoute getTiddler in loadTiddler'));
       }
-      // Invoke the callback & return null adaptorInfo
-      callback(null, null);
     } catch (error) {
       // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
