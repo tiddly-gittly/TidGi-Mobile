@@ -38,6 +38,9 @@ dependencies:
   expo-background-fetch:
     specifier: 11.8.0
     version: 11.8.0(expo@50.0.2)
+  expo-barcode-scanner:
+    specifier: 12.9.2
+    version: 12.9.2(expo@50.0.2)
   expo-camera:
     specifier: 14.0.1
     version: 14.0.1(expo@50.0.2)
@@ -5056,6 +5059,15 @@ packages:
       expo-task-manager: 11.7.0(expo@50.0.2)
     dev: false
 
+  /expo-barcode-scanner@12.9.2(expo@50.0.2):
+    resolution: {integrity: sha512-szsGCWMu6HXWigSKvGy7q+5v7EyIUr4SYdmMhzLxNQmNA8fPP2t2SMOhX8AVcGAqu9nOY7ij0bZUtAWrLFo6FA==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 50.0.2(@babel/core@7.23.7)(@react-native/babel-preset@0.73.19)
+      expo-image-loader: 4.6.0(expo@50.0.2)
+    dev: false
+
   /expo-camera@14.0.1(expo@50.0.2):
     resolution: {integrity: sha512-72W8T9P+oYloWwFt2/ils15OS5X0R9u1p5vjRRo5fyGhbTA3qkS8UsV1tdSNTCUBcAxXHEXTO+iM4Xzabun8tg==}
     peerDependencies:
@@ -5160,6 +5172,14 @@ packages:
 
   /expo-haptics@12.8.1(expo@50.0.2):
     resolution: {integrity: sha512-ntLsHkfle8K8w9MW8pZEw92ZN3sguaGUSSIxv30fPKNeQFu7Cq/h47Qv3tONv2MO3wU48N9FbKnant6XlfptpA==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 50.0.2(@babel/core@7.23.7)(@react-native/babel-preset@0.73.19)
+    dev: false
+
+  /expo-image-loader@4.6.0(expo@50.0.2):
+    resolution: {integrity: sha512-RHQTDak7/KyhWUxikn2yNzXL7i2cs16cMp6gEAgkHOjVhoCJQoOJ0Ljrt4cKQ3IowxgCuOrAgSUzGkqs7omj8Q==}
     peerDependencies:
       expo: '*'
     dependencies:

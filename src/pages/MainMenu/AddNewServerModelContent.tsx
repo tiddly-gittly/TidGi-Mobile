@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
+import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
-import { BarcodeScanningResult, Camera, CameraView } from 'expo-camera/next';
 import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
 import { useWorkspaceStore } from '../../store/workspace';
@@ -15,7 +15,7 @@ interface WikiEditModalProps {
   onClose: () => void;
 }
 
-const SmallBarCodeScanner = styled(CameraView)`
+const SmallBarCodeScanner = styled(BarCodeScanner)`
   height: 80%;
   width: 100%;
 `;
@@ -49,13 +49,14 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
 
   useEffect(() => {
     void (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
+      const { status } = await BarCodeScanner.requestPermissionsAsync();
       setHasPermission(status === 'granted');
     })();
   }, []);
 
-  const handleBarCodeScanned = useCallback(({ type, data }: BarcodeScanningResult) => {
-    if (type === 'qr') {
+  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
       try {
         setQrScannerOpen(false);
         setScannedString(data);
@@ -87,10 +88,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     <ModalContainer>
       {qrScannerOpen && (
         <SmallBarCodeScanner
-          barcodeScannerSettings={{
-            barCodeTypes: ['qr'],
-          }}
-          onBarcodeScanned={handleBarCodeScanned}
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
+          onBarCodeScanned={handleBarCodeScanned}
         />
       )}
       <ScanQRButton

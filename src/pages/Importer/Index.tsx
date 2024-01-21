@@ -1,6 +1,6 @@
 /* eslint-disable unicorn/no-useless-undefined */
 import { StackScreenProps } from '@react-navigation/stack';
-import { BarcodeScanningResult, Camera, CameraView } from 'expo-camera/next';
+import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Collapsible from 'react-native-collapsible';
@@ -23,7 +23,7 @@ const Container = styled.View`
 const ButtonText = styled.Text`
   height: 30px;
 `;
-const LargeBarCodeScanner = styled(CameraView)`
+const LargeBarCodeScanner = styled(BarCodeScanner)`
   height: 80%;
   width: 100%;
 `;
@@ -65,15 +65,16 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
+      const { status } = await BarCodeScanner.requestPermissionsAsync();
       setHasPermission(status === 'granted');
     };
 
     void getBarCodeScannerPermissions();
   }, []);
 
-  const handleBarCodeScanned = useCallback(({ type, data }: BarcodeScanningResult) => {
-    if (type === 'qr') {
+  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
       try {
         setQrScannerOpen(false);
         setScannedString(data);
@@ -117,10 +118,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     <Container>
       {qrScannerOpen && (
         <LargeBarCodeScanner
-          barcodeScannerSettings={{
-            barCodeTypes: ['qr'],
-          }}
-          onBarcodeScanned={handleBarCodeScanned}
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
+          onBarCodeScanned={handleBarCodeScanned}
         />
       )}
       <ScanQRButton

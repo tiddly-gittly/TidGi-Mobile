@@ -1,4 +1,4 @@
-import { Camera } from 'expo-camera/next';
+import { Camera } from 'expo-camera';
 import * as fs from 'expo-file-system';
 import * as Location from 'expo-location';
 import ReceiveSharingIntent from 'react-native-receive-sharing-intent';

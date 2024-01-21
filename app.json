@@ -43,7 +43,7 @@
     "plugins": [
       "expo-localization",
       [
-        "expo-camera",
+        "expo-barcode-scanner",
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }
