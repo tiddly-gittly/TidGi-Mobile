@@ -193,18 +193,17 @@ export class ImportService {
    * Insert a single batch
    */
   private async insertTiddlerFieldsBatch(database: SQLiteDatabase, batch: ISkinnyTiddler[]) {
-    const placeholders = batch.map(() => '(?, ?)').join(',');
-    const query = `INSERT INTO tiddlers (title, fields) VALUES ${placeholders}
-    ON CONFLICT(title) DO UPDATE SET
-    fields = excluded.fields;
-    `;
-
     // TODO: let server provide stringified row and title, so we don't need to stringify here
     // TODO: Or store fields to a fields table. https://github.com/Jermolene/TiddlyWiki5/discussions/7931
     const bindParameters = batch.flatMap(row => [row.title, JSON.stringify(row)]);
 
     let statement = this.preparedForInsertTiddlerFieldsBatch.get(batch.length);
     if (statement === undefined) {
+      const placeholders = batch.map(() => '(?, ?)').join(',');
+      const query = `INSERT INTO tiddlers (title, fields) VALUES ${placeholders}
+      ON CONFLICT(title) DO UPDATE SET
+      fields = excluded.fields;
+      `;
       statement = await database.prepareAsync(query);
       this.preparedForInsertTiddlerFieldsBatch.set(batch.length, statement);
     }
@@ -217,10 +216,10 @@ export class ImportService {
    * Insert a single batch
    */
   private async insertTiddlerTextsBatch(database: SQLiteDatabase, batch: ITiddlerTextOnly[]) {
-    const placeholders = batch.map(() => '(?, ?)').join(',');
-    const query = `INSERT INTO temp_tiddlers (title, text) VALUES ${placeholders};`;
     let statement = this.preparedForInsertTiddlerTextsBatch.get(batch.length);
     if (statement === undefined) {
+      const placeholders = batch.map(() => '(?, ?)').join(',');
+      const query = `INSERT INTO temp_tiddlers (title, text) VALUES ${placeholders};`;
       statement = await database.prepareAsync(query);
       this.preparedForInsertTiddlerTextsBatch.set(batch.length, statement);
     }

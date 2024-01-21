@@ -1,6 +1,7 @@
 /* eslint-disable unicorn/no-null */
 import { count } from 'drizzle-orm';
 import { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite/next';
 import { Readable } from 'readable-stream';
 import { sqliteServiceService } from '../../../services/SQLiteService';
 import { TiddlersSQLModel } from '../../../services/SQLiteService/orm';
@@ -28,9 +29,11 @@ export class SQLiteTiddlersReadStream extends Readable {
    * Usually 1 row is about 1kB, so 5000 rows is about 5MB. But if some row contains plugins, this will be bigger, need to reduce at runtime to prevent `SQLite: Row too big to fit into CursorWindow` error of expo-sqlite.
    */
   private readonly defaultChunkSize: number;
-  private database?: ExpoSQLiteDatabase<typeof schema>;
+  private orm?: ExpoSQLiteDatabase<typeof schema>;
+  private db?: SQLiteDatabase;
   private readonly emptyChunk = '[]';
   private readonly additionalContent?: string[];
+  private readonly preparedReadStatements = new Map<number, SQLiteStatement>();
 
   constructor(workspace: IWikiWorkspace, options?: ISQLiteTiddlersReadStreamOptions) {
     super();
@@ -44,8 +47,10 @@ export class SQLiteTiddlersReadStream extends Readable {
 
   async init() {
     try {
-      this.database = (await sqliteServiceService.getDatabase(this.workspace)).orm;
-      this.listSize = (await this.database.select({ value: count() }).from(TiddlersSQLModel))[0].value;
+      const { orm, db } = await sqliteServiceService.getDatabase(this.workspace);
+      this.orm = orm;
+      this.db = db;
+      this.listSize = (await this.orm.select({ value: count() }).from(TiddlersSQLModel))[0].value;
     } catch (error) {
       console.error();
       console.error(`SQLiteTiddlersReadStream init error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
@@ -53,12 +58,20 @@ export class SQLiteTiddlersReadStream extends Readable {
     }
   }
 
+  destroy(error?: Error | undefined): this {
+    this.preparedReadStatements.forEach(statement => {
+      statement.finalizeSync();
+    });
+    this.preparedReadStatements.clear();
+    return super.destroy(error);
+  }
+
   _read() {
-    if (this.database === undefined) {
+    if (this.orm === undefined || this.db === undefined) {
       throw new Error('database is undefined (not ready) in SQLiteTiddlersReadStream when reading.');
     }
 
-    this.readWithChunkSize(this.database, this.defaultChunkSize).then(({
+    this.readWithChunkSize(this.db, this.defaultChunkSize).then(({
       chunk,
       size,
     }) => {
@@ -83,17 +96,25 @@ export class SQLiteTiddlersReadStream extends Readable {
    * Read sqlite with `this.currentPosition` and given chunkSize (won't read from `this.chunkSize`, so you can try with different chunk size)
    * @returns stringified json array of tiddlers
    */
-  private async readWithChunkSize(database: ExpoSQLiteDatabase<typeof schema>, chunkSize: number): Promise<{ chunk: string; size: number }> {
+  private async readWithChunkSize(database: SQLiteDatabase, chunkSize: number): Promise<{ chunk: string; size: number }> {
     if (chunkSize <= 0) {
       throw new Error(`Read tiddlers from SQLite retry down to chunkSize ${chunkSize}, which is a bug.`);
     }
     try {
       console.info(`Loading tiddlers from sqlite, chunkSize: ${chunkSize}, currentPosition: ${this.currentPosition}`);
-      // FIXME: this is too slow, even with 100 rows
-      const rows = await database.query.TiddlersSQLModel.findMany({
-        limit: chunkSize,
-        offset: this.currentPosition,
-      });
+      // FIXME: this is too slow, even with 100 rows, try add index, and row id and use where id > ?
+      // const rows = await database.query.TiddlerSQLModel.findMany({
+      //   limit: chunkSize,
+      //   offset: this.currentPosition,
+      // });
+      let statement = this.preparedReadStatements.get(chunkSize);
+      if (statement === undefined) {
+        const query = `SELECT * FROM tiddlers LIMIT ${chunkSize} OFFSET ${this.currentPosition}`;
+        statement = await database.prepareAsync(query);
+        this.preparedReadStatements.set(chunkSize, statement);
+      }
+      const result = await statement.executeAsync<typeof TiddlersSQLModel.$inferSelect>();
+      const rows = await result.getAllAsync();
       if (rows.length === 0) {
         return { chunk: this.emptyChunk, size: 0 };
       }
