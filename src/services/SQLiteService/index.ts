@@ -1,5 +1,5 @@
 import * as fs from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from 'expo-sqlite/next';
 import { DataSource } from 'typeorm';
 import { getWikiMainSqliteName, getWikiMainSqlitePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/workspace';

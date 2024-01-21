@@ -38,9 +38,9 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
                 void Haptics.selectionAsync();
                 drag();
               }}
-              name='md-reorder-three-sharp'
+              name='reorder-three-sharp'
               size={24}
-              color={theme.colors.onSecondary}
+              color={theme.colors.onPrimary}
             />
           )}
         />
