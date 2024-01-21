@@ -10,11 +10,11 @@ export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${worksp
  * Will make sure filename don't have invalid characters.
  */
 export const getWikiTiddlerPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiTiddlerFolderPath(workspace)}${title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_')}`;
-export const WIKI_STORE_NAME = 'tiddlerStore.json';
+export const SYSTEM_STORE_CACHE_NAME = 'system-tiddlerStore.json';
 /**
  * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.
  */
-export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_STORE_NAME}`;
+export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${SYSTEM_STORE_CACHE_NAME}`;
 export const WIKI_SMALL_TEXT_STORE_CACHE_NAME = 'text-tiddlerStore.json';
 export const WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME = 'skinny-tiddlerStore.json';
 export const WIKI_BINARY_TIDDLERS_LIST_CACHE_NAME = 'binaryTiddlersList.json';
