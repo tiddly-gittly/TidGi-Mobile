@@ -44,11 +44,6 @@ export class WikiStorageService {
     };
   }
 
-  async getSkinnyTiddlers(): Promise<string> {
-    const skinnyTiddlerStore = await getSkinnyTiddlersJSONFromSQLite(this.#workspace);
-    return skinnyTiddlerStore;
-  }
-
   /**
    * Return the e-tag
    */
@@ -209,25 +204,5 @@ export class WikiStorageService {
       //   observer.next(changes);
       // });
     });
-  }
-}
-
-/**
- * get skinny tiddlers json array from sqlite, without text field to speedup initial loading and memory usage
- * If you want some tiddlers not being skinny (For example, `$:/` tiddlers), make sure to save text field in the `fields` field when saving, in the plugins\src\expo-file-system-syncadaptor\file-system-syncadaptor.ts , see logic of `saveFullTiddler`
- * @returns json string same as what return from `tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`, with type `Promise<Array<Omit<ITiddlerFields, 'text'>> | undefined>`
- */
-export async function getSkinnyTiddlersJSONFromSQLite(workspace: IWikiWorkspace): Promise<string> {
-  try {
-    const dataSource = await sqliteServiceService.getDatabase(workspace);
-    const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
-    /** skinny tiddlers + full tiddlers judged by `saveFullTiddler` */
-    const tiddlers = await tiddlerRepo.find({ select: ['fields'] });
-    if (tiddlers.length === 0) {
-      return '[]';
-    }
-    return `[${tiddlers.map(tiddler => tiddler.fields).filter((fields): fields is string => fields !== null).join(',')}]`;
-  } catch (error) {
-    throw new Error(`Error getting skinny tiddlers list from SQLite: ${(error as Error).message}`);
   }
 }
