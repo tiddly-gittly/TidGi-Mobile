@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
-import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
+import { BarcodeScanningResult, CameraView } from 'expo-camera/next';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
@@ -14,7 +14,7 @@ interface ServerEditModalProps {
   onClose: () => void;
 }
 
-const SmallBarCodeScanner = styled(BarCodeScanner)`
+const SmallBarCodeScanner = styled(CameraView)`
   height: 80%;
   width: 100%;
 `;
@@ -52,9 +52,9 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       }
     }
   }, [scannedString]);
-  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
+  const handleBarCodeScanned = useCallback(({ type, data }: BarcodeScanningResult) => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
+    if (type === 'qr') {
       try {
         setQrScannerOpen(false);
         setScannedString(data);
@@ -88,9 +88,10 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     <ModalContainer>
       {qrScannerOpen && (
         <SmallBarCodeScanner
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
-          onBarCodeScanned={handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barCodeTypes: ['qr'],
+          }}
+          onBarcodeScanned={handleBarCodeScanned}
         />
       )}
       <ScanQRButton

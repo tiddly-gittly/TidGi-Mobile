@@ -25,7 +25,6 @@
     "expo": "50.0.2",
     "expo-application": "5.8.3",
     "expo-background-fetch": "11.8.0",
-    "expo-barcode-scanner": "12.9.2",
     "expo-camera": "14.0.1",
     "expo-clipboard": "5.0.1",
     "expo-dev-client": "3.3.6",
