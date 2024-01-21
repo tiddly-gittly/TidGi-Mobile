@@ -202,20 +202,21 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         <>
           <Text variant='titleLarge'>{t('Loading')}</Text>
           <Text>{t('Downloading.HTML')}</Text>
-          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
           <Text>{t('Downloading.TiddlersListAndEssential')}</Text>
-          <ProgressBar progress={downloadPercentage.skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar progress={downloadPercentage.skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
           <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
-          <ProgressBar progress={downloadPercentage.binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar progress={downloadPercentage.binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral60} />
           <Text>{t('Downloading.TiddlerTexts')}</Text>
-          <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral70} />
         </>
       )}
       {importStatus === 'sqlite' && (
         <>
           <Text>{t('Downloading.AddToSQLite')}</Text>
-          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
-          <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary40} />
+          <ProgressBar progress={downloadPercentage.addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (

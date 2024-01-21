@@ -32,7 +32,7 @@ export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
       {importingBinary && (
         <>
           <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
-          <ProgressBar progress={importPercentage.importBinaryReadListPercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={importPercentage.importBinaryReadListPercentage} color={MD3Colors.tertiary40} />
           <ProgressBar progress={importPercentage.importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
         </>
       )}
