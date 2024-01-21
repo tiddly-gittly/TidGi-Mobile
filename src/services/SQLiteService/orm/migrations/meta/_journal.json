@@ -1,0 +1,13 @@
+{
+  "version": "5",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1705863322016,
+      "tag": "0000_sour_anthem",
+      "breakpoints": true
+    }
+  ]
+}

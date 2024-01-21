@@ -1,8 +1,11 @@
+/* eslint-disable unicorn/no-new-buffer */
+/* eslint-disable security/detect-new-buffer */
 /* eslint-disable unicorn/no-null */
+import { Buffer } from 'buffer/';
 import * as fs from 'expo-file-system';
 import { Readable } from 'readable-stream';
 
-class ExpoReadStream extends Readable {
+export class ExpoReadStream extends Readable {
   private readonly fileUri: string;
   private fileSize: number;
   private currentPosition: number;
@@ -18,10 +21,9 @@ class ExpoReadStream extends Readable {
      * If this is too large, the progress bar will be stuck when down stream processing this chunk, but too small will waste too much time in fs hand shake.
      */
     this.chunkSize = options.length ?? 1024 * 1024 * 5;
-    void this._init();
   }
 
-  async _init() {
+  public async init() {
     try {
       const fileInfo = await fs.getInfoAsync(this.fileUri, { size: true });
       if (fileInfo.exists) {
@@ -41,6 +43,7 @@ class ExpoReadStream extends Readable {
       length: this.chunkSize,
     } satisfies fs.ReadingOptions;
     fs.readAsStringAsync(this.fileUri, readingOptions).then(chunk => {
+
       if (chunk.length === 0) {
         // End of the stream
         this.emit('progress', 1);
@@ -48,9 +51,10 @@ class ExpoReadStream extends Readable {
       } else {
         this.currentPosition = Math.min(this.chunkSize + this.currentPosition, this.fileSize);
         this.emit('progress', this.fileSize === 0 ? 0.5 : (this.currentPosition / this.fileSize));
-        this.push(Buffer.from(chunk, 'base64'));
+        this.push(new Buffer(chunk, 'base64'));
       }
     }).catch(error => {
+      console.error(`ExpoReadStream error reading file: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       this.emit('error', error);
     });
   }

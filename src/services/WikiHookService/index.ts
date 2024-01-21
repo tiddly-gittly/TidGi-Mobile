@@ -56,10 +56,6 @@ export class WikiHookService {
   }
 }
 
-export function replaceTiddlerStoreScriptToTriggerFullReload(tiddlerStoreScript: string): string {
-  return tiddlerStoreScript.replaceAll('window.location.reload', 'window.service.wikiHookService.triggerFullReload');
-}
-
 export function wrapScriptToWaitTwReady(script: string): string {
   return `
   (function waitForTwReadyIntervalIIFE() {

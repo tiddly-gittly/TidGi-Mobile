@@ -4,8 +4,6 @@ import * as fs from 'expo-file-system';
 import streamChunksPreloadScriptAssetID from '../../../../assets/preload/streamChunksPreloadScript.js.html';
 
 export enum OnStreamChunksToWebViewEventTypes {
-  TIDDLER_SKINNY_STORE_SCRIPT_CHUNK = 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK',
-  TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END = 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END',
   TIDDLER_STORE_SCRIPT_CHUNK = 'TIDDLER_STORE_SCRIPT_CHUNK',
   TIDDLER_STORE_SCRIPT_CHUNK_END = 'TIDDLER_STORE_SCRIPT_CHUNK_END',
   TIDDLYWIKI_HTML = 'TIDDLYWIKI_HTML',
@@ -14,14 +12,18 @@ type OnStreamChunksToWebViewEvents = {
   data: string;
   type:
     | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML
-    | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK
-    | OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK;
+    | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK;
 } | {
-  type: OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END;
+  type: OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END;
 };
 declare global {
   interface Window {
     onStreamChunksToWebView: (event: OnStreamChunksToWebViewEvents) => void;
+    /**
+     * Prevent send side call methods provided by preload script too soon.
+     * Need to wait this to be true, then send data.
+     */
+    preloadScriptLoaded?: boolean;
   }
 }
 

@@ -1,162 +1,231 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
+import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite/next';
+import { Dispatch, SetStateAction } from 'react';
 import { Writable } from 'readable-stream';
 import Chain, { chain } from 'stream-chain';
 import JsonlParser from 'stream-json/jsonl/Parser';
 import StreamArray from 'stream-json/streamers/StreamArray';
 import Batch from 'stream-json/utils/Batch';
-import { DataSource, EntityManager } from 'typeorm';
-import { getWikiBinaryTiddlersListCachePath, getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
+import { getWikiBinaryTiddlersListCachePath, getWikiTiddlerSkinnyStoreCachePath, getWikiTiddlerStorePath, getWikiTiddlerTextStoreCachePath } from '../../constants/paths';
 import { sqliteServiceService } from '../../services/SQLiteService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
-import { createReadStream } from './ExpoReadStream';
+import { createReadStream, ExpoReadStream } from './ExpoReadStream';
 import { ISkinnyTiddler, ISkinnyTiddlersJSONBatch, ITiddlerTextOnly, ITiddlerTextsJSONBatch } from './types';
 
 /**
  * Service for importing wiki from TidGi Desktop or nodejs server
  */
 export class ImportService {
-  public async storeTiddlersToSQLite(workspace: IWikiWorkspace, setProgress: { fields: (progress: number) => void; text: (progress: number) => void }) {
-    const database = await sqliteServiceService.getDatabase(workspace);
+  public async storeTiddlersToSQLite(
+    workspace: IWikiWorkspace,
+    setProgress: {
+      fields: (progress: number) => void;
+      setError: Dispatch<SetStateAction<string | undefined>>;
+      system: (progress: number) => void;
+      text: (progress: number) => void;
+    },
+  ) {
+    const { db } = await sqliteServiceService.getDatabase(workspace);
+    await db.execAsync('PRAGMA journal_mode = OFF');
     // skinny tiddler >= skinny tiddler with text, so we insert skinny tiddlers first, and update text later with title as id
-    await this.storeFieldsToSQLite(database, workspace, setProgress.fields);
-    await this.storeTextToSQLite(database, workspace, setProgress.text);
-    await sqliteServiceService.closeDatabase(workspace);
+    // plugin files might be large, so store 10 by 10 to save memory
+    try {
+      await this.storeFieldsToSQLite(db, getWikiTiddlerStorePath(workspace), setProgress.system, { batchSize: 10 });
+      await this.storeFieldsToSQLite(db, getWikiTiddlerSkinnyStoreCachePath(workspace), setProgress.fields);
+    } finally {
+      try {
+        // will cause `Access to closed resource`, if this is created in a transaction
+        // await Promise.all([...this.preparedForInsertTiddlerFieldsBatch].map(async ([_index, statement]) => {
+        //   await statement.finalizeAsync();
+        // }));
+        this.preparedForInsertTiddlerFieldsBatch.clear();
+      } catch (error) {
+        console.error(`Failed to finalize prepared statement for InsertTiddlerFields ${(error as Error).message}`);
+      }
+    }
+    try {
+      await this.storeTextToSQLite(db, getWikiTiddlerTextStoreCachePath(workspace), setProgress.text);
+    } finally {
+      try {
+        // await Promise.all([...this.preparedForInsertTiddlerTextsBatch].map(async ([_index, statement]) => {
+        //   await statement.finalizeAsync();
+        // }));
+        this.preparedForInsertTiddlerTextsBatch.clear();
+      } catch (error) {
+        console.error(`Failed to finalize prepared statement for InsertTiddlerTexts ${(error as Error).message}`);
+      }
+    }
   }
 
   /** Max variable count is 999 by default, We divide by 2 as we have 2 fields to insert (title, text) each time for each row */
   BATCH_SIZE_2 = 499;
 
-  private async storeFieldsToSQLite(database: DataSource, workspace: IWikiWorkspace, setProgress: (progress: number) => void = () => {}) {
+  /**
+   * Store full json content as-is to `fields` in the sqlite.
+   *
+   * If json provided is skinny, `fields` won't include `text` field too, and should have `is_skinny` when preparing the JSON on serve side. Need to call `storeTextToSQLite` to store text later.
+   * If json is full tiddler json, `fields` will have the full tiddler.
+   */
+  private async storeFieldsToSQLite(
+    database: SQLiteDatabase,
+    filePath: string,
+    setProgress: (progress: number) => void = () => {},
+    configs?: { batchSize?: number; jsonl?: boolean },
+  ) {
     setProgress(0);
-    await database.transaction(async tx => {
-      let batchedTiddlerFieldsStream: Chain;
-      try {
-        const readStream = createReadStream(getWikiTiddlerSkinnyStoreCachePath(workspace));
-        readStream.on('progress', (progress: number) => {
-          setProgress(progress);
-        });
-        batchedTiddlerFieldsStream = chain([
-          readStream,
-          new JsonlParser(),
-          new Batch({ batchSize: this.BATCH_SIZE_2 }),
-        ]);
-      } catch (error) {
-        throw new Error(`storeFieldsToSQLite() Failed to read tiddler text store, ${(error as Error).message}`);
-      }
-      const sqliteWriteStream = new Writable({
-        objectMode: true,
-        write: async (chunk: ISkinnyTiddlersJSONBatch, encoding, next) => {
-          try {
-            await this.insertTiddlerFieldsBatch(tx, chunk.map(item => item.value));
-            next();
-          } catch (error) {
-            // if have any error, end the batch, not calling `next()`, to prevent dirty data
-            throw new Error(`storeFieldsToSQLite() Insert text to SQLite batch error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
-          }
-        },
+    let batchedTiddlerFieldsStream: Chain;
+    let readStream: ExpoReadStream;
+    try {
+      readStream = createReadStream(filePath);
+      readStream.on('progress', (progress: number) => {
+        setProgress(progress);
       });
-      batchedTiddlerFieldsStream.pipe(sqliteWriteStream);
-      // wait for stream to finish before exit the transaction
-      let readEnded = false;
-      let writeEnded = false;
-      await new Promise<void>((resolve, reject) => {
-        batchedTiddlerFieldsStream.on('end', () => {
-          readEnded = true;
-          if (writeEnded) resolve();
-        });
-        sqliteWriteStream.on('finish', () => {
-          writeEnded = true;
-          if (readEnded) resolve();
-        });
-        batchedTiddlerFieldsStream.on('error', (error) => {
-          reject(error);
-        });
+      await readStream.init();
+      batchedTiddlerFieldsStream = chain([
+        readStream,
+        (configs?.jsonl ?? true) ? new JsonlParser() : StreamArray.withParser(),
+        new Batch({ batchSize: configs?.batchSize ?? this.BATCH_SIZE_2 }),
+      ]);
+    } catch (error) {
+      throw new Error(`storeFieldsToSQLite() Failed to read tiddler text store, ${(error as Error).message}`);
+    }
+    const sqliteWriteStream = new Writable({
+      objectMode: true,
+      write: async (chunk: ISkinnyTiddlersJSONBatch, encoding, next) => {
+        try {
+          await this.insertTiddlerFieldsBatch(database, chunk.map(item => item.value));
+          next();
+        } catch (error) {
+          // if have any error, end the batch, not calling `next()`, to prevent dirty data
+          sqliteWriteStream.emit('error', new Error(`storeFieldsToSQLite() error: ${(error as Error).message} ${(error as Error).stack ?? ''}`));
+          readStream.destroy();
+        }
+      },
+    });
+    batchedTiddlerFieldsStream.pipe(sqliteWriteStream);
+    // wait for stream to finish before exit the method
+    let readEnded = false;
+    let writeEnded = false;
+    await new Promise<void>((resolve, reject) => {
+      batchedTiddlerFieldsStream.on('end', () => {
+        readEnded = true;
+        if (writeEnded) resolve();
+      });
+      sqliteWriteStream.on('finish', () => {
+        writeEnded = true;
+        if (readEnded) resolve();
+      });
+      batchedTiddlerFieldsStream.on('error', (error) => {
+        reject(error);
+      });
+      sqliteWriteStream.on('error', (error) => {
+        reject(error);
       });
     });
   }
 
-  private async storeTextToSQLite(database: DataSource, workspace: IWikiWorkspace, setProgress: (progress: number) => void = () => {}) {
+  private async storeTextToSQLite(database: SQLiteDatabase, filePath: string, setProgress: (progress: number) => void = () => {}) {
     setProgress(0);
-    await database.transaction(async tx => {
-      let batchedTiddlerTextStream: Chain;
-      try {
-        // stream result to prevent OOM
-        const readStream = createReadStream(getWikiTiddlerTextStoreCachePath(workspace));
-        readStream.on('progress', (progress: number) => {
-          setProgress(progress);
-        });
-        batchedTiddlerTextStream = chain([
-          readStream,
-          new JsonlParser(),
-          new Batch({ batchSize: this.BATCH_SIZE_2 }),
-        ]);
-      } catch (error) {
-        throw new Error(`storeTextToSQLite() Failed to read tiddler text store, ${(error as Error).message}`);
-      }
-      // Use temp table to speed up update. Can't directly batch update existing rows, SQLite can only batch insert non-existing rows.
-      await tx.query('CREATE TEMPORARY TABLE tempTiddlers (title TEXT PRIMARY KEY, text TEXT);');
-      const sqliteWriteStream = new Writable({
-        objectMode: true,
-        write: async (chunk: ITiddlerTextsJSONBatch, encoding, next) => {
-          try {
-            await this.insertTiddlerTextsBatch(tx, chunk.map(item => item.value));
-            next();
-          } catch (error) {
-            // if have any error, end the batch, not calling `next()`, to prevent dirty data
-            throw new Error(`storeTextToSQLite() Insert text to SQLite batch error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
-          }
-        },
+    let batchedTiddlerTextStream: Chain;
+    let readStream: ExpoReadStream;
+    try {
+      // stream result to prevent OOM
+      readStream = createReadStream(filePath);
+      readStream.on('progress', (progress: number) => {
+        setProgress(progress);
       });
-      batchedTiddlerTextStream.pipe(sqliteWriteStream);
-      // wait for stream to finish before exit the transaction
-      let readEnded = false;
-      let writeEnded = false;
-      await new Promise<void>((resolve, reject) => {
-        batchedTiddlerTextStream.on('end', () => {
-          readEnded = true;
-          if (writeEnded) resolve();
-        });
-        sqliteWriteStream.on('finish', () => {
-          writeEnded = true;
-          if (readEnded) resolve();
-        });
-        batchedTiddlerTextStream.on('error', (error) => {
-          reject(error);
-        });
+      await readStream.init();
+      batchedTiddlerTextStream = chain([
+        readStream,
+        new JsonlParser(),
+        new Batch({ batchSize: this.BATCH_SIZE_2 }),
+      ]);
+    } catch (error) {
+      throw new Error(`storeTextToSQLite() Failed to read tiddler text store JSON file, ${(error as Error).message}`);
+    }
+    // Use temp table to speed up update. Can't directly batch update existing rows, SQLite can only batch insert non-existing rows.
+    // await database.execAsync('CREATE TEMPORARY TABLE temp_tiddlers (title TEXT PRIMARY KEY, text TEXT);');
+    const sqliteWriteStream = new Writable({
+      objectMode: true,
+      write: async (chunk: ITiddlerTextsJSONBatch, encoding, next) => {
+        try {
+          await this.insertTiddlerTextsBatch(database, chunk.map(item => item.value));
+          next();
+        } catch (error) {
+          // if have any error, end the batch, not calling `next()`, to prevent dirty data
+          sqliteWriteStream.emit('error', new Error(`storeTextToSQLite() Insert text to SQLite batch error: ${(error as Error).message} ${(error as Error).stack ?? ''}`));
+          readStream.destroy();
+        }
+      },
+    });
+    batchedTiddlerTextStream.pipe(sqliteWriteStream);
+    // wait for stream to finish before exit the method
+    let readEnded = false;
+    let writeEnded = false;
+    await new Promise<void>((resolve, reject) => {
+      batchedTiddlerTextStream.on('end', () => {
+        readEnded = true;
+        if (writeEnded) resolve();
       });
-      await tx.query(`
+      sqliteWriteStream.on('finish', () => {
+        writeEnded = true;
+        if (readEnded) resolve();
+      });
+      batchedTiddlerTextStream.on('error', (error) => {
+        reject(error);
+      });
+      sqliteWriteStream.on('error', (error) => {
+        reject(error);
+      });
+    });
+    await database.execAsync(`
           UPDATE tiddlers 
-          SET text = (SELECT text FROM tempTiddlers WHERE tempTiddlers.title = tiddlers.title)
-          WHERE title IN (SELECT title FROM tempTiddlers)
+          SET text = (SELECT text FROM temp_tiddlers WHERE temp_tiddlers.title = tiddlers.title)
+          WHERE title IN (SELECT title FROM temp_tiddlers)
       `);
-      await tx.query('DROP TABLE tempTiddlers;');
-      setProgress(1);
-    });
+    await database.execAsync('DROP TABLE temp_tiddlers;');
+    setProgress(1);
   }
 
+  private readonly preparedForInsertTiddlerFieldsBatch = new Map<number, SQLiteStatement>();
   /**
    * Insert a single batch
    */
-  private async insertTiddlerFieldsBatch(tx: EntityManager, batch: ISkinnyTiddler[]) {
+  private async insertTiddlerFieldsBatch(database: SQLiteDatabase, batch: ISkinnyTiddler[]) {
     const placeholders = batch.map(() => '(?, ?)').join(',');
-    const query = `INSERT INTO tiddlers (title, fields) VALUES ${placeholders};`;
+    const query = `INSERT INTO tiddlers (title, fields) VALUES ${placeholders}
+    ON CONFLICT(title) DO UPDATE SET
+    fields = excluded.fields;
+    `;
 
     // TODO: let server provide stringified row and title, so we don't need to stringify here
+    // TODO: Or store fields to a fields table. https://github.com/Jermolene/TiddlyWiki5/discussions/7931
     const bindParameters = batch.flatMap(row => [row.title, JSON.stringify(row)]);
 
-    await tx.query(query, bindParameters);
+    let statement = this.preparedForInsertTiddlerFieldsBatch.get(batch.length);
+    if (statement === undefined) {
+      statement = await database.prepareAsync(query);
+      this.preparedForInsertTiddlerFieldsBatch.set(batch.length, statement);
+    }
+    await statement.executeAsync(bindParameters);
   }
+
+  private readonly preparedForInsertTiddlerTextsBatch = new Map<number, SQLiteStatement>();
 
   /**
    * Insert a single batch
    */
-  private async insertTiddlerTextsBatch(tx: EntityManager, batch: ITiddlerTextOnly[]) {
+  private async insertTiddlerTextsBatch(database: SQLiteDatabase, batch: ITiddlerTextOnly[]) {
     const placeholders = batch.map(() => '(?, ?)').join(',');
-    const query = `INSERT INTO tempTiddlers (title, text) VALUES ${placeholders};`;
+    const query = `INSERT INTO temp_tiddlers (title, text) VALUES ${placeholders};`;
+    let statement = this.preparedForInsertTiddlerTextsBatch.get(batch.length);
+    if (statement === undefined) {
+      statement = await database.prepareAsync(query);
+      this.preparedForInsertTiddlerTextsBatch.set(batch.length, statement);
+    }
     const bindParameters = batch.flatMap(row => [row.title, row.text]);
-
-    await tx.query(query, bindParameters);
+    await statement.executeAsync(bindParameters);
   }
 
   /**
@@ -183,6 +252,7 @@ export class ImportService {
       readStream.on('progress', (progress: number) => {
         setProgress.setReadListProgress(progress);
       });
+      await readStream.init();
       const countBinaryTiddlerFieldsStream = chain([
         readStream,
         StreamArray.withParser(),
@@ -216,6 +286,7 @@ export class ImportService {
       readStream.on('progress', (progress: number) => {
         setProgress.setReadListProgress(progress);
       });
+      await readStream.init();
       batchedBinaryTiddlerFieldsStream = chain([
         readStream,
         StreamArray.withParser(),

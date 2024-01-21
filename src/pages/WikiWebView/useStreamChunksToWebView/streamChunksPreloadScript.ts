@@ -7,51 +7,43 @@
  * Run `pnpm build:preload` to build this file.
  */
 (function useStreamChunksToWebViewWebviewSideReceiverIIFE() {
-  let tiddlersStoreAccumulatedContent = '';
-  let skinnyTiddlersStoreAccumulatedContent = '';
-  let wikiHTML = '';
-  let skinnyStoreCompleteCount = 0;
-  let storeCompleteCount = 0;
+  /**
+   * Array of stringified json array.
+   */
+  let tiddlersStoreContents: string[] = [];
+  let canInjectTiddlers = false;
   function resetUseStreamChunksToWebViewWebviewSideReceiverIIFE() {
-    tiddlersStoreAccumulatedContent = '';
-    skinnyTiddlersStoreAccumulatedContent = '';
-    wikiHTML = '';
-    skinnyStoreCompleteCount = 0;
-    storeCompleteCount = 0;
+    tiddlersStoreContents = [];
+    canInjectTiddlers = false;
   }
 
   // @ts-ignore
   window.onStreamChunksToWebView = function(event) {
     switch (event.type) {
       case 'TIDDLYWIKI_HTML': {
-        wikiHTML += event.data;
+        resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
+        startInjectHTML(event.data);
         break;
       }
       case 'TIDDLER_STORE_SCRIPT_CHUNK': {
-        tiddlersStoreAccumulatedContent += event.data;
-        break;
-      }
-      case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK': {
-        skinnyTiddlersStoreAccumulatedContent += event.data;
-        break;
-      }
-      case 'TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END': {
-        skinnyStoreCompleteCount += 1;
+        tiddlersStoreContents.push(event.data);
         break;
       }
       case 'TIDDLER_STORE_SCRIPT_CHUNK_END': {
-        storeCompleteCount += 1;
+        const startInjectTiddlerIfHTMLDone = () => {
+          if (canInjectTiddlers) {
+            executeScriptsAfterInjectHTML();
+          } else {
+            setTimeout(startInjectTiddlerIfHTMLDone, 100);
+          }
+        };
+        startInjectTiddlerIfHTMLDone();
         break;
       }
     }
-
-    if (skinnyStoreCompleteCount === 1 && storeCompleteCount === 1) {
-      // start jobs
-      startInjectHTML();
-    }
   };
 
-  function startInjectHTML() {
+  function startInjectHTML(newInnerHTML: string) {
     console.log('startInjectHTML');
     /**
      * All information needed are collected.
@@ -71,8 +63,7 @@
       }
       if (hasChange) {
         observer.disconnect(); // Important: disconnect the observer once done.
-        // use timeout to give splash screen a chance to execute and show
-        setTimeout(executeScriptsAfterInjectHTML, 100);
+        canInjectTiddlers = true;
       }
     });
 
@@ -80,14 +71,14 @@
     observer.observe(document.body, { childList: true });
 
     // this ignores all script tags, so we need 'executeScriptsAfterInjectHTML()' later.
-    document.body.innerHTML = wikiHTML;
+    document.body.innerHTML = newInnerHTML;
   }
 
-  function appendStoreScript(storeJSON: string, name: string) {
+  function appendStoreScript(storeJSONString: string, name: string) {
     const tiddlersStoreScript = document.createElement('script');
     tiddlersStoreScript.type = 'application/json';
     tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store', name);
-    tiddlersStoreScript.textContent = storeJSON;
+    tiddlersStoreScript.textContent = storeJSONString;
     const styleAreaDiv = document.querySelector('#styleArea');
     styleAreaDiv?.insertAdjacentElement('afterend', tiddlersStoreScript);
   }
@@ -100,8 +91,9 @@
     console.log('executeScriptsAfterInjectHTML');
     try {
       // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
-      appendStoreScript(skinnyTiddlersStoreAccumulatedContent, 'skinnyTiddlers');
-      appendStoreScript(tiddlersStoreAccumulatedContent, 'pluginsAndJS');
+      tiddlersStoreContents.forEach((storeJSONString, index) => {
+        appendStoreScript(storeJSONString, `tidgi-tiddlers-store-${index}`);
+      });
 
       // load other scripts
       const scriptElements = Array.from(document.querySelectorAll('script'));

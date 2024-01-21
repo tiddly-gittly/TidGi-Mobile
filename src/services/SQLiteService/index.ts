@@ -1,38 +1,32 @@
+import { drizzle, ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
+import { migrate } from 'drizzle-orm/expo-sqlite/migrator';
 import * as fs from 'expo-file-system';
 import * as SQLite from 'expo-sqlite/next';
-import { DataSource } from 'typeorm';
 import { getWikiMainSqliteName, getWikiMainSqlitePath } from '../../constants/paths';
 import { IWikiWorkspace } from '../../store/workspace';
-import { TiddlerChangeSQLModel, TiddlerSQLModel } from './orm';
-import { migrations } from './orm/migrations';
+import * as schema from './orm';
+import migrations from './orm/migrations/migrations';
 
 /**
  * Get app stores in wiki.
  */
 export class SQLiteServiceService {
-  private readonly dataSources = new Map<string, DataSource>();
+  private readonly rawDatabases = new Map<string, SQLite.SQLiteDatabase>();
+  private readonly databases = new Map<string, ExpoSQLiteDatabase<typeof schema>>();
 
-  async getDatabase(workspace: IWikiWorkspace, isRetry = false): Promise<DataSource> {
+  async getDatabase(workspace: IWikiWorkspace, isRetry = false): Promise<{ db: SQLite.SQLiteDatabase; orm: ExpoSQLiteDatabase<typeof schema> }> {
     const name = getWikiMainSqliteName(workspace);
-    if (!this.dataSources.has(name)) {
+    if (!this.rawDatabases.has(name) && !this.databases.has(name)) {
       try {
-        const dataSource = new DataSource({
-          database: name,
-          entities: [TiddlerSQLModel, TiddlerChangeSQLModel],
-          synchronize: false,
-          type: 'expo',
-          driver: SQLite,
-          migrations,
-          migrationsTableName: 'migrations',
-        });
-        /**
-         * Error `TypeError: Cannot read property 'transaction' of undefined` will show if run any query without initialize.
-         */
-        await dataSource.initialize();
-        await dataSource.runMigrations();
-
-        this.dataSources.set(name, dataSource);
-        return dataSource;
+        const expoSqlite = await SQLite.openDatabaseAsync(name);
+        const dataSource = drizzle(expoSqlite, { schema });
+        await migrate(dataSource, migrations);
+        this.rawDatabases.set(name, expoSqlite);
+        this.databases.set(name, dataSource);
+        return {
+          db: expoSqlite,
+          orm: dataSource,
+        };
       } catch (error) {
         console.error(`Failed to getDatabase ${name}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
         if (!isRetry) {
@@ -44,7 +38,12 @@ export class SQLiteServiceService {
           }
         }
         try {
-          await this.dataSources.get(name)?.destroy();
+          const existingDatabase = this.rawDatabases.get(name);
+          if (existingDatabase !== undefined) {
+            existingDatabase.closeSync();
+            this.databases.delete(name);
+            this.rawDatabases.delete(name);
+          }
         } catch (error) {
           console.error(`Failed to destroy in getDatabase ${name}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
         }
@@ -52,26 +51,26 @@ export class SQLiteServiceService {
       }
     }
 
-    return this.dataSources.get(name)!;
+    return {
+      db: this.rawDatabases.get(name)!,
+      orm: this.databases.get(name)!,
+    };
   }
 
   async closeDatabase(workspace: IWikiWorkspace, drop?: boolean) {
     const name = getWikiMainSqliteName(workspace);
-    if (this.dataSources.has(name)) {
+    if (this.rawDatabases.has(name)) {
       try {
-        const dataSource = this.dataSources.get(name)!;
-        this.dataSources.delete(name);
+        const rawDatabase = this.rawDatabases.get(name)!;
+        this.databases.delete(name);
+        this.rawDatabases.delete(name);
+        await rawDatabase.closeAsync();
         if (drop === true) {
-          await dataSource.dropDatabase();
           // need to delete the file. May encounter SQLITE_BUSY error if not deleted.
           await fs.deleteAsync(getWikiMainSqlitePath(workspace));
-        } else {
-          await dataSource.destroy();
-          console.log(`closeDatabase ${name}`);
         }
       } catch (error) {
         console.error(`Failed to closeDatabase ${name}: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
-        throw error;
       }
     }
   }

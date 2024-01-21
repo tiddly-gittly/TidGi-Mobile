@@ -7,8 +7,8 @@ import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { useCloseSQLite } from '../../services/SQLiteService/hooks';
 import { useWorkspaceStore } from '../../store/workspace';
-import { WikiViewer } from './WikiViewer';
 import { getWebviewSideReceiver } from './useStreamChunksToWebView/webviewSideReceiver';
+import { WikiViewer } from './WikiViewer';
 
 const Container = styled.View`
   height: 100%;

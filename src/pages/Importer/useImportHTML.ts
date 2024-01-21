@@ -15,8 +15,8 @@ import {
   WIKI_FOLDER_PATH,
 } from '../../constants/paths';
 import { importService } from '../../services/ImportService';
-import { sqliteServiceService } from '../../services/SQLiteService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { sqliteServiceService } from '../../services/SQLiteService';
 
 type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'sqlite' | 'success' | 'error';
 
@@ -30,6 +30,7 @@ export function useImportHTML() {
   const [binaryTiddlersListDownloadPercentage, setBinaryTiddlersListDownloadPercentage] = useState(0);
   const [addTextToSQLitePercentage, setAddTextToSQLitePercentage] = useState(0);
   const [addFieldsToSQLitePercentage, setAddFieldsToSQLitePercentage] = useState(0);
+  const [addSystemTiddlersToSQLitePercentage, setAddSystemTiddlersToSQLitePercentage] = useState(0);
   const addWiki = useWorkspaceStore(state => state.add);
   const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWikiWorkspace, setCreatedWikiWorkspace] = useState<undefined | IWikiWorkspace>();
@@ -66,7 +67,7 @@ export function useImportHTML() {
     const getBinaryTiddlersListUrl = new URL(`/recipes/default/tiddlers.json?filter=${encodeURIComponent(defaultBinaryFilter)}`, origin);
     /**
      * Some tiddlers must have text field on start, this gets them.
-     * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.
+     * This JSON contains non-skinny tiddlers, like system tiddlers and state tiddlers.
      */
     const getNonSkinnyTiddlywikiTiddlerStoreScriptUrl = new URL('/tw-mobile-sync/get-non-skinny-tiddlywiki-tiddler-store-script', origin);
 
@@ -136,7 +137,12 @@ export function useImportHTML() {
         binaryTiddlersListDownloadResumable.downloadAsync(),
       ]);
       setStatus('sqlite');
-      await importService.storeTiddlersToSQLite(newWorkspace, { text: setAddTextToSQLitePercentage, fields: setAddFieldsToSQLitePercentage });
+      await importService.storeTiddlersToSQLite(newWorkspace, {
+        text: setAddTextToSQLitePercentage,
+        fields: setAddFieldsToSQLitePercentage,
+        system: setAddSystemTiddlersToSQLitePercentage,
+        setError,
+      });
       await sqliteServiceService.closeDatabase(newWorkspace);
       setStatus('success');
     } catch (error) {
@@ -163,6 +169,7 @@ export function useImportHTML() {
       binaryTiddlersListDownloadPercentage,
       addTextToSQLitePercentage,
       addFieldsToSQLitePercentage,
+      addSystemTiddlersToSQLitePercentage,
     },
   };
 }

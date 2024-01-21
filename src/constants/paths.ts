@@ -12,7 +12,7 @@ export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${worksp
 export const getWikiTiddlerPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiTiddlerFolderPath(workspace)}${title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_')}`;
 export const SYSTEM_STORE_CACHE_NAME = 'system-tiddlerStore.json';
 /**
- * This JSON is used as-is, so should be a valid JSON, instead of JSON-Line.
+ * non-skinny tiddlers, like system tiddlers and state tiddlers.
  */
 export const getWikiTiddlerStorePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${SYSTEM_STORE_CACHE_NAME}`;
 export const WIKI_SMALL_TEXT_STORE_CACHE_NAME = 'text-tiddlerStore.json';

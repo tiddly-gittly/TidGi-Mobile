@@ -13,7 +13,7 @@ module.exports = {
   resolver: {
     ...resolver,
     unstable_enableSymlinks: true,
-    sourceExts: [...sourceExts, 'mjs'],
+    sourceExts: [...sourceExts, 'mjs', 'sql'],
     extraNodeModules: {
       stream: require.resolve('readable-stream'),
       // crypto: require.resolve('react-native-crypto-js'),

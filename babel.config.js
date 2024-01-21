@@ -15,6 +15,7 @@ module.exports = function(api) {
       ['@babel/plugin-transform-private-methods', { loose: true }],
       'babel-plugin-transform-typescript-metadata',
       'react-native-reanimated/plugin',
+      ['inline-import', { extensions: ['.sql'] }],
     ],
   };
 };

@@ -1,9 +1,8 @@
-import { MutableRefObject, useCallback } from 'react';
+import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
+import { Writable } from 'readable-stream';
 import { IHtmlContent } from '../useTiddlyWiki';
 import { OnStreamChunksToWebViewEventTypes } from './webviewSideReceiver';
-
-const CHUNK_SIZE = 1_000_000;
 
 /**
  * WebView can't load large html string, so we have to send it using postMessage and load it inside the webview
@@ -11,66 +10,85 @@ const CHUNK_SIZE = 1_000_000;
  * @returns
  */
 export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>) {
+  const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
     if (webViewReference.current === null) return;
-    webViewReference.current.injectJavaScript(`window.onStreamChunksToWebView(${
+    webViewReference.current.injectJavaScript(`
+    var receiveData = () => {
+    if (window.preloadScriptLoaded !== true) {
+      setTimeout(receiveData, 100);
+    } else {
+      window.onStreamChunksToWebView(${
       JSON.stringify({
         type: messageType,
         data,
       })
-    });`);
-  }, [webViewReference]);
-
-  const sendChunkedDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, scriptContent: string, endMessageType: OnStreamChunksToWebViewEventTypes) => {
-    let chunkIndex = 0;
-    const scriptLength = scriptContent.length;
-    function sendNextChunk() {
-      if (webViewReference.current === null) return;
-      if (chunkIndex < scriptLength) {
-        const chunk = scriptContent.slice(chunkIndex, chunkIndex + CHUNK_SIZE);
-        sendDataToWebView(messageType, chunk);
-        chunkIndex += CHUNK_SIZE;
-
-        // If this was the last chunk, notify the WebView to replace the content
-        if (chunkIndex >= scriptLength) {
-          sendDataToWebView(endMessageType);
-        } else {
-          // Optionally add a delay to ensure chunks are processed in order
-          setTimeout(sendNextChunk, 10);
-        }
-      }
+    });
     }
-
-    sendNextChunk();
-  }, [sendDataToWebView, webViewReference]);
+    }
+    receiveData();
+    `);
+  }, [webViewReference]);
 
   /**
    * Inject HTML and tiddlers store
    */
-  const injectHtmlAndTiddlersStore = useCallback((htmlContent: IHtmlContent) => {
-    const { html, skinnyTiddlerStore, tiddlerStoreScript } = htmlContent;
-
+  const injectHtmlAndTiddlersStore = useCallback(async ({ html, tiddlersStream, setLoadHtmlError }: IHtmlContent) => {
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
     if (webViewReference.current !== null) {
-      /**
-       * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
-       */
-      sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
-      /**
-       * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
-       */
-      sendChunkedDataToWebView(
-        OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK,
-        tiddlerStoreScript,
-        OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END,
-      );
-      sendChunkedDataToWebView(
-        OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK,
-        skinnyTiddlerStore,
-        OnStreamChunksToWebViewEventTypes.TIDDLER_SKINNY_STORE_SCRIPT_CHUNK_END,
-      );
+      try {
+        /**
+         * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
+         */
+        sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
+        /**
+         * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
+         */
+        await tiddlersStream.init();
+        tiddlersStream.on('progress', (percentage: number) => {
+          setStreamChunksToWebViewPercentage(percentage);
+        });
+        const webviewSendDataWriteStream = new Writable({
+          objectMode: true,
+          write: (chunk: Buffer, encoding, next) => {
+            try {
+              sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK, chunk.toString());
+              setTimeout(() => {
+                // Optionally add a delay to ensure chunks are processed in order
+                next();
+              }, 10);
+            } catch (error) {
+              // if have any error, end the batch, not calling `next()`, to prevent dirty data
+              throw new Error(`injectHtmlAndTiddlersStore() read tiddlers error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+            }
+          },
+        });
+        tiddlersStream.pipe(webviewSendDataWriteStream);
+        await new Promise<void>((resolve, reject) => {
+          // wait for stream to finish before exit the transaction
+          let readEnded = false;
+          let writeEnded = false;
+          tiddlersStream.on('end', () => {
+            sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END);
+            setStreamChunksToWebViewPercentage(1);
+            readEnded = true;
+            if (writeEnded) resolve();
+          });
+          webviewSendDataWriteStream.on('finish', () => {
+            writeEnded = true;
+            if (readEnded) resolve();
+          });
+          tiddlersStream.on('error', (error: Error) => {
+            setLoadHtmlError(`injectHtmlAndTiddlersStore Stream error: ${error.message}`);
+            reject(error);
+          });
+        });
+      } catch (error) {
+        setLoadHtmlError(`injectHtmlAndTiddlersStore error: ${(error as Error).message}`);
+        throw error;
+      }
     }
-  }, [webViewReference, sendDataToWebView, sendChunkedDataToWebView]);
+  }, [webViewReference, sendDataToWebView]);
 
-  return injectHtmlAndTiddlersStore;
+  return { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage };
 }

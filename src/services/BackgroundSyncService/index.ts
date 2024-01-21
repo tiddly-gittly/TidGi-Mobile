@@ -1,5 +1,6 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/promise-function-async */
+import { asc, desc, eq, lt } from 'drizzle-orm';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as fs from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
@@ -14,7 +15,7 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { sqliteServiceService } from '../SQLiteService';
-import { TiddlerChangeSQLModel, TiddlerSQLModel } from '../SQLiteService/orm';
+import { TiddlerChangeSQLModel, TiddlersSQLModel } from '../SQLiteService/orm';
 import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
 import { ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
 import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
@@ -121,16 +122,16 @@ export class BackgroundSyncService {
 
   public async getChangeLogsSinceLastSync(wiki: IWikiWorkspace, lastSync: number, newerFirst?: boolean): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
     try {
-      const dataSource = await sqliteServiceService.getDatabase(wiki);
-      const tiddlerChangeRepo = dataSource.getRepository(TiddlerChangeSQLModel);
-      const tiddlerRepo = dataSource.getRepository(TiddlerSQLModel);
-
+      const { orm } = await sqliteServiceService.getDatabase(wiki);
       const lastSyncTimestamp = new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ');
 
-      const changeLogs = await tiddlerChangeRepo.createQueryBuilder('change')
-        .where("strftime('%s', change.timestamp) > strftime('%s', :lastSyncTimestamp)", { lastSyncTimestamp })
-        .orderBy('change.timestamp', newerFirst === true ? 'DESC' : 'ASC')
-        .getMany();
+      // const changeLogs = await tiddlerChangeRepo.createQueryBuilder('change')
+      //   .where("strftime('%s', change.timestamp) > strftime('%s', :lastSyncTimestamp)", { lastSyncTimestamp })
+      //   .orderBy('change.timestamp', newerFirst === true ? 'DESC' : 'ASC')
+      //   .getMany();
+      const changeLogs = await orm.select().from(TiddlerChangeSQLModel).where(lt(TiddlerChangeSQLModel.timestamp, lastSyncTimestamp)).orderBy(
+        newerFirst === true ? desc(TiddlerChangeSQLModel.timestamp) : asc(TiddlerChangeSQLModel.timestamp),
+      );
 
       const filteredChangeLogs = changeLogs.filter(change => !getSyncIgnoredTiddlers(change.title).includes(change.title));
 
@@ -139,14 +140,15 @@ export class BackgroundSyncService {
           const result: { fields?: ITiddlerFieldsParam } & ITiddlerChange = {
             id: change.id,
             title: change.title,
-            operation: change.operation,
-            timestamp: change.timestamp.toISOString(), // Convert Date to string
+            operation: change.operation as TiddlersLogOperation,
+            timestamp: new Date(change.timestamp).toISOString(), // Convert Date to string
           };
           if (change.operation === TiddlersLogOperation.DELETE) return result;
           // for update and insert, add text and fields to it
           const title = change.title;
-          const skinnyTiddlerWithText = await tiddlerRepo.findOne({ where: { title } });
-          if (skinnyTiddlerWithText === null) return result;
+          // const skinnyTiddlerWithText = await tiddlerRepo.findOne({ where: { title } });
+          const [skinnyTiddlerWithText] = await orm.select().from(TiddlersSQLModel).where(eq(TiddlersSQLModel.title, title)).limit(1);
+          if (skinnyTiddlerWithText === undefined) return result;
 
           /**
            * This may have text if it is `getFullSaveTiddlers` tiddler, otherwise it is skinny tiddler without text.
@@ -222,19 +224,19 @@ export class BackgroundSyncService {
     }
   }
 
-  async #updateTiddlersFromServer(wiki: IWikiWorkspace, deletes: string[], updates: ITiddlerFieldsParam[]) {
+  async #updateTiddlersFromServer(workspace: IWikiWorkspace, deletes: string[], updates: ITiddlerFieldsParam[]) {
     try {
-      const dataSource = await sqliteServiceService.getDatabase(wiki);
-      await dataSource.transaction(async (transactionalEntityManager) => {
-        const tiddlerRepo = transactionalEntityManager.getRepository(TiddlerSQLModel);
+      const dataSource = (await sqliteServiceService.getDatabase(workspace)).orm;
+      await dataSource.transaction(async (transaction) => {
         // Delete Tiddlers
         for (const title of deletes) {
-          await tiddlerRepo.delete({ title });
+          // await tiddlerRepo.delete({ title });
+          await transaction.delete(TiddlersSQLModel).where(eq(TiddlersSQLModel.title, title));
         }
 
         // Update Tiddlers
         for (const tiddlerFields of updates) {
-          const { text, title, ...fieldsToSave } = tiddlerFields as ITiddlerFieldsParam & { text?: string; title: string };
+          const { text, title, ...fieldsObjectToSave } = tiddlerFields as ITiddlerFieldsParam & { text?: string; title: string };
           const ignore = getSyncIgnoredTiddlers(title).includes(title);
           if (ignore) continue;
           const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
@@ -251,31 +253,42 @@ export class BackgroundSyncService {
           //   }
           // }
 
-          const tiddler = new TiddlerSQLModel();
-          tiddler.title = title;
+          let textToSave: string | null = null;
+          let fieldsStringToSave: string;
           // for `$:/` tiddlers, if being skinny will throw error like `"Linked List only accepts string values, not " + value;`
           if (saveFullTiddler) {
-            tiddler.fields = JSON.stringify({
+            fieldsStringToSave = JSON.stringify({
               text,
               title,
-              ...fieldsToSave,
+              ...fieldsObjectToSave,
             });
           } else {
             // prevent save huge duplicated content to SQLite, if not necessary
-            if (text !== undefined && this.checkIsLargeText(text, fieldsToSave.type as string)) {
+            if (text !== undefined && backgroundSyncService.checkIsLargeText(text, fieldsObjectToSave.type as string)) {
               // save to fs instead of sqlite. See `WikiStorageService.#loadFromServer` for how we load it later.
-              await this.saveToFSFromServer(wiki, title);
-              tiddler.text = null;
+              // `BackgroundSyncService.#updateTiddlersFromServer` will use saveToFSFromServer, but here we already have the text, so we can save it directly
+              // don't set encoding here, otherwise read as utf8 will failed.
+              await fs.writeAsStringAsync(getWikiTiddlerPathByTitle(workspace, title), text);
+              textToSave = null;
             } else {
-              tiddler.text = text;
+              textToSave = text ?? null;
             }
-            tiddler.fields = JSON.stringify({
+            fieldsStringToSave = JSON.stringify({
               _is_skinny: '',
               title,
-              ...fieldsToSave,
+              ...fieldsObjectToSave,
             });
           }
-          await tiddlerRepo.save(tiddler);
+          /**
+           * Save or update tiddler
+           * See `BackgroundSyncService.#updateTiddlersFromServer` for a similar logic
+           */
+          const newTiddler = {
+            title,
+            text: textToSave,
+            fields: fieldsStringToSave,
+          } satisfies typeof TiddlersSQLModel.$inferInsert;
+          await transaction.insert(TiddlersSQLModel).values(newTiddler);
         }
       });
     } catch (error) {

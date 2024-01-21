@@ -18,6 +18,7 @@
     "./*.json",
     "./*.js",
     "./*.tsx",
+    "./*.ts",
     "./*.*.js"
   ],
   "exclude": ["libs", "patches"]

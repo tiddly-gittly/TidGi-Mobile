@@ -100,9 +100,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
     const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
-    void nativeService.getLocationWithTimeout().then(coords => {
-      if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
-    });
+    // void nativeService.getLocationWithTimeout().then(coords => {
+    //   if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
+    // });
     await storeHtml(wikiUrl.origin, wikiName, newServer.id);
     setWikiUrl(undefined);
   }, [addServer, storeHtml, updateServer, wikiName, wikiUrl]);
@@ -214,8 +214,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       {importStatus === 'sqlite' && (
         <>
           <Text>{t('Downloading.AddToSQLite')}</Text>
-          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary40} />
           <ProgressBar progress={downloadPercentage.addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary40} />
           <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
         </>
       )}
