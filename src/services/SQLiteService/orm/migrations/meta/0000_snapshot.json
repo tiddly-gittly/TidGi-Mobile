@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "sqlite",
-  "id": "7f1006d0-dd1c-461c-abdb-be9ac23f08aa",
+  "id": "eabb353e-c3b2-4a9c-8187-000bb5152875",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "temp_tiddlers": {
@@ -67,10 +67,17 @@
     "tiddlers": {
       "name": "tiddlers",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
         "title": {
           "name": "title",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -89,7 +96,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "tiddlers_title_unique": {
+          "name": "tiddlers_title_unique",
+          "columns": [
+            "title"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}

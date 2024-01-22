@@ -102,18 +102,13 @@ export class SQLiteTiddlersReadStream extends Readable {
     }
     try {
       console.info(`Loading tiddlers from sqlite, chunkSize: ${chunkSize}, currentPosition: ${this.currentPosition}`);
-      // FIXME: this is too slow, even with 100 rows, try add index, and row id and use where id > ?
-      // const rows = await database.query.TiddlerSQLModel.findMany({
-      //   limit: chunkSize,
-      //   offset: this.currentPosition,
-      // });
-      let statement = this.preparedReadStatements.get(chunkSize);
+      let statement = this.preparedReadStatements.get('SELECT');
       if (statement === undefined) {
-        const query = `SELECT * FROM tiddlers LIMIT ${chunkSize} OFFSET ${this.currentPosition}`;
+        const query = `SELECT * FROM tiddlers WHERE id > (?) LIMIT (?)`;
         statement = await database.prepareAsync(query);
-        this.preparedReadStatements.set(chunkSize, statement);
+        this.preparedReadStatements.set('SELECT', statement);
       }
-      const result = await statement.executeAsync<typeof TiddlersSQLModel.$inferSelect>();
+      const result = await statement.executeAsync<typeof TiddlersSQLModel.$inferSelect>(this.currentPosition, chunkSize);
       const rows = await result.getAllAsync();
       if (rows.length === 0) {
         return { chunk: this.emptyChunk, size: 0 };

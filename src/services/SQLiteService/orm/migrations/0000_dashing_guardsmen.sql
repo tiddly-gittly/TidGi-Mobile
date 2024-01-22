@@ -11,7 +11,10 @@ CREATE TABLE `tiddlers_changes_log` (
 );
 --> statement-breakpoint
 CREATE TABLE `tiddlers` (
-	`title` text PRIMARY KEY NOT NULL,
+	`id` integer PRIMARY KEY NOT NULL,
+	`title` text NOT NULL,
 	`text` text,
 	`fields` text NOT NULL
 );
+--> statement-breakpoint
+CREATE UNIQUE INDEX `tiddlers_title_unique` ON `tiddlers` (`title`);

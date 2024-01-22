@@ -2,7 +2,8 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const TiddlersSQLModel = sqliteTable('tiddlers', {
-  title: text('title').primaryKey(),
+  id: integer('id').primaryKey(),
+  title: text('title').unique().notNull(),
   /**
    * If has text, means this tiddler can be skinny (user side tiddlers), if is null, means full tiddler json is in `fields` and can't be skinny (system and plugin tiddlers that needs to be load at the start).
    */
