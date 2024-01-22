@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null */
-import { count } from 'drizzle-orm';
+import { max } from 'drizzle-orm';
 import { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite/next';
 import { Readable } from 'readable-stream';
@@ -33,10 +33,10 @@ export class SQLiteTiddlersReadStream extends Readable {
   private db?: SQLiteDatabase;
   private readonly emptyChunk = '[]';
   private readonly additionalContent?: string[];
-  private readonly preparedReadStatements = new Map<number, SQLiteStatement>();
+  private readonly preparedReadStatements = new Map<string, SQLiteStatement>();
 
   constructor(workspace: IWikiWorkspace, options?: ISQLiteTiddlersReadStreamOptions) {
-    super();
+    super({ encoding: 'utf8' });
     this.workspace = workspace;
     this.listSize = 0;
     this.currentPosition = 0;
@@ -50,7 +50,7 @@ export class SQLiteTiddlersReadStream extends Readable {
       const { orm, db } = await sqliteServiceService.getDatabase(this.workspace);
       this.orm = orm;
       this.db = db;
-      this.listSize = (await this.orm.select({ value: count() }).from(TiddlersSQLModel))[0].value;
+      this.listSize = (await this.orm.select({ listSize: max(TiddlersSQLModel.id) }).from(TiddlersSQLModel))[0]?.listSize ?? 0;
     } catch (error) {
       console.error();
       console.error(`SQLiteTiddlersReadStream init error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);

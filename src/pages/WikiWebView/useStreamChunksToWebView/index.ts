@@ -13,18 +13,17 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
     if (webViewReference.current === null) return;
+    const stringifiedData = JSON.stringify({
+      type: messageType,
+      data,
+    });
     webViewReference.current.injectJavaScript(`
     var receiveData = () => {
-    if (window.preloadScriptLoaded !== true) {
-      setTimeout(receiveData, 100);
-    } else {
-      window.onStreamChunksToWebView(${
-      JSON.stringify({
-        type: messageType,
-        data,
-      })
-    });
-    }
+      if (window.preloadScriptLoaded !== true) {
+        setTimeout(receiveData, 100);
+      } else {
+        window.onStreamChunksToWebView(${stringifiedData});
+      }
     }
     receiveData();
     `);
@@ -50,13 +49,10 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
         });
         const webviewSendDataWriteStream = new Writable({
           objectMode: true,
-          write: (chunk: Buffer, encoding, next) => {
+          write: (tiddlersJSONArrayString: string, encoding, next) => {
             try {
-              sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK, chunk.toString());
-              setTimeout(() => {
-                // Optionally add a delay to ensure chunks are processed in order
-                next();
-              }, 10);
+              sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK, tiddlersJSONArrayString);
+              next();
             } catch (error) {
               // if have any error, end the batch, not calling `next()`, to prevent dirty data
               throw new Error(`injectHtmlAndTiddlersStore() read tiddlers error: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
