@@ -2,6 +2,7 @@
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Dimensions } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
@@ -18,13 +19,22 @@ import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 
-const WebViewContainer = styled.View`
-  flex: 2;
-  height: 100%;
+const PROGRESS_BAR_HEIGHT = 30;
+const TopProgressBar = styled(ProgressBar)`
+  height: ${PROGRESS_BAR_HEIGHT}px;
+  width: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 100;
+`;
+const WebViewContainer = styled.View<{ loading: boolean }>`
+  height: ${({ loading }) => loading ? `${Dimensions.get('window').height - PROGRESS_BAR_HEIGHT}px` : '100%'};
+  width: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  position: absolute;
+  top: ${({ loading }) => loading ? '10%' : `0`};
 `;
 const ErrorText = styled(Text)`
   color: ${MD3Colors.error50};
@@ -68,6 +78,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerPro
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
   const { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage } = useStreamChunksToWebView(webViewReference);
+  const loading = streamChunksToWebViewPercentage > 0 && streamChunksToWebViewPercentage < 1;
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
   }, [webViewKeyToReloadAfterRecycleByOS]);
@@ -95,61 +106,59 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerPro
   }, [registerWikiStorageServiceOnWebView, rememberLastVisitState, webviewSideReceiver, wikiWorkspace]);
 
   if (loadHtmlError) {
-    return (
-      <WebViewContainer>
-        <ErrorText variant='titleLarge'>{loadHtmlError}</ErrorText>
-      </WebViewContainer>
-    );
+    return <ErrorText variant='titleLarge'>{loadHtmlError}</ErrorText>;
   }
   // TODO: maybe webViewKeyToReloadAfterRecycleByOS need to be use when refactor this to a new component. Sometimes the source works, but preload is not applied
   return (
     <>
-      {streamChunksToWebViewPercentage > 0 && streamChunksToWebViewPercentage < 1 && <ProgressBar progress={streamChunksToWebViewPercentage} color={MD3Colors.tertiary40} />}
-      <WebView
-        style={{ backgroundColor: theme.colors.background }}
-        key={webViewKeyToReloadAfterRecycleByOS}
-        originWhitelist={['*']}
-        mediaPlaybackRequiresUserAction={false}
-        allowsInlineMediaPlayback
-        javaScriptCanOpenWindowsAutomatically
-        allowsBackForwardNavigationGestures
-        allowsProtectedMedia
-        allowFileAccess
-        allowFileAccessFromFileURLs
-        allowUniversalAccessFromFileURLs
-        focusable
-        geolocationEnabled
-        importantForAccessibility='yes'
-        keyboardDisplayRequiresUserAction={false}
-        mediaCapturePermissionGrantType='grant'
-        mixedContentMode='always'
-        allowsAirPlayForMediaPlayback
-        allowsFullscreenVideo
-        userAgent={FAKE_USER_AGENT}
-        // add DOCTYPE at load time to prevent Quirks Mode
-        source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>` }}
-        // source={{ uri: 'about:blank#%E6%9E%97%E4%B8%80%E4%BA%8C:%E6%9E%97%E4%B8%80%E4%BA%8C%20Index' }}
-        renderError={(errorName) => <Text>{errorName}</Text>}
-        renderLoading={() => <Text>{t('Loading')}</Text>}
-        onRenderProcessGone={() => {
-          console.warn('onRenderProcessGone triggerFullReload');
-          // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
-          triggerFullReload();
-        }}
-        onContentProcessDidTerminate={() => {
-          console.warn('onContentProcessDidTerminate triggerFullReload');
-          // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1838563135
-          triggerFullReload();
-        }}
-        onLoadEnd={() => {
-          // this is called every time a tiddler is opened. And will be call 3 times before wiki loaded, seems including when setting innerHTML.
-          setLoaded(true);
-        }}
-        onMessage={onMessageReference.current}
-        ref={webViewReference}
-        injectedJavaScriptBeforeContentLoaded={preloadScript}
-        webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
-      />
+      <TopProgressBar progress={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
+      <WebViewContainer loading={loading}>
+        <WebView
+          style={{ backgroundColor: theme.colors.background }}
+          key={webViewKeyToReloadAfterRecycleByOS}
+          originWhitelist={['*']}
+          mediaPlaybackRequiresUserAction={false}
+          allowsInlineMediaPlayback
+          javaScriptCanOpenWindowsAutomatically
+          allowsBackForwardNavigationGestures
+          allowsProtectedMedia
+          allowFileAccess
+          allowFileAccessFromFileURLs
+          allowUniversalAccessFromFileURLs
+          focusable
+          geolocationEnabled
+          importantForAccessibility='yes'
+          keyboardDisplayRequiresUserAction={false}
+          mediaCapturePermissionGrantType='grant'
+          mixedContentMode='always'
+          allowsAirPlayForMediaPlayback
+          allowsFullscreenVideo
+          userAgent={FAKE_USER_AGENT}
+          // add DOCTYPE at load time to prevent Quirks Mode
+          source={{ html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>` }}
+          // source={{ uri: 'about:blank#%E6%9E%97%E4%B8%80%E4%BA%8C:%E6%9E%97%E4%B8%80%E4%BA%8C%20Index' }}
+          renderError={(errorName) => <Text>{errorName}</Text>}
+          renderLoading={() => <Text>{t('Loading')}</Text>}
+          onRenderProcessGone={() => {
+            console.warn('onRenderProcessGone triggerFullReload');
+            // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
+            triggerFullReload();
+          }}
+          onContentProcessDidTerminate={() => {
+            console.warn('onContentProcessDidTerminate triggerFullReload');
+            // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1838563135
+            triggerFullReload();
+          }}
+          onLoadEnd={() => {
+            // this is called every time a tiddler is opened. And will be call 3 times before wiki loaded, seems including when setting innerHTML.
+            setLoaded(true);
+          }}
+          onMessage={onMessageReference.current}
+          ref={webViewReference}
+          injectedJavaScriptBeforeContentLoaded={preloadScript}
+          webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
+        />
+      </WebViewContainer>
     </>
   );
 };

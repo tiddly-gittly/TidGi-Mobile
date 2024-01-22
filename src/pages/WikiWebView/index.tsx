@@ -1,7 +1,7 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Text } from 'react-native-paper';
+import { MD3Colors, ProgressBar, Text } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
@@ -15,7 +15,7 @@ const Container = styled.View`
   width: 100%;
   background-color: ${({ theme }) => theme.colors.background};
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
 `;
 
 export interface WikiWebViewProps {
