@@ -27,6 +27,7 @@ export function ServerAndSync(): JSX.Element {
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
   const [inSyncing, setInSyncing] = useState(false);
+  const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const onEditServer = useCallback((server: IServerInfo) => {
     void Haptics.selectionAsync();
     setSelectedServerID(server.id);
@@ -44,12 +45,15 @@ export function ServerAndSync(): JSX.Element {
           setInSyncing(true);
           try {
             await backgroundSyncService.sync();
+            setIsSyncSucceed(true);
+          } catch {
+            setIsSyncSucceed(false);
           } finally {
             setInSyncing(false);
           }
         }}
       >
-        {t('ContextMenu.SyncNow')}
+        {isSyncSucceed === true ? t('Log.SynchronizationFinish') : (isSyncSucceed === undefined ? t('ContextMenu.SyncNow') : t('Log.SynchronizationFailed'))}
       </Button>
       <Text>{t('Preference.SyncNowDescription')}</Text>
       <BackgroundSyncStatus />

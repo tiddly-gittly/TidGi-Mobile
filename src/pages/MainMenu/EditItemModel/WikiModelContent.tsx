@@ -47,7 +47,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   useEffect(() => {
     if (wiki === undefined) return;
     void backgroundSyncService.updateServerOnlineStatus().then(async () => {
-      const server = await backgroundSyncService.getOnlineServerForWiki(wiki);
+      const server = backgroundSyncService.getOnlineServerForWiki(wiki);
       setCurrentOnlineServerToSync(server);
     });
   }, [wiki]);
@@ -97,11 +97,12 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
           setInSyncing(true);
           try {
             await backgroundSyncService.updateServerOnlineStatus();
-            const server = await backgroundSyncService.getOnlineServerForWiki(wiki);
-            if (server !== undefined) {
-              await backgroundSyncService.syncWikiWithServer(wiki, server);
-              setIsSyncSucceed(true);
+            const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+            if (server === undefined) {
+              throw new Error('No server available');
             }
+            await backgroundSyncService.syncWikiWithServer(wiki, server);
+            setIsSyncSucceed(true);
           } catch {
             setIsSyncSucceed(false);
           } finally {
@@ -109,7 +110,10 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
           }
         }}
       >
-        <Text>{currentOnlineServerToSync?.name ?? 'x'} {t('ContextMenu.SyncNow')}</Text>
+        <Text>
+          {currentOnlineServerToSync?.name ?? 'x'}{' '}
+          {isSyncSucceed === true ? t('Log.SynchronizationFinish') : (isSyncSucceed === undefined ? t('ContextMenu.SyncNow') : t('Log.SynchronizationFailed'))}
+        </Text>
       </Button>
 
       <Button
