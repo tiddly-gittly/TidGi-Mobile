@@ -27,6 +27,11 @@ export interface IWikiWorkspace {
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
+  /**
+   * Enable quick load button on workspace list.
+   * When click on button, will only load recent tiddlers, speed up loading time for huge wiki.
+   */
+  enableQuickLoad?: boolean;
 }
 export interface IPageWorkspace {
   id: string;

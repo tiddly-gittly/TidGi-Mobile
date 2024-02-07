@@ -2,17 +2,18 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback } from 'react';
 import DraggableFlatList from 'react-native-draggable-flatlist';
-import { Card, useTheme } from 'react-native-paper';
+import { Card, IconButton, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 
 interface WorkspaceListProps {
   onLongPress?: (workspace: IWorkspace) => void;
   onPress?: (workspace: IWorkspace) => void;
+  onPressQuickLoad?: (workspace: IWorkspace) => void;
   onReorderEnd?: (workspaces: IWorkspace[]) => void;
 }
 
-export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd }) => {
+export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd, onPressQuickLoad }) => {
   const workspacesList = useWorkspaceStore(state => state.workspaces);
   const theme = useTheme();
 
@@ -30,23 +31,31 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
           title={item.name}
           subtitle={item.id}
           right={(props) => (
-            <DragHandle
-              {...props}
-              onLongPress={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void Haptics.selectionAsync();
-                drag();
-              }}
-              name='reorder-three-sharp'
-              size={24}
-              color={theme.colors.onSecondaryContainer}
-            />
+            <RightButtonsContainer>
+              {(item as IWikiWorkspace).enableQuickLoad === true && (
+                <IconButton
+                  {...props}
+                  icon='speedometer'
+                  onPress={() => onPressQuickLoad?.(item)}
+                />
+              )}
+              <ItemRightIconButton
+                {...props}
+                onLongPress={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void Haptics.selectionAsync();
+                  drag();
+                }}
+                name='reorder-three-sharp'
+                color={theme.colors.onSecondaryContainer}
+              />
+            </RightButtonsContainer>
           )}
         />
       </WorkspaceCard>
     );
-  }, [onLongPress, onPress, theme]);
+  }, [onLongPress, onPress, onPressQuickLoad, theme]);
 
   return (
     <>
@@ -68,7 +77,16 @@ const WorkspaceCard = styled(Card)`
   background-color: ${({ theme }) => theme.colors.secondaryContainer};
   color: ${({ theme }) => theme.colors.onSecondaryContainer};
 `;
-const DragHandle = styled(Ionicons)`
+const ItemRightIconButton = styled(Ionicons)`
   padding: 10px;
   margin-right: 10px;
+`;
+ItemRightIconButton.defaultProps = {
+  size: 24,
+};
+const RightButtonsContainer = styled.View`
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
 `;

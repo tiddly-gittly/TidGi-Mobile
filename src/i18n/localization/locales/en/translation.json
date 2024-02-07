@@ -423,7 +423,9 @@
     "NotRegistered": "Not registered yet!",
     "BackgroundSyncStatus": "Background Sync Status",
     "Available": "Available",
-    "NotAvailable": "Not Available"
+    "NotAvailable": "Not Available",
+    "EnableQuickLoad": "Enable Quick Load",
+    "EnableQuickLoadDescription": "Enabled to load only the last few days' worth of tiddlers for quick opening of new content added to the giant wiki. Ideal for scenarios where you only need to add content quickly and don't need to look at old content."
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",
