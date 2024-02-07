@@ -5,8 +5,8 @@ import { Picker } from '@react-native-picker/picker';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Modal } from 'react-native';
-import { Button, MD3Colors, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { Alert } from 'react-native';
+import { Button, MD3Colors, Modal, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 
 import Collapsible from 'react-native-collapsible';
