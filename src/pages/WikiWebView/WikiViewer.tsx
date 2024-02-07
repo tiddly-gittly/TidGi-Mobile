@@ -42,6 +42,10 @@ const ErrorText = styled(Text)`
 
 export interface WikiViewerProps {
   /**
+   * User ask wiki to quick load. By pressing a button that show up only when `enableQuickLoad` is true.
+   */
+  quickLoad: boolean;
+  /**
    * Preload script for `injectHtmlAndTiddlersStore`.
    * This can't load async in this component. This component need to load at once.
    */
@@ -49,7 +53,7 @@ export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
 
-export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerProps) => {
+export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: WikiViewerProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
@@ -82,7 +86,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver }: WikiViewerPro
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
   }, [webViewKeyToReloadAfterRecycleByOS]);
-  const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS);
+  const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS, quickLoad);
   const preloadScript = useMemo(() => {
     const windowMetaScript = getWindowMeta(wikiWorkspace);
     return `

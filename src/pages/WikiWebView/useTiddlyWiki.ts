@@ -21,6 +21,7 @@ export function useTiddlyWiki(
   injectHtmlAndTiddlersStore: (htmlContent: IHtmlContent) => Promise<void>,
   webviewLoaded: boolean,
   keyToTriggerReload: number,
+  quickLoad: boolean,
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
   /**
@@ -40,6 +41,7 @@ export function useTiddlyWiki(
         const tiddlersStream = createSQLiteTiddlersReadStream(workspace, {
           // inject tidgi syncadaptor plugins
           additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
+          quickLoad,
         });
         tiddlersStreamReference.current = tiddlersStream;
         await injectHtmlAndTiddlersStore({ html: htmlWithPrefix, tiddlersStream, setLoadHtmlError });

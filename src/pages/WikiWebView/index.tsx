@@ -1,7 +1,7 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MD3Colors, ProgressBar, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
@@ -20,10 +20,11 @@ const Container = styled.View`
 
 export interface WikiWebViewProps {
   id?: string;
+  quickLoad?: boolean;
 }
 export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'WikiWebView'>> = ({ route }) => {
   const { t } = useTranslation();
-  const { id } = route.params;
+  const { id, quickLoad } = route.params;
   const activeWikiWorkspace = useWorkspaceStore(state => state.workspaces.find(wiki => wiki.id === id));
   useCloseSQLite(activeWikiWorkspace);
   const [webviewSideReceiver, webviewSideReceiverSetter] = useState<string | undefined>(undefined);
@@ -43,7 +44,7 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
     case 'wiki': {
       return (
         <Container>
-          {(activeWikiWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWikiWorkspace} webviewSideReceiver={webviewSideReceiver} />}
+          {(activeWikiWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWikiWorkspace} webviewSideReceiver={webviewSideReceiver} quickLoad={quickLoad ?? false} />}
         </Container>
       );
     }

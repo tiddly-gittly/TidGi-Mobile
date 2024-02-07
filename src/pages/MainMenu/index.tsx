@@ -38,6 +38,9 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         onPress={(wiki) => {
           navigation.navigate('WikiWebView', { id: wiki.id });
         }}
+        onPressQuickLoad={(wiki) => {
+          navigation.navigate('WikiWebView', { id: wiki.id, quickLoad: true });
+        }}
         onLongPress={(wiki) => {
           void Haptics.selectionAsync();
           setSelectedWikiID(wiki.id);

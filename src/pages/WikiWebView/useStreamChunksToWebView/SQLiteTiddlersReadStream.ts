@@ -8,9 +8,14 @@ import { TiddlersSQLModel } from '../../../services/SQLiteService/orm';
 import * as schema from '../../../services/SQLiteService/orm';
 import { IWikiWorkspace } from '../../../store/workspace';
 
+/**
+ * If quickLoad, only load small amount of recent tiddlers, speed up loading time for huge wiki.
+ */
+const QUICK_LOAD_LIMIT = 300;
 export interface ISQLiteTiddlersReadStreamOptions {
   additionalContent?: string[];
   chunkSize?: number;
+  quickLoad?: boolean;
 }
 /**
  * get (skinny tiddlers + full tiddlers judged by `saveFullTiddler` + full tiddlers when importing system tiddlers) json array from sqlite, without text field to speedup initial loading and memory usage
@@ -33,6 +38,11 @@ export class SQLiteTiddlersReadStream extends Readable {
   private db?: SQLiteDatabase;
   private readonly emptyChunk = '[]';
   private readonly additionalContent?: string[];
+  /**
+   * How many user tiddlers will we load. `-1` means no limit.
+   */
+  private readonly quickLoadLimit: number = -1;
+  private hasReachQuickLoadLimit = false;
   private readonly preparedReadStatements = new Map<string, SQLiteStatement>();
 
   constructor(workspace: IWikiWorkspace, options?: ISQLiteTiddlersReadStreamOptions) {
@@ -43,6 +53,9 @@ export class SQLiteTiddlersReadStream extends Readable {
 
     this.defaultChunkSize = options?.chunkSize ?? 5000;
     this.additionalContent = options?.additionalContent;
+    if (options?.quickLoad === true) {
+      this.quickLoadLimit = QUICK_LOAD_LIMIT;
+    }
   }
 
   async init() {
@@ -71,11 +84,10 @@ export class SQLiteTiddlersReadStream extends Readable {
       throw new Error('database is undefined (not ready) in SQLiteTiddlersReadStream when reading.');
     }
 
-    this.readWithChunkSize(this.db, this.defaultChunkSize).then(({
-      chunk,
-      size,
-    }) => {
-      if (chunk === this.emptyChunk || size === 0) {
+    const readMethod = this.quickLoadLimit === -1 ? this.readWithChunkSize(this.db, this.defaultChunkSize) : this.readWithLimit(this.db, this.defaultChunkSize);
+
+    readMethod.then(({ chunk, size }) => {
+      if (chunk === this.emptyChunk || size === 0 || this.hasReachQuickLoadLimit) {
         // End of the stream
         this.emit('progress', 1);
         if (this.additionalContent !== undefined) {
@@ -129,6 +141,50 @@ export class SQLiteTiddlersReadStream extends Readable {
       console.warn(`SQLiteTiddlersReadStream readWithChunkSize error: ${(error as Error).message} ${(error as Error).stack ?? ''}, now retry with chunkSize`);
       throw error;
       // }
+    }
+  }
+
+  private async readWithLimit(database: SQLiteDatabase, chunkSize: number): Promise<{ chunk: string; size: number }> {
+    if (this.hasReachQuickLoadLimit) {
+      // Already read text rows, indicating end of stream
+      return { chunk: this.emptyChunk, size: 0 };
+    }
+
+    let query: string;
+    let parameters: number[] = [this.currentPosition, chunkSize];
+    if (this.currentPosition === 0) {
+      // First, read rows where text IS NULL with pagination
+      query = `SELECT * FROM tiddlers WHERE text IS NULL AND id > (?) LIMIT (?)`;
+    } else {
+      // Next, read rows where text IS NOT NULL, only once because of QUICK_LOAD_LIMIT
+      query = `SELECT * FROM tiddlers WHERE text IS NOT NULL ORDER BY id DESC LIMIT ${QUICK_LOAD_LIMIT}`;
+      parameters = []; // No pagination for this part
+      this.hasReachQuickLoadLimit = true; // Indicate that we have attempted to read text rows
+    }
+
+    try {
+      console.info(`Quick Loading tiddlers from sqlite, with ${query} ${parameters.join(',')}`);
+
+      const statement = await database.prepareAsync(query);
+      const result = await statement.executeAsync<typeof TiddlersSQLModel.$inferSelect>(...parameters);
+      const rows = await result.getAllAsync();
+      statement.finalizeSync();
+
+      if (rows.length === 0 && this.currentPosition !== 0) {
+        // If no rows and currentPosition is not 0, switch to text rows
+        this.currentPosition = 0; // Reset for reading text rows
+        return await this.readWithLimit(database, chunkSize); // Attempt to read text rows
+      }
+
+      const chunk = `[${rows.map(row => row.fields).join(',')}]`;
+      this.currentPosition += rows.length; // Update currentPosition for pagination
+      return {
+        chunk,
+        size: rows.length,
+      };
+    } catch (error) {
+      console.error(`readWithLimit error: ${(error as Error).message}`);
+      throw error;
     }
   }
 }
