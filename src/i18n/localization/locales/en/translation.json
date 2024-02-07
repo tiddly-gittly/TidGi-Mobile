@@ -161,7 +161,8 @@
     "ImportBinaryFilesDescription": "Large files such as images are by default loaded from the connected server only when in use, so as not to take up too much mobile storage. If you wish to have them loaded in advance, you can click this button.",
     "Success": "Import Success",
     "DownloadBinaryTimeout": "Timeout download an asset file.",
-    "WarningMessageDescription": "You can ignore the warning message, since after this it can still be loaded normally on demand, when entering the wiki."
+    "WarningMessageDescription": "You can ignore the warning message, since after this it can still be loaded normally on demand, when entering the wiki.",
+    "OpenPerformanceTools": "Open Performance Tools"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

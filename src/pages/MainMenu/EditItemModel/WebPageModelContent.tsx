@@ -9,12 +9,12 @@ import { styled } from 'styled-components/native';
 
 import { IPageWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
-interface WikiEditModalProps {
+interface ModalProps {
   id: string | undefined;
   onClose: () => void;
 }
 
-export function WebPageEditModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
+export function WebPageEditModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const page = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w): w is IPageWorkspace => w.id === id && w.type === 'webpage'));
   const [updatePage, deletePage] = useWorkspaceStore(state => [state.update, state.remove]);

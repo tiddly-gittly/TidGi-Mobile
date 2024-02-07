@@ -7,13 +7,12 @@ import { styled } from 'styled-components/native';
 import { WikiUpdateList } from '../../../components/WikiUpdateList';
 import { useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
-
-interface WikiEditModalProps {
+interface ModalProps {
   id: string | undefined;
   onClose: () => void;
 }
 
-export function WikiChangesModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
+export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
   const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };

@@ -15,8 +15,8 @@ import { backgroundSyncService } from '../../../services/BackgroundSyncService';
 import { useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
-import { ImportBinary } from '../../Importer/ImportBinary';
 import { AddNewServerModelContent } from '../AddNewServerModelContent';
+import { PerformanceToolsModelContent } from './PerformanceToolsModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
 
 interface WikiEditModalProps {
@@ -40,13 +40,14 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [newServerID, setNewServerID] = useState<string>('');
   const [addServerModelVisible, setAddServerModelVisible] = useState(false);
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
+  const [performanceToolsModelVisible, setPerformanceToolsModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
   const [inSyncing, setInSyncing] = useState(false);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof backgroundSyncService.getOnlineServerForWiki>>>();
   useEffect(() => {
     if (wiki === undefined) return;
-    void backgroundSyncService.updateServerOnlineStatus().then(async () => {
+    void backgroundSyncService.updateServerOnlineStatus().then(() => {
       const server = backgroundSyncService.getOnlineServerForWiki(wiki);
       setCurrentOnlineServerToSync(server);
     });
@@ -185,8 +186,14 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       >
         <Text>{t('AddWorkspace.OpenChangeLogList')}</Text>
       </Button>
-
-      <ImportBinary wikiWorkspace={wiki} />
+      <Button
+        mode='text'
+        onPress={() => {
+          setPerformanceToolsModelVisible(!performanceToolsModelVisible);
+        }}
+      >
+        <Text>{t('AddWorkspace.OpenPerformanceTools')}</Text>
+      </Button>
 
       <ButtonsContainer>
         <Button onPress={onClose}>{t('Cancel')}</Button>
@@ -244,6 +251,19 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
               id={id}
               onClose={() => {
                 setWikiChangeLogModelVisible(false);
+              }}
+            />
+          </Modal>
+          <Modal
+            visible={performanceToolsModelVisible}
+            onDismiss={() => {
+              setPerformanceToolsModelVisible(false);
+            }}
+          >
+            <PerformanceToolsModelContent
+              id={id}
+              onClose={() => {
+                setPerformanceToolsModelVisible(false);
               }}
             />
           </Modal>
