@@ -40,7 +40,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
               }}
               name='reorder-three-sharp'
               size={24}
-              color={theme.colors.onPrimary}
+              color={theme.colors.onSecondaryContainer}
             />
           )}
         />
@@ -65,6 +65,8 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
 const WorkspaceCard = styled(Card)`
   margin: 8px;
   padding: 8px;
+  background-color: ${({ theme }) => theme.colors.secondaryContainer};
+  color: ${({ theme }) => theme.colors.onSecondaryContainer};
 `;
 const DragHandle = styled(Ionicons)`
   padding: 10px;
