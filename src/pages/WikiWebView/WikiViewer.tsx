@@ -28,13 +28,13 @@ const TopProgressBar = styled(ProgressBar)`
   top: 0;
   z-index: 100;
 `;
-const WebViewContainer = styled.View<{ loading: boolean }>`
-  height: ${({ loading }) => loading ? `${Dimensions.get('window').height - PROGRESS_BAR_HEIGHT}px` : '100%'};
+const WebViewContainer = styled.View<{ showProgressBar: boolean }>`
+  height: ${({ showProgressBar }) => showProgressBar ? `${Dimensions.get('window').height - PROGRESS_BAR_HEIGHT}px` : '100%'};
   width: 100%;
   display: flex;
   flex-direction: column;
   position: absolute;
-  top: ${({ loading }) => loading ? '10%' : `0`};
+  top: ${({ showProgressBar }) => showProgressBar ? '10%' : `0`};
 `;
 const ErrorText = styled(Text)`
   color: ${MD3Colors.error50};
@@ -67,6 +67,8 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
    */
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView, servicesOfWorkspace] = useRegisterService(wikiWorkspace);
   useSetWebViewReferenceToService(servicesOfWorkspace.wikiHookService, webViewReference);
+  // TODO: goback not seem to working
+  // useHandleGoBack(webViewReference);
   /**
    * When app is in background for a while, system will recycle the webview, and auto refresh it when app is back to foreground. We need to retrigger the initialization process by assigning different react key to the webview, otherwise it will white screen.
    */
@@ -112,11 +114,15 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   if (loadHtmlError) {
     return <ErrorText variant='titleLarge'>{loadHtmlError}</ErrorText>;
   }
+  /**
+   * Quick load is very fast, progress bar will flash and disappear. So we don't show it.
+   */
+  const showProgressBar = loading && !quickLoad;
   // TODO: maybe webViewKeyToReloadAfterRecycleByOS need to be use when refactor this to a new component. Sometimes the source works, but preload is not applied
   return (
     <>
       <TopProgressBar progress={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
-      <WebViewContainer loading={loading}>
+      <WebViewContainer showProgressBar={showProgressBar}>
         <WebView
           style={{ backgroundColor: theme.colors.background }}
           key={webViewKeyToReloadAfterRecycleByOS}
