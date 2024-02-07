@@ -535,7 +535,12 @@
     "HTML": "HTML页面框架和元信息",
     "TiddlersListAndEssential": "条目列表和关键条目内容",
     "TiddlerTexts": "条目文本内容",
-    "AddToSQLite": "添加到本地SQLite快取数据库"
+    "AddToSQLite": "添加到本地SQLite快取数据库",
+    "SystemTiddlers": "系统条目",
+    "Fields": "用户字段数据",
+    "Text": "用户条目文本",
+    "ReadList": "读取文件列表",
+    "FetchAndWrite": "拉取和写入"
   },
   "WarningMessage": "警告信息"
 }

@@ -558,7 +558,12 @@
     "HTML": "HTML PageFrame and Metadata",
     "TiddlersListAndEssential": "Tiddlers List and Essential Tiddlers",
     "TiddlerTexts": "Tiddler Texts",
-    "AddToSQLite": "Adding To local SQLite cache DB"
+    "AddToSQLite": "Adding To local SQLite cache DB",
+    "SystemTiddlers": "System Tiddlers",
+    "Fields": "User Fields Data",
+    "Text": "User Tiddler Text",
+    "ReadList": "Read File List",
+    "FetchAndWrite": "Fetch And Write"
   },
   "WarningMessage": "Warning Message"
 }

@@ -19,6 +19,10 @@ export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
     props.wikiWorkspace,
   );
 
+  const {
+    importBinaryFetchAndWritPercentage,
+    importBinaryReadListPercentage,
+  } = importPercentage;
   return (
     <>
       <Text>{t('AddWorkspace.ImportBinaryFilesDescription')}</Text>
@@ -31,9 +35,15 @@ export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
       </Button>
       {importingBinary && (
         <>
-          <Text>{t('AddWorkspace.ImportBinaryFiles')}</Text>
-          <ProgressBar progress={importPercentage.importBinaryReadListPercentage} color={MD3Colors.tertiary40} />
-          <ProgressBar progress={importPercentage.importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
+          <Text>
+            {t('AddWorkspace.ImportBinaryFiles')} {importBinaryReadListPercentage < 1
+              ? `${t('Downloading.ReadList')} ${Math.floor(importBinaryReadListPercentage * 100)}%`
+              : (importBinaryFetchAndWritPercentage < 1
+                ? `${t('Downloading.FetchAndWrite')} ${Math.floor(importBinaryFetchAndWritPercentage * 100)}%`
+                : t('Log.SynchronizationFinish'))}
+          </Text>
+          <ProgressBar progress={importBinaryReadListPercentage} color={MD3Colors.tertiary40} />
+          <ProgressBar progress={importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
         </>
       )}
       {importBinaryError !== undefined && (

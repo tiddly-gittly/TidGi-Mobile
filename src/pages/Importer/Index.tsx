@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/no-nested-ternary */
 /* eslint-disable unicorn/no-useless-undefined */
 import { StackScreenProps } from '@react-navigation/stack';
 import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
@@ -9,7 +10,6 @@ import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { ServerList } from '../../components/ServerList';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
-import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
 import { ImportBinary } from './ImportBinary';
 import { useImportHTML } from './useImportHTML';
@@ -113,6 +113,16 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   if (!hasPermission) {
     return <Text>No access to camera</Text>;
   }
+  const {
+    addFieldsToSQLitePercentage,
+    addSystemTiddlersToSQLitePercentage,
+    addTextToSQLitePercentage,
+    binaryTiddlersListDownloadPercentage,
+    nonSkinnyTiddlerStoreScriptDownloadPercentage,
+    skinnyHtmlDownloadPercentage,
+    skinnyTiddlerStoreScriptDownloadPercentage,
+    skinnyTiddlerTextCacheDownloadPercentage,
+  } = downloadPercentage;
 
   return (
     <Container>
@@ -202,21 +212,29 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         <>
           <Text variant='titleLarge'>{t('Loading')}</Text>
           <Text>{t('Downloading.HTML')}</Text>
-          <ProgressBar progress={downloadPercentage.skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
+          <ProgressBar progress={skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
           <Text>{t('Downloading.TiddlersListAndEssential')}</Text>
-          <ProgressBar progress={downloadPercentage.skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
-          <ProgressBar progress={downloadPercentage.nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
-          <ProgressBar progress={downloadPercentage.binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral60} />
+          <ProgressBar progress={skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
+          <ProgressBar progress={nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar progress={binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral60} />
           <Text>{t('Downloading.TiddlerTexts')}</Text>
-          <ProgressBar progress={downloadPercentage.skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral70} />
+          <ProgressBar progress={skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral70} />
         </>
       )}
       {importStatus === 'sqlite' && (
         <>
-          <Text>{t('Downloading.AddToSQLite')}</Text>
-          <ProgressBar progress={downloadPercentage.addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary50} />
-          <ProgressBar progress={downloadPercentage.addFieldsToSQLitePercentage} color={MD3Colors.tertiary40} />
-          <ProgressBar progress={downloadPercentage.addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
+          <Text>
+            {t('Downloading.AddToSQLite')} {addSystemTiddlersToSQLitePercentage < 1
+              ? `${t('Downloading.SystemTiddlers')} ${Math.floor(addSystemTiddlersToSQLitePercentage * 100)}%`
+              : (addFieldsToSQLitePercentage < 1
+                ? `${t('Downloading.Fields')} ${Math.floor(addFieldsToSQLitePercentage * 100)}%`
+                : addTextToSQLitePercentage < 1
+                ? `${t('Downloading.Text')} ${Math.floor(addTextToSQLitePercentage * 100)}%`
+                : t('Log.SynchronizationFinish'))}
+          </Text>
+          <ProgressBar progress={addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary40} />
+          <ProgressBar progress={addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar progress={addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
