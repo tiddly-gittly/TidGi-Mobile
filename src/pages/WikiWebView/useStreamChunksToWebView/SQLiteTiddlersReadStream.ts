@@ -87,7 +87,7 @@ export class SQLiteTiddlersReadStream extends Readable {
     const readMethod = this.quickLoadLimit === -1 ? this.readWithChunkSize(this.db, this.defaultChunkSize) : this.readWithLimit(this.db, this.defaultChunkSize);
 
     readMethod.then(({ chunk, size }) => {
-      if (chunk === this.emptyChunk || size === 0 || this.hasReachQuickLoadLimit) {
+      if (chunk === this.emptyChunk || size === 0) {
         // End of the stream
         this.emit('progress', 1);
         if (this.additionalContent !== undefined) {
@@ -153,12 +153,13 @@ export class SQLiteTiddlersReadStream extends Readable {
     let query: string;
     let parameters: number[] = [this.currentPosition, chunkSize];
     if (this.currentPosition === 0) {
-      // First, read rows where text IS NULL with pagination
+      // First, read rows where text IS NULL with pagination, these are system tiddlers
       query = `SELECT * FROM tiddlers WHERE text IS NULL AND id > (?) LIMIT (?)`;
     } else {
-      // Next, read rows where text IS NOT NULL, only once because of QUICK_LOAD_LIMIT
-      query = `SELECT * FROM tiddlers WHERE text IS NOT NULL ORDER BY id DESC LIMIT ${QUICK_LOAD_LIMIT}`;
-      parameters = []; // No pagination for this part
+      // Next, read rows from the latest rows, those are user tiddlers, only once because of QUICK_LOAD_LIMIT is small, no pagination is needed.
+      // TODO: also read those are tags, so tagging system is working.
+      query = `SELECT * FROM tiddlers ORDER BY id DESC LIMIT ${QUICK_LOAD_LIMIT}`;
+      parameters = [];
       this.hasReachQuickLoadLimit = true; // Indicate that we have attempted to read text rows
     }
 
@@ -169,15 +170,8 @@ export class SQLiteTiddlersReadStream extends Readable {
       const result = await statement.executeAsync<typeof TiddlersSQLModel.$inferSelect>(...parameters);
       const rows = await result.getAllAsync();
       statement.finalizeSync();
-
-      if (rows.length === 0 && this.currentPosition !== 0) {
-        // If no rows and currentPosition is not 0, switch to text rows
-        this.currentPosition = 0; // Reset for reading text rows
-        return await this.readWithLimit(database, chunkSize); // Attempt to read text rows
-      }
-
       const chunk = `[${rows.map(row => row.fields).join(',')}]`;
-      this.currentPosition += rows.length; // Update currentPosition for pagination
+      this.currentPosition += rows.length;
       return {
         chunk,
         size: rows.length,
