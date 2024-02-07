@@ -48,7 +48,7 @@ export const App: React.FC = () => {
                 name='Config'
                 component={Config}
                 options={({ navigation }) => ({
-                  presentation: 'modal',
+                  presentation: 'modal' as const,
                   headerTitle: t('Preference.Title'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={(navigation as NavigationProp<ReactNavigation.RootParamList>).goBack} />,
