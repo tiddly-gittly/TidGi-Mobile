@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { SegmentedButtons, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { detectedLanguage, supportedLanguages } from '../../i18n';
+import { defaultLanguage, detectedLanguage, supportedLanguages } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 
 export function Language(): JSX.Element {
@@ -16,12 +16,12 @@ export function Language(): JSX.Element {
       <Text variant='titleLarge'>{t('Preference.ChooseLanguage')}</Text>
       <SegmentedContainer>
         <SegmentedButtons
-          value={currentLanguage}
+          value={currentLanguage ?? defaultLanguage}
           onValueChange={async (newValue) => {
             // when tap again, set to undefined
             const preferredLanguage = currentLanguage === newValue ? undefined : newValue;
             setConfig({ preferredLanguage });
-            await i18n.changeLanguage(preferredLanguage ?? detectedLanguage);
+            await i18n.changeLanguage(preferredLanguage ?? detectedLanguage ?? defaultLanguage);
           }}
           buttons={supportedLanguages}
         />
@@ -30,7 +30,7 @@ export function Language(): JSX.Element {
   );
 }
 
-const SegmentedContainer = styled.View`
+export const SegmentedContainer = styled.View`
   flex-direction: row;
   justify-content: space-between;
   align-items: center;

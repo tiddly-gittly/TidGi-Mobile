@@ -6,14 +6,15 @@ import { initReactI18next } from 'react-i18next';
 import en from './localization/locales/en/translation.json';
 import zh_CN from './localization/locales/zh_CN/translation.json';
 
+export const defaultLanguage = 'zh_CN';
 export const supportedLanguages = [
   { label: 'English', value: 'en' },
-  { label: '中文（简体）', value: 'zh_CN' },
+  { label: '中文（简体）', value: defaultLanguage },
   // ... Add other languages here
 ];
 export const detectedLanguage = getLocales()[0].languageCode;
 void i18n.use(initReactI18next).init({
-  lng: detectedLanguage,
+  lng: detectedLanguage ?? defaultLanguage,
   fallbackLng: 'en',
   resources: {
     en: {
