@@ -31,7 +31,6 @@
     "expo-barcode-scanner": "12.9.2",
     "expo-camera": "14.0.4",
     "expo-clipboard": "5.0.1",
-    "expo-dev-client": "3.3.8",
     "expo-device": "5.9.3",
     "expo-file-system": "16.0.6",
     "expo-haptics": "12.8.1",
