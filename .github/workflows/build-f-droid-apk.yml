@@ -48,9 +48,10 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.0.1 # use the gradle version I saw on eas build's console, which might match the kotlin version?
-      - name: Install Android Build Tools
+      - name: Set Build Tools Version
         run: |
-          yes | sdkmanager --install "build-tools;29.0.3"
+          echo "BUILD_TOOLS_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)" >> $GITHUB_ENV
+        
 
       - name: Get pnpm store directory
         shell: bash
@@ -107,6 +108,8 @@ jobs:
           alias: ${{ secrets.ANDROID_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
