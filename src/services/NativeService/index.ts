@@ -109,7 +109,7 @@ export class NativeService {
       (error: Error) => {
         console.log(error);
       },
-      'ren.onetwo.mobile', // share url protocol (must be unique to your app, suggest using your apple bundle id)
+      'ren.onetwo.tidgi.mobile', // share url protocol (must be unique to your app, suggest using your apple bundle id)
     );
     // Fully unregister Intents, actually it is not clearReceivedFiles
     // ReceiveSharingIntent.clearReceivedFiles();

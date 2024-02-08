@@ -25,7 +25,7 @@
           "fetch"
         ]
       },
-      "bundleIdentifier": "fren.onetwo.mobile"
+      "bundleIdentifier": "fren.onetwo.tidgi.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +35,7 @@
       "permissions": [
         "android.permission.CAMERA"
       ],
-      "package": "ren.onetwo.mobile"
+      "package": "ren.onetwo.tidgi.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"

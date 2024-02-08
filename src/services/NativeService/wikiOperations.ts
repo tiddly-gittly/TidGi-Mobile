@@ -2,7 +2,7 @@ import { ISharedFile } from './types';
 
 /**
  * We replace the text with filePath before calling this.
- * @param files [{"contentUri": "content://com.google.android.apps.photos.contentprovider/0/1/content%3A%2F%2Fmedia%2Fexternal%2Fimages%2Fmedia%2F22483/ORIGINAL/NONE/image%2Fjpeg/1673810121", "fileName": "1694162284670.jpg", "filePath": "/data/user/0/ren.onetwo.mobile/cache/1694162284670.jpg", "mimeType": "image/jpeg", "subject": null, "text": null, "weblink": null}]
+ * @param files [{"contentUri": "content://com.google.android.apps.photos.contentprovider/0/1/content%3A%2F%2Fmedia%2Fexternal%2Fimages%2Fmedia%2F22483/ORIGINAL/NONE/image%2Fjpeg/1673810121", "fileName": "1694162284670.jpg", "filePath": "/data/user/0/ren.onetwo.tidgi.mobile/cache/1694162284670.jpg", "mimeType": "image/jpeg", "subject": null, "text": null, "weblink": null}]
  * @returns
  */
 export const importBinaryTiddlers = (files: ISharedFile[]) => {
