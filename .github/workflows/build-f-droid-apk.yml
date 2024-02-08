@@ -62,6 +62,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+      - name: Initialize and Update Submodules
+        run: pnpm run init-submodules
 
       ## configure cash for gradle : will help to reduce build time
       - name: Cache Gradle Wrapper and Dependencies
@@ -77,7 +79,7 @@ jobs:
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
 
-      - name: remove prorietary bits (for f-droid)
+      - name: Remove prorietary bits (for fix f-droid)
         run: npx zx scripts/fit-f-droid.mjs
 
       - name: Build apk
