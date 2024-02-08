@@ -90,6 +90,7 @@ jobs:
         run: |
           cd android
           cat /home/runner/work/TidGi-Mobile/TidGi-Mobile/android/app/src/main/java/fun/tidgi/mobile/MainActivity.kt
+          ./gradlew clean
           ./gradlew -v
           ./gradlew assembleRelease --no-daemon --warning-mode all
 
