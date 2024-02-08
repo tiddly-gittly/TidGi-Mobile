@@ -3,8 +3,6 @@ name: Build FDroid APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - master
     tags:
       - 'fdroid-v*.*.*'
     paths-ignore:
@@ -84,11 +82,9 @@ jobs:
 
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
-      # - name: Build APK use react-native build
-        # run: npx react-native build-android --mode=release
 
-      # - name: Remove prorietary bits (for fix f-droid)
-      #   run: npx zx scripts/fit-f-droid.mjs
+      - name: Remove prorietary bits (for fix f-droid)
+        run: npx zx scripts/fit-f-droid.mjs
 
       - name: Build apk
         run: |
@@ -117,6 +113,6 @@ jobs:
         with:
           draft: true
           generate_release_notes: true
-          files: android/app/build/outputs/apk/release/app-release-signed.apk 
+          files: android/app/build/outputs/apk/release/*.apk 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
