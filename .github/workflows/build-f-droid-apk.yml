@@ -80,17 +80,18 @@ jobs:
 
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
-      - name: Build APK use react-native build
-        run: npx react-native build-android --mode=release
+      # - name: Build APK use react-native build
+        # run: npx react-native build-android --mode=release
 
       # - name: Remove prorietary bits (for fix f-droid)
       #   run: npx zx scripts/fit-f-droid.mjs
 
-      # - name: Build apk
-      #   run: |
-      #     cd android
-      #     ./gradlew -v
-      #     ./gradlew assembleRelease --no-daemon
+      - name: Build apk
+        run: |
+          cd android
+          cat /home/runner/work/TidGi-Mobile/TidGi-Mobile/android/app/src/main/java/fun/tidgi/mobile/MainActivity.kt
+          ./gradlew -v
+          ./gradlew assembleRelease --no-daemon --warning-mode all
 
       ## sign generated apk
       - name: Sign APK
