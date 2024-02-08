@@ -41,7 +41,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu' # See 'Supported distributions' for available options
-          java-version: '11'
+          java-version: '17'
       - name: Setup Gradle # fix `incompatible version of Kotlin. The binary version of its metadata is 1.9.0, expected version is 1.7.1.`
         uses: gradle/gradle-build-action@v2
         with:
