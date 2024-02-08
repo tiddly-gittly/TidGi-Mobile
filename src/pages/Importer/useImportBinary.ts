@@ -26,7 +26,7 @@ export function useImportBinary(newWorkspace: IWikiWorkspace | undefined) {
       });
       setImportSuccess(true);
     } catch (error) {
-      setError(`Failed to import binary tiddlers: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      setError(`Failed to import binary tiddlers, maybe you forget to enable custom filter in Tiddlywiki?: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
     } finally {
       setImportingBinary(false);
     }

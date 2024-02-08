@@ -246,8 +246,9 @@ export class ImportService {
     const JSON_READ_LENGTH = 512 * 1024;
     // get content length use first pass
     let dataCount = 0;
+    const binaryFileListPath = getWikiBinaryTiddlersListCachePath(workspace);
     try {
-      const readStream = createReadStream(getWikiBinaryTiddlersListCachePath(workspace), { length: JSON_READ_LENGTH * 2 });
+      const readStream = createReadStream(binaryFileListPath, { length: JSON_READ_LENGTH * 2 });
       readStream.on('progress', (progress: number) => {
         setProgress.setReadListProgress(progress);
       });
@@ -275,13 +276,13 @@ export class ImportService {
         });
       });
     } catch (error) {
-      throw new Error(`loadBinaryTiddlersAsFilesFromServer() Failed to read tiddler text store, ${(error as Error).message}`);
+      throw new Error(`loadBinaryTiddlersAsFilesFromServer() Failed to read tiddler text store ${binaryFileListPath}, ${(error as Error).message}`);
     }
     // reset progress, start really processing data.
     setProgress.setReadListProgress(0);
     let batchedBinaryTiddlerFieldsStream: Chain;
     try {
-      const readStream = createReadStream(getWikiBinaryTiddlersListCachePath(workspace), { length: JSON_READ_LENGTH });
+      const readStream = createReadStream(binaryFileListPath, { length: JSON_READ_LENGTH });
       readStream.on('progress', (progress: number) => {
         setProgress.setReadListProgress(progress);
       });

@@ -28,8 +28,9 @@ export class ExpoReadStream extends Readable {
       const fileInfo = await fs.getInfoAsync(this.fileUri, { size: true });
       if (fileInfo.exists) {
         this.fileSize = fileInfo.size ?? 0;
-      } else {
-        this.fileSize = 0;
+      }
+      if (this.fileSize === 0) {
+        this.emit('error', new Error('File size is 0'));
       }
     } catch (error) {
       this.emit('error', error);
@@ -43,7 +44,6 @@ export class ExpoReadStream extends Readable {
       length: this.chunkSize,
     } satisfies fs.ReadingOptions;
     fs.readAsStringAsync(this.fileUri, readingOptions).then(chunk => {
-
       if (chunk.length === 0) {
         // End of the stream
         this.emit('progress', 1);
