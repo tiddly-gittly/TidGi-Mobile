@@ -1,4 +1,4 @@
-name: Build APK
+name: Build FDroid APK
 
 on:
   workflow_dispatch:
