@@ -81,14 +81,11 @@ jobs:
 
       - name: Remove prorietary bits (for fix f-droid)
         run: npx zx scripts/fit-f-droid.mjs
-      - name: Configure Kotlin JVM target
-        run: |
-          echo "kotlin.jvm.target=17" >> android/gradle.properties
 
       - name: Build apk
         run: |
-          cd android/app
-          gradle assembleRelease --no-daemon
+          cd android
+          ./gradlew assembleRelease -Pkotlin.jvm.target=17 --no-daemon
 
       ## sign generated apk
       - name: Sign APK
