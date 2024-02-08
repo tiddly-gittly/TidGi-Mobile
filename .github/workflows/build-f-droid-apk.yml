@@ -3,6 +3,8 @@ name: Build FDroid APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - master
     tags:
       - 'fdroid-v*.*.*'
     paths-ignore:
@@ -85,6 +87,7 @@ jobs:
       - name: Build apk
         run: |
           cd android
+          ./gradlew -v
           ./gradlew assembleRelease -Pkotlin.jvm.target=17 --no-daemon
 
       ## sign generated apk
