@@ -88,5 +88,4 @@ const RightButtonsContainer = styled.View`
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
-  height: 100%;
 `;
