@@ -12,7 +12,8 @@
     "start": "expo start",
     "start:tunnel": "expo start --tunnel --android",
     "start:devClient": "npx expo start --dev-client --android",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "zx scripts/fix-gradle.mjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.21.0",
