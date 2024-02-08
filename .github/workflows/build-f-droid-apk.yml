@@ -5,6 +5,7 @@ on:
   push:
     tags:
       - 'fdroid-v*.*.*'
+      - 'v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
@@ -83,8 +84,9 @@ jobs:
       - name: Build by eject eas
         run: npx expo prebuild -p android --clean
 
-      - name: Remove prorietary bits (for fix f-droid)
-        run: npx zx scripts/fit-f-droid.mjs
+      # TODO: https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
+      # - name: Remove prorietary bits (for fix f-droid)
+      #   run: npx zx scripts/fit-f-droid.mjs
 
       - name: Build apk
         run: |
