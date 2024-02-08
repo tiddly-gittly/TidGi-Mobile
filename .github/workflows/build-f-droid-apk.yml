@@ -48,6 +48,9 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.0.1 # use the gradle version I saw on eas build's console, which might match the kotlin version?
+      - name: Install Android Build Tools
+        run: |
+          yes | sdkmanager --install "build-tools;29.0.3"
 
       - name: Get pnpm store directory
         shell: bash
@@ -89,7 +92,7 @@ jobs:
       - name: Build apk
         run: |
           cd android
-          cat /home/runner/work/TidGi-Mobile/TidGi-Mobile/android/app/src/main/java/ren/onetwo/mobile/MainActivity.kt
+          cat /home/runner/work/TidGi-Mobile/TidGi-Mobile/android/app/src/main/java/ren/onetwo/tidgi/mobile/MainActivity.kt
           ./gradlew clean
           ./gradlew -v
           ./gradlew assembleRelease --no-daemon --warning-mode all
