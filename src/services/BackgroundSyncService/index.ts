@@ -186,7 +186,7 @@ export class BackgroundSyncService {
 
     const request: ISyncEndPointRequest = {
       deleted: uniq(changes.filter(change => change.operation === TiddlersLogOperation.DELETE).map(change => change.title)),
-      lastSync: String(server.lastSync),
+      lastSync: server.lastSync,
       tiddlers: sortedUniqBy(
         changes.filter((change): change is { fields: ITiddlerFieldsParam } & ITiddlerChange =>
           (change.operation === TiddlersLogOperation.INSERT || change.operation === TiddlersLogOperation.UPDATE) && change.fields?.title !== undefined
