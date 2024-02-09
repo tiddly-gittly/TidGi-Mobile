@@ -18,7 +18,7 @@ export function ImporterButton() {
     <MainFeatureButton
       mode='outlined'
       onPress={() => {
-        navigation.navigate('Importer');
+        navigation.navigate('Importer', {});
       }}
     >
       {t('Menu.ScanQRToSync')}

@@ -18,6 +18,7 @@ const Container = styled.View`
   justify-content: space-between;
 `;
 const ButtonButtonsContainer = styled.View`
+  background-color: ${({ theme }) => theme.colors.background};
   display: flex;
   flex-direction: row;
   justify-content: space-around;

@@ -60,7 +60,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
   }, [onLongPress, onPress, onPressQuickLoad, theme]);
 
   return (
-    <>
+    <ListContainer>
       <DraggableFlatList
         data={workspacesList}
         renderItem={renderItem}
@@ -69,7 +69,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
           onReorderEnd?.(workspaces);
         }}
       />
-    </>
+    </ListContainer>
   );
 };
 
@@ -86,6 +86,11 @@ const ItemRightIconButton = styled(Ionicons)`
 ItemRightIconButton.defaultProps = {
   size: 24,
 };
+const ListContainer = styled.View`
+  display: flex;
+  flex: 1;
+  overflow-y: scroll;
+`;
 const RightButtonsContainer = styled.View`
   flex-direction: row;
   justify-content: flex-end;
