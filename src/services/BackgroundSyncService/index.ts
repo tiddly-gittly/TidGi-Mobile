@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/promise-function-async */
 import { asc, desc, eq, gt } from 'drizzle-orm';
 import * as BackgroundFetch from 'expo-background-fetch';
+import Constants from 'expo-constants';
 import * as fs from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
@@ -200,6 +201,7 @@ export class BackgroundSyncService {
         headers: {
           'Content-Type': 'application/json',
           'x-requested-with': 'TiddlyWiki',
+          'User-Agent': `${await Constants.getWebViewUserAgentAsync() ?? `TidGi-Mobile`} ${wiki.name}`,
         },
         body: JSON.stringify(request),
       }).then(response => response.json() as Promise<ISyncEndPointResponse>);

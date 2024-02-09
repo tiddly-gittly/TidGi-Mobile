@@ -53,6 +53,9 @@ dependencies:
   expo-clipboard:
     specifier: 5.0.1
     version: 5.0.1(expo@50.0.6)
+  expo-constants:
+    specifier: ~15.4.5
+    version: 15.4.5(expo@50.0.6)
   expo-device:
     specifier: 5.9.3
     version: 5.9.3(expo@50.0.6)
