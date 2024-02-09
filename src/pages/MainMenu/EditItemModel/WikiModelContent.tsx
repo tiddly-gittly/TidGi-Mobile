@@ -16,6 +16,7 @@ import { backgroundSyncService } from '../../../services/BackgroundSyncService';
 import { useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
+import { ServerEditModalContent } from '../../Config/ServerAndSync/ServerEditModal';
 import { AddNewServerModelContent } from '../AddNewServerModelContent';
 import { PerformanceToolsModelContent } from './PerformanceToolsModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
@@ -39,6 +40,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [editedSelectiveSyncFilter, setEditedSelectiveSyncFilter] = useState(wiki?.selectiveSyncFilter ?? '');
   const [editedWikiFolderLocation, setEditedWikiFolderLocation] = useState(wiki?.wikiFolderLocation ?? '');
   const [newServerID, setNewServerID] = useState<string>('');
+  const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
+  const [serverModalVisible, setServerModalVisible] = useState(false);
   const [addServerModelVisible, setAddServerModelVisible] = useState(false);
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
   const [performanceToolsModelVisible, setPerformanceToolsModelVisible] = useState(false);
@@ -102,23 +105,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
           }}
           onLongPress={(server) => {
             void Haptics.selectionAsync();
-            Alert.alert(
-              t('ConfirmDelete'),
-              t('ConfirmDeleteDescription'),
-              [
-                {
-                  text: t('EditWorkspace.Cancel'),
-                  onPress: () => {},
-                  style: 'cancel',
-                },
-                {
-                  text: t('Delete'),
-                  onPress: () => {
-                    handleRemoveServer(server.id);
-                  },
-                },
-              ],
-            );
+            setSelectedServerID(server.id);
+            setServerModalVisible(true);
           }}
         />
         <Picker
@@ -228,6 +216,19 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
               id={id}
               onClose={() => {
                 setPerformanceToolsModelVisible(false);
+              }}
+            />
+          </Modal>
+          <Modal
+            visible={serverModalVisible}
+            onDismiss={() => {
+              setServerModalVisible(false);
+            }}
+          >
+            <ServerEditModalContent
+              id={selectedServerID}
+              onClose={() => {
+                setServerModalVisible(false);
               }}
             />
           </Modal>
