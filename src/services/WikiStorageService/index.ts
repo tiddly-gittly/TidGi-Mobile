@@ -1,6 +1,6 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import * as fs from 'expo-file-system';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
@@ -50,7 +50,6 @@ export class WikiStorageService {
    */
   async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
     try {
-      let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
       const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
       const { text, title: _, ...fieldsObjectToSave } = fields as (ITiddlerFieldsParam & { text?: string; title: string });
       const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
@@ -105,6 +104,7 @@ export class WikiStorageService {
           },
           where: eq(TiddlersSQLModel.title, title),
         });
+        let operation: TiddlersLogOperation = TiddlersLogOperation.INSERT;
         if (existingTiddler !== undefined) {
           // If tiddler exists, set operation to 'UPDATE'
           operation = TiddlersLogOperation.UPDATE;
@@ -116,10 +116,29 @@ export class WikiStorageService {
         } satisfies typeof TiddlerChangeSQLModel.$inferInsert;
         if (operation === TiddlersLogOperation.UPDATE) {
           await transaction.update(TiddlersSQLModel).set(newTiddler).where(eq(TiddlersSQLModel.title, title));
+          // Find the most recent update operation for this title
+          const recentUpdate = await transaction.query.TiddlerChangeSQLModel.findFirst({
+            columns: {
+              id: true,
+              operation: true,
+            },
+            orderBy: desc(TiddlerChangeSQLModel.timestamp),
+          });
+
+          if (recentUpdate !== undefined && recentUpdate.operation === TiddlersLogOperation.UPDATE) {
+            // If we are frequently update same title, then update the timestamp of last update, instead of put a new UPDATE log.
+            await transaction.update(TiddlerChangeSQLModel)
+              .set({ timestamp: newOperation.timestamp })
+              .where(eq(TiddlerChangeSQLModel.id, recentUpdate.id));
+          } else {
+            // Otherwise, insert the new update operation
+            await transaction.insert(TiddlerChangeSQLModel).values(newOperation);
+          }
         } else {
           await transaction.insert(TiddlersSQLModel).values(newTiddler);
+          // For operations other than UPDATE, insert the operation as usual
+          await transaction.insert(TiddlerChangeSQLModel).values(newOperation);
         }
-        await transaction.insert(TiddlerChangeSQLModel).values(newOperation);
       });
 
       return Etag;

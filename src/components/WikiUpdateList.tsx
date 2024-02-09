@@ -43,7 +43,7 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onPress, onLongPress, 
         }}
       >
         <Card.Title
-          left={(props) => <Ionicons name={iconName} color={theme.colors.onSecondary} {...props} />}
+          left={(props) => <Ionicons name={iconName} color={theme.colors.onSecondaryContainer} {...props} />}
           title={item.title}
           subtitle={new Date(item.timestamp).toLocaleString()}
         />
@@ -63,6 +63,6 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onPress, onLongPress, 
 };
 
 const WikiCard = styled(Card)`
-  margin: 8px;
-  padding: 8px;
+  margin: 2px;
+  padding: 0px;
 `;
