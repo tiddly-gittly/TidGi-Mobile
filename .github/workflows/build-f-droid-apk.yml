@@ -69,6 +69,8 @@ jobs:
         run: pnpm install
       - name: Initialize and Update Submodules
         run: pnpm run init-submodules
+      - name: Fix gradle error
+        run: pnpm exec zx scripts/fix-gradle.mjs
 
       ## configure cash for gradle : will help to reduce build time
       - name: Cache Gradle Wrapper and Dependencies

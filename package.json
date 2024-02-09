@@ -13,8 +13,7 @@
     "start:tunnel": "expo start --tunnel --android",
     "start:devClient": "npx expo start --dev-client --android",
     "web": "expo start --web",
-    "init-submodules": "git submodule update --init --recursive",
-    "postinstall": "zx scripts/fix-gradle.mjs"
+    "init-submodules": "git submodule update --init --recursive"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.21.0",
