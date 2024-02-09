@@ -238,19 +238,10 @@ export class BackgroundSyncService {
           if (ignore) continue;
           const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
 
-          // If no text is provided, means user delete the text on the Desktop. But not deleting this tiddler. fixes #18
-          // // If no text is provided, fetch from existing tiddler. This should not happened in tw-mobile-sync, just in case.
-          // // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-          // if (!text) {
-          //   const existingTiddler = await tiddlerRepo.findOne({ where: { title } });
-          //   if (existingTiddler === null) {
-          //     console.warn(`Cannot find text for tiddler ${title}`);
-          //   } else {
-          //     text = existingTiddler.text ?? '';
-          //   }
-          // }
-
-          let textToSave: string | null = null;
+          /**
+           * If no text, or text is saved to fs, this will be null.
+           */
+          let textToSaveToSQLite: string | null = null;
           let fieldsStringToSave: string;
           // for `$:/` tiddlers, if being skinny will throw error like `"Linked List only accepts string values, not " + value;`
           if (saveFullTiddler) {
@@ -266,9 +257,9 @@ export class BackgroundSyncService {
               // `BackgroundSyncService.#updateTiddlersFromServer` will use saveToFSFromServer, but here we already have the text, so we can save it directly
               // don't set encoding here, otherwise read as utf8 will failed.
               await fs.writeAsStringAsync(getWikiTiddlerPathByTitle(workspace, title), text);
-              textToSave = null;
+              textToSaveToSQLite = null;
             } else {
-              textToSave = text ?? null;
+              textToSaveToSQLite = text ?? null;
             }
             fieldsStringToSave = JSON.stringify({
               _is_skinny: '',
@@ -276,16 +267,26 @@ export class BackgroundSyncService {
               ...fieldsObjectToSave,
             });
           }
+          // Check if a tiddler with the same title already exists
+          const existingTiddler = await transaction.query.TiddlersSQLModel.findFirst({
+            columns: {
+              title: true,
+            },
+            where: eq(TiddlersSQLModel.title, title),
+          });
           /**
            * Save or update tiddler
-           * See `BackgroundSyncService.#updateTiddlersFromServer` for a similar logic
            */
           const newTiddler = {
             title,
-            text: textToSave,
+            text: textToSaveToSQLite,
             fields: fieldsStringToSave,
           } satisfies typeof TiddlersSQLModel.$inferInsert;
-          await transaction.insert(TiddlersSQLModel).values(newTiddler);
+          if (existingTiddler === undefined) {
+            await transaction.insert(TiddlersSQLModel).values(newTiddler);
+          } else {
+            await transaction.update(TiddlersSQLModel).set(newTiddler).where(eq(TiddlersSQLModel.title, title));
+          }
         }
       });
     } catch (error) {
@@ -295,7 +296,7 @@ export class BackgroundSyncService {
 
   public checkIsLargeText(text: string, mimeType = 'text/plain') {
     const blob = new Blob([text], { type: mimeType });
-    return blob.size > 200 * 1024; // 200KB
+    return blob.size > 2 * 1024 * 1024; // 2MB
   }
 
   public async saveToFSFromServer(workspace: IWikiWorkspace, title: string, onlineLastSyncServer = this.getOnlineServerForWiki(workspace)) {
@@ -305,11 +306,27 @@ export class BackgroundSyncService {
         return;
       }
       const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
-      const downloadPromise = fs.downloadAsync(getTiddlerUrl.toString(), getWikiTiddlerPathByTitle(workspace, title));
-      await pTimeout(downloadPromise, { milliseconds: 10_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
+      const downloadPromise = this.#downloadTextContentToFs(getTiddlerUrl.toString(), title, workspace);
+      await pTimeout(downloadPromise, { milliseconds: 20_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
     } catch (error) {
       console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       throw error;
+    }
+  }
+
+  /**
+   * Download content from url, handle delete content if download fail with 40x
+   * @param url that will return a string content, or have error message in string content when 404/400
+   */
+  async #downloadTextContentToFs(url: string, title: string, workspace: IWikiWorkspace) {
+    const filePath = getWikiTiddlerPathByTitle(workspace, title);
+    const result = await fs.downloadAsync(url, filePath);
+    if (result.status !== 200) {
+      // delete text file if have server error like 404
+      const content = await fs.readAsStringAsync(filePath);
+      const errorMessage = `${content} Status: ${result.status}`;
+      await fs.deleteAsync(filePath);
+      throw new Error(errorMessage);
     }
   }
 
