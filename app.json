@@ -25,7 +25,7 @@
           "fetch"
         ]
       },
-      "bundleIdentifier": "fren.onetwo.tidgi.mobile"
+      "bundleIdentifier": "ren.onetwo.tidgi.mobile"
     },
     "android": {
       "adaptiveIcon": {

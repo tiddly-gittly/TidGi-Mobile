@@ -27,5 +27,5 @@ export const TiddlerChangeSQLModel = sqliteTable('tiddlers_changes_log', {
    * TiddlersLogOperation
    */
   operation: text('operation').notNull(),
-  timestamp: text('timestamp').notNull(),
+  timestamp: integer('timestamp').notNull(),
 });

@@ -112,7 +112,7 @@ export class WikiStorageService {
         const newOperation = {
           title,
           operation,
-          timestamp: new Date().toISOString(),
+          timestamp: Date.now(),
         } satisfies typeof TiddlerChangeSQLModel.$inferInsert;
         if (operation === TiddlersLogOperation.UPDATE) {
           await transaction.update(TiddlersSQLModel).set(newTiddler).where(eq(TiddlersSQLModel.title, title));
@@ -146,7 +146,7 @@ export class WikiStorageService {
         const newOperation = {
           title,
           operation: TiddlersLogOperation.DELETE,
-          timestamp: new Date().toISOString(),
+          timestamp: Date.now(),
         } satisfies typeof TiddlerChangeSQLModel.$inferInsert;
         await transaction.insert(TiddlerChangeSQLModel).values(newOperation);
       });

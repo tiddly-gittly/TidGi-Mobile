@@ -1,6 +1,6 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/promise-function-async */
-import { asc, desc, eq, lt } from 'drizzle-orm';
+import { asc, desc, eq, gt } from 'drizzle-orm';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as fs from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
@@ -123,13 +123,8 @@ export class BackgroundSyncService {
   public async getChangeLogsSinceLastSync(wiki: IWikiWorkspace, lastSync: number, newerFirst?: boolean): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
     try {
       const { orm } = await sqliteServiceService.getDatabase(wiki);
-      const lastSyncTimestamp = new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ');
-
-      // const changeLogs = await tiddlerChangeRepo.createQueryBuilder('change')
-      //   .where("strftime('%s', change.timestamp) > strftime('%s', :lastSyncTimestamp)", { lastSyncTimestamp })
-      //   .orderBy('change.timestamp', newerFirst === true ? 'DESC' : 'ASC')
-      //   .getMany();
-      const changeLogs = await orm.select().from(TiddlerChangeSQLModel).where(lt(TiddlerChangeSQLModel.timestamp, lastSyncTimestamp)).orderBy(
+      const lastSyncTimestamp: number = new Date(lastSync).getTime();
+      const changeLogs = await orm.select().from(TiddlerChangeSQLModel).where(gt(TiddlerChangeSQLModel.timestamp, lastSyncTimestamp)).orderBy(
         newerFirst === true ? desc(TiddlerChangeSQLModel.timestamp) : asc(TiddlerChangeSQLModel.timestamp),
       );
 

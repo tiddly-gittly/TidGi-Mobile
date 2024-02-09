@@ -7,7 +7,7 @@ CREATE TABLE `tiddlers_changes_log` (
 	`id` integer PRIMARY KEY NOT NULL,
 	`title` text NOT NULL,
 	`operation` text NOT NULL,
-	`timestamp` text NOT NULL
+	`timestamp` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `tiddlers` (

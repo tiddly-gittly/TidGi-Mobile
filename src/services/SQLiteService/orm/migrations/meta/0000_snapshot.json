@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "sqlite",
-  "id": "eabb353e-c3b2-4a9c-8187-000bb5152875",
+  "id": "51941d56-8187-4cfe-8c99-e46c82813676",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "temp_tiddlers": {
@@ -53,7 +53,7 @@
         },
         "timestamp": {
           "name": "timestamp",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
