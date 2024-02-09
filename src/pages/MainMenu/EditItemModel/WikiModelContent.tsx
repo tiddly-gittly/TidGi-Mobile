@@ -3,14 +3,15 @@
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
-import { Button, MD3Colors, Modal, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Modal, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 
 import Collapsible from 'react-native-collapsible';
 import { ServerList } from '../../../components/ServerList';
+import { SyncTextButton } from '../../../components/SyncButton';
 import { backgroundSyncService } from '../../../services/BackgroundSyncService';
 import { useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
@@ -42,16 +43,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
   const [performanceToolsModelVisible, setPerformanceToolsModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
-  const [inSyncing, setInSyncing] = useState(false);
-  const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
-  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof backgroundSyncService.getOnlineServerForWiki>>>();
-  useEffect(() => {
-    if (wiki === undefined) return;
-    void backgroundSyncService.updateServerOnlineStatus().then(() => {
-      const server = backgroundSyncService.getOnlineServerForWiki(wiki);
-      setCurrentOnlineServerToSync(server);
-    });
-  }, [wiki]);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -89,34 +80,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       <StyledTextInput label={t('AddWorkspace.SelectiveSyncFilter')} value={editedSelectiveSyncFilter} onChangeText={setEditedSelectiveSyncFilter} />
       <StyledTextInput label={t('AddWorkspace.WorkspaceFolder')} value={editedWikiFolderLocation} onChangeText={setEditedWikiFolderLocation} />
 
-      <Button
-        mode='outlined'
-        disabled={inSyncing}
-        loading={inSyncing}
-        buttonColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80)}
-        onPress={async () => {
-          setInSyncing(true);
-          try {
-            await backgroundSyncService.updateServerOnlineStatus();
-            const server = backgroundSyncService.getOnlineServerForWiki(wiki);
-            if (server === undefined) {
-              throw new Error('No server available');
-            }
-            await backgroundSyncService.syncWikiWithServer(wiki, server);
-            setIsSyncSucceed(true);
-          } catch {
-            setIsSyncSucceed(false);
-          } finally {
-            setInSyncing(false);
-          }
-        }}
-      >
-        <Text>
-          {currentOnlineServerToSync?.name ?? 'x'}{' '}
-          {isSyncSucceed === true ? t('Log.SynchronizationFinish') : (isSyncSucceed === undefined ? t('ContextMenu.SyncNow') : t('Log.SynchronizationFailed'))}
-        </Text>
-      </Button>
-
+      <SyncTextButton workspaceID={id} />
       <Button
         mode='text'
         onPress={() => {

@@ -28,7 +28,7 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
   const now = Date.now();
 
   console.log(`Got background fetch call at date: ${new Date(now).toISOString()}`);
-  const haveUpdate = await backgroundSyncService.sync();
+  const { haveUpdate } = await backgroundSyncService.sync();
 
   // Be sure to return the successful result type!
   return haveUpdate ? BackgroundFetch.BackgroundFetchResult.NewData : BackgroundFetch.BackgroundFetchResult.NoData;
@@ -64,19 +64,21 @@ export class BackgroundSyncService {
     setInterval(this.sync.bind(this), syncInterval);
   }
 
-  public async sync(): Promise<boolean> {
+  public async sync() {
     const workspaces = this.#workspacestore.getState().workspaces;
     let haveUpdate = false;
+    let haveConnectedServer = false;
     await this.updateServerOnlineStatus();
     for (const wiki of workspaces) {
       if (wiki.type === 'wiki') {
         const server = this.getOnlineServerForWiki(wiki);
         if (server !== undefined) {
+          haveConnectedServer ||= true;
           haveUpdate ||= await this.syncWikiWithServer(wiki, server);
         }
       }
     }
-    return haveUpdate;
+    return { haveUpdate, haveConnectedServer };
   }
 
   public async updateServerOnlineStatus() {

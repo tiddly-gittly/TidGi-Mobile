@@ -6,7 +6,7 @@ import { ThemeProvider } from 'styled-components/native';
 import BackgroundSyncStatus from '../../../components/BackgroundSync';
 import { ImporterButton } from '../../../components/NavigationButtons';
 import { ServerList } from '../../../components/ServerList';
-import { backgroundSyncService } from '../../../services/BackgroundSyncService';
+import { SyncAllTextButton } from '../../../components/SyncButton';
 import { IServerInfo, useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { ServerEditModalContent } from './ServerEditModal';
@@ -26,8 +26,6 @@ export function ServerAndSync(): JSX.Element {
   );
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
-  const [inSyncing, setInSyncing] = useState(false);
-  const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const onEditServer = useCallback((server: IServerInfo) => {
     void Haptics.selectionAsync();
     setSelectedServerID(server.id);
@@ -37,24 +35,7 @@ export function ServerAndSync(): JSX.Element {
   return (
     <>
       <ImporterButton />
-      <Button
-        mode='elevated'
-        disabled={inSyncing}
-        loading={inSyncing}
-        onPress={async () => {
-          setInSyncing(true);
-          try {
-            await backgroundSyncService.sync();
-            setIsSyncSucceed(true);
-          } catch {
-            setIsSyncSucceed(false);
-          } finally {
-            setInSyncing(false);
-          }
-        }}
-      >
-        {isSyncSucceed === true ? t('Log.SynchronizationFinish') : (isSyncSucceed === undefined ? t('ContextMenu.SyncNow') : t('Log.SynchronizationFailed'))}
-      </Button>
+      <SyncAllTextButton />
       <Text>{t('Preference.SyncNowDescription')}</Text>
       <BackgroundSyncStatus />
       <Text variant='titleLarge'>{t('AddWorkspace.ServerList')}</Text>
