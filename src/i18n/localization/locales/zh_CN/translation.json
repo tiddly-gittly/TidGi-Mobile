@@ -180,7 +180,8 @@
     "ScanFromWiki": "扫码添加",
     "CreateWebpageShortcut": "添加网页快捷方式",
     "Preview": "预览",
-    "Use": "使用"
+    "Use": "使用",
+    "SelectSource": "换源"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
