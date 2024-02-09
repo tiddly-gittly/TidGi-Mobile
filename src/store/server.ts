@@ -51,7 +51,7 @@ export const useServerStore = create<ServerState & ServerActions>()(
     persist(
       (set) => ({
         ...defaultServer,
-        add: (partialServer) => {
+        add(partialServer) {
           const id = String(Math.random()).substring(2, 7);
           const name = `TidGi-Desktop ${id}`;
           let newServer: IServerInfo = {

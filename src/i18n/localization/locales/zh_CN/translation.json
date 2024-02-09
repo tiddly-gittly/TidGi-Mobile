@@ -181,7 +181,8 @@
     "CreateWebpageShortcut": "添加网页快捷方式",
     "Preview": "预览",
     "Use": "使用",
-    "SelectSource": "换源"
+    "SelectSource": "换源",
+    "PreviewWebView": "预览网页"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",

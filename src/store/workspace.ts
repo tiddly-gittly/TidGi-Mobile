@@ -9,6 +9,11 @@ import { defaultTextBasedTiddlerFilter } from '../constants/filters';
 import { WIKI_FOLDER_PATH } from '../constants/paths';
 
 export interface IWikiWorkspace {
+  /**
+   * Enable quick load button on workspace list.
+   * When click on button, will only load recent tiddlers, speed up loading time for huge wiki.
+   */
+  enableQuickLoad?: boolean;
   id: string;
   /** We store the hash to restore view next time. */
   lastLocationHash?: string;
@@ -27,11 +32,6 @@ export interface IWikiWorkspace {
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
-  /**
-   * Enable quick load button on workspace list.
-   * When click on button, will only load recent tiddlers, speed up loading time for huge wiki.
-   */
-  enableQuickLoad?: boolean;
 }
 export interface IPageWorkspace {
   id: string;
@@ -55,7 +55,7 @@ interface WikiActions {
   /**
    * @returns id of new workspace if successful, undefined otherwise
    */
-  add: (newWikiWorkspace: Omit<IWikiWorkspace, 'id' | 'wikiFolderLocation'> | Omit<IPageWorkspace, 'id' | 'name'>) => IWorkspace | undefined;
+  add: (newWikiWorkspace: Omit<IWikiWorkspace, 'id' | 'wikiFolderLocation'> | (Omit<IPageWorkspace, 'id' | 'name'> & { name?: IPageWorkspace['name'] })) => IWorkspace | undefined;
   addServer: (id: string, newServerID: string) => void;
   remove: (id: string) => void;
   removeAll: () => void;
@@ -72,7 +72,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
     persist(
       (set) => ({
         workspaces: defaultWorkspaces,
-        add: (newWorkspace) => {
+        add(newWorkspace) {
           let result: IWorkspace | undefined;
           set((state) => {
             switch (newWorkspace.type) {
@@ -96,7 +96,8 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               }
               case 'webpage': {
                 const id = String(Math.random()).substring(2, 7);
-                const name = `Webpage ${id}`;
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                const name = newWorkspace.name || `Webpage ${id}`;
                 const newPageWorkspace = { ...(newWorkspace as IPageWorkspace), id, name } satisfies IPageWorkspace;
                 state.workspaces = [newPageWorkspace, ...state.workspaces];
                 result = cloneDeep(newPageWorkspace);
@@ -105,7 +106,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
           });
           return result;
         },
-        update: (id, newWikiWorkspace) => {
+        update(id, newWikiWorkspace) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
             const oldWiki = state.workspaces[oldWikiIndex];
@@ -114,7 +115,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             }
           });
         },
-        addServer: (id, newServerID) => {
+        addServer(id, newServerID) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
             const oldWiki = state.workspaces[oldWikiIndex];
@@ -134,7 +135,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             }
           });
         },
-        setServerActive: (id, serverIDToActive, isActive = true) => {
+        setServerActive(id, serverIDToActive, isActive = true) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
             const oldWiki = state.workspaces[oldWikiIndex];
@@ -148,12 +149,12 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             }
           });
         },
-        remove: (id) => {
+        remove(id) {
           set((state) => {
             state.workspaces = state.workspaces.filter((workspace) => workspace.id !== id);
           });
         },
-        removeAll: () => {
+        removeAll() {
           set((state) => {
             state.workspaces = [];
           });

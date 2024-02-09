@@ -25,8 +25,8 @@ export interface WikiWebViewProps {
 export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'WikiWebView'>> = ({ route }) => {
   const { t } = useTranslation();
   const { id, quickLoad } = route.params;
-  const activeWikiWorkspace = useWorkspaceStore(state => state.workspaces.find(wiki => wiki.id === id));
-  useCloseSQLite(activeWikiWorkspace);
+  const activeWorkspace = useWorkspaceStore(state => state.workspaces.find(wiki => wiki.id === id));
+  useCloseSQLite(activeWorkspace);
   const [webviewSideReceiver, webviewSideReceiverSetter] = useState<string | undefined>(undefined);
   useEffect(() => {
     void getWebviewSideReceiver().then(webviewSideReceiverSetter);
@@ -39,12 +39,12 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
     );
   }
 
-  switch (activeWikiWorkspace?.type) {
+  switch (activeWorkspace?.type) {
     case undefined:
     case 'wiki': {
       return (
         <Container>
-          {(activeWikiWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWikiWorkspace} webviewSideReceiver={webviewSideReceiver} quickLoad={quickLoad ?? false} />}
+          {(activeWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWorkspace} webviewSideReceiver={webviewSideReceiver} quickLoad={quickLoad ?? false} />}
         </Container>
       );
     }
@@ -52,7 +52,7 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
     case 'webpage': {
       return (
         <Container>
-          <WebView source={{ uri: activeWikiWorkspace.uri }} />
+          <WebView source={{ uri: activeWorkspace.uri }} />
         </Container>
       );
     }

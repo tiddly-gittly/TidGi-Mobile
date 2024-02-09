@@ -1,6 +1,7 @@
 {
   "AddWorkspace": {
     "Use": "Use",
-    "SelectSource": "Sources"
+    "SelectSource": "Sources",
+    "PreviewWebView": "Preview WebView"
   }
 }

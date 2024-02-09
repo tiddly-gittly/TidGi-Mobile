@@ -53,13 +53,17 @@ const ImportStatusText = styled.Text`
   flex-direction: row;
 `;
 
-export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation }) => {
+export interface ImporterProps {
+  uri?: string;
+}
+
+export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
   const [scannedString, setScannedString] = useState('');
-  const [wikiUrl, setWikiUrl] = useState<undefined | URL>();
+  const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
   const [wikiName, setWikiName] = useState('wiki');
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
 

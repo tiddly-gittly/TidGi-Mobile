@@ -15,7 +15,8 @@ import { ThemeProvider } from 'styled-components';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
-import { Importer } from './pages/Importer/Index';
+import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
+import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
@@ -25,8 +26,9 @@ import { navigationReference } from './utils/RootNavigation';
 export type RootStackParameterList = {
   Config: undefined;
   CreateWorkspace: undefined;
-  Importer: undefined;
+  Importer: ImporterProps;
   MainMenu: MainMenuProps;
+  PreviewWebView: PreviewWebViewProps;
   WikiWebView: WikiWebViewProps;
 };
 const Stack = createStackNavigator<RootStackParameterList>();
@@ -90,6 +92,14 @@ export const App: React.FC = () => {
                   headerTitleStyle: { color: theme.colors.primary },
                 })}
                 component={CreateWorkspace}
+              />
+              <Stack.Screen
+                name='PreviewWebView'
+                options={() => ({
+                  headerTitle: t('AddWorkspace.PreviewWebView'),
+                  headerTitleStyle: { color: theme.colors.primary },
+                })}
+                component={PreviewWebView}
               />
             </Stack.Navigator>
           </NavigationContainer>

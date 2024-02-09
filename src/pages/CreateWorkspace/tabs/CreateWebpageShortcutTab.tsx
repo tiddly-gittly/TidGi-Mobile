@@ -1,8 +1,12 @@
+import { useNavigation } from '@react-navigation/native';
+import { StackScreenProps } from '@react-navigation/stack';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Text, TextInput } from 'react-native-paper';
 import styled from 'styled-components/native';
+
+import { RootStackParameterList } from '../../../App';
 import { TemplateListItem } from '../../../components/TemplateList';
 import { useWorkspaceStore } from '../../../store/workspace';
 import helpPages from '../templates/helpPages.json';
@@ -21,9 +25,9 @@ const InputContainer = styled.View`
 
 const exampleWebPages = helpPages.default;
 
-export const CreateWebpageShortcutTab = () => {
+export function CreateWebpageShortcutTab() {
   const { t } = useTranslation();
-  const theme = useTheme();
+  const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>['navigation']>();
   const [newPageUrl, newPageUrlSetter] = useState('');
   const addPage = useWorkspaceStore(state => state.add);
 
@@ -32,13 +36,15 @@ export const CreateWebpageShortcutTab = () => {
       return (
         <TemplateListItem
           item={item}
-          onPreviewPress={() => {}}
-          onUsePress={(newText: string) => {
-            newPageUrlSetter(newText);
+          onPreviewPress={(uri: string) => {
+            navigation.navigate('PreviewWebView', { uri });
+          }}
+          onUsePress={(uri: string) => {
+            newPageUrlSetter(uri);
           }}
         />
       );
-    }, []);
+    }, [navigation]);
 
   return (
     <Container>
@@ -52,7 +58,10 @@ export const CreateWebpageShortcutTab = () => {
         />
         <Button
           onPress={() => {
-            addPage({ type: 'webpage', uri: newPageUrl });
+            const createdPageWorkspace = addPage({ type: 'webpage', uri: newPageUrl, name: new URL(newPageUrl).hostname });
+            if (createdPageWorkspace === undefined) return;
+            navigation.navigate('MainMenu', { fromWikiID: createdPageWorkspace.id });
+            navigation.navigate('WikiWebView', { id: createdPageWorkspace.id });
           }}
           mode='outlined'
         >
@@ -66,4 +75,4 @@ export const CreateWebpageShortcutTab = () => {
       />
     </Container>
   );
-};
+}
