@@ -5,6 +5,7 @@ import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Card, IconButton, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { SyncIconButton } from './SyncButton';
 
 interface WorkspaceListProps {
   onLongPress?: (workspace: IWorkspace) => void;
@@ -32,6 +33,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
           subtitle={item.id}
           right={(props) => (
             <RightButtonsContainer>
+              {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
               {(item as IWikiWorkspace).enableQuickLoad === true && (
                 <IconButton
                   {...props}

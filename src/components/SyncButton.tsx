@@ -8,6 +8,44 @@ import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 export interface ISyncIconButtonProps {
   workspaceID: string;
 }
+export function SyncIconButton(props: ISyncIconButtonProps) {
+  const { workspaceID } = props;
+  const wiki = useWorkspaceStore(state =>
+    workspaceID === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === workspaceID && (w.type === undefined || w.type === 'wiki'))
+  );
+
+  const [inSyncing, setInSyncing] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
+  const iconName = getSyncIconName(isSyncSucceed, isConnected, inSyncing);
+
+  return (
+    <IconButton
+      {...props}
+      icon={iconName}
+      iconColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80)}
+      onPress={async () => {
+        if (wiki === undefined) return;
+        setInSyncing(true);
+        try {
+          await backgroundSyncService.updateServerOnlineStatus();
+          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+          if (server === undefined) {
+            setIsConnected(false);
+            return;
+          }
+          await backgroundSyncService.syncWikiWithServer(wiki, server);
+          setIsSyncSucceed(true);
+        } catch {
+          setIsSyncSucceed(false);
+        } finally {
+          setInSyncing(false);
+        }
+      }}
+    />
+  );
+}
+
 export function SyncTextButton(props: ISyncIconButtonProps) {
   const { t } = useTranslation();
   const { workspaceID } = props;
