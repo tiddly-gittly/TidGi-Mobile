@@ -175,7 +175,12 @@
     "Success": "导入成功",
     "DownloadBinaryTimeout": "下载一个资源文件时超时",
     "WarningMessageDescription": "你可以忽略警告信息。因为导入失败的内容，之后可以在进入知识库后正常按需加载。",
-    "OpenPerformanceTools": "打开性能工具"
+    "OpenPerformanceTools": "打开性能工具",
+    "CreateFromTemplate": "从模板创建",
+    "ScanFromWiki": "扫码添加",
+    "CreateWebpageShortcut": "添加网页快捷方式",
+    "Preview": "预览",
+    "Use": "使用"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",

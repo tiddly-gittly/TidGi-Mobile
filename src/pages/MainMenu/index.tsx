@@ -4,7 +4,7 @@ import { FC, useState } from 'react';
 import { Modal, Portal, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
-import { ImporterButton } from '../../components/NavigationButtons';
+import { CreateWorkspaceButton, ImporterButton } from '../../components/NavigationButtons';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
@@ -16,6 +16,11 @@ const Container = styled.View`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+`;
+const ButtonButtonsContainer = styled.View`
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
 `;
 
 export interface MainMenuProps {
@@ -68,7 +73,10 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
           </Modal>
         </ThemeProvider>
       </Portal>
-      <ImporterButton />
+      <ButtonButtonsContainer>
+        <ImporterButton />
+        <CreateWorkspaceButton />
+      </ButtonButtonsContainer>
     </Container>
   );
 };

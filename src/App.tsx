@@ -14,6 +14,7 @@ import { PaperProvider } from 'react-native-paper';
 import { ThemeProvider } from 'styled-components';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
+import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { Importer } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
@@ -23,6 +24,7 @@ import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
   Config: undefined;
+  CreateWorkspace: undefined;
   Importer: undefined;
   MainMenu: MainMenuProps;
   WikiWebView: WikiWebViewProps;
@@ -80,6 +82,14 @@ export const App: React.FC = () => {
                   headerTitleStyle: { color: theme.colors.primary },
                 })}
                 component={Importer}
+              />
+              <Stack.Screen
+                name='CreateWorkspace'
+                options={() => ({
+                  headerTitle: t('AddWorkspace.AddWorkspace'),
+                  headerTitleStyle: { color: theme.colors.primary },
+                })}
+                component={CreateWorkspace}
               />
             </Stack.Navigator>
           </NavigationContainer>

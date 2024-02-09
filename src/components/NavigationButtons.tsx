@@ -25,3 +25,18 @@ export function ImporterButton() {
     </MainFeatureButton>
   );
 }
+
+export function CreateWorkspaceButton() {
+  const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
+
+  return (
+    <MainFeatureButton
+      mode='outlined'
+      onPress={() => {
+        navigation.navigate('CreateWorkspace');
+      }}
+    >
+      {t('AddWorkspace.AddWorkspace')}
+    </MainFeatureButton>
+  );
+}

@@ -1,0 +1,59 @@
+{
+  "onlineSources": [
+    "https://tidgi.fun/recipes/default/tiddlers.json?filter=[tag[WikiTemplates]]"
+  ],
+  "default": [
+    {
+      "title": "Tiddlywiki NodeJS Github Template",
+      "description": "太记桌面版的默认知识库模板。来自太记移动版的作者。",
+      "tags": "Pure",
+      "url": "https://keatonlao.gitee.io/tiddlywiki-xp/",
+      "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "fallbackUrls": "https://keatonlao.github.io/tiddlywiki-xp/",
+      "language": "zh_CN"
+    },
+    {
+      "title": "Tiddlywiki NodeJS Github Template",
+      "description": "Default wiki template for TidGi-Desktop. From author of TidGi-Mobile.",
+      "tags": "Pure",
+      "url": "https://keatonlao.gitee.io/tiddlywiki-xp/",
+      "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "fallbackUrls": "https://keatonlao.github.io/tiddlywiki-xp/",
+      "language": "zh_CN"
+    },
+    {
+      "title": "Tiddlywiki XP",
+      "description": "「一个快速体验太微的机会」—— 非常全面、易读，包括了很多非常基础的操作，例如「如何新建第一个笔记」",
+      "tags": "Intro",
+      "url": "https://keatonlao.gitee.io/tiddlywiki-xp/",
+      "contribute": "https://github.com/keatonlao/tiddlywiki-xp",
+      "fallbackUrls": "https://keatonlao.github.io/tiddlywiki-xp/",
+      "language": "zh_CN"
+    },
+    {
+      "title": "Grok TiddlyWiki",
+      "description": "Build a deep, lasting understanding of TiddlyWiki",
+      "tags": "Intro FAQ",
+      "url": "https://groktiddlywiki.com/read/",
+      "contribute": "https://groktiddlywiki.com/donate/",
+      "language": "en"
+    },
+    {
+      "title": "太微官方文档（中文版）",
+      "description": "TiddlyWiki 舞 - 基础文档简体中文版",
+      "tags": "Docs",
+      "url": "https://tw-cn-doc.cpolar.top/",
+      "contribute": "https://github.com/BramChen/tw5-docs",
+      "fallbackUrls": "https://bramchen.github.io/tw5-docs/zh_CN/",
+      "language": "zh_CN"
+    },
+    {
+      "title": "TiddlyWiki",
+      "description": "Official Document",
+      "tags": "Docs",
+      "url": "https://tiddlywiki.com/",
+      "contribute": "https://github.com/Jermolene/TiddlyWiki5/tree/master/editions/tw5.com",
+      "language": "en"
+    }
+  ]
+}
