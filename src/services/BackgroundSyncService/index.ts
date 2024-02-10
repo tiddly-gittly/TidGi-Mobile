@@ -184,7 +184,7 @@ export class BackgroundSyncService {
 
   public async syncWikiWithServer(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<boolean> {
     const changes = await this.getChangeLogsSinceLastSync(wiki, server.lastSync);
-    const syncUrl = new URL(`tw-mobile-sync/sync`, server.uri);
+    const syncUrl = new URL('tw-mobile-sync/sync', server.uri);
 
     const request: ISyncEndPointRequest = {
       deleted: uniq(changes.filter(change => change.operation === TiddlersLogOperation.DELETE).map(change => change.title)),
@@ -206,7 +206,19 @@ export class BackgroundSyncService {
           'User-Agent': `${await Constants.getWebViewUserAgentAsync() ?? `TidGi-Mobile`} ${wiki.name}`,
         },
         body: JSON.stringify(request),
-      }).then(response => response.json() as Promise<ISyncEndPointResponse>);
+      }).then(async response => {
+        switch (response.status) {
+          case 200: {
+            return await (response.json() as Promise<ISyncEndPointResponse>);
+          }
+          case 401: {
+            throw new Error(i18n.t('Log.Unauthorized'));
+          }
+          default: {
+            throw new Error(`${i18n.t('Log.SyncFailedSystemError')} ${response.status} ${await response.text()}`);
+          }
+        }
+      });
       if (response === undefined) return false;
       const { deletes, updates } = response;
       await this.#updateTiddlersFromServer(wiki, deletes, updates);

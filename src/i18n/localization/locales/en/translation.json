@@ -3,5 +3,8 @@
     "Use": "Use",
     "SelectSource": "Sources",
     "PreviewWebView": "Preview WebView"
+  },
+  "Log": {
+    "Unauthorized": "Do not sync data to public servers or servers you do not own."
   }
 }

@@ -300,7 +300,8 @@
     "UsingUrlAndUsername": "使用 Git Url {{githubRepoUrl}} 和用户名 {{username}} 和 accessToken {{accessToken}}",
     "FailedToOpenDirectory": "无法打开文件夹 {{path}} {{errorMessage}}",
     "FailedToOpenFile": "无法打开文件 {{path}} {{errorMessage}}",
-    "FileNotSyncedYet": "文件尚未同步过来，连接到有此文件的服务器重试以接收它。"
+    "FileNotSyncedYet": "文件尚未同步过来，连接到有此文件的服务器重试以接收它。",
+    "Unauthorized": "不可往公共服务器或非你拥有的服务器同步数据。"
   },
   "Dialog": {
     "NeedCorrectTiddlywikiFolderPath": "需要传入正确的路径，而此路径无法被 TiddlyWiki 识别。",
