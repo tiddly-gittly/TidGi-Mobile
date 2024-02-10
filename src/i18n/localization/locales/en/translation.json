@@ -555,7 +555,7 @@
   "Edit": "Edit",
   "Open": "Open",
   "Import": {
-    "ImportWiki": "Import Wiki {{wikiUrl}}"
+    "ImportWiki": "Import Wiki"
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",

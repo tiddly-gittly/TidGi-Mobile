@@ -3,6 +3,7 @@ import { getLocales } from 'expo-localization';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
+import { useConfigStore } from '../store/config';
 import en from './localization/locales/en/translation.json';
 import zh_CN from './localization/locales/zh_CN/translation.json';
 
@@ -14,7 +15,7 @@ export const supportedLanguages = [
 ];
 export const detectedLanguage = getLocales()[0].languageCode;
 void i18n.use(initReactI18next).init({
-  lng: detectedLanguage ?? defaultLanguage,
+  lng: useConfigStore.getState().preferredLanguage ?? detectedLanguage ?? defaultLanguage,
   fallbackLng: 'en',
   resources: {
     en: {
