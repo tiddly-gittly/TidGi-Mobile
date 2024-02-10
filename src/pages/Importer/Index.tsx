@@ -62,8 +62,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
-  const [scannedString, setScannedString] = useState('');
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
+  const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
   const [wikiName, setWikiName] = useState('wiki');
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
 
@@ -81,23 +81,23 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     if (type === BarCodeScanner.Constants.BarCodeType.qr) {
       try {
         setQrScannerOpen(false);
-        setScannedString(data);
+        setServerUriToUseString(data);
       } catch (error) {
         console.warn('Not a valid URL', error);
       }
     }
   }, []);
   useEffect(() => {
-    if (scannedString !== '') {
+    if (serverUriToUseString !== '') {
       try {
-        const url = new URL(scannedString);
+        const url = new URL(serverUriToUseString);
         setExpandServerList(false);
         setWikiUrl(new URL(url.origin));
       } catch (error) {
         console.warn('Not a valid URL', error);
       }
     }
-  }, [scannedString]);
+  }, [serverUriToUseString]);
 
   const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace, resetState } = useImportHTML();
 
@@ -161,15 +161,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         <ServerList
           onlineOnly
           onPress={(server) => {
-            setScannedString(server.uri);
+            setServerUriToUseString(server.uri);
           }}
         />
       </Collapsible>
       <TextInput
         label={t('EditWorkspace.ServerURI')}
-        value={scannedString}
+        inputMode='url'
+        keyboardType='url'
+        value={serverUriToUseString}
         onChangeText={(newText: string) => {
-          setScannedString(newText);
+          setServerUriToUseString(newText);
         }}
       />
       {importStatus === 'idle' && !qrScannerOpen && wikiUrl !== undefined && (
@@ -186,7 +188,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             disabled={importStatus !== 'idle'}
             onPress={addServerAndImport}
           >
-            {t('Import.ImportWiki', { wikiUrl: `${wikiUrl.host}:${wikiUrl.port}` })}
+            <ButtonText>
+              {t('Import.ImportWiki')}
+            </ButtonText>
           </ImportWikiButton>
         </>
       )}
