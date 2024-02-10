@@ -5,10 +5,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList } from 'react-native';
 
 import { RootStackParameterList } from '../../../App';
-import { TemplateListItem } from '../../../components/TemplateList';
+import { filterTemplate, ITemplateListItem, TemplateListItem } from '../../../components/TemplateList';
 import wikiTemplates from '../templates/wikiTemplates.json';
 
-const defaultTemplates = wikiTemplates.default;
+const defaultTemplates = wikiTemplates.default as ITemplateListItem[];
 
 export const CreateFromTemplateTab = () => {
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>['navigation']>();
@@ -19,7 +19,7 @@ export const CreateFromTemplateTab = () => {
       const fetchedLists = await Promise.all(wikiTemplates.onlineSources.map(async (sourceUrl: string) => {
         try {
           const response = await fetch(sourceUrl);
-          const data = await (response.json() as Promise<typeof defaultTemplates>);
+          const data = await (response.json() as Promise<ITemplateListItem[]>);
           return data;
         } catch (error) {
           console.warn('Failed to fetch online sources', error);
@@ -32,7 +32,7 @@ export const CreateFromTemplateTab = () => {
   }, []);
 
   const renderItem = useMemo(() =>
-    function CreateFromTemplateTabListItem({ item }: { item: typeof defaultTemplates[number] }) {
+    function CreateFromTemplateTabListItem({ item }: { item: ITemplateListItem }) {
       return (
         <TemplateListItem
           item={item}
@@ -48,7 +48,7 @@ export const CreateFromTemplateTab = () => {
 
   return (
     <FlatList
-      data={webPages}
+      data={filterTemplate(webPages)}
       renderItem={renderItem}
       keyExtractor={(item, index) => `template-${index}`}
     />

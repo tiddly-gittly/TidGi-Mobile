@@ -8,7 +8,7 @@ import { Button, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { RootStackParameterList } from '../../../App';
-import { TemplateListItem } from '../../../components/TemplateList';
+import { filterTemplate, ITemplateListItem, TemplateListItem } from '../../../components/TemplateList';
 import { useWorkspaceStore } from '../../../store/workspace';
 import helpPages from '../templates/helpPages.json';
 
@@ -37,7 +37,7 @@ export function CreateWebpageShortcutTab() {
       const fetchedLists = await Promise.all(helpPages.onlineSources.map(async (sourceUrl: string) => {
         try {
           const response = await fetch(sourceUrl);
-          const data = await (response.json() as Promise<typeof exampleWebPages>);
+          const data = await (response.json() as Promise<ITemplateListItem[]>);
           return data;
         } catch (error) {
           console.warn('Failed to fetch online sources', error);
@@ -50,7 +50,7 @@ export function CreateWebpageShortcutTab() {
   }, []);
 
   const renderItem = useMemo(() =>
-    function CreateWebpageShortcutTabListItem({ item }: { item: typeof exampleWebPages[number] }) {
+    function CreateWebpageShortcutTabListItem({ item }: { item: ITemplateListItem }) {
       return (
         <TemplateListItem
           item={item}
@@ -87,7 +87,7 @@ export function CreateWebpageShortcutTab() {
         </Button>
       </InputContainer>
       <FlatList
-        data={webPages}
+        data={filterTemplate(webPages)}
         renderItem={renderItem}
         keyExtractor={(item, index) => `helpPage-${index}`}
       />

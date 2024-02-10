@@ -1,7 +1,8 @@
+import i18n from 'i18next';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Card, Menu, useTheme } from 'react-native-paper';
-import styled from 'styled-components/native';
+import { styled } from 'styled-components/native';
 
 const TemplateItem = styled(Card)`
   margin: 8px;
@@ -10,7 +11,7 @@ const TemplateItem = styled(Card)`
 export interface ITemplateListItem {
   contribute: string;
   description: string;
-  fallbackUrls?: string;
+  fallbackUrls?: string | undefined;
   language: string;
   tags: string;
   title: string;
@@ -21,6 +22,14 @@ interface ITemplateListItemProps {
   item: ITemplateListItem;
   onPreviewPress: (url: string) => void;
   onUsePress: (url: string) => void;
+}
+
+export function filterTemplate(list: ITemplateListItem[]): ITemplateListItem[] {
+  const currentLanguage = i18n.language;
+  /**
+   * When language is `zh`, match `zh` and `zh-CN` and `zh-Hans`
+   */
+  return list.filter((item) => item.language.startsWith(currentLanguage));
 }
 
 export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplateListItemProps) {
