@@ -54,6 +54,17 @@ const ImportStatusText = styled.Text`
 `;
 
 export interface ImporterProps {
+  /**
+   * Save the URI as a server to workspace. Default to `true`.
+   */
+  addAsServer?: boolean;
+  /**
+   * Auto trigger the import of binary tiddlers after the import of the HTML
+   */
+  autoImportBinary?: boolean;
+  /**
+   * The URI to auto fill the server URI input
+   */
   uri?: string;
 }
 
@@ -66,7 +77,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
   const [wikiName, setWikiName] = useState('wiki');
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
-
+  const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
       const { status } = await BarCodeScanner.requestPermissionsAsync();
@@ -103,13 +114,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
-    const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
-    // void nativeService.getLocationWithTimeout().then(coords => {
-    //   if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
-    // });
-    await storeHtml(wikiUrl.origin, wikiName, newServer.id);
+    if (addAsServer) {
+      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
+      // void nativeService.getLocationWithTimeout().then(coords => {
+      //   if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
+      // });
+      await storeHtml(wikiUrl.origin, wikiName, newServer.id);
+    } else {
+      await storeHtml(wikiUrl.origin, wikiName);
+    }
     setWikiUrl(undefined);
-  }, [addServer, storeHtml, updateServer, wikiName, wikiUrl]);
+  }, [addAsServer, addServer, storeHtml, wikiName, wikiUrl.origin]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -258,7 +273,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
           </OpenWikiButton>
           <DoneImportActionsTitleText variant='titleLarge'>{t('OptionalActions')}</DoneImportActionsTitleText>
-          <ImportBinary wikiWorkspace={createdWikiWorkspace} />
+          <ImportBinary wikiWorkspace={createdWikiWorkspace} autoImportBinary={route.params.autoImportBinary} />
         </>
       )}
     </Container>

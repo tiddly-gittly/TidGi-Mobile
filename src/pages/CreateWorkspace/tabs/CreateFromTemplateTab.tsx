@@ -40,7 +40,7 @@ export const CreateFromTemplateTab = () => {
             navigation.navigate('PreviewWebView', { uri });
           }}
           onUsePress={(uri: string) => {
-            navigation.navigate('Importer', { uri });
+            navigation.navigate('Importer', { uri, autoImportBinary: true, addAsServer: false });
           }}
         />
       );

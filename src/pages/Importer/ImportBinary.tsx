@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-useless-undefined */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, MD3Colors, ProgressBar, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
@@ -13,11 +13,16 @@ const ImportStatusText = styled.Text`
   flex-direction: row;
 `;
 
-export function ImportBinary(props: { wikiWorkspace: IWikiWorkspace }) {
+export function ImportBinary(props: { autoImportBinary?: boolean; wikiWorkspace: IWikiWorkspace }) {
   const { t } = useTranslation();
   const { importBinary, importingBinary, importPercentage, importBinaryError, resetState, importSuccess, importWarning } = useImportBinary(
     props.wikiWorkspace,
   );
+  useEffect(() => {
+    if (props.autoImportBinary === true) {
+      void importBinary();
+    }
+  }, [importBinary, props.autoImportBinary]);
 
   const {
     importBinaryFetchAndWritPercentage,

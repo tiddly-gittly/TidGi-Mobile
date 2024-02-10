@@ -15,8 +15,8 @@ import {
   WIKI_FOLDER_PATH,
 } from '../../constants/paths';
 import { importService } from '../../services/ImportService';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { sqliteServiceService } from '../../services/SQLiteService';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'sqlite' | 'success' | 'error';
 
@@ -47,7 +47,7 @@ export function useImportHTML() {
     setCreatedWikiWorkspace(undefined);
   }, []);
 
-  const storeHtml = useCallback(async (origin: string, wikiName: string, serverID: string) => {
+  const storeHtml = useCallback(async (origin: string, wikiName: string, serverID?: string) => {
     if (WIKI_FOLDER_PATH === undefined) return;
     setStatus('fetching');
     const getSkinnyHTMLUrl = new URL('/tw-mobile-sync/get-skinny-html', origin);
@@ -76,7 +76,7 @@ export function useImportHTML() {
     try {
       setStatus('creating');
 
-      const newWorkspace = addWiki({ type: 'wiki', name: wikiName, syncedServers: [{ serverID, lastSync: Date.now(), syncActive: true }] }) as
+      const newWorkspace = addWiki({ type: 'wiki', name: wikiName, syncedServers: serverID === undefined ? [] : [{ serverID, lastSync: Date.now(), syncActive: true }] }) as
         | IWikiWorkspace
         | undefined;
       if (newWorkspace === undefined) throw new Error('Failed to create workspace');
