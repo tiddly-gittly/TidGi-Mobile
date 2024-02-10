@@ -34,8 +34,7 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
             setIsConnected(false);
             return;
           }
-          await backgroundSyncService.syncWikiWithServer(wiki, server);
-          setIsSyncSucceed(true);
+          setIsSyncSucceed(await backgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {
@@ -86,8 +85,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
           if (server === undefined) {
             throw new Error('No server available');
           }
-          await backgroundSyncService.syncWikiWithServer(wiki, server);
-          setIsSyncSucceed(true);
+          setIsSyncSucceed(await backgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {

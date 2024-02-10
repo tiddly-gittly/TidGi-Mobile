@@ -228,7 +228,7 @@ export class BackgroundSyncService {
     } catch (error) {
       console.error(error, (error as Error).stack);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(`${server.name} ${i18n.t('Log.SynchronizationFailed')}`, `${i18n.t('Log.SynchronizationFailedDetail')} Error: ${(error as Error).message}`, undefined, {
+      Alert.alert(`${server.name} ${i18n.t('Log.SynchronizationFailed')}`, `${(error as Error).message} ${i18n.t('Log.SynchronizationFailedDetail')}`, undefined, {
         cancelable: true,
       });
       return false;

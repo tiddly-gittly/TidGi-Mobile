@@ -263,7 +263,7 @@
     "GitRepositoryConfigurateFailed": "Git 仓库配置失败，详见错误日志",
     "GitRepositoryConfigurationFinished": "Git 仓库配置完毕",
     "SynchronizationFailed": "同步失败！",
-    "SynchronizationFailedDetail": "The failure could be caused by the network, if it does, retry after adjusting the network, for example by ensuring that you are on the same WiFi LAN. It could also be a mismatch between the the mobile and the version of plugin on the computer!",
+    "SynchronizationFailedDetail": "故障可能是由网络引起的，如果是，请在调整网络后重试，例如确保您在同一个 WiFi 局域网内。也可能是手机和电脑上的插件版本不匹配！",
     "NotAGitRepository": "不是一个 Git 仓库",
     "CantSynchronizeAndSyncScriptIsInDeadLoop": "无法同步，而且同步脚本陷入死循环",
     "CantSyncInSpecialGitStateAutoFixFailed": "无法同步，这个文件夹处在特殊状态，不能直接进行同步，已尝试自动修复，但还是出现错误，请先解决所有冲突（例如使用 VSCode 打开)，如果还不行，请尝试用专业 Git 工具（Source Tree, GitKraken）解决问题",
@@ -532,7 +532,7 @@
     "ClearDebugPanel": "清空调试面板"
   },
   "Import": {
-    "ImportWiki": "导入Wiki {{wikiUrl}}"
+    "ImportWiki": "导入Wiki"
   },
   "ConfirmDelete": "是否删除？",
   "ConfirmDeleteDescription": "此操作无法撤销。",

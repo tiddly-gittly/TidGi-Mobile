@@ -5,6 +5,7 @@
     "PreviewWebView": "Preview WebView"
   },
   "Log": {
-    "Unauthorized": "Do not sync data to public servers or servers you do not own."
+    "Unauthorized": "Do not sync data to public servers or servers you do not own.",
+    "SynchronizationFailedDetail": "The failure could be caused by the network, if it does, retry after adjusting the network, for example by ensuring that you are on the same WiFi LAN. It could also be a mismatch between the the mobile and the version of plugin on the computer!"
   }
 }
