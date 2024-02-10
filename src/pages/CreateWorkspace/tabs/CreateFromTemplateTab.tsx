@@ -26,7 +26,7 @@ export const CreateFromTemplateTab = () => {
           return [];
         }
       }));
-      webPagesSetter(uniqBy([...defaultTemplates, ...flatten(fetchedLists)], 'url'));
+      webPagesSetter(uniqBy([...defaultTemplates, ...flatten(fetchedLists)], 'title'));
     };
     void loadOnlineSources();
   }, []);

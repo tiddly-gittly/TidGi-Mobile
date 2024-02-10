@@ -1,7 +1,7 @@
 import i18n from 'i18next';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Card, Menu, useTheme } from 'react-native-paper';
+import { Button, Card, Menu, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 const TemplateItem = styled(Card)`
@@ -53,7 +53,10 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
 
   return (
     <TemplateItem>
-      <Card.Title title={item.title} subtitle={item.description} />
+      <Card.Title title={item.title} />
+      <Card.Content>
+        <Text>{item.description}</Text>
+      </Card.Content>
       <Card.Actions>
         <Button
           icon='eye-outline'

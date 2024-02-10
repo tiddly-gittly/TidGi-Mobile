@@ -44,7 +44,7 @@ export function CreateWebpageShortcutTab() {
           return [];
         }
       }));
-      webPagesSetter(uniqBy([...exampleWebPages, ...flatten(fetchedLists)], 'url'));
+      webPagesSetter(uniqBy([...exampleWebPages, ...flatten(fetchedLists)], 'title'));
     };
     void loadOnlineSources();
   }, []);
