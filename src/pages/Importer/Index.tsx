@@ -124,7 +124,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       await storeHtml(wikiUrl.origin, wikiName);
     }
     setWikiUrl(undefined);
-  }, [addAsServer, addServer, storeHtml, wikiName, wikiUrl.origin]);
+  }, [addAsServer, addServer, storeHtml, wikiName, wikiUrl?.origin]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;

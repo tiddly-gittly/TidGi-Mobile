@@ -65,7 +65,7 @@ interface WikiActions {
 
 const defaultWorkspaces = [
   { type: 'webpage', id: 'help', name: '?', uri: 'https://tidgi.fun/#:TidGi-Mobile' },
-] satisfies IWorkspace[];
+] satisfies IPageWorkspace[];
 
 export const useWorkspaceStore = create<WikiState & WikiActions>()(
   immer(devtools(
@@ -124,8 +124,8 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 oldWiki.type = 'wiki';
               }
               if (oldWiki.type !== 'wiki') return;
-              // get latest existing server last sync
-              const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? Date.now();
+              // get latest existing server last sync, if haven't sync to any server before, use `0` (1970 年 1 月 1 日 00:00:00 UTC) to sync every thing to the newly added server.
+              const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? 0;
               const updatedServers = [...oldWiki.syncedServers.map(oldServers => ({ ...oldServers, syncActive: false })), {
                 serverID: newServerID,
                 lastSync,

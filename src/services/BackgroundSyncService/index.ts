@@ -208,6 +208,7 @@ export class BackgroundSyncService {
         body: JSON.stringify(request),
       }).then(async response => {
         switch (response.status) {
+          case 201:
           case 200: {
             return await (response.json() as Promise<ISyncEndPointResponse>);
           }

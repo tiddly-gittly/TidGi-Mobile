@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { compact } from 'lodash';
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList } from 'react-native';
 import { Card, useTheme } from 'react-native-paper';
@@ -22,7 +23,7 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onPress, onLongPress, 
     void (async () => {
       if (lastSyncDate === undefined) return;
       const changes = await backgroundSyncService.getChangeLogsSinceLastSync(wiki, lastSyncDate.getTime(), true);
-      setChangesAfterLastSync(changes);
+      setChangesAfterLastSync(compact(changes));
     })();
   }, [wiki, lastSyncDate]);
 

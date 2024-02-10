@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
+import { compact } from 'lodash';
 import React, { useCallback } from 'react';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Card, IconButton, useTheme } from 'react-native-paper';
@@ -15,7 +16,7 @@ interface WorkspaceListProps {
 }
 
 export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd, onPressQuickLoad }) => {
-  const workspacesList = useWorkspaceStore(state => state.workspaces);
+  const workspacesList = useWorkspaceStore(state => compact(state.workspaces));
   const theme = useTheme();
 
   const renderItem = useCallback(({ item, drag }: { drag: () => void; item: IWorkspace }) => {
