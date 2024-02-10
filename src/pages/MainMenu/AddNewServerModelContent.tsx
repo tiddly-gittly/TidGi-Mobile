@@ -34,35 +34,23 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [addServerToWiki] = useWorkspaceStore(state => [state.addServer]);
   const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
-  const [scannedString, setScannedString] = useState('');
   const [serverName, setServerName] = useState('');
-  const [serverUrl, setServerUrl] = useState<undefined | URL>();
+  const [serverUrlString, setServerUrlString] = useState('');
   const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
   const [servers, availableServersToPick] = useServerStore(
     state => [state.servers, Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` }))],
   );
 
-  const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>('');
+  const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>(availableServersToPick?.[0]?.id ?? '');
   const handleFillSelectedServer = useCallback(() => {
     if (pickerSelectedServerID && wiki !== undefined) {
       const selectedServer = servers[pickerSelectedServerID];
       if (selectedServer !== undefined) {
-        setServerUrl(new URL(selectedServer.uri));
+        setServerUrlString(selectedServer.uri);
+        setServerName(selectedServer.name);
       }
-      setPickerSelectedServerID('');
     }
   }, [pickerSelectedServerID, servers, wiki]);
-
-  useEffect(() => {
-    if (scannedString !== '') {
-      try {
-        const url = new URL(scannedString);
-        setServerUrl(new URL(url.origin));
-      } catch (error) {
-        console.warn('Not a valid URL', error);
-      }
-    }
-  }, [scannedString]);
 
   useEffect(() => {
     void (async () => {
@@ -76,7 +64,7 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     if (type === BarCodeScanner.Constants.BarCodeType.qr) {
       try {
         setQrScannerOpen(false);
-        setScannedString(data);
+        setServerUrlString(data);
       } catch (error) {
         console.warn('Not a valid URL', error);
       }
@@ -84,14 +72,15 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   }, []);
 
   const addServerForWiki = useCallback(() => {
-    if (id === undefined || serverUrl?.origin === undefined) return;
+    if (id === undefined) return;
+    const serverUrl = new URL(serverUrlString);
     const newServer = addServer({ uri: serverUrl.origin, name: serverName });
     void nativeService.getLocationWithTimeout().then(coords => {
       if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
     });
     addServerToWiki(id, newServer.id);
     onClose();
-  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrl?.origin, updateServer]);
+  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString, updateServer]);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -125,6 +114,8 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
             style={pickerStyle}
             selectedValue={pickerSelectedServerID}
             onValueChange={(itemValue) => {
+              // DEBUG: console itemValue
+              console.log(`itemValue`, itemValue);
               setPickerSelectedServerID(itemValue);
             }}
           >
@@ -137,9 +128,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
       )}
       <TextInput
         label={t('EditWorkspace.ServerURI')}
-        value={scannedString}
+        value={serverUrlString}
         onChangeText={(newText: string) => {
-          setScannedString(newText);
+          setServerUrlString(newText);
         }}
       />
       <TextInput
