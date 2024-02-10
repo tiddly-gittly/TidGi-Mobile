@@ -165,7 +165,11 @@
     "Success": "Import Success",
     "DownloadBinaryTimeout": "Timeout download an asset file.",
     "WarningMessageDescription": "You can ignore the warning message, since after this it can still be loaded normally on demand, when entering the wiki.",
-    "OpenPerformanceTools": "Open Performance Tools"
+    "OpenPerformanceTools": "Open Performance Tools",
+    "CreateFromTemplate": "Create From Template",
+    "CreateWebpageShortcut": "Add Webpage Shortcut",
+    "ScanFromWiki": "Scan From Wiki",
+    "Preview": "Preview"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",
