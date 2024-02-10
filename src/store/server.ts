@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LocationObjectCoords } from 'expo-location';
 import { cloneDeep } from 'lodash';
@@ -53,13 +55,13 @@ export const useServerStore = create<ServerState & ServerActions>()(
         ...defaultServer,
         add(partialServer) {
           const id = String(Math.random()).substring(2, 7);
-          const name = `TidGi-Desktop ${id}`;
+          const name = partialServer.name || `TidGi-Desktop ${id}`;
           let newServer: IServerInfo = {
             id,
-            name,
             status: ServerStatus.online,
             provider: ServerProvider.TidGiDesktop,
             ...partialServer,
+            name,
           };
           set((state) => {
             const existingServerWithSameOrigin = Object.values(state.servers).find(
