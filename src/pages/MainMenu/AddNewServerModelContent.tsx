@@ -83,6 +83,16 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     }
   }, []);
 
+  const addServerForWiki = useCallback(() => {
+    if (id === undefined || serverUrl?.origin === undefined) return;
+    const newServer = addServer({ uri: serverUrl.origin, name: serverName });
+    void nativeService.getLocationWithTimeout().then(coords => {
+      if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
+    });
+    addServerToWiki(id, newServer.id);
+    onClose();
+  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrl?.origin, updateServer]);
+
   if (id === undefined || wiki === undefined) {
     return (
       <ModalContainer>
@@ -90,16 +100,6 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
       </ModalContainer>
     );
   }
-
-  const addServerForWiki = () => {
-    if (serverUrl?.origin === undefined) return;
-    const newServer = addServer({ uri: serverUrl.origin, name: serverName });
-    void nativeService.getLocationWithTimeout().then(coords => {
-      if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
-    });
-    addServerToWiki(id, newServer.id);
-    onClose();
-  };
 
   return (
     <ModalContainer>
