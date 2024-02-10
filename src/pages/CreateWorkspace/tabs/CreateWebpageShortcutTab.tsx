@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
-import React, { useMemo, useState } from 'react';
+import { flatten, uniqBy } from 'lodash';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
@@ -30,6 +31,23 @@ export function CreateWebpageShortcutTab() {
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>['navigation']>();
   const [newPageUrl, newPageUrlSetter] = useState('');
   const addPage = useWorkspaceStore(state => state.add);
+  const [webPages, webPagesSetter] = useState(exampleWebPages);
+  useEffect(() => {
+    const loadOnlineSources = async () => {
+      const fetchedLists = await Promise.all(helpPages.onlineSources.map(async (sourceUrl: string) => {
+        try {
+          const response = await fetch(sourceUrl);
+          const data = await (response.json() as Promise<typeof exampleWebPages>);
+          return data;
+        } catch (error) {
+          console.warn('Failed to fetch online sources', error);
+          return [];
+        }
+      }));
+      webPagesSetter(uniqBy([...exampleWebPages, ...flatten(fetchedLists)], 'url'));
+    };
+    void loadOnlineSources();
+  }, []);
 
   const renderItem = useMemo(() =>
     function CreateWebpageShortcutTabListItem({ item }: { item: typeof exampleWebPages[number] }) {
@@ -69,7 +87,7 @@ export function CreateWebpageShortcutTab() {
         </Button>
       </InputContainer>
       <FlatList
-        data={exampleWebPages}
+        data={webPages}
         renderItem={renderItem}
         keyExtractor={(item, index) => `helpPage-${index}`}
       />
