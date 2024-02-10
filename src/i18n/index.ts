@@ -15,7 +15,6 @@ export const supportedLanguages = [
 ];
 export const detectedLanguage = getLocales()[0].languageCode;
 void i18n.use(initReactI18next).init({
-  lng: useConfigStore.getState().preferredLanguage ?? detectedLanguage ?? defaultLanguage,
   fallbackLng: 'en',
   resources: {
     en: {
@@ -30,6 +29,12 @@ void i18n.use(initReactI18next).init({
     },
   },
   compatibilityJSON: 'v3',
+  // getState() only have value when it is in dev mode hot reload, will return default value on production, use `subscribe` as below to fix this.
+  lng: useConfigStore.getState().preferredLanguage ?? detectedLanguage ?? defaultLanguage,
+});
+// incase store is not loaded from asyncStorage at this time, we need to subscribe to the store to get the latest value
+useConfigStore.subscribe((state) => {
+  void i18n.changeLanguage(state.preferredLanguage ?? detectedLanguage ?? defaultLanguage);
 });
 
 export { default } from 'i18next';

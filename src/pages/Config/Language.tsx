@@ -21,7 +21,6 @@ export function Language(): JSX.Element {
             // when tap again, set to undefined
             const preferredLanguage = currentLanguage === newValue ? undefined : newValue;
             setConfig({ preferredLanguage });
-            await i18n.changeLanguage(preferredLanguage ?? detectedLanguage ?? defaultLanguage);
           }}
           buttons={supportedLanguages}
         />

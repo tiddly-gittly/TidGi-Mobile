@@ -16,8 +16,11 @@ function getInfoTiddlerFields(updateInfoTiddlersCallback: (infos: Array<{ text: 
   // Basics
   if (!$tw.browser || typeof window === 'undefined') return infoTiddlerFields;
   const isInTidGi = typeof document !== 'undefined';
-  const workspaceID = window.meta?.()?.workspaceID;
+  const { workspaceID, language } = window.meta?.() ?? {};
   infoTiddlerFields.push({ title: '$:/info/tidgi', text: mapBoolean(isInTidGi) }, { title: '$:/info/tidgi-mobile', text: mapBoolean(isInTidGi) });
+  if (language !== undefined) {
+    infoTiddlerFields.push({ title: '$:/info/browser/language', text: language });
+  }
   if (isInTidGi && workspaceID) {
     infoTiddlerFields.push({ title: '$:/info/tidgi/workspaceID', text: workspaceID });
   }

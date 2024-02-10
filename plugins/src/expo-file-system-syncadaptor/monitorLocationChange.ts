@@ -5,8 +5,5 @@ const setup = () => {
   });
 };
 
-// eslint-disable-next-line no-var
-declare var exports: {
-  startup: typeof setup;
-};
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 exports.startup = setup;

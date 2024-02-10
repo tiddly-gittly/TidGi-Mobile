@@ -61,7 +61,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   useRequestNativePermissions();
 
   const [loaded, setLoaded] = useState(false);
-  const [rememberLastVisitState] = useConfigStore(state => [state.rememberLastVisitState]);
+  const [rememberLastVisitState, preferredLanguage] = useConfigStore(state => [state.rememberLastVisitState, state.preferredLanguage]);
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
@@ -146,7 +146,9 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           userAgent={FAKE_USER_AGENT}
           // add DOCTYPE at load time to prevent Quirks Mode
           source={{
-            html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>`,
+            html: `<!doctype html><html lang="${
+              preferredLanguage ?? 'en'
+            }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>`,
             /**
              * Add baseUrl to fix `SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.`
              * @url https://github.com/react-native-webview/react-native-webview/issues/1635#issuecomment-1021425071
