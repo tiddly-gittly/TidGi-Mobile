@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
-import styled from 'styled-components/native';
+import { styled } from 'styled-components/native';
 
 import { RootStackParameterList } from '../../../App';
 import { TemplateListItem } from '../../../components/TemplateList';
