@@ -24,6 +24,19 @@ export function ServerAndSync(): JSX.Element {
           ?.map(item => item.serverID) ?? []
       )
   );
+  const removeAllSyncedServersFromWorkspace = useWorkspaceStore(state => () => {
+    state.workspaces.forEach(workspace => {
+      if (workspace.type === 'wiki') {
+        workspace.syncedServers = [];
+        state.update(workspace.id, workspace);
+      }
+    });
+  });
+  const onRemoveAllServers = useCallback(() => {
+    void Haptics.impactAsync();
+    clearServerList();
+    removeAllSyncedServersFromWorkspace();
+  }, [clearServerList, removeAllSyncedServersFromWorkspace]);
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
   const onEditServer = useCallback((server: IServerInfo) => {
@@ -63,7 +76,7 @@ export function ServerAndSync(): JSX.Element {
         </ThemeProvider>
       </Portal>
       <Button
-        onPress={clearServerList}
+        onPress={onRemoveAllServers}
       >
         {t('Preference.ClearServerList')}
       </Button>

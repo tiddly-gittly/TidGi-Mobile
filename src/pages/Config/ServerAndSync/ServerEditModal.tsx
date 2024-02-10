@@ -2,12 +2,14 @@
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
 import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
+import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
+import { useWorkspaceStore } from '../../../store/workspace';
 
 interface ServerEditModalProps {
   id?: string;
@@ -31,6 +33,19 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   const server = useServerStore(state => id === undefined ? undefined : state.servers[id]);
   const updateServer = useServerStore(state => state.update);
   const deleteServer = useServerStore(state => state.remove);
+  const removeSyncedServersFromWorkspace = useWorkspaceStore(state => (serverIDToRemove: string) => {
+    state.workspaces.forEach(workspace => {
+      if (workspace.type === 'wiki' && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
+        workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
+        state.update(workspace.id, workspace);
+      }
+    });
+  });
+  const onRemoveServer = useCallback((serverIDToRemove: string) => {
+    void Haptics.impactAsync();
+    deleteServer(serverIDToRemove);
+    removeSyncedServersFromWorkspace(serverIDToRemove);
+  }, [deleteServer, removeSyncedServersFromWorkspace]);
 
   // States for each field in the server type
   const [editedName, setEditedName] = useState(server?.name ?? '');
@@ -139,7 +154,7 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
                   text: t('Delete'),
                   onPress: () => {
                     // Proceed with deletion if confirm is pressed.}
-                    deleteServer(server.id);
+                    onRemoveServer(server.id);
                     onClose();
                   },
                 },
