@@ -48,6 +48,10 @@ export interface IWikiServerSync {
    */
   syncActive: boolean;
 }
+/**
+ * use `1` (1970 - 1 - 1 00:00:00:001 UTC) to sync every thing to the newly added server.
+ */
+const LAST_SYNC_TO_SYNC_ALL = 1;
 interface WikiState {
   workspaces: IWorkspace[];
 }
@@ -124,8 +128,8 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 oldWiki.type = 'wiki';
               }
               if (oldWiki.type !== 'wiki') return;
-              // get latest existing server last sync, if haven't sync to any server before, use `0` (1970 年 1 月 1 日 00:00:00 UTC) to sync every thing to the newly added server.
-              const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? 0;
+              // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
+              const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? LAST_SYNC_TO_SYNC_ALL;
               console.log(`Add new server to wiki ${oldWiki.name} with last sync ${lastSync} to server ${newServerID}`);
               const updatedServers = [...oldWiki.syncedServers.map(oldServers => ({ ...oldServers, syncActive: false })), {
                 serverID: newServerID,
