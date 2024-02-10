@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
+import { Picker } from '@react-native-picker/picker';
 import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { nativeService } from '../../services/NativeService';
@@ -28,6 +29,7 @@ const ScanQRButton = styled(Button)`
 export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
   const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find(w => w.id === id));
+  const theme = useTheme();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [addServerToWiki] = useWorkspaceStore(state => [state.addServer]);
@@ -35,6 +37,21 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const [scannedString, setScannedString] = useState('');
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState<undefined | URL>();
+  const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
+  const [servers, availableServersToPick] = useServerStore(
+    state => [state.servers, Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` }))],
+  );
+
+  const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>('');
+  const handleFillSelectedServer = useCallback(() => {
+    if (pickerSelectedServerID && wiki !== undefined) {
+      const selectedServer = servers[pickerSelectedServerID];
+      if (selectedServer !== undefined) {
+        setServerUrl(new URL(selectedServer.uri));
+      }
+      setPickerSelectedServerID('');
+    }
+  }, [pickerSelectedServerID, servers, wiki]);
 
   useEffect(() => {
     if (scannedString !== '') {
@@ -102,6 +119,22 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
         {/* eslint-disable-next-line react-native/no-raw-text */}
         <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
       </ScanQRButton>
+      {availableServersToPick.length > 0 && (
+        <>
+          <Picker
+            style={pickerStyle}
+            selectedValue={pickerSelectedServerID}
+            onValueChange={(itemValue) => {
+              setPickerSelectedServerID(itemValue);
+            }}
+          >
+            {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} style={pickerStyle} />)}
+          </Picker>
+          <Button onPress={handleFillSelectedServer}>
+            <Text>{t('EditWorkspace.FillSelectedServer')}</Text>
+          </Button>
+        </>
+      )}
       <TextInput
         label={t('EditWorkspace.ServerURI')}
         value={scannedString}

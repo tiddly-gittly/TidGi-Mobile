@@ -1,7 +1,6 @@
 /* eslint-disable react-native/no-inline-styles */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
-import { Picker } from '@react-native-picker/picker';
 import * as Haptics from 'expo-haptics';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -29,17 +28,14 @@ interface WikiEditModalProps {
 export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
-  const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
   const wiki = useWorkspaceStore(state =>
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
-  const [updateWiki, addServerToWiki, deleteWiki, setServerActive] = useWorkspaceStore(state => [state.update, state.addServer, state.remove, state.setServerActive]);
-  const availableServersToPick = useServerStore(state => Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` })));
+  const [updateWiki, deleteWiki, setServerActive] = useWorkspaceStore(state => [state.update, state.remove, state.setServerActive]);
 
   const [editedName, setEditedName] = useState(wiki?.name ?? '');
   const [editedSelectiveSyncFilter, setEditedSelectiveSyncFilter] = useState(wiki?.selectiveSyncFilter ?? '');
   const [editedWikiFolderLocation, setEditedWikiFolderLocation] = useState(wiki?.wikiFolderLocation ?? '');
-  const [newServerID, setNewServerID] = useState<string>('');
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
   const [serverModalVisible, setServerModalVisible] = useState(false);
   const [addServerModelVisible, setAddServerModelVisible] = useState(false);
@@ -61,20 +57,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       selectiveSyncFilter: editedSelectiveSyncFilter,
     });
     onClose();
-  };
-
-  const handleAddServer = () => {
-    if (newServerID) {
-      addServerToWiki(id, newServerID);
-      setNewServerID('');
-    }
-  };
-
-  const handleRemoveServer = (serverIDToRemoveFromWiki: string) => {
-    const updatedServers = wiki.syncedServers.filter(server => server.serverID !== serverIDToRemoveFromWiki);
-    updateWiki(id, {
-      syncedServers: updatedServers,
-    });
   };
 
   return (
@@ -109,18 +91,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
             setServerModalVisible(true);
           }}
         />
-        <Picker
-          style={pickerStyle}
-          selectedValue={newServerID}
-          onValueChange={(itemValue) => {
-            setNewServerID(itemValue);
-          }}
-        >
-          {availableServersToPick.map((server) => <Picker.Item key={server.id} label={server.label} value={server.id} style={pickerStyle} />)}
-        </Picker>
-        <Button onPress={handleAddServer}>
-          <Text>{t('EditWorkspace.AddSelectedServer')}</Text>
-        </Button>
         <Button
           onPress={() => {
             setAddServerModelVisible(true);

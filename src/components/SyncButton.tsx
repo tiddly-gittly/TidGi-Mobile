@@ -65,6 +65,8 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       const server = backgroundSyncService.getOnlineServerForWiki(wiki);
       if (server === undefined) {
         setIsConnected(false);
+      } else {
+        setIsConnected(true);
       }
       setCurrentOnlineServerToSync(server);
     });
