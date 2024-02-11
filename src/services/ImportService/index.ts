@@ -256,7 +256,12 @@ export class ImportService {
       readStream.on('progress', (progress: number) => {
         setProgress.setReadListProgress(progress);
       });
-      await readStream.init();
+      const fileSize = await readStream.init();
+      if (fileSize <= 2) {
+        // 2 means `[]`, empty array
+        console.log('loadBinaryTiddlersAsFilesFromServer: No binary tiddlers to load.');
+        return;
+      }
       const countBinaryTiddlerFieldsStream = chain([
         readStream,
         StreamArray.withParser(),
