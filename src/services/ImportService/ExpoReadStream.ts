@@ -53,14 +53,28 @@ export class ExpoReadStream extends Readable {
       if (chunk.length === 0) {
         // End of the stream
         this.emit('progress', 1);
-        this.push(null);
+        try {
+          this.push(null);
+        } catch (error) {
+          this.emit('error', new Error(`Error pushing null to stream: ${(error as Error).message}`));
+        }
       } else {
         this.currentPosition = Math.min(this.chunkSize + this.currentPosition, this.fileSize);
         this.emit('progress', this.fileSize === 0 ? 0.5 : (this.currentPosition / this.fileSize));
-        this.push(new Buffer(chunk, 'base64'));
+        try {
+          this.push(new Buffer(chunk, 'base64'));
+        } catch (error) {
+          this.emit(
+            'error',
+            new Error(`Error pushing chunk to stream,: ${(error as Error).message} this.currentPosition: ${this.currentPosition}, this.fileSize: ${this.fileSize}`),
+          );
+        }
       }
-    }).catch(error => {
+    }, error => {
       console.error(`ExpoReadStream error reading file: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      this.emit('error', error);
+    }).catch(error => {
+      console.error(`ExpoReadStream error processing file: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       this.emit('error', error);
     });
   }
