@@ -46,23 +46,6 @@
       "contribute": "https://github.com/tiddly-gittly/TiddlyWiki-Chinese-Tutorial",
       "fallbackUrls": "https://tw-cn.cpolar.top/ https://tiddly-wiki-chinese-tutorial.vercel.app/ https://tiddly-gittly.github.io/TiddlyWiki-Chinese-Tutorial/",
       "language": "zh_CN"
-    },
-    {
-      "title": "太微官方文档（中文版）",
-      "description": "TiddlyWiki 舞 - 基础文档简体中文版",
-      "tags": "Docs",
-      "url": "https://tw-cn-doc.cpolar.top/",
-      "contribute": "https://github.com/BramChen/tw5-docs",
-      "fallbackUrls": "https://bramchen.github.io/tw5-docs/zh_CN/",
-      "language": "zh_CN"
-    },
-    {
-      "title": "TiddlyWiki",
-      "description": "Official Document",
-      "tags": "Docs",
-      "url": "https://tiddlywiki.com/",
-      "contribute": "https://github.com/Jermolene/TiddlyWiki5/tree/master/editions/tw5.com",
-      "language": "en"
     }
   ]
 }
