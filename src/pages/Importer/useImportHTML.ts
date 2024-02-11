@@ -95,6 +95,7 @@ export function useImportHTML() {
       setStatus('downloading');
       // Save the HTML to a file
       const htmlDownloadResumable = fs.createDownloadResumable(getSkinnyHTMLUrl.toString(), getWikiFilePath(newWorkspace), {}, (progress) => {
+        if (progress.totalBytesExpectedToWrite <= 0) return;
         setSkinnyHtmlDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
       });
       const skinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
@@ -102,6 +103,7 @@ export function useImportHTML() {
         getWikiTiddlerSkinnyStoreCachePath(newWorkspace),
         {},
         (progress) => {
+          if (progress.totalBytesExpectedToWrite <= 0) return;
           setSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
@@ -110,6 +112,7 @@ export function useImportHTML() {
         getWikiTiddlerTextStoreCachePath(newWorkspace),
         {},
         (progress) => {
+          if (progress.totalBytesExpectedToWrite <= 0) return;
           setSkinnyTiddlerTextCacheDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
@@ -118,6 +121,7 @@ export function useImportHTML() {
         getWikiTiddlerStorePath(newWorkspace),
         {},
         (progress) => {
+          if (progress.totalBytesExpectedToWrite <= 0) return;
           setNonSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
@@ -126,6 +130,7 @@ export function useImportHTML() {
         getWikiBinaryTiddlersListCachePath(newWorkspace),
         {},
         (progress) => {
+          if (progress.totalBytesExpectedToWrite <= 0) return;
           setBinaryTiddlersListDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
         },
       );
