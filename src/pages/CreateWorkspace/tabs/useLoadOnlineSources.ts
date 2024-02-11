@@ -30,14 +30,16 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
             // try read from cache first
             content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
             // stale while revalidate
-            void fetchJSON(sourceUrl);
+            void fetchJSON(sourceUrl).catch(error => {
+              console.warn('Failed to fetch online sources when swr in useLoadOnlineSources', error);
+            });
           } else {
             await fetchJSON(sourceUrl);
             content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
           }
           return JSON.parse(content) as ITemplateListItem[];
         } catch (error) {
-          console.warn('Failed to fetch online sources', error);
+          console.warn('Failed to load online sources in useLoadOnlineSources', error);
           return [];
         }
       }));
