@@ -93,46 +93,41 @@ export function useImportHTML() {
       setCreatedWikiWorkspace(newWorkspace);
 
       setStatus('downloading');
+      const createDownloadResumableWithProgress = (url: URL, locationToSave: string, setProgress: (progress: number) => void) => {
+        return fs.createDownloadResumable(
+          url.toString(),
+          locationToSave,
+          {},
+          (progress) => {
+            if (progress.totalBytesExpectedToWrite <= 0) {
+              setProgress(1);
+              return;
+            }
+            setProgress(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
+          },
+        );
+      };
       // Save the HTML to a file
-      const htmlDownloadResumable = fs.createDownloadResumable(getSkinnyHTMLUrl.toString(), getWikiFilePath(newWorkspace), {}, (progress) => {
-        if (progress.totalBytesExpectedToWrite <= 0) return;
-        setSkinnyHtmlDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
-      });
-      const skinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
-        getSkinnyTiddlywikiTiddlerStoreScriptUrl.toString(),
+      const htmlDownloadResumable = createDownloadResumableWithProgress(getSkinnyHTMLUrl, getWikiFilePath(newWorkspace), setSkinnyHtmlDownloadPercentage);
+      const skinnyTiddlerStoreDownloadResumable = createDownloadResumableWithProgress(
+        getSkinnyTiddlywikiTiddlerStoreScriptUrl,
         getWikiTiddlerSkinnyStoreCachePath(newWorkspace),
-        {},
-        (progress) => {
-          if (progress.totalBytesExpectedToWrite <= 0) return;
-          setSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
-        },
+        setSkinnyTiddlerStoreScriptDownloadPercentage,
       );
-      const skinnyTiddlywikiTiddlerTextDownloadResumable = fs.createDownloadResumable(
-        getSkinnyTiddlerTextCacheUrl.toString(),
+      const skinnyTiddlywikiTiddlerTextDownloadResumable = createDownloadResumableWithProgress(
+        getSkinnyTiddlerTextCacheUrl,
         getWikiTiddlerTextStoreCachePath(newWorkspace),
-        {},
-        (progress) => {
-          if (progress.totalBytesExpectedToWrite <= 0) return;
-          setSkinnyTiddlerTextCacheDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
-        },
+        setSkinnyTiddlerTextCacheDownloadPercentage,
       );
-      const nonSkinnyTiddlerStoreDownloadResumable = fs.createDownloadResumable(
-        getNonSkinnyTiddlywikiTiddlerStoreScriptUrl.toString(),
+      const nonSkinnyTiddlerStoreDownloadResumable = createDownloadResumableWithProgress(
+        getNonSkinnyTiddlywikiTiddlerStoreScriptUrl,
         getWikiTiddlerStorePath(newWorkspace),
-        {},
-        (progress) => {
-          if (progress.totalBytesExpectedToWrite <= 0) return;
-          setNonSkinnyTiddlerStoreScriptDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
-        },
+        setNonSkinnyTiddlerStoreScriptDownloadPercentage,
       );
-      const binaryTiddlersListDownloadResumable = fs.createDownloadResumable(
-        getBinaryTiddlersListUrl.toString(),
+      const binaryTiddlersListDownloadResumable = createDownloadResumableWithProgress(
+        getBinaryTiddlersListUrl,
         getWikiBinaryTiddlersListCachePath(newWorkspace),
-        {},
-        (progress) => {
-          if (progress.totalBytesExpectedToWrite <= 0) return;
-          setBinaryTiddlersListDownloadPercentage(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
-        },
+        setBinaryTiddlersListDownloadPercentage,
       );
       await Promise.all([
         htmlDownloadResumable.downloadAsync(),
