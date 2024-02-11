@@ -28,9 +28,11 @@ export class ExpoReadStream extends Readable {
       const fileInfo = await fs.getInfoAsync(this.fileUri, { size: true });
       if (fileInfo.exists) {
         this.fileSize = fileInfo.size ?? 0;
+      } else {
+        this.emit('error', new Error(`File not exist, path: ${this.fileUri}`));
       }
       if (this.fileSize === 0) {
-        this.emit('error', new Error('File size is 0'));
+        console.warn(`File size is 0, Exist: ${String(fileInfo.exists)}, path: ${this.fileUri}`);
       }
     } catch (error) {
       this.emit('error', error);
@@ -38,6 +40,10 @@ export class ExpoReadStream extends Readable {
   }
 
   _read() {
+    if (this.fileSize === 0) {
+      // early return if file is empty.
+      this.push(null);
+    }
     const readingOptions = {
       encoding: fs.EncodingType.Base64,
       position: this.currentPosition,

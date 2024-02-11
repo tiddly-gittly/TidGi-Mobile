@@ -117,10 +117,12 @@ export class ImportService {
         if (readEnded) resolve();
       });
       batchedTiddlerFieldsStream.on('error', (error) => {
-        reject(error);
+        const newError = new Error(`storeFieldsToSQLite batchedTiddlerFieldsStream("${filePath}") error: ${(error).message} ${(error).stack ?? ''}`);
+        reject(newError);
       });
       sqliteWriteStream.on('error', (error) => {
-        reject(error);
+        const newError = new Error(`storeFieldsToSQLite sqliteWriteStream error: ${(error).message} ${(error).stack ?? ''}`);
+        reject(newError);
       });
     });
   }
@@ -173,10 +175,12 @@ export class ImportService {
         if (readEnded) resolve();
       });
       batchedTiddlerTextStream.on('error', (error) => {
-        reject(error);
+        const newError = new Error(`storeTextToSQLite batchedTiddlerTextStream("${filePath}") error: ${(error).message} ${(error).stack ?? ''}`);
+        reject(newError);
       });
       sqliteWriteStream.on('error', (error) => {
-        reject(error);
+        const newError = new Error(`storeTextToSQLite sqliteWriteStream error: ${(error).message} ${(error).stack ?? ''}`);
+        reject(newError);
       });
     });
     await database.execAsync(`
@@ -334,7 +338,10 @@ export class ImportService {
         if (readEnded) resolve();
       });
       batchedBinaryTiddlerFieldsStream.on('error', (error) => {
-        reject(error);
+        const newError = new Error(
+          `loadBinaryTiddlersAsFilesFromServer batchedBinaryTiddlerFieldsStream("${binaryFileListPath}") error: ${(error).message} ${(error).stack ?? ''}`,
+        );
+        reject(newError);
       });
     });
   }
