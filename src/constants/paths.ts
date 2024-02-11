@@ -2,6 +2,7 @@ import * as fs from 'expo-file-system';
 import type { IWikiWorkspace } from '../store/workspace';
 
 export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${fs.documentDirectory}wikis/`;
+export const APP_CACHE_FOLDER_PATH = fs.cacheDirectory === null ? `${fs.documentDirectory!}/cache/` : fs.cacheDirectory;
 export const WIKI_FILE_NAME = 'index.html';
 export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
 export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/tiddlers/`;
@@ -25,6 +26,10 @@ export const getWikiCacheFolderPath = (workspace: IWikiWorkspace) => `${fs.cache
 export const getWikiTiddlerSkinnyStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME}`;
 export const getWikiTiddlerTextStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SMALL_TEXT_STORE_CACHE_NAME}`;
 export const getWikiBinaryTiddlersListCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_BINARY_TIDDLERS_LIST_CACHE_NAME}`;
+export const TEMPLATE_LIST_NAME = 'templateList.json';
+export const HELP_PAGE_LIST_NAME = 'helpPageList.json';
+export const templateListCachePath = `${APP_CACHE_FOLDER_PATH}${TEMPLATE_LIST_NAME}`;
+export const helpPageListCachePath = `${APP_CACHE_FOLDER_PATH}${HELP_PAGE_LIST_NAME}`;
 export const WIKI_MAIN_SQLITE_NAME = 'sqlite.db';
 /**
  * Will be store to `${fs.documentDirectory}/SQLite/${name}`

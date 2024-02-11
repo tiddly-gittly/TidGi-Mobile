@@ -114,8 +114,6 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
             style={pickerStyle}
             selectedValue={pickerSelectedServerID}
             onValueChange={(itemValue) => {
-              // DEBUG: console itemValue
-              console.log(`itemValue`, itemValue);
               setPickerSelectedServerID(itemValue);
             }}
           >
