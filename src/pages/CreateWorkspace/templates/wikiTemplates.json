@@ -1,25 +1,5 @@
 {
   "onlineSources": [
     "https://tidgi.fun/recipes/default/tiddlers.json?filter=[tag[WikiTemplates]tag[ServerList]"
-  ],
-  "default": [
-    {
-      "title": "太记默认模板",
-      "description": "太记桌面版的默认知识库模板。来自太记移动版的作者。",
-      "tags": "Pure",
-      "url": "https://tiddlywiki-nodejs-github-template.cpolar.top/",
-      "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
-      "fallbackUrls": "",
-      "language": "zh_CN"
-    },
-    {
-      "title": "TidGi Default Template",
-      "description": "Default wiki template for TidGi-Desktop. From author of TidGi-Mobile.",
-      "tags": "Pure",
-      "url": "https://tiddlywiki-nodejs-github-template.cpolar.top/",
-      "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
-      "fallbackUrls": "",
-      "language": "en"
-    }
   ]
 }

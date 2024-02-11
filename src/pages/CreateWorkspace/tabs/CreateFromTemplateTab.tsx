@@ -8,12 +8,10 @@ import { RootStackParameterList } from '../../../App';
 import { filterTemplate, ITemplateListItem, TemplateListItem } from '../../../components/TemplateList';
 import wikiTemplates from '../templates/wikiTemplates.json';
 
-const defaultTemplates = wikiTemplates.default as ITemplateListItem[];
-
 export const CreateFromTemplateTab = () => {
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>['navigation']>();
 
-  const [webPages, webPagesSetter] = useState(defaultTemplates);
+  const [webPages, webPagesSetter] = useState<ITemplateListItem[]>([]);
   useEffect(() => {
     const loadOnlineSources = async () => {
       const fetchedLists = await Promise.all(wikiTemplates.onlineSources.map(async (sourceUrl: string) => {
@@ -26,7 +24,7 @@ export const CreateFromTemplateTab = () => {
           return [];
         }
       }));
-      webPagesSetter(uniqBy([...defaultTemplates, ...flatten(fetchedLists)], 'title'));
+      webPagesSetter(uniqBy(flatten(fetchedLists), 'title'));
     };
     void loadOnlineSources();
   }, []);
