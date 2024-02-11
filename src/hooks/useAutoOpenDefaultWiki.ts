@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
+import { compact } from 'lodash';
 import { useEffect, useState } from 'react';
 import type { RootStackParameterList } from '../App';
 import { useConfigStore } from '../store/config';
-import { useWorkspaceStore } from '../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 import { navigateIfNotAlreadyThere } from '../utils/RootNavigation';
 
 /**
@@ -14,7 +15,7 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   const autoOpenDefaultWiki = useConfigStore(state => state.autoOpenDefaultWiki);
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
   const route = useRoute<StackScreenProps<RootStackParameterList, 'MainMenu'>['route']>();
-  const wikis = useWorkspaceStore(state => state.workspaces);
+  const wikis = useWorkspaceStore(state => compact(state.workspaces).filter((w): w is IWikiWorkspace => w.type === 'wiki'));
   /** If we are just go back from a wiki, don't immediately goto default wiki. */
   const { fromWikiID } = route.params ?? {};
 
