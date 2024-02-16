@@ -90,16 +90,13 @@ jobs:
       # - name: Remove prorietary bits (for fix f-droid)
       #   run: npx zx scripts/fit-f-droid.mjs
 
-      - name: Build apk & aab
+      - name: Build APK
         run: |
           cd android
-          cat /home/runner/work/TidGi-Mobile/TidGi-Mobile/android/app/src/main/java/ren/onetwo/tidgi/mobile/MainActivity.kt
           ./gradlew clean
-          ./gradlew -v
           ./gradlew assembleRelease --no-daemon --warning-mode all
-          ./gradlew bundleRelease --no-daemon --warning-mode all
 
-      ## sign generated apk (not signing aab, which will be signed by store)
+      ## sign generated apk
       - name: Sign APK
         id: sign_app_apk
         uses: r0adkll/sign-android-release@v1
@@ -112,7 +109,13 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
-      - name: Sign APK
+      - name: Build AAB
+        run: |
+          cd android
+          ./gradlew clean
+          ./gradlew bundleRelease --no-daemon --warning-mode all
+        
+      - name: Sign AAB
         id: sign_app_aab
         uses: r0adkll/sign-android-release@v1
         with:
