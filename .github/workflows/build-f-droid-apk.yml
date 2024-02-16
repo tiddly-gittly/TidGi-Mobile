@@ -118,7 +118,7 @@ jobs:
       - name: Show artifacts
         run: |
           ls android/app/build/outputs/bundle/release/
-          ls android/app/build/outputs/apk/release/
+          # ls android/app/build/outputs/apk/release/
 
       - name: Sign AAB
         id: sign_app_aab
