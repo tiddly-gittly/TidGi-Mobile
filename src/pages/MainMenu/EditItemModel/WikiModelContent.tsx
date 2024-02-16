@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import * as Haptics from 'expo-haptics';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Modal, Portal, Text, TextInput, useTheme } from 'react-native-paper';
@@ -12,7 +12,6 @@ import Collapsible from 'react-native-collapsible';
 import { ServerList } from '../../../components/ServerList';
 import { SyncTextButton } from '../../../components/SyncButton';
 import { backgroundSyncService } from '../../../services/BackgroundSyncService';
-import { useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
 import { ServerEditModalContent } from '../../Config/ServerAndSync/ServerEditModal';
@@ -43,6 +42,15 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [performanceToolsModelVisible, setPerformanceToolsModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
 
+  const handleSave = useCallback(() => {
+    if (id === undefined) return;
+    updateWiki(id, {
+      name: editedName,
+      selectiveSyncFilter: editedSelectiveSyncFilter,
+    });
+    onClose();
+  }, [editedName, editedSelectiveSyncFilter, id, onClose, updateWiki]);
+
   if (id === undefined || wiki === undefined) {
     return (
       <ModalContainer>
@@ -50,14 +58,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       </ModalContainer>
     );
   }
-
-  const handleSave = () => {
-    updateWiki(id, {
-      name: editedName,
-      selectiveSyncFilter: editedSelectiveSyncFilter,
-    });
-    onClose();
-  };
 
   return (
     <ModalContainer>

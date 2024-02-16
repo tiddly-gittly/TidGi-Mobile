@@ -52,7 +52,7 @@ export interface IWikiServerSync {
  * use `1` (1970 - 1 - 1 00:00:00:001 UTC) to sync every thing to the newly added server.
  */
 const LAST_SYNC_TO_SYNC_ALL = 1;
-interface WikiState {
+export interface WikiState {
   workspaces: IWorkspace[];
 }
 interface WikiActions {

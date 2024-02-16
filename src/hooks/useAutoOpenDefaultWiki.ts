@@ -5,7 +5,7 @@ import { compact } from 'lodash';
 import { useEffect, useState } from 'react';
 import type { RootStackParameterList } from '../App';
 import { useConfigStore } from '../store/config';
-import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore, WikiState } from '../store/workspace';
 import { navigateIfNotAlreadyThere } from '../utils/RootNavigation';
 
 /**
@@ -36,13 +36,24 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   }, [navigation, fromWikiID, route.name, autoOpenDefaultWiki, hadPreventOpen]);
 }
 
-/**
- * @param wikis Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
- */
 export function openDefaultWikiIfNotAlreadyThere() {
+  /**
+   * Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
+   */
   const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
   console.log(`openDefaultWiki ${defaultWiki?.id ?? 'undefined'}`);
-  if (defaultWiki !== undefined) {
+  if (defaultWiki === undefined) {
+    const unsubscribe = useWorkspaceStore.subscribe(onStoreLoaded);
+    setTimeout(unsubscribe, 1000);
+    // wait for 1s for asyncStorage to load
+    // eslint-disable-next-line no-inner-declarations
+    function onStoreLoaded(state: WikiState, previousState: WikiState) {
+      if (previousState.workspaces.length !== state.workspaces.length) {
+        openDefaultWikiIfNotAlreadyThere();
+        unsubscribe();
+      }
+    }
+  } else {
     navigateIfNotAlreadyThere('WikiWebView', { id: defaultWiki.id, quickLoad: defaultWiki.enableQuickLoad });
   }
 }
