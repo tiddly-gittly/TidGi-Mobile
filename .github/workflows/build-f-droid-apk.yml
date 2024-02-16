@@ -112,9 +112,17 @@ jobs:
       - name: Build AAB
         run: |
           cd android
-          ./gradlew clean
+          # ./gradlew clean
           ./gradlew bundleRelease --no-daemon --warning-mode all
-        
+          ls android/app/build/outputs/bundle/release/
+          ls android/app/build/outputs/apk/release/
+
+      - name: Show artifacts
+        run: |
+          cd android
+          ls android/app/build/outputs/bundle/release/
+          ls android/app/build/outputs/apk/release/
+
       - name: Sign AAB
         id: sign_app_aab
         uses: r0adkll/sign-android-release@v1
@@ -135,6 +143,6 @@ jobs:
           generate_release_notes: true
           files: |
             android/app/build/outputs/apk/release/app-release-signed.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/bundle/release/app-release-signed.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
