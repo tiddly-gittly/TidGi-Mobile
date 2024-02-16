@@ -93,7 +93,7 @@ jobs:
       - name: Build AAB
         run: |
           cd android
-          # ./gradlew clean
+          ./gradlew clean
           ./gradlew bundleRelease --no-daemon --warning-mode all
 
       - name: Sign AAB
@@ -107,6 +107,16 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          generate_release_notes: true
+          files: android/app/build/outputs/bundle/release/app-release.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build APK
         run: |
@@ -127,20 +137,12 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
-          
-      - name: Show artifacts
-        run: |
-          ls android/app/build/outputs/apk/release/
-          ls android/app/build/outputs/bundle/release/
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
           generate_release_notes: true
-          files: |
-            android/app/build/outputs/apk/release/app-release-signed.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+          files: android/app/build/outputs/apk/release/app-release-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
