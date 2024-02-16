@@ -96,6 +96,16 @@ jobs:
           ./gradlew clean
           ./gradlew bundleRelease --no-daemon --warning-mode all
 
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          generate_release_notes: true
+          files: android/app/build/outputs/bundle/release/app-release.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Sign AAB
         id: sign_app_aab
         uses: r0adkll/sign-android-release@v1
@@ -107,14 +117,15 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
-
+      - name: Rename AAB
+        run: mv android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/app-release-signed.aab
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
           generate_release_notes: true
-          files: android/app/build/outputs/bundle/release/app-release.aab
+          files: android/app/build/outputs/bundle/release/app-releasee-signed.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
