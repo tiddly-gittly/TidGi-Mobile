@@ -15,7 +15,6 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   const autoOpenDefaultWiki = useConfigStore(state => state.autoOpenDefaultWiki);
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
   const route = useRoute<StackScreenProps<RootStackParameterList, 'MainMenu'>['route']>();
-  const wikis = useWorkspaceStore(state => compact(state.workspaces).filter((w): w is IWikiWorkspace => w.type === 'wiki'));
   /** If we are just go back from a wiki, don't immediately goto default wiki. */
   const { fromWikiID } = route.params ?? {};
 
@@ -32,16 +31,16 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
     if (!autoOpenDefaultWiki) return;
     const currentScreen = navigation.getState()?.routes.at(-1)?.name;
     if (fromWikiID === undefined && currentScreen === 'MainMenu') {
-      openDefaultWikiIfNotAlreadyThere(wikis);
+      openDefaultWikiIfNotAlreadyThere();
     }
-  }, [navigation, wikis, fromWikiID, route.name, autoOpenDefaultWiki, hadPreventOpen]);
+  }, [navigation, fromWikiID, route.name, autoOpenDefaultWiki, hadPreventOpen]);
 }
 
 /**
  * @param wikis Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
  */
-export function openDefaultWikiIfNotAlreadyThere(workspaces = useWorkspaceStore.getState().workspaces) {
-  const defaultWiki = workspaces.find((w): w is IWikiWorkspace => w.type === 'wiki');
+export function openDefaultWikiIfNotAlreadyThere() {
+  const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
   console.log(`openDefaultWiki ${defaultWiki?.id ?? 'undefined'}`);
   if (defaultWiki !== undefined) {
     navigateIfNotAlreadyThere('WikiWebView', { id: defaultWiki.id, quickLoad: defaultWiki.enableQuickLoad });
