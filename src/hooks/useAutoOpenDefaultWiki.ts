@@ -20,7 +20,7 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   const { fromWikiID } = route.params ?? {};
 
   // once model opened, we need to prevent closing model trigger the auto open
-  const [hadPreventOpen, setHadPreventOpen] = useState(false);
+  const [hadPreventOpen, setHadPreventOpen] = useState(preventOpen);
   useEffect(() => {
     if (preventOpen === true) {
       setHadPreventOpen(true);
@@ -41,9 +41,9 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
  * @param wikis Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
  */
 export function openDefaultWikiIfNotAlreadyThere(workspaces = useWorkspaceStore.getState().workspaces) {
-  const defaultWiki = workspaces[0];
-  console.log(`openDefaultWiki ${defaultWiki?.id}`);
+  const defaultWiki = workspaces.find((w): w is IWikiWorkspace => w.type === 'wiki');
+  console.log(`openDefaultWiki ${defaultWiki?.id ?? 'undefined'}`);
   if (defaultWiki !== undefined) {
-    navigateIfNotAlreadyThere('WikiWebView', { id: defaultWiki.id });
+    navigateIfNotAlreadyThere('WikiWebView', { id: defaultWiki.id, quickLoad: defaultWiki.enableQuickLoad });
   }
 }
