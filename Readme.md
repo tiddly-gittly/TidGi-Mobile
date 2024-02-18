@@ -1,5 +1,11 @@
 # TidGi Mobile
 
+<div align="center">
+
+### [Open Official Website](https://tidgi.fun/#:TidGi-Mobile)
+
+</div>
+
 Mobile Tiddlywiki app is A Note App that is local-first, uses tid/md pure text file, all-in-one with calendar/todo/diary widget, lazy-loading, backlink & outline & Zettelkasten, and syncs with the open-source [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop).
 
 <div align="center">
@@ -47,8 +53,6 @@ Later, we use a Sync-Adaptor to only load the file you need lazily, to increase 
 ### Drawbacks
 
 Currently, only normal tiddlers in SQLite are certainly synced back to TidGi-Desktop. HTML Javascript tiddler, and JSON plugins are never tested (Feel free to have a try and report to me!). So if you want to add new plugins, you may need to backup data to Desktop, add plugins on Desktop, and perform a full resync (delete and recreate) from TidGi-Desktop (If this is not necessary, report to me!).
-
-And we don't support creating a new wiki, like [Tiddloid](https://github.com/donmor/Tiddloid) does. You need an existing [TidGi-Desktop](https://github.com/tiddly-gittly/TidGi-Desktop) wiki to get started.
 
 ## Permissions
 
