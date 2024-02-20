@@ -111,10 +111,10 @@ jobs:
         uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: android/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-          alias: ${{ secrets.ANDROID_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY_UPLOAD }}
+          alias: ${{ secrets.ANDROID_ALIAS_UPLOAD }}
+          keyStorePassword: ${{ secrets.ANDROID_KEY_PASSWORD_UPLOAD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD_UPLOAD }}
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
       - name: Rename AAB
