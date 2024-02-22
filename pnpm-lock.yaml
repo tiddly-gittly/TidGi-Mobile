@@ -71,9 +71,6 @@ dependencies:
   expo-localization:
     specifier: 14.8.3
     version: 14.8.3(expo@50.0.6)
-  expo-location:
-    specifier: 16.5.3
-    version: 16.5.3(expo@50.0.6)
   expo-notifications:
     specifier: 0.27.6
     version: 0.27.6(expo@50.0.6)
@@ -5838,14 +5835,6 @@ packages:
     dependencies:
       expo: 50.0.6(@babel/core@7.23.9)(@react-native/babel-preset@0.73.21)
       rtl-detect: 1.1.2
-    dev: false
-
-  /expo-location@16.5.3(expo@50.0.6):
-    resolution: {integrity: sha512-V+84TZIa5MWpIXPvurnlJS9VxuxF1d3ajufUeq2sTgUkI/PP0aLHwyk5wg05C4CwuvwoiaVV80WyEL23j1Mz0w==}
-    peerDependencies:
-      expo: '*'
-    dependencies:
-      expo: 50.0.6(@babel/core@7.23.9)(@react-native/babel-preset@0.73.21)
     dev: false
 
   /expo-modules-autolinking@1.10.3:

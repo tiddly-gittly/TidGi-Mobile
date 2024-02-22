@@ -1,6 +1,5 @@
 import { Camera } from 'expo-camera';
 import * as fs from 'expo-file-system';
-import * as Location from 'expo-location';
 import ReceiveSharingIntent from 'react-native-receive-sharing-intent';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import type { WikiHookService } from '../WikiHookService';
@@ -11,31 +10,31 @@ import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
  * Service for using native ability like Location based Geofencing in the wiki todo system.
  */
 export class NativeService {
-  async getLocationWithTimeout(timeout = 1000): Promise<Location.LocationObjectCoords | undefined> {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      return;
-    }
+  // async getLocationWithTimeout(timeout = 1000): Promise<Location.LocationObjectCoords | undefined> {
+  //   const { status } = await Location.requestForegroundPermissionsAsync();
+  //   if (status !== 'granted') {
+  //     return;
+  //   }
 
-    try {
-      const timeoutPromise = new Promise<Location.LocationObject['coords'] | undefined>((resolve) => {
-        setTimeout(() => {
-          resolve(undefined);
-        }, timeout); // resolve as undefined after 1 second
-      });
+  //   try {
+  //     const timeoutPromise = new Promise<Location.LocationObject['coords'] | undefined>((resolve) => {
+  //       setTimeout(() => {
+  //         resolve(undefined);
+  //       }, timeout); // resolve as undefined after 1 second
+  //     });
 
-      // this usually last for a very long time. So we use a timeout to prevent it from blocking the app
-      const locationPromise = (async () => {
-        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
-        return location.coords;
-      })();
+  //     // this usually last for a very long time. So we use a timeout to prevent it from blocking the app
+  //     const locationPromise = (async () => {
+  //       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
+  //       return location.coords;
+  //     })();
 
-      return await Promise.race([timeoutPromise, locationPromise]);
-    } catch (error) {
-      console.error('Error fetching location:', error);
-      return undefined;
-    }
-  }
+  //     return await Promise.race([timeoutPromise, locationPromise]);
+  //   } catch (error) {
+  //     console.error('Error fetching location:', error);
+  //     return undefined;
+  //   }
+  // }
 
   async requestCameraPermission(): Promise<boolean> {
     const { status } = await Camera.requestCameraPermissionsAsync();

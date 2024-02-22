@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
-import { nativeService } from '../../services/NativeService';
 import { useServerStore } from '../../store/server';
 import { useWorkspaceStore } from '../../store/workspace';
 
@@ -75,12 +74,12 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     if (id === undefined) return;
     const serverUrl = new URL(serverUrlString);
     const newServer = addServer({ uri: serverUrl.origin, name: serverName });
-    void nativeService.getLocationWithTimeout().then(coords => {
-      if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
-    });
+    // void nativeService.getLocationWithTimeout().then(coords => {
+    //   if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
+    // });
     addServerToWiki(id, newServer.id);
     onClose();
-  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString, updateServer]);
+  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString]);
 
   if (id === undefined || wiki === undefined) {
     return (

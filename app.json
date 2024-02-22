@@ -21,7 +21,6 @@
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera to Scan QR code.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
         "UIBackgroundModes": [
-          "location",
           "fetch"
         ]
       },
@@ -41,7 +40,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-localization",
       [
         "expo-barcode-scanner",
         {
