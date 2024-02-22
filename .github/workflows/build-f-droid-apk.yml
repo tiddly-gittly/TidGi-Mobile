@@ -95,6 +95,7 @@ jobs:
           cd android
           ./gradlew clean
           ./gradlew bundleRelease --no-daemon --warning-mode all
+          ./jarsigner -verify -verbose android/app/build/outputs/bundle/release/app-release.aab
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -134,6 +135,7 @@ jobs:
           cd android
           ./gradlew clean
           ./gradlew assembleRelease --no-daemon --warning-mode all
+          ./jarsigner -verify -verbose android/app/build/outputs/apk/release/app-release-signed.apk
 
       ## sign generated apk
       - name: Sign APK
