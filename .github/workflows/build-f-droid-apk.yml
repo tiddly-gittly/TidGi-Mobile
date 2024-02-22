@@ -98,16 +98,6 @@ jobs:
           ./gradlew clean
           ./gradlew bundleRelease --no-daemon --warning-mode all
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          draft: true
-          generate_release_notes: true
-          files: android/app/build/outputs/bundle/release/app-release.aab
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Sign AAB
         id: sign_app_aab
         uses: r0adkll/sign-android-release@v1
