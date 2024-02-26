@@ -13,7 +13,7 @@ import { backgroundSyncService } from '../BackgroundSyncService';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlersSQLModel } from '../SQLiteService/orm';
 import { IWikiServerStatusObject, TiddlersLogOperation } from '../WikiStorageService/types';
-import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from './ignoredTiddler';
+import { getFullSaveTiddlers } from './ignoredTiddler';
 
 /**
  * Service that can be used to save/load wiki data
@@ -94,9 +94,6 @@ export class WikiStorageService {
           fields: fieldsStringToSave,
         } satisfies typeof TiddlersSQLModel.$inferInsert;
 
-        if ((getSyncIgnoredTiddlers(title).includes(title))) {
-          return Etag;
-        }
         // Check if a tiddler with the same title already exists
         const existingTiddler = await transaction.query.TiddlersSQLModel.findFirst({
           columns: {
