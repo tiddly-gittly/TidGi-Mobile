@@ -27,4 +27,3 @@ And we don't support creating a new wiki, like [Tiddloid](https://github.com/don
 All these features can be accessible from tiddlywiki plugin, so you can develop plugins to notify you about ToDo, or record locations of visited places, etc.
 
 1. Notification: We use notification to switch between full-screen wiki and menu, and also allow plugin to show notification.
-2. Location: To store server location, later can show them on a map.

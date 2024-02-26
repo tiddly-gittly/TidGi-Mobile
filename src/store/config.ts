@@ -7,6 +7,7 @@ import { immer } from 'zustand/middleware/immer';
 export interface ConfigState {
   /** the initial value should be undefined, so an initial true value won't immediately trigger autoOpen */
   autoOpenDefaultWiki?: boolean;
+  hideStatusBar?: boolean;
   keepAliveInBackground: boolean;
   preferredLanguage?: string;
   rememberLastVisitState: boolean;
@@ -14,10 +15,12 @@ export interface ConfigState {
   syncInterval: number;
   syncIntervalBackground: number;
   theme: ColorSchemeName | 'default';
+  translucentStatusBar?: boolean;
   userName: string;
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: undefined,
+  hideStatusBar: false,
   keepAliveInBackground: true,
   preferredLanguage: undefined,
   rememberLastVisitState: true,
@@ -25,6 +28,7 @@ const defaultConfig: ConfigState = {
   syncInterval: 60 * 1000,
   syncIntervalBackground: 60 * 30 * 1000,
   theme: 'default',
+  translucentStatusBar: true,
   userName: '',
 };
 interface ConfigActions {

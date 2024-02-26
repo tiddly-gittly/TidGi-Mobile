@@ -1,6 +1,3 @@
-[submodule "libs/expo-location"]
-	path = libs/expo-location
-	url = https://github.com/Nonononoki/expo-location
 [submodule "libs/expo-application"]
 	path = libs/expo-application
 	url = https://github.com/Nonononoki/expo-application

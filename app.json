@@ -2,7 +2,7 @@
   "expo": {
     "name": "TidGi",
     "slug": "tidgi-mobile",
-    "version": "0.7.2",
+    "version": "0.7.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,18 +16,19 @@
       "assets/*"
     ],
     "ios": {
+      "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera to Scan QR code.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
         "UIBackgroundModes": [
-          "location",
           "fetch"
         ]
       },
       "bundleIdentifier": "ren.onetwo.tidgi.mobile"
     },
     "android": {
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
@@ -41,7 +42,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-localization",
       [
         "expo-barcode-scanner",
         {

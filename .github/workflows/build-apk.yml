@@ -83,53 +83,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Build by eject eas and remove debug signing key
-        run: |
-          pnpm exec expo prebuild -p android --clean
-          pnpm exec zx scripts/removeDebugSigningConfigs.mjs
+      - name: Build by eject eas and not remove debug signing key for apk
+        run: pnpm exec expo prebuild -p android --clean
 
       # TODO: https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
       # - name: Remove prorietary bits (for fix f-droid)
       #   run: npx zx scripts/fit-f-droid.mjs
-
-      - name: Build AAB
-        run: |
-          cd android
-          ./gradlew clean
-          ./gradlew bundleRelease --no-daemon --warning-mode all
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          draft: true
-          generate_release_notes: true
-          files: android/app/build/outputs/bundle/release/app-release.aab
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Sign AAB
-        id: sign_app_aab
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: android/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY_UPLOAD }}
-          alias: ${{ secrets.ANDROID_ALIAS_UPLOAD }}
-          keyStorePassword: ${{ secrets.ANDROID_KEY_PASSWORD_UPLOAD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD_UPLOAD }}
-        env:
-          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
-      - name: Rename AAB
-        run: mv android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/app-release-signed.aab
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          draft: true
-          generate_release_notes: true
-          files: android/app/build/outputs/bundle/release/app-release-signed.aab
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build APK
         run: |

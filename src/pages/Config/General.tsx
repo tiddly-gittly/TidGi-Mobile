@@ -1,12 +1,14 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { SegmentedButtons, Text } from 'react-native-paper';
+import { SegmentedButtons, Switch, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
 import { useConfigStore } from '../../store/config';
 
 export function General(): JSX.Element {
   const { t } = useTranslation();
 
+  const [translucentStatusBar, hideStatusBar] = useConfigStore(state => [state.translucentStatusBar, state.hideStatusBar]);
   const theme = useConfigStore(state => state.theme ?? 'default');
   const setConfig = useConfigStore(state => state.set);
   const supportedThemes = [
@@ -27,6 +29,26 @@ export function General(): JSX.Element {
           buttons={supportedThemes}
         />
       </SegmentedContainer>
+      <Text variant='titleLarge'>{t('Preference.TranslucentStatusBar')}</Text>
+      <SwitchContainer>
+        <FlexibleText>{t('Preference.TranslucentStatusBarDescription')}</FlexibleText>
+        <Switch
+          value={translucentStatusBar}
+          onValueChange={(value) => {
+            setConfig({ translucentStatusBar: value });
+          }}
+        />
+      </SwitchContainer>
+      <Text variant='titleLarge'>{t('Preference.HideStatusBar')}</Text>
+      <SwitchContainer>
+        <FlexibleText>{t('Preference.HideStatusBarDescription')}</FlexibleText>
+        <Switch
+          value={hideStatusBar}
+          onValueChange={(value) => {
+            setConfig({ hideStatusBar: value });
+          }}
+        />
+      </SwitchContainer>
     </>
   );
 }

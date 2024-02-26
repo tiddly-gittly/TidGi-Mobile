@@ -38,13 +38,14 @@ export const App: React.FC = () => {
   const themeConfig = useConfigStore(state => state.theme);
   const colorScheme = useColorScheme();
   const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
+  const [translucentStatusBar, hideStatusBar] = useConfigStore(state => [state.translucentStatusBar, state.hideStatusBar]);
   useRegisterReceivingShareIntent();
 
   return (
     <I18nextProvider i18n={i18n}>
       <PaperProvider theme={theme}>
         <ThemeProvider theme={theme}>
-          <StatusBar hidden={false} />
+          <StatusBar translucent={translucentStatusBar} hidden={hideStatusBar} />
           <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
             <Stack.Navigator initialRouteName='MainMenu'>
               <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />

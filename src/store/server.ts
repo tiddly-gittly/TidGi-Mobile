@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LocationObjectCoords } from 'expo-location';
 import { cloneDeep } from 'lodash';
 import { create } from 'zustand';
 import { createJSONStorage, devtools, persist } from 'zustand/middleware';
@@ -24,7 +23,7 @@ export interface IServerInfo {
     /**
      * The coordinates of the position.
      */
-    coords?: LocationObjectCoords;
+    // coords?: LocationObjectCoords;
   };
   name: string;
   provider: ServerProvider;

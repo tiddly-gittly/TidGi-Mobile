@@ -433,7 +433,11 @@
     "Available": "Available",
     "NotAvailable": "Not Available",
     "EnableQuickLoad": "Enable Quick Load",
-    "EnableQuickLoadDescription": "Enabled to load only the last few days' worth of tiddlers for quick opening of new content added to the giant wiki. Ideal for scenarios where you only need to add content quickly and don't need to look at old content."
+    "EnableQuickLoadDescription": "Enabled to load only the last few days' worth of tiddlers for quick opening of new content added to the giant wiki. Ideal for scenarios where you only need to add content quickly and don't need to look at old content.",
+    "TranslucentStatusBar": "Translucent Status Bar",
+    "TranslucentStatusBarDescription": "Allow the interface to be displayed below the status bar, overlapping with \n text on status bar, for more display space, but interface elements may be obscured by the status bar.",
+    "HideStatusBar": "Hide Status Bar",
+    "HideStatusBarDescription": "Completely hide the status bar, more display space is available when hidden, but opening the status bar may require additional action. Does not take effect on bangs screen dig hole screen."
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",
