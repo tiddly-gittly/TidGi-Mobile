@@ -11,7 +11,7 @@
  * 
  * Also comment out all code inside `useRegisterReceivingShareIntent`.
  */
-// import { useShareIntent } from 'expo-share-intent';
+import { useShareIntent } from 'expo-share-intent';
 import { useEffect } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { nativeService } from '.';
@@ -33,7 +33,7 @@ export function useRequestNativePermissions() {
 
 export function useRegisterReceivingShareIntent() {
   /** UnComment `return;` to fix `Error: Cannot find native module 'ExpoShareIntentModule', js engine: hermes` */
-  return;
+  // return;
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
     debug: true,
   });
