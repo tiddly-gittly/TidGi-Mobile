@@ -14,10 +14,14 @@ const setLanguage = () => {
       break;
     }
   }
-  $tw.wiki.addTiddler({
-    title: '$:/language',
-    text: twLanguage,
-  });
+  const existingTiddler = $tw.wiki.getTiddler('$:/language');
+  if (existingTiddler?.fields?.text !== twLanguage) {
+    $tw.wiki.addTiddler({
+      ...existingTiddler?.fields,
+      title: '$:/language',
+      text: twLanguage,
+    });
+  }
 };
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
