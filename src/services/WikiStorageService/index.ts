@@ -118,11 +118,12 @@ export class WikiStorageService {
             columns: {
               id: true,
               operation: true,
+              title: true,
             },
             orderBy: desc(TiddlerChangeSQLModel.timestamp),
           });
 
-          if (recentUpdate !== undefined && recentUpdate.operation === TiddlersLogOperation.UPDATE) {
+          if (recentUpdate !== undefined && recentUpdate.operation === TiddlersLogOperation.UPDATE && recentUpdate.title === title) {
             // If we are frequently update same title, then update the timestamp of last update, instead of put a new UPDATE log.
             await transaction.update(TiddlerChangeSQLModel)
               .set({ timestamp: newOperation.timestamp })
