@@ -70,7 +70,8 @@
     "stream-json": "^1.8.0",
     "styled-components": "^6.1.8",
     "type-fest": "^4.10.2",
-    "zustand": "^4.5.0"
+    "zustand": "^4.5.0",
+    "expo-dev-client": "~3.3.9"
   },
   "devDependencies": {
     "@babel/core": "^7.23.9",
