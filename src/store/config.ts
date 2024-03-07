@@ -7,6 +7,7 @@ import { immer } from 'zustand/middleware/immer';
 export interface ConfigState {
   /** the initial value should be undefined, so an initial true value won't immediately trigger autoOpen */
   autoOpenDefaultWiki?: boolean;
+  defaultDownloadLocation?: string;
   hideStatusBar?: boolean;
   keepAliveInBackground: boolean;
   preferredLanguage?: string;

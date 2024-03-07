@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { Camera } from 'expo-camera';
 import * as fs from 'expo-file-system';
 import { ShareIntent } from 'expo-share-intent';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
+import { useConfigStore } from '../../store/config';
 import type { WikiHookService } from '../WikiHookService';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
@@ -105,6 +107,24 @@ export class NativeService {
     openDefaultWikiIfNotAlreadyThere();
     const wikiHookService = await this.getCurrentWikiHookServices();
     await wikiHookService.executeAfterTwReady(script);
+  }
+
+  async saveFileToFs(filename: string, text: string, mimeType?: string): Promise<string | false> {
+    const configs = useConfigStore.getState();
+    const result = await fs.StorageAccessFramework.requestDirectoryPermissionsAsync(configs.defaultDownloadLocation);
+    if (!result.granted) {
+      return false;
+    }
+    try {
+      const fileUri = await fs.StorageAccessFramework.createFileAsync(result.directoryUri, filename, mimeType || '');
+      console.log(`File mimeType: ${mimeType} write to ${fileUri} content: ${text.length > 100 ? text.substring(0, 100) + '...' : text}`);
+      await fs.writeAsStringAsync(fileUri, text, { encoding: fs.EncodingType.UTF8 });
+      configs.set({ defaultDownloadLocation: result.directoryUri });
+      return fileUri;
+    } catch (error) {
+      console.error('Error saving file:', error);
+      return false;
+    }
   }
 }
 

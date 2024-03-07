@@ -9,7 +9,7 @@ import type { WikiHookService } from '../../../src/services/WikiHookService/inde
 import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
-type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
+// type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
 type ISyncAdaptorPutTiddlersCallback = (error: Error | null | string, etag?: {
   bag: string;
 }, version?: string) => void;
