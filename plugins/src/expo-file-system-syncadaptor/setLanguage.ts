@@ -1,13 +1,13 @@
 const setLanguage = () => {
   const { language } = window.meta?.() ?? {};
-  let twLanguage = 'en-GB';
+  let twLanguage = '$:/languages/en-GB';
   switch (language) {
     case 'en': {
-      twLanguage = 'en-GB';
+      twLanguage = '$:/languages/en-GB';
       break;
     }
     case 'zh': {
-      twLanguage = 'zh-CN';
+      twLanguage = '$:/languages/zh-Hans';
       break;
     }
     default: {
@@ -26,3 +26,7 @@ const setLanguage = () => {
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 exports.startup = setLanguage;
+exports.name = 'tidgi-set-language';
+exports.platforms = ['browser'];
+exports.after = ['startup'];
+exports.synchronous = true;

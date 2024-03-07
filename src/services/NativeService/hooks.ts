@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { useShareIntent } from 'expo-share-intent';
+// import { useShareIntent } from 'expo-share-intent';
 import { useEffect } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { nativeService } from '.';
@@ -20,6 +20,7 @@ export function useRequestNativePermissions() {
 }
 
 export function useRegisterReceivingShareIntent() {
+  return
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
     debug: true,
   });
@@ -30,9 +31,9 @@ export function useRegisterReceivingShareIntent() {
         `Failed to get ShareIntent, This is normal if you are using Expo Go for dev. To debug sharing feature, create a dev build "pnpm start:devClient" instead. ${error}`,
       );
     }
-    if (process.env.NODE_ENV === 'development') {
-      return;
-    }
+    // if (process.env.NODE_ENV === 'development') {
+    //   return;
+    // }
     void (async () => {
       try {
         if (hasShareIntent) {
