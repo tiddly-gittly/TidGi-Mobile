@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "TidGi",
+    "scheme": "tidgi",
     "slug": "tidgi-mobile",
     "version": "0.7.4",
     "orientation": "portrait",
