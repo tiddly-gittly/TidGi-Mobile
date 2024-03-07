@@ -50,12 +50,18 @@
       ],
       "./expo-plugins/trustHTTPRequests/trust-local-certs.js",
       [
-        "./expo-plugins/withAndroidShareExtension/index",
+        "expo-share-intent",
         {
           "androidIntentFilters": [
             "text/*",
             "image/*"
-          ]
+          ],
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1,
+            "NSExtensionActivationSupportsMovieWithMaxCount": 1,
+          }
         }
       ]
     ],

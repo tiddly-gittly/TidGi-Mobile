@@ -16,14 +16,14 @@ export const importBinaryTiddlers = (files: ISharedFile[]) => {
     temporaryWidget.render(document.createElement('div'), null);
     var sharedContentsToImport = ${JSON.stringify(files)};
     var parsedContentToImport = sharedContentsToImport.flatMap((content) => {
-      return $tw.wiki.deserializeTiddlers(content.mimeType ?? 'text/plain', content.text, { title: content.fileName })
+      return $tw.wiki.deserializeTiddlers(content.type ?? 'text/plain', content.text, { title: content.fileName })
     });
     temporaryWidget.children[0].children[0].dispatchEvent({ type: 'tm-import-tiddlers', param: JSON.stringify(parsedContentToImport) });
   `;
   return importBinaryTiddlersScript;
 };
 
-export const importTextTiddlers = (files: ISharedFile[]) => {
+export const importTextTiddlers = (texts: string[]) => {
   const importTextTiddlersScript = `
     /* eslint-disable unicorn/no-null */
     /* eslint-disable no-var */
@@ -32,9 +32,9 @@ export const importTextTiddlers = (files: ISharedFile[]) => {
       { parentWidget: $tw.rootWidget, document, variables: {} },
     );
     temporaryWidget.render(document.createElement('div'), null);
-    var sharedContentsToImport = ${JSON.stringify(files)};
-    sharedContentsToImport.forEach(function(block) {
-      temporaryWidget.children[0].children[0].dispatchEvent({ type: 'tm-new-tiddler', param: { text: block.text, url: block.weblink } });
+    var sharedContentsToImport = ${JSON.stringify(texts)};
+    sharedContentsToImport.forEach(function(text) {
+      temporaryWidget.children[0].children[0].dispatchEvent({ type: 'tm-new-tiddler', param: { text } });
     });
   `;
   return importTextTiddlersScript;

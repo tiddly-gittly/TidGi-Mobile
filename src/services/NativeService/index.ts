@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { Camera } from 'expo-camera';
 import * as fs from 'expo-file-system';
-import ReceiveSharingIntent from 'react-native-receive-sharing-intent';
+import { ShareIntent } from 'expo-share-intent';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import type { WikiHookService } from '../WikiHookService';
-import { ISharedFile } from './types';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
 /**
@@ -75,43 +75,36 @@ export class NativeService {
    * If wiki has not started, android will store files in a queue, wait for getReceivedFiles to be called.
    * Even wiki previously loaded, but after go background for a while, it may be unloaded too. We need to wait not only webview loaded, need wiki core loaded, then call this.
    */
-  registerReceivingShareIntent() {
+  async receivingShareIntent(shareIntent: ShareIntent) {
     // wait for wiki start, and use injectJavascript to add tiddler, for user to edit.
     // To get All Recived Urls
-    ReceiveSharingIntent.getReceivedFiles(
-      async (
-        files: ISharedFile[],
-      ) => {
-        // files returns as JSON Array example
-        // [{ filePath: null, text: null, weblink: null, mimeType: null, contentUri: null, fileName: null, extension: null }]
-        console.log(files);
+
+    // files returns as JSON Array example
+    // [{ filePath: null, text: null, weblink: null, mimeType: null, contentUri: null, fileName: null, extension: null }]
+    const { text, files } = shareIntent;
+    let script = '';
+    if (files !== null) {
+      console.log(text, files);
+      if (text) {
+        script = importTextTiddlers([text]);
+      } else {
         if (files.length === 0) return;
-        let script = '';
-        if (files.every(item => (item.mimeType ?? 'text/plain') === 'text/plain')) {
-          script = importTextTiddlers(files);
-        } else {
-          const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
-            if (file.filePath === null) return file;
-            /**
-             * based on tiddlywiki file type parsers `$tw.utils.registerFileType("image/jpeg","base64",[".jpg",".jpeg"],{flags:["image"]});`
-             * we need to use base64 encoding to load file
-             */
-            const text = await fs.readAsStringAsync(file.filePath.startsWith('file://') ? file.filePath : `file://${file.filePath}`, { encoding: 'base64' });
-            return { ...file, text };
-          }));
-          script = importBinaryTiddlers(filesWithFileLoadedToText);
-        }
-        openDefaultWikiIfNotAlreadyThere();
-        const wikiHookService = await this.getCurrentWikiHookServices();
-        await wikiHookService.executeAfterTwReady(script);
-      },
-      (error: Error) => {
-        console.log(error);
-      },
-      'ren.onetwo.tidgi.mobile', // share url protocol (must be unique to your app, suggest using your apple bundle id)
-    );
-    // Fully unregister Intents, actually it is not clearReceivedFiles
-    // ReceiveSharingIntent.clearReceivedFiles();
+        const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
+          if (file.path === null) return file;
+          /**
+           * based on tiddlywiki file type parsers `$tw.utils.registerFileType("image/jpeg","base64",[".jpg",".jpeg"],{flags:["image"]});`
+           * we need to use base64 encoding to load file
+           */
+          const text = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: 'base64' });
+          return { ...file, text };
+        }));
+        script = importBinaryTiddlers(filesWithFileLoadedToText);
+      }
+    }
+    if (!script) return;
+    openDefaultWikiIfNotAlreadyThere();
+    const wikiHookService = await this.getCurrentWikiHookServices();
+    await wikiHookService.executeAfterTwReady(script);
   }
 }
 
