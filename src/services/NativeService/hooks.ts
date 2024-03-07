@@ -1,5 +1,17 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-// import { useShareIntent } from 'expo-share-intent';
+/** If you get error on development:
+ * ```
+ *  Error: Cannot find native module 'ExpoShareIntentModule', js engine: hermes
+ * Invariant Violation: "main" has not been registered. This can happen if:
+* Metro (the local dev server) is run from the wrong folder. Check if Metro is running, stop it and restart it in the current project.
+* A module failed to load due to an error and `AppRegistry.registerComponent` wasn't called., js engine: hermes
+ * ```
+ * 
+ * Comment out this import will work.
+ * 
+ * Also comment out all code inside `useRegisterReceivingShareIntent`.
+ */
+import { useShareIntent } from 'expo-share-intent';
 import { useEffect } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { nativeService } from '.';
@@ -20,7 +32,6 @@ export function useRequestNativePermissions() {
 }
 
 export function useRegisterReceivingShareIntent() {
-  return
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
     debug: true,
   });
