@@ -2,7 +2,7 @@ import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';
 import { IHtmlContent } from '../useTiddlyWiki';
-import { OnStreamChunksToWebViewEventTypes } from './webviewSideReceiver';
+import { OnStreamChunksToWebViewEventTypes } from './WebViewEventTypes';
 
 /**
  * WebView can't load large html string, so we have to send it using postMessage and load it inside the webview
@@ -18,14 +18,15 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
       data,
     });
     webViewReference.current.injectJavaScript(`
-    var receiveData = () => {
-      if (window.preloadScriptLoaded !== true) {
-        setTimeout(receiveData, 100);
-      } else {
-        window.onStreamChunksToWebView(${stringifiedData});
+      var receiveData = () => {
+        console.log(\`TidGi calling receiveData() with ${messageType}, window.preloadScriptLoaded \${window.preloadScriptLoaded ? '√' : 'x'}, window.onStreamChunksToWebView \${window.onStreamChunksToWebView ? '√' : 'x'}\`);
+        if (window.preloadScriptLoaded !== true || !window.onStreamChunksToWebView) {
+          setTimeout(receiveData, 100);
+        } else {
+          window.onStreamChunksToWebView(${stringifiedData});
+        }
       }
-    }
-    receiveData();
+      receiveData();
     `);
   }, [webViewReference]);
 

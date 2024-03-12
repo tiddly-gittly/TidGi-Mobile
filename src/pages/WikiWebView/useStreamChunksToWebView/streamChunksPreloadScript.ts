@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/prefer-spread */
+import { OnStreamChunksToWebViewEventTypes } from './WebViewEventTypes';
 
 /**
  * Run `pnpm build:preload` to build this file.
@@ -20,16 +21,16 @@
   // @ts-ignore
   window.onStreamChunksToWebView = function(event) {
     switch (event.type) {
-      case 'TIDDLYWIKI_HTML': {
+      case OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML: {
         resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
         startInjectHTML(event.data);
         break;
       }
-      case 'TIDDLER_STORE_SCRIPT_CHUNK': {
+      case OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK: {
         tiddlersStoreContents.push(event.data);
         break;
       }
-      case 'TIDDLER_STORE_SCRIPT_CHUNK_END': {
+      case OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END: {
         const startInjectTiddlerIfHTMLDone = () => {
           if (canInjectTiddlers) {
             executeScriptsAfterInjectHTML();

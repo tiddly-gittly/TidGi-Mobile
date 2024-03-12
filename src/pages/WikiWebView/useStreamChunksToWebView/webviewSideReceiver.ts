@@ -2,12 +2,8 @@
 import { Asset } from 'expo-asset';
 import * as fs from 'expo-file-system';
 import streamChunksPreloadScriptAssetID from '../../../../assets/preload/streamChunksPreloadScript.js.html';
+import { OnStreamChunksToWebViewEventTypes } from './WebViewEventTypes';
 
-export enum OnStreamChunksToWebViewEventTypes {
-  TIDDLER_STORE_SCRIPT_CHUNK = 'TIDDLER_STORE_SCRIPT_CHUNK',
-  TIDDLER_STORE_SCRIPT_CHUNK_END = 'TIDDLER_STORE_SCRIPT_CHUNK_END',
-  TIDDLYWIKI_HTML = 'TIDDLYWIKI_HTML',
-}
 type OnStreamChunksToWebViewEvents = {
   data: string;
   type:
