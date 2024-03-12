@@ -8,6 +8,7 @@ export const WikiHookServiceIPCDescriptor: ProxyDescriptor = {
   channel: WikiHookServiceChannel.name,
   properties: {
     triggerFullReload: ProxyPropertyType.Function,
+    setWebviewReceiverReady: ProxyPropertyType.Function,
     saveLocationInfo: ProxyPropertyType.Function,
   },
 };

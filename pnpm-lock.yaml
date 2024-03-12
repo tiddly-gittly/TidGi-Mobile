@@ -92,6 +92,9 @@ dependencies:
   expo-task-manager:
     specifier: 11.7.2
     version: 11.7.2(expo@50.0.11)
+  exponential-backoff:
+    specifier: ^3.1.1
+    version: 3.1.1
   i18next:
     specifier: ^23.10.1
     version: 23.10.1
@@ -6196,6 +6199,10 @@ packages:
       - encoding
       - supports-color
       - utf-8-validate
+    dev: false
+
+  /exponential-backoff@3.1.1:
+    resolution: {integrity: sha512-dX7e/LHVJ6W3DE1MHWi9S1EYzDESENfLrYohG2G++ovZrYOkm4Knwa0mc1cn84xJOR4KEU0WSchhLbd0UklbHw==}
     dev: false
 
   /ext@1.7.0:

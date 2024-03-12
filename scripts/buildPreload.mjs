@@ -2,9 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import os from 'os';
-import path from 'path';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { $ } from 'zx';
 
 if (process.platform === 'win32') {
@@ -20,7 +18,9 @@ const modifiedTsContent = tsContent.replaceAll('export ', '');
 
 // Write the modified content to a temporary file
 const tmpTsFilePath = 'build/streamChunksPreloadScript.ts';
-await mkdir('build')
+try {
+  await mkdir('build');
+} catch {}
 await writeFile(tmpTsFilePath, modifiedTsContent);
 
 // Use TypeScript compiler to compile the temporary file

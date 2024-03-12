@@ -1,6 +1,9 @@
+import { brand } from 'expo-device';
 import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';
+import type { WikiHookService } from '../../../services/WikiHookService';
+import type { WikiStorageService } from '../../../services/WikiStorageService';
 import { IHtmlContent } from '../useTiddlyWiki';
 import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
 
@@ -9,11 +12,14 @@ import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
  * @url https://github.com/react-native-webview/react-native-webview/issues/3126
  * @returns
  */
-export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>) {
+export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>, servicesOfWorkspace: {
+  wikiHookService: WikiHookService;
+  wikiStorageService: WikiStorageService;
+}) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
     console.log(`sendDataToWebView ${messageType}`);
-    if (webViewReference.current === null) return;
+    if (webViewReference.current === null) throw new Error('WebView is not ready when sendDataToWebView');
     const stringifiedData = JSON.stringify({
       type: messageType,
       data,
@@ -38,14 +44,19 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
     if (webViewReference.current !== null) {
       try {
+        // Huawei HONOR device need to wait for a while before sending large data, otherwise first message (send HTML) will lost, cause white screen (no HTML loaded). Maybe its webview has bug.
+        // Instead of `if (brand === 'HONOR') await new Promise<void>(resolve => setTimeout(resolve, 1000));}`, we use heart beat to check if it is ready.
+        await servicesOfWorkspace.wikiHookService.waitForWebviewReceiverReady(() => {
+          sendDataToWebView(OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY);
+        });
         /**
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
          */
         sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
+        await tiddlersStream.init();
         /**
          * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
          */
-        await tiddlersStream.init();
         tiddlersStream.on('progress', (percentage: number) => {
           setStreamChunksToWebViewPercentage(percentage);
         });

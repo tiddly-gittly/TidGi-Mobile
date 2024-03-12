@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/prefer-spread */
 export enum OnStreamChunksToWebViewEventTypes {
+  CHECK_RECEIVER_READY = 'CHECK_RECEIVER_READY',
   TIDDLER_STORE_SCRIPT_CHUNK = 'TIDDLER_STORE_SCRIPT_CHUNK',
   TIDDLER_STORE_SCRIPT_CHUNK_END = 'TIDDLER_STORE_SCRIPT_CHUNK_END',
   TIDDLYWIKI_HTML = 'TIDDLYWIKI_HTML',
@@ -43,6 +44,11 @@ export enum OnStreamChunksToWebViewEventTypes {
           }
         };
         startInjectTiddlerIfHTMLDone();
+        break;
+      }
+      case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
+        // @ts-ignore
+        window.service?.wikiHookService?.setWebviewReceiverReady?.();
         break;
       }
     }

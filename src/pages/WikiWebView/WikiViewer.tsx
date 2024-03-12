@@ -80,12 +80,16 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     setWebViewKeyToReloadAfterRecycleByOS(latest => latest + 1);
   }, []);
   servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
+  useEffect(() => {
+    servicesOfWorkspace.wikiHookService.resetWebviewReceiverReady();
+  }, [servicesOfWorkspace.wikiHookService]);
+
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * This need to use with `webviewSideReceiver`.
    * @url https://github.com/react-native-webview/react-native-webview/issues/3126
    */
-  const { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage } = useStreamChunksToWebView(webViewReference);
+  const { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage } = useStreamChunksToWebView(webViewReference, servicesOfWorkspace);
   const loading = streamChunksToWebViewPercentage > 0 && streamChunksToWebViewPercentage < 1;
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();

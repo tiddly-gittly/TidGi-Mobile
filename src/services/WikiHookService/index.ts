@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable @typescript-eslint/require-await */
+import { backOff } from 'exponential-backoff';
 import { MutableRefObject } from 'react';
 import { WebView } from 'react-native-webview';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
@@ -10,9 +11,9 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 export class WikiHookService {
   #triggerFullReloadCallback: () => void = () => {};
   /** value in this maybe outdated, use #wikiStore for latest data. */
-  #workspace: IWikiWorkspace;
+  readonly #workspace: IWikiWorkspace;
   #webViewReference?: MutableRefObject<WebView | null>;
-  #wikiStore = useWorkspaceStore;
+  readonly #wikiStore = useWorkspaceStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
@@ -53,6 +54,30 @@ export class WikiHookService {
 
   public saveLocationInfo(hash: string) {
     this.#wikiStore.getState().update(this.#workspace.id, { lastLocationHash: hash });
+  }
+
+  #webViewReceiverReady = false;
+  public setWebviewReceiverReady() {
+    this.#webViewReceiverReady = true;
+  }
+
+  public resetWebviewReceiverReady() {
+    this.#webViewReceiverReady = false;
+  }
+
+  public async waitForWebviewReceiverReady(tryGetReady: () => void): Promise<void> {
+    await backOff(
+      async () => {
+        console.log(`backoff retry waitForWebviewReceiverReady`);
+        if (this.#webViewReceiverReady) {
+          return true;
+        } else {
+          tryGetReady();
+          throw new Error('Webview receiver not ready');
+        }
+      },
+      { numOfAttempts: 100, jitter: 'full' },
+    );
   }
 }
 

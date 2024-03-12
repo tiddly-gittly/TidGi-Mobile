@@ -4,6 +4,7 @@
 /* eslint-disable unicorn/prefer-spread */
 var OnStreamChunksToWebViewEventTypes;
 (function (OnStreamChunksToWebViewEventTypes) {
+    OnStreamChunksToWebViewEventTypes["CHECK_RECEIVER_READY"] = "CHECK_RECEIVER_READY";
     OnStreamChunksToWebViewEventTypes["TIDDLER_STORE_SCRIPT_CHUNK"] = "TIDDLER_STORE_SCRIPT_CHUNK";
     OnStreamChunksToWebViewEventTypes["TIDDLER_STORE_SCRIPT_CHUNK_END"] = "TIDDLER_STORE_SCRIPT_CHUNK_END";
     OnStreamChunksToWebViewEventTypes["TIDDLYWIKI_HTML"] = "TIDDLYWIKI_HTML";
@@ -23,6 +24,7 @@ var OnStreamChunksToWebViewEventTypes;
     }
     // @ts-ignore
     window.onStreamChunksToWebView = function (event) {
+        var _a, _b, _c;
         switch (event.type) {
             case OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML: {
                 resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
@@ -43,6 +45,11 @@ var OnStreamChunksToWebViewEventTypes;
                     }
                 };
                 startInjectTiddlerIfHTMLDone_1();
+                break;
+            }
+            case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
+                // @ts-ignore
+                (_c = (_b = (_a = window.service) === null || _a === void 0 ? void 0 : _a.wikiHookService) === null || _b === void 0 ? void 0 : _b.setWebviewReceiverReady) === null || _c === void 0 ? void 0 : _c.call(_b);
                 break;
             }
         }

@@ -7,6 +7,7 @@ import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
 type OnStreamChunksToWebViewEvents = {
   data: string;
   type:
+    | OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY
     | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML
     | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK;
 } | {
