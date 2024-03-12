@@ -1,46 +1,31 @@
-import React, { MutableRefObject } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Dimensions } from 'react-native';
+import React, { MutableRefObject, PureComponent } from 'react';
 import { Text } from 'react-native-paper';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
-import { styled } from 'styled-components/native';
 import { FAKE_USER_AGENT } from '../../constants/webview';
-
-export const PROGRESS_BAR_HEIGHT = 30;
-const WebViewContainer = styled.View<{ showProgressBar: boolean }>`
-  height: ${({ showProgressBar }) => showProgressBar ? `${Dimensions.get('window').height - PROGRESS_BAR_HEIGHT}px` : '100%'};
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  top: ${({ showProgressBar }) => showProgressBar ? '10%' : `0`};
-`;
 
 interface CustomWebViewProps {
   backgroundColor: string;
   injectedJavaScriptBeforeContentLoaded: string;
   onLoadEnd: () => void;
-  onMessage: (event: WebViewMessageEvent) => void;
+  onMessageReference: MutableRefObject<(event: WebViewMessageEvent) => void>;
   preferredLanguage: string | undefined | null;
-  showProgressBar: boolean;
   triggerFullReload: () => void;
   webViewReference: MutableRefObject<WebView | null>;
 }
 
-export function CustomWebView({
-  backgroundColor,
-  webViewReference,
-  preferredLanguage,
-  onLoadEnd,
-  onMessage,
-  injectedJavaScriptBeforeContentLoaded,
-  triggerFullReload,
-  showProgressBar,
-}: CustomWebViewProps) {
-  const { t } = useTranslation();
+export class CustomWebView extends PureComponent<CustomWebViewProps> {
+  render() {
+    const {
+      backgroundColor,
+      webViewReference,
+      preferredLanguage,
+      onLoadEnd,
+      onMessageReference,
+      injectedJavaScriptBeforeContentLoaded,
+      triggerFullReload,
+    } = this.props;
 
-  return (
-    <WebViewContainer showProgressBar={showProgressBar}>
+    return (
       <WebView
         style={{ backgroundColor }}
         originWhitelist={['*']}
@@ -74,7 +59,6 @@ export function CustomWebView({
         }}
         // source={{ uri: 'about:blank#%E6%9E%97%E4%B8%80%E4%BA%8C:%E6%9E%97%E4%B8%80%E4%BA%8C%20Index' }}
         renderError={(errorName) => <Text>{errorName}</Text>}
-        renderLoading={() => <Text>{t('Loading')}</Text>}
         onRenderProcessGone={() => {
           console.warn('onRenderProcessGone triggerFullReload');
           // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
@@ -86,11 +70,11 @@ export function CustomWebView({
           triggerFullReload();
         }}
         onLoadEnd={onLoadEnd}
-        onMessage={onMessage}
+        onMessage={onMessageReference.current}
         ref={webViewReference}
         injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
         webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
       />
-    </WebViewContainer>
-  );
+    );
+  }
 }

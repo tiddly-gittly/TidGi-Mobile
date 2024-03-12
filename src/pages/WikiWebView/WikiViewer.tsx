@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Dimensions } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
@@ -11,12 +12,21 @@ import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
-import { CustomWebView, PROGRESS_BAR_HEIGHT } from './CustomWebview';
+import { CustomWebView } from './CustomWebview';
 import { getWindowMeta } from './getWindowMeta';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 
+const PROGRESS_BAR_HEIGHT = 30;
+const WebViewContainer = styled.View<{ showProgressBar: boolean }>`
+  height: ${({ showProgressBar }) => showProgressBar ? `${Dimensions.get('window').height - PROGRESS_BAR_HEIGHT}px` : '100%'};
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: ${({ showProgressBar }) => showProgressBar ? '10%' : `0`};
+`;
 const TopProgressBar = styled(ProgressBar)`
   height: ${PROGRESS_BAR_HEIGHT}px;
   width: 100%;
@@ -49,6 +59,10 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   useRequestNativePermissions();
 
   const [loaded, setLoaded] = useState(false);
+  const onLoadEnd = useCallback(() => {
+    console.log(`Webview onLoadEnd`);
+    setLoaded(true);
+  }, []);
   const [rememberLastVisitState, preferredLanguage] = useConfigStore(state => [state.rememberLastVisitState, state.preferredLanguage]);
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
@@ -64,7 +78,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const triggerFullReload = useThrottledCallback(() => {
     console.info('triggerFullReload due to WebViewKeyToReloadAfterRecycleByOS');
     setWebViewKeyToReloadAfterRecycleByOS(latest => latest + 1);
-  });
+  }, []);
   servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
@@ -110,19 +124,18 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   return (
     <>
       <TopProgressBar progress={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
-      <CustomWebView
-        webViewReference={webViewReference}
-        backgroundColor={theme.colors.background}
-        key={webViewKeyToReloadAfterRecycleByOS}
-        preferredLanguage={preferredLanguage ?? detectedLanguage}
-        onLoadEnd={() => {
-          setLoaded(true);
-        }}
-        showProgressBar={showProgressBar}
-        onMessage={onMessageReference.current}
-        injectedJavaScriptBeforeContentLoaded={preloadScript}
-        triggerFullReload={triggerFullReload}
-      />
+      <WebViewContainer showProgressBar={showProgressBar}>
+        <CustomWebView
+          webViewReference={webViewReference}
+          backgroundColor={theme.colors.background}
+          key={webViewKeyToReloadAfterRecycleByOS}
+          preferredLanguage={preferredLanguage ?? detectedLanguage}
+          onLoadEnd={onLoadEnd}
+          onMessageReference={onMessageReference}
+          injectedJavaScriptBeforeContentLoaded={preloadScript}
+          triggerFullReload={triggerFullReload}
+        />
+      </WebViewContainer>
     </>
   );
 };
