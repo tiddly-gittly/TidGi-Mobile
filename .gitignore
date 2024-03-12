@@ -43,5 +43,6 @@ scripts/fetchHTML/
 # assets/plugins/
 @tiddly-gittly__tidgi-mobile.jks.base64.txt
 
+build/
 # prebuild
 android/

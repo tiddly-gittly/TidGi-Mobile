@@ -4,7 +4,7 @@
   "scripts": {
     "android": "cross-env NODE_ENV=development expo start --go --android",
     "build:plugin": "zx scripts/buildPlugins.mjs",
-    "build:preload": "tsc src/pages/WikiWebView/useStreamChunksToWebView/streamChunksPreloadScript.ts --outFile assets/preload/streamChunksPreloadScript.js.html",
+    "build:preload": "zx scripts/buildPreload.mjs",
     "build:sqlite-migration": "drizzle-kit generate:sqlite",
     "build:android-apk": "eas build --profile preview --platform android --non-interactive",
     "build:expo-sdk": "eas build --profile development --platform android --non-interactive",

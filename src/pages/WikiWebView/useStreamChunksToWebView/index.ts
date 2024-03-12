@@ -2,7 +2,7 @@ import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';
 import { IHtmlContent } from '../useTiddlyWiki';
-import { OnStreamChunksToWebViewEventTypes } from './WebViewEventTypes';
+import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
 
 /**
  * WebView can't load large html string, so we have to send it using postMessage and load it inside the webview
@@ -12,6 +12,9 @@ import { OnStreamChunksToWebViewEventTypes } from './WebViewEventTypes';
 export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
+    console.log(`sendDataToWebView ${messageType}`);
+    // DEBUG: console webViewReference.current
+    console.log(`webViewReference.current`, webViewReference.current);
     if (webViewReference.current === null) return;
     const stringifiedData = JSON.stringify({
       type: messageType,

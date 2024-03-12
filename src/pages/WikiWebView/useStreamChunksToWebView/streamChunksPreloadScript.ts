@@ -2,7 +2,12 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/prefer-spread */
-import { OnStreamChunksToWebViewEventTypes } from './WebViewEventTypes';
+export enum OnStreamChunksToWebViewEventTypes {
+  TIDDLER_STORE_SCRIPT_CHUNK = 'TIDDLER_STORE_SCRIPT_CHUNK',
+  TIDDLER_STORE_SCRIPT_CHUNK_END = 'TIDDLER_STORE_SCRIPT_CHUNK_END',
+  TIDDLYWIKI_HTML = 'TIDDLYWIKI_HTML',
+}
+
 
 /**
  * Run `pnpm build:preload` to build this file.
