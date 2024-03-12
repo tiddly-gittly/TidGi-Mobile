@@ -1,25 +1,21 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Dimensions } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
-import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
-import { FAKE_USER_AGENT } from '../../constants/webview';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
+import { CustomWebView, PROGRESS_BAR_HEIGHT } from './CustomWebview';
 import { getWindowMeta } from './getWindowMeta';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 
-const PROGRESS_BAR_HEIGHT = 30;
 const TopProgressBar = styled(ProgressBar)`
   height: ${PROGRESS_BAR_HEIGHT}px;
   width: 100%;
@@ -27,14 +23,6 @@ const TopProgressBar = styled(ProgressBar)`
   left: 0;
   top: 0;
   z-index: 100;
-`;
-const WebViewContainer = styled.View<{ showProgressBar: boolean }>`
-  height: ${({ showProgressBar }) => showProgressBar ? `${Dimensions.get('window').height - PROGRESS_BAR_HEIGHT}px` : '100%'};
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  top: ${({ showProgressBar }) => showProgressBar ? '10%' : `0`};
 `;
 const ErrorText = styled(Text)`
   color: ${MD3Colors.error50};
@@ -54,7 +42,6 @@ export interface WikiViewerProps {
 }
 
 export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: WikiViewerProps) => {
-  const { t } = useTranslation();
   const theme = useTheme();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
@@ -118,66 +105,23 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
    * Quick load is very fast, progress bar will flash and disappear. So we don't show it.
    */
   const showProgressBar = loading && !quickLoad;
-  // TODO: maybe webViewKeyToReloadAfterRecycleByOS need to be use when refactor this to a new component. Sometimes the source works, but preload is not applied
+  // TODO: check if webViewKeyToReloadAfterRecycleByOS on component is working. Sometimes the source works, but preload is not applied
   return (
     <>
       <TopProgressBar progress={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
-      <WebViewContainer showProgressBar={showProgressBar}>
-        <WebView
-          style={{ backgroundColor: theme.colors.background }}
-          key={webViewKeyToReloadAfterRecycleByOS}
-          originWhitelist={['*']}
-          mediaPlaybackRequiresUserAction={false}
-          allowsInlineMediaPlayback
-          javaScriptCanOpenWindowsAutomatically
-          allowsBackForwardNavigationGestures
-          allowsProtectedMedia
-          allowFileAccess
-          allowFileAccessFromFileURLs
-          allowUniversalAccessFromFileURLs
-          focusable
-          geolocationEnabled
-          importantForAccessibility='yes'
-          keyboardDisplayRequiresUserAction={false}
-          mediaCapturePermissionGrantType='grant'
-          mixedContentMode='always'
-          allowsAirPlayForMediaPlayback
-          allowsFullscreenVideo
-          userAgent={FAKE_USER_AGENT}
-          // add DOCTYPE at load time to prevent Quirks Mode
-          source={{
-            html: `<!doctype html><html lang="${
-              preferredLanguage ?? 'en'
-            }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>`,
-            /**
-             * Add baseUrl to fix `SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.`
-             * @url https://github.com/react-native-webview/react-native-webview/issues/1635#issuecomment-1021425071
-             */
-            baseUrl: 'http://localhost',
-          }}
-          // source={{ uri: 'about:blank#%E6%9E%97%E4%B8%80%E4%BA%8C:%E6%9E%97%E4%B8%80%E4%BA%8C%20Index' }}
-          renderError={(errorName) => <Text>{errorName}</Text>}
-          renderLoading={() => <Text>{t('Loading')}</Text>}
-          onRenderProcessGone={() => {
-            console.warn('onRenderProcessGone triggerFullReload');
-            // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1711645611
-            triggerFullReload();
-          }}
-          onContentProcessDidTerminate={() => {
-            console.warn('onContentProcessDidTerminate triggerFullReload');
-            // fix webview recycled by system https://github.com/react-native-webview/react-native-webview/issues/3062#issuecomment-1838563135
-            triggerFullReload();
-          }}
-          onLoadEnd={() => {
-            // this is called every time a tiddler is opened. And will be call 3 times before wiki loaded, seems including when setting innerHTML.
-            setLoaded(true);
-          }}
-          onMessage={onMessageReference.current}
-          ref={webViewReference}
-          injectedJavaScriptBeforeContentLoaded={preloadScript}
-          webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
-        />
-      </WebViewContainer>
+      <CustomWebView
+        webViewReference={webViewReference}
+        backgroundColor={theme.colors.background}
+        key={webViewKeyToReloadAfterRecycleByOS}
+        preferredLanguage={preferredLanguage}
+        onLoadEnd={() => {
+          setLoaded(true);
+        }}
+        showProgressBar={showProgressBar}
+        onMessage={onMessageReference.current}
+        injectedJavaScriptBeforeContentLoaded={preloadScript}
+        triggerFullReload={triggerFullReload}
+      />
     </>
   );
 };
