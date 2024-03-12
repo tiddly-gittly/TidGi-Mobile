@@ -21,7 +21,7 @@ interface CustomWebViewProps {
   injectedJavaScriptBeforeContentLoaded: string;
   onLoadEnd: () => void;
   onMessage: (event: WebViewMessageEvent) => void;
-  preferredLanguage: string | undefined;
+  preferredLanguage: string | undefined | null;
   showProgressBar: boolean;
   triggerFullReload: () => void;
   webViewReference: MutableRefObject<WebView | null>;

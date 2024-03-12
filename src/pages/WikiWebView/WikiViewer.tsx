@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
+import { detectedLanguage } from '../../i18n';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
@@ -113,7 +114,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
         webViewReference={webViewReference}
         backgroundColor={theme.colors.background}
         key={webViewKeyToReloadAfterRecycleByOS}
-        preferredLanguage={preferredLanguage}
+        preferredLanguage={preferredLanguage ?? detectedLanguage}
         onLoadEnd={() => {
           setLoaded(true);
         }}
