@@ -8,7 +8,6 @@ export enum OnStreamChunksToWebViewEventTypes {
   TIDDLYWIKI_HTML = 'TIDDLYWIKI_HTML',
 }
 
-
 /**
  * Run `pnpm build:preload` to build this file.
  */

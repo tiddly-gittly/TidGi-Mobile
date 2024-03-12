@@ -13,8 +13,6 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
     console.log(`sendDataToWebView ${messageType}`);
-    // DEBUG: console webViewReference.current
-    console.log(`webViewReference.current`, webViewReference.current);
     if (webViewReference.current === null) return;
     const stringifiedData = JSON.stringify({
       type: messageType,
