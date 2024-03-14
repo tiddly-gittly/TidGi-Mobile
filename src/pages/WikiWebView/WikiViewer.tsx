@@ -84,6 +84,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   }, [servicesOfWorkspace.wikiHookService]);
 
   useEffect(() => {
+    servicesOfWorkspace.wikiHookService.resetWebviewReceiverReady();
     void backgroundSyncService.updateServerOnlineStatus();
   }, [servicesOfWorkspace.wikiHookService, webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError, loading, streamChunksToWebViewPercentage } = useTiddlyWiki(
