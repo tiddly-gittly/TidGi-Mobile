@@ -3,12 +3,16 @@
 /* eslint-disable unicorn/no-null */
 import { Asset } from 'expo-asset';
 import * as fs from 'expo-file-system';
-import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
+import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef, useState } from 'react';
+import type { WebView } from 'react-native-webview';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath } from '../../constants/paths';
+import { WikiHookService } from '../../services/WikiHookService';
+import { WikiStorageService } from '../../services/WikiStorageService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { usePromiseValue } from '../../utils/usePromiseValue';
+import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { createSQLiteTiddlersReadStream, SQLiteTiddlersReadStream } from './useStreamChunksToWebView/SQLiteTiddlersReadStream';
 
 export interface IHtmlContent {
@@ -18,23 +22,35 @@ export interface IHtmlContent {
 }
 export function useTiddlyWiki(
   workspace: IWikiWorkspace,
-  injectHtmlAndTiddlersStore: (htmlContent: IHtmlContent) => Promise<void>,
-  webviewLoaded: boolean,
+  loaded: boolean,
+  webViewReference: MutableRefObject<WebView | null>,
   keyToTriggerReload: number,
   quickLoad: boolean,
+  servicesOfWorkspace: {
+    wikiHookService: WikiHookService;
+    wikiStorageService: WikiStorageService;
+  },
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
-  /**
-   * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
-   */
-  const html = usePromiseValue<string>(() => fs.readAsStringAsync(getWikiFilePath(workspace)));
   const pluginJSONStrings = usePromiseValue<ITidGiMobilePlugins>(() => getTidGiMobilePlugins());
   const tiddlersStreamReference = useRef<SQLiteTiddlersReadStream | undefined>();
+  /**
+   * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
+   * This need to use with `webviewSideReceiver`.
+   * @url https://github.com/react-native-webview/react-native-webview/issues/3126
+   */
+  const { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage } = useStreamChunksToWebView(webViewReference, servicesOfWorkspace);
+  const loading = streamChunksToWebViewPercentage > 0 && streamChunksToWebViewPercentage < 1;
+
+  const webviewLoaded = loaded && webViewReference.current !== null;
   useEffect(() => {
-    if (!webviewLoaded || !html || !pluginJSONStrings) return;
+    if (!webviewLoaded || !pluginJSONStrings) return;
     void (async () => {
       try {
-        const htmlWithPrefix = `<!doctype html>${html}`;
+        /**
+         * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
+         */
+        const html = `<!doctype html>${await fs.readAsStringAsync(getWikiFilePath(workspace))}`;
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
@@ -44,7 +60,7 @@ export function useTiddlyWiki(
           quickLoad,
         });
         tiddlersStreamReference.current = tiddlersStream;
-        await injectHtmlAndTiddlersStore({ html: htmlWithPrefix, tiddlersStream, setLoadHtmlError });
+        await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
       } catch (error) {
         console.error(error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);
@@ -53,8 +69,8 @@ export function useTiddlyWiki(
     // React Hook useMemo has a missing dependency: 'workspace'. Either include it or remove the dependency array.
     // but workspace reference may change multiple times, causing rerender
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspace.id, injectHtmlAndTiddlersStore, webviewLoaded, keyToTriggerReload, html, pluginJSONStrings]);
-  return { loadHtmlError };
+  }, [workspace.id, injectHtmlAndTiddlersStore, webviewLoaded, keyToTriggerReload, pluginJSONStrings]);
+  return { loadHtmlError, loading, streamChunksToWebViewPercentage };
 }
 
 export interface ITidGiMobilePlugins {

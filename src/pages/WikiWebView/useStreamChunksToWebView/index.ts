@@ -46,6 +46,7 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
       try {
         // Huawei HONOR device need to wait for a while before sending large data, otherwise first message (send HTML) will lost, cause white screen (no HTML loaded). Maybe its webview has bug.
         // Instead of `if (brand === 'HONOR') await new Promise<void>(resolve => setTimeout(resolve, 1000));}`, we use heart beat to check if it is ready.
+        // This is also required when app bring from background after a while, the webview will be recycled, and need to wait for it to resume before sending large data, otherwise first few data will be lost.
         await servicesOfWorkspace.wikiHookService.waitForWebviewReceiverReady(() => {
           sendDataToWebView(OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY);
         });
@@ -97,7 +98,7 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
         throw error;
       }
     }
-  }, [webViewReference, sendDataToWebView]);
+  }, [webViewReference, servicesOfWorkspace.wikiHookService, sendDataToWebView]);
 
   return { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage };
 }

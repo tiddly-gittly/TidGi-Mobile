@@ -14,7 +14,6 @@ import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
 import { CustomWebView } from './CustomWebview';
 import { getWindowMeta } from './getWindowMeta';
-import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { onErrorHandler } from './useStreamChunksToWebView/onErrorHandler';
 import { useTiddlyWiki } from './useTiddlyWiki';
 
@@ -84,17 +83,17 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     servicesOfWorkspace.wikiHookService.resetWebviewReceiverReady();
   }, [servicesOfWorkspace.wikiHookService]);
 
-  /**
-   * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
-   * This need to use with `webviewSideReceiver`.
-   * @url https://github.com/react-native-webview/react-native-webview/issues/3126
-   */
-  const { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage } = useStreamChunksToWebView(webViewReference, servicesOfWorkspace);
-  const loading = streamChunksToWebViewPercentage > 0 && streamChunksToWebViewPercentage < 1;
   useEffect(() => {
     void backgroundSyncService.updateServerOnlineStatus();
-  }, [webViewKeyToReloadAfterRecycleByOS]);
-  const { loadHtmlError } = useTiddlyWiki(wikiWorkspace, injectHtmlAndTiddlersStore, loaded && webViewReference.current !== null, webViewKeyToReloadAfterRecycleByOS, quickLoad);
+  }, [servicesOfWorkspace.wikiHookService, webViewKeyToReloadAfterRecycleByOS]);
+  const { loadHtmlError, loading, streamChunksToWebViewPercentage } = useTiddlyWiki(
+    wikiWorkspace,
+    loaded,
+    webViewReference,
+    webViewKeyToReloadAfterRecycleByOS,
+    quickLoad,
+    servicesOfWorkspace,
+  );
   const preloadScript = useMemo(() => {
     const windowMetaScript = getWindowMeta(wikiWorkspace);
     return `
@@ -112,6 +111,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       ${webviewSideReceiver}
 
       window.preloadScriptLoaded = true;
+      console.log('WikiViewer preloadScriptLoaded');
       
       true; // note: this is required, or you'll sometimes get silent failures
   `;
