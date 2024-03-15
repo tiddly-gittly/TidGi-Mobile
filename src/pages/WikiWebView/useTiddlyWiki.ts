@@ -11,7 +11,6 @@ import { getWikiFilePath } from '../../constants/paths';
 import { WikiHookService } from '../../services/WikiHookService';
 import { WikiStorageService } from '../../services/WikiStorageService';
 import { IWikiWorkspace } from '../../store/workspace';
-import { usePromiseValue } from '../../utils/usePromiseValue';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { createSQLiteTiddlersReadStream, SQLiteTiddlersReadStream } from './useStreamChunksToWebView/SQLiteTiddlersReadStream';
 
@@ -32,7 +31,6 @@ export function useTiddlyWiki(
   },
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
-  const pluginJSONStrings = usePromiseValue<ITidGiMobilePlugins>(() => getTidGiMobilePlugins());
   const tiddlersStreamReference = useRef<SQLiteTiddlersReadStream | undefined>();
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
@@ -44,13 +42,14 @@ export function useTiddlyWiki(
 
   const webviewLoaded = loaded && webViewReference.current !== null;
   useEffect(() => {
-    if (!webviewLoaded || !pluginJSONStrings) return;
+    if (!webviewLoaded) return;
     void (async () => {
       try {
         /**
          * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
          */
         const html = `<!doctype html>${await fs.readAsStringAsync(getWikiFilePath(workspace))}`;
+        const pluginJSONStrings = await getTidGiMobilePlugins();
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
@@ -66,10 +65,10 @@ export function useTiddlyWiki(
         setLoadHtmlError((error as Error).message);
       }
     })();
-    // React Hook useMemo has a missing dependency: 'workspace'. Either include it or remove the dependency array.
-    // but workspace reference may change multiple times, causing rerender
+    // React Hook useMemo has a missing dependency: 'injectHtmlAndTiddlersStore', 'quickLoad', and 'workspace'. Either include it or remove the dependency array.
+    // but workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspace.id, injectHtmlAndTiddlersStore, webviewLoaded, keyToTriggerReload, pluginJSONStrings]);
+  }, [workspace.id, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError, loading, streamChunksToWebViewPercentage };
 }
 

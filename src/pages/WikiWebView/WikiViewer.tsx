@@ -51,7 +51,7 @@ export interface WikiViewerProps {
   wikiWorkspace: IWikiWorkspace;
 }
 
-export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: WikiViewerProps) => {
+export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: WikiViewerProps) {
   const theme = useTheme();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
@@ -59,7 +59,6 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
 
   const [loaded, setLoaded] = useState(false);
   const onLoadEnd = useCallback(() => {
-    console.log(`Webview onLoadEnd`);
     setLoaded(true);
   }, []);
   const [rememberLastVisitState, preferredLanguage] = useConfigStore(state => [state.rememberLastVisitState, state.preferredLanguage]);
@@ -80,10 +79,7 @@ export const WikiViewer = ({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   }, []);
   servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   useEffect(() => {
-    servicesOfWorkspace.wikiHookService.resetWebviewReceiverReady();
-  }, [servicesOfWorkspace.wikiHookService]);
-
-  useEffect(() => {
+    console.log('resetWebviewReceiverReady on webViewKeyToReloadAfterRecycleByOS and init');
     servicesOfWorkspace.wikiHookService.resetWebviewReceiverReady();
     void backgroundSyncService.updateServerOnlineStatus();
   }, [servicesOfWorkspace.wikiHookService, webViewKeyToReloadAfterRecycleByOS]);

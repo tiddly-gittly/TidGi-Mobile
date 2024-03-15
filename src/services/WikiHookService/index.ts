@@ -68,7 +68,7 @@ export class WikiHookService {
   public async waitForWebviewReceiverReady(tryGetReady: () => void): Promise<void> {
     await backOff(
       async () => {
-        console.log(`backoff retry waitForWebviewReceiverReady`);
+        console.log(`backoff retry waitForWebviewReceiverReady, #webViewReceiverReady: ${this.#webViewReceiverReady}`);
         if (this.#webViewReceiverReady) {
           return true;
         } else {
