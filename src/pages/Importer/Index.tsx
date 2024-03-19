@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-nested-ternary */
 /* eslint-disable unicorn/no-useless-undefined */
 import { StackScreenProps } from '@react-navigation/stack';
-import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
+import { BarCodeScannedCallback, BarCodeScanner, PermissionStatus } from 'expo-barcode-scanner';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Collapsible from 'react-native-collapsible';
@@ -29,19 +29,19 @@ const LargeBarCodeScanner = styled(BarCodeScanner)`
 `;
 const ImportWikiButton = styled(Button)`
   margin-top: 20px;
-  height: 100px;
+  min-height: 100px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 `;
 const ScanQRButton = styled(Button)`
-  margin: 10px;
-  padding: 20px;
-  height: 3em;
+  margin: 10px 0;
+  min-height: 3em;
 `;
+/** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
+const ButtonLabelPadding = 30;
 const OpenWikiButton = styled(Button)`
-  padding: 20px;
-  height: 5em;
+  min-height: 5em;
   margin-top: 5px;
 `;
 const DoneImportActionsTitleText = styled(Text)`
@@ -76,12 +76,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
   const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
   const [wikiName, setWikiName] = useState('wiki');
-  const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
+  const [addServer] = useServerStore(state => [state.add, state.update]);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
       const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
+      setHasPermission(status === PermissionStatus.GRANTED);
     };
 
     void getBarCodeScannerPermissions();
@@ -155,6 +155,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       <ScanQRButton
         mode={importStatus === 'idle' ? 'elevated' : 'outlined'}
         disabled={importStatus !== 'idle'}
+        labelStyle={{ padding: ButtonLabelPadding }}
         onPress={() => {
           setQrScannerOpen(!qrScannerOpen);
         }}
@@ -202,6 +203,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             mode='elevated'
             disabled={importStatus !== 'idle'}
             onPress={addServerAndImport}
+            labelStyle={{ padding: ButtonLabelPadding }}
           >
             <ButtonText>
               {t('Import.ImportWiki')}
@@ -269,6 +271,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               navigation.navigate('MainMenu', { fromWikiID: createdWikiWorkspace.id });
               navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
             }}
+            labelStyle={{ padding: ButtonLabelPadding }}
           >
             <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
           </OpenWikiButton>
