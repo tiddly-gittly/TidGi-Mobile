@@ -95,7 +95,6 @@ var OnStreamChunksToWebViewEventTypes;
      * Delay the script execution slightly, until MutationObserver found document.body is ready.
      */
     function executeScriptsAfterInjectHTML() {
-        var _a;
         console.log('executeScriptsAfterInjectHTML');
         try {
             // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
@@ -113,8 +112,8 @@ var OnStreamChunksToWebViewEventTypes;
                 var newScript = document.createElement('script');
                 // copy all attributes from the original script to the new one
                 var scriptTagAttributes = Array.from(script.attributes);
-                for (var _b = 0, scriptTagAttributes_1 = scriptTagAttributes; _b < scriptTagAttributes_1.length; _b++) {
-                    var _c = scriptTagAttributes_1[_b], name_1 = _c.name, value = _c.value;
+                for (var _a = 0, scriptTagAttributes_1 = scriptTagAttributes; _a < scriptTagAttributes_1.length; _a++) {
+                    var _b = scriptTagAttributes_1[_a], name_1 = _b.name, value = _b.value;
                     newScript.setAttribute(name_1, value);
                 }
                 if (script.src) {
@@ -126,7 +125,14 @@ var OnStreamChunksToWebViewEventTypes;
                     newScript.textContent = script.textContent;
                 }
                 // replace the old script element with the new one
-                (_a = script.parentNode) === null || _a === void 0 ? void 0 : _a.replaceChild(newScript, script);
+                if (script.parentNode !== null) {
+                    try {
+                        script.parentNode.replaceChild(newScript, script);
+                    }
+                    catch (error) {
+                        console.error("Faile to refresh script tag with error ".concat(error.message, ": newScript, script"), newScript, script, error);
+                    }
+                }
             }
         }
         catch (error) {

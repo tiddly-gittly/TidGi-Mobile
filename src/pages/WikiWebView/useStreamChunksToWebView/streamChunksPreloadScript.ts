@@ -126,7 +126,14 @@ export enum OnStreamChunksToWebViewEventTypes {
           newScript.textContent = script.textContent;
         }
         // replace the old script element with the new one
-        script.parentNode?.replaceChild(newScript, script);
+        if (script.parentNode !== null) {
+          try {
+            script.parentNode.replaceChild(newScript, script);
+          } catch (error) {
+            // FIXME: can't catch error `SyntaxError: Can't create duplicate variable: 'A'` on iOS
+            console.error(`Faile to refresh script tag with error ${(error as Error).message}: newScript, script`, newScript, script, error);
+          }
+        }
       }
     } catch (error) {
       console.error('executeScriptsAfterInjectHTML error', error);
