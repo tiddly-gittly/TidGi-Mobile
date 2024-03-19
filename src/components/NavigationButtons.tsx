@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { t } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { Button } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../App';
@@ -12,6 +12,7 @@ const MainFeatureButton = styled(Button)`
 `;
 
 export function ImporterButton() {
+  const { t } = useTranslation();
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
 
   return (
@@ -27,6 +28,7 @@ export function ImporterButton() {
 }
 
 export function CreateWorkspaceButton() {
+  const { t } = useTranslation();
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
 
   return (
