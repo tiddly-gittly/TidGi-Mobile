@@ -1,4 +1,3 @@
-import { brand } from 'expo-device';
 import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';
@@ -40,7 +39,7 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
   /**
    * Inject HTML and tiddlers store
    */
-  const injectHtmlAndTiddlersStore = useCallback(async ({ html, tiddlersStream, setLoadHtmlError }: IHtmlContent) => {
+  const injectHtmlAndTiddlersStore = useCallback(async ({ html1, html2, tiddlersStream, setLoadHtmlError }: IHtmlContent) => {
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
     if (webViewReference.current !== null) {
       try {
@@ -53,7 +52,8 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
         /**
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
          */
-        sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
+        sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML1, html1);
+        sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML2, html2);
         await tiddlersStream.init();
         /**
          * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)

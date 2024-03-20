@@ -7,7 +7,8 @@ var OnStreamChunksToWebViewEventTypes;
     OnStreamChunksToWebViewEventTypes["CHECK_RECEIVER_READY"] = "CHECK_RECEIVER_READY";
     OnStreamChunksToWebViewEventTypes["TIDDLER_STORE_SCRIPT_CHUNK"] = "TIDDLER_STORE_SCRIPT_CHUNK";
     OnStreamChunksToWebViewEventTypes["TIDDLER_STORE_SCRIPT_CHUNK_END"] = "TIDDLER_STORE_SCRIPT_CHUNK_END";
-    OnStreamChunksToWebViewEventTypes["TIDDLYWIKI_HTML"] = "TIDDLYWIKI_HTML";
+    OnStreamChunksToWebViewEventTypes["TIDDLYWIKI_HTML1"] = "TIDDLYWIKI_HTML1";
+    OnStreamChunksToWebViewEventTypes["TIDDLYWIKI_HTML2"] = "TIDDLYWIKI_HTML2";
 })(OnStreamChunksToWebViewEventTypes || (OnStreamChunksToWebViewEventTypes = {}));
 /**
  * Run `pnpm build:preload` to build this file.
@@ -17,18 +18,22 @@ var OnStreamChunksToWebViewEventTypes;
      * Array of stringified json array.
      */
     var tiddlersStoreContents = [];
-    var canInjectTiddlers = false;
+    var htmlParts = {};
     function resetUseStreamChunksToWebViewWebviewSideReceiverIIFE() {
+        htmlParts = {};
         tiddlersStoreContents = [];
-        canInjectTiddlers = false;
     }
     // @ts-ignore
     window.onStreamChunksToWebView = function (event) {
         var _a, _b, _c;
         switch (event.type) {
-            case OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML: {
-                resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
-                startInjectHTML(event.data);
+            case OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML1: {
+                htmlParts.html1 = event.data;
+                document.body.innerHTML = htmlParts.html1;
+                break;
+            }
+            case OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML2: {
+                htmlParts.html2 = event.data;
                 break;
             }
             case OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK: {
@@ -37,8 +42,9 @@ var OnStreamChunksToWebViewEventTypes;
             }
             case OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END: {
                 var startInjectTiddlerIfHTMLDone_1 = function () {
-                    if (canInjectTiddlers) {
-                        executeScriptsAfterInjectHTML();
+                    if (htmlParts.html1 && htmlParts.html2) {
+                        startInjectHTML();
+                        // setTimeout(startInjectHTML, 4000);
                     }
                     else {
                         setTimeout(startInjectTiddlerIfHTMLDone_1, 100);
@@ -50,94 +56,38 @@ var OnStreamChunksToWebViewEventTypes;
             case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
                 // @ts-ignore
                 (_c = (_b = (_a = window.service) === null || _a === void 0 ? void 0 : _a.wikiHookService) === null || _b === void 0 ? void 0 : _b.setWebviewReceiverReady) === null || _c === void 0 ? void 0 : _c.call(_b);
+                resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
                 break;
             }
         }
     };
-    function startInjectHTML(newInnerHTML) {
+    function startInjectHTML() {
         console.log('startInjectHTML');
         /**
          * All information needed are collected.
          * Start using html and store.
          */
-        /**
-         * Use MutationObserver to watch if wikiHTML is loaded.
-         * We execute the script tags after this.
-         */
-        var observer = new MutationObserver(function (mutationsList, observer) {
-            var hasChange = false;
-            for (var _i = 0, mutationsList_1 = mutationsList; _i < mutationsList_1.length; _i++) {
-                var mutation = mutationsList_1[_i];
-                if (mutation.type === 'childList') {
-                    hasChange = true;
-                }
-            }
-            if (hasChange) {
-                observer.disconnect(); // Important: disconnect the observer once done.
-                canInjectTiddlers = true;
-            }
+        var storeScripts = tiddlersStoreContents.map(function (storeJSONString, index) {
+            return getStoreScript(storeJSONString, "tidgi-tiddlers-store-".concat(index));
         });
-        // Start observing the body with the configured parameters
-        observer.observe(document.body, { childList: true });
-        // this ignores all script tags, so we need 'executeScriptsAfterInjectHTML()' later.
-        document.body.innerHTML = newInnerHTML;
+        // DEBUG: console storeScripts
+        console.log("storeScripts", storeScripts);
+        // DEBUG: console htmlParts.html1
+        console.log("htmlParts.html1", htmlParts.html1);
+        // DEBUG: console htmlParts.html2
+        console.log("htmlParts.html2", htmlParts.html2);
+        // document.write(`${htmlParts.html1}${storeScripts.join('')}${htmlParts.html2}`);
+        // document.documentElement.innerHTML = `${htmlParts.html1}${storeScripts.join('')}${htmlParts.html2}`;
+        document.open();
+        document.write("".concat(htmlParts.html1).concat(storeScripts.join('')).concat(htmlParts.html2));
+        document.close();
+        resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
     }
-    function appendStoreScript(storeJSONString, name) {
+    function getStoreScript(storeJSONString, name) {
         var tiddlersStoreScript = document.createElement('script');
         tiddlersStoreScript.type = 'application/json';
         tiddlersStoreScript.classList.add('tiddlywiki-tiddler-store', name);
         tiddlersStoreScript.textContent = storeJSONString;
-        var styleAreaDiv = document.querySelector('#styleArea');
-        styleAreaDiv === null || styleAreaDiv === void 0 ? void 0 : styleAreaDiv.insertAdjacentElement('afterend', tiddlersStoreScript);
-    }
-    /**
-     * Manually execute each of the script tags.
-     * Delay the script execution slightly, until MutationObserver found document.body is ready.
-     */
-    function executeScriptsAfterInjectHTML() {
-        console.log('executeScriptsAfterInjectHTML');
-        try {
-            // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
-            tiddlersStoreContents.forEach(function (storeJSONString, index) {
-                appendStoreScript(storeJSONString, "tidgi-tiddlers-store-".concat(index));
-            });
-            // load other scripts
-            var scriptElements = Array.from(document.querySelectorAll('script'));
-            for (var _i = 0, scriptElements_1 = scriptElements; _i < scriptElements_1.length; _i++) {
-                var script = scriptElements_1[_i];
-                // skip tiddlersStoreScript we just added
-                if (script.classList.contains('tiddlywiki-tiddler-store'))
-                    continue;
-                // activate other scripts in the HTML
-                var newScript = document.createElement('script');
-                // copy all attributes from the original script to the new one
-                var scriptTagAttributes = Array.from(script.attributes);
-                for (var _a = 0, scriptTagAttributes_1 = scriptTagAttributes; _a < scriptTagAttributes_1.length; _a++) {
-                    var _b = scriptTagAttributes_1[_a], name_1 = _b.name, value = _b.value;
-                    newScript.setAttribute(name_1, value);
-                }
-                if (script.src) {
-                    // if the original script has a 'src' url, load it
-                    newScript.src = script.src;
-                }
-                else {
-                    // if the script has inline content, set it
-                    newScript.textContent = script.textContent;
-                }
-                // replace the old script element with the new one
-                if (script.parentNode !== null) {
-                    try {
-                        script.parentNode.replaceChild(newScript, script);
-                    }
-                    catch (error) {
-                        console.error("Faile to refresh script tag with error ".concat(error.message, ": newScript, script"), newScript, script, error);
-                    }
-                }
-            }
-        }
-        catch (error) {
-            console.error('executeScriptsAfterInjectHTML error', error);
-        }
-        resetUseStreamChunksToWebViewWebviewSideReceiverIIFE();
+        return tiddlersStoreScript.outerHTML;
     }
 })();

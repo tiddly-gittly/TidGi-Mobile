@@ -15,7 +15,8 @@ import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { createSQLiteTiddlersReadStream, SQLiteTiddlersReadStream } from './useStreamChunksToWebView/SQLiteTiddlersReadStream';
 
 export interface IHtmlContent {
-  html: string;
+  html1: string;
+  html2: string;
   setLoadHtmlError: Dispatch<SetStateAction<string>>;
   tiddlersStream: SQLiteTiddlersReadStream;
 }
@@ -48,7 +49,8 @@ export function useTiddlyWiki(
         /**
          * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
          */
-        const html = `<!doctype html>${await fs.readAsStringAsync(getWikiFilePath(workspace))}`;
+        const html1 = await fs.readAsStringAsync(getWikiFilePath(workspace, 1));
+        const html2 = await fs.readAsStringAsync(getWikiFilePath(workspace, 2));
         const pluginJSONStrings = await getTidGiMobilePlugins();
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
@@ -59,7 +61,7 @@ export function useTiddlyWiki(
           quickLoad,
         });
         tiddlersStreamReference.current = tiddlersStream;
-        await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
+        await injectHtmlAndTiddlersStore({ html1, html2, tiddlersStream, setLoadHtmlError });
       } catch (error) {
         console.error(error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);

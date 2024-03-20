@@ -23,7 +23,8 @@ type StoreHtmlStatus = 'idle' | 'fetching' | 'creating' | 'downloading' | 'sqlit
 export function useImportHTML() {
   const [status, setStatus] = useState<StoreHtmlStatus>('idle');
   const [error, setError] = useState<string | undefined>();
-  const [skinnyHtmlDownloadPercentage, setSkinnyHtmlDownloadPercentage] = useState(0);
+  const [skinnyHtml1DownloadPercentage, setSkinnyHtml1DownloadPercentage] = useState(0);
+  const [skinnyHtml2DownloadPercentage, setSkinnyHtml2DownloadPercentage] = useState(0);
   const [skinnyTiddlerStoreScriptDownloadPercentage, setSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [nonSkinnyTiddlerStoreScriptDownloadPercentage, setNonSkinnyTiddlerStoreScriptDownloadPercentage] = useState(0);
   const [skinnyTiddlerTextCacheDownloadPercentage, setSkinnyTiddlerTextCacheDownloadPercentage] = useState(0);
@@ -37,7 +38,8 @@ export function useImportHTML() {
   const resetState = useCallback(() => {
     setStatus('idle');
     setError(undefined);
-    setSkinnyHtmlDownloadPercentage(0);
+    setSkinnyHtml1DownloadPercentage(0);
+    setSkinnyHtml2DownloadPercentage(0);
     setSkinnyTiddlerStoreScriptDownloadPercentage(0);
     setNonSkinnyTiddlerStoreScriptDownloadPercentage(0);
     setSkinnyTiddlerTextCacheDownloadPercentage(0);
@@ -50,7 +52,8 @@ export function useImportHTML() {
   const storeHtml = useCallback(async (origin: string, wikiName: string, serverID?: string) => {
     if (WIKI_FOLDER_PATH === undefined) return;
     setStatus('fetching');
-    const getSkinnyHTMLUrl = new URL('/tw-mobile-sync/get-skinny-html', origin);
+    const getSkinnyHTMLPart1Url = new URL('/tw-mobile-sync/get-skinny-html-part1', origin);
+    const getSkinnyHTMLPart2Url = new URL('/tw-mobile-sync/get-skinny-html-part2', origin);
     /**
      * Get tiddlers without text field
      */
@@ -108,7 +111,8 @@ export function useImportHTML() {
         );
       };
       // Save the HTML to a file
-      const htmlDownloadResumable = createDownloadResumableWithProgress(getSkinnyHTMLUrl, getWikiFilePath(newWorkspace), setSkinnyHtmlDownloadPercentage);
+      const html1DownloadResumable = createDownloadResumableWithProgress(getSkinnyHTMLPart1Url, getWikiFilePath(newWorkspace, 1), setSkinnyHtml1DownloadPercentage);
+      const html2DownloadResumable = createDownloadResumableWithProgress(getSkinnyHTMLPart2Url, getWikiFilePath(newWorkspace, 2), setSkinnyHtml2DownloadPercentage);
       const skinnyTiddlerStoreDownloadResumable = createDownloadResumableWithProgress(
         getSkinnyTiddlywikiTiddlerStoreScriptUrl,
         getWikiTiddlerSkinnyStoreCachePath(newWorkspace),
@@ -130,7 +134,8 @@ export function useImportHTML() {
         setBinaryTiddlersListDownloadPercentage,
       );
       await Promise.all([
-        htmlDownloadResumable.downloadAsync(),
+        html1DownloadResumable.downloadAsync(),
+        html2DownloadResumable.downloadAsync(),
         skinnyTiddlerStoreDownloadResumable.downloadAsync(),
         nonSkinnyTiddlerStoreDownloadResumable.downloadAsync(),
         skinnyTiddlywikiTiddlerTextDownloadResumable.downloadAsync(),
@@ -162,7 +167,8 @@ export function useImportHTML() {
     resetState,
     createdWikiWorkspace,
     downloadPercentage: {
-      skinnyHtmlDownloadPercentage,
+      skinnyHtml1DownloadPercentage,
+      skinnyHtml2DownloadPercentage,
       skinnyTiddlerStoreScriptDownloadPercentage,
       nonSkinnyTiddlerStoreScriptDownloadPercentage,
       skinnyTiddlerTextCacheDownloadPercentage,

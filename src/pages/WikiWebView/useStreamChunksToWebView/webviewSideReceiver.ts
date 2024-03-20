@@ -8,7 +8,8 @@ type OnStreamChunksToWebViewEvents = {
   data: string;
   type:
     | OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY
-    | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML
+    | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML1
+    | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML2
     | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK;
 } | {
   type: OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END;

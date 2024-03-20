@@ -3,8 +3,8 @@ import type { IWikiWorkspace } from '../store/workspace';
 
 export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${fs.documentDirectory}wikis/`;
 export const APP_CACHE_FOLDER_PATH = fs.cacheDirectory === null ? `${fs.documentDirectory!}/cache/` : fs.cacheDirectory;
-export const WIKI_FILE_NAME = 'index.html';
-export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
+const WIKI_FILE_NAME = 'index.html';
+export const getWikiFilePath = (workspace: IWikiWorkspace, part: number) => `${workspace.wikiFolderLocation}/${String(part)}-${WIKI_FILE_NAME}`;
 export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/tiddlers/`;
 /**
  * Get file path like `file:///data/user/0/host.exp.exponent/files/wikis/wiki_88370/tiddlers/TiddlyWikiIconBlack.png`

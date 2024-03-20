@@ -138,7 +138,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     addTextToSQLitePercentage,
     binaryTiddlersListDownloadPercentage,
     nonSkinnyTiddlerStoreScriptDownloadPercentage,
-    skinnyHtmlDownloadPercentage,
+    skinnyHtml1DownloadPercentage,
+    skinnyHtml2DownloadPercentage,
     skinnyTiddlerStoreScriptDownloadPercentage,
     skinnyTiddlerTextCacheDownloadPercentage,
   } = downloadPercentage;
@@ -237,7 +238,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         <>
           <Text variant='titleLarge'>{t('Loading')}</Text>
           <Text>{t('Downloading.HTML')}</Text>
-          <ProgressBar progress={skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
+          <ProgressBar progress={skinnyHtml1DownloadPercentage} color={MD3Colors.neutral30} />
+          <ProgressBar progress={skinnyHtml2DownloadPercentage} color={MD3Colors.neutral30} />
           <Text>{t('Downloading.TiddlersListAndEssential')}</Text>
           <ProgressBar progress={skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
           <ProgressBar progress={nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
