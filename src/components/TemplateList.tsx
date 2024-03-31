@@ -96,3 +96,12 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
     </TemplateItem>
   );
 }
+
+export const LoadingContainer = styled.View`
+padding-top: 20px;
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+height: 100px;
+`;

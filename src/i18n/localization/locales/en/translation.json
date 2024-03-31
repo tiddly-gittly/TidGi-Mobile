@@ -169,7 +169,8 @@
     "CreateFromTemplate": "Create From Template",
     "CreateWebpageShortcut": "Add Webpage Shortcut",
     "ScanFromWiki": "Scan From Wiki",
-    "Preview": "Preview"
+    "Preview": "Preview",
+    "LoadingFromServer": "Loading List From Server"
   },
   "EditWorkspace": {
     "Path": "Wiki Path",

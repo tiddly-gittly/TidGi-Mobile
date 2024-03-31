@@ -4,20 +4,26 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ITemplateListItem } from '../../../components/TemplateList';
 
-export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileLocation: string, defaultList?: ITemplateListItem[]): ITemplateListItem[] {
+export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileLocation: string, defaultList?: ITemplateListItem[]): [ITemplateListItem[], boolean] {
+  const [loading, setLoading] = useState(true);
   const [webPages, webPagesSetter] = useState<ITemplateListItem[]>(defaultList ?? []);
   const fetchJSON = useCallback(async (sourceUrl: string) => {
-    const result = await fs.downloadAsync(sourceUrl, temporaryFileLocation, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    if (result.status !== 200) {
-      // delete text file if have server error like 404
-      const content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
-      const errorMessage = `${content} Status: ${result.status}`;
-      await fs.deleteAsync(temporaryFileLocation);
-      throw new Error(errorMessage);
+    setLoading(true);
+    try {
+      const result = await fs.downloadAsync(sourceUrl, temporaryFileLocation, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (result.status !== 200) {
+        // delete text file if have server error like 404
+        const content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
+        const errorMessage = `${content} Status: ${result.status}`;
+        await fs.deleteAsync(temporaryFileLocation);
+        throw new Error(errorMessage);
+      }
+    } finally {
+      setLoading(false);
     }
   }, [temporaryFileLocation]);
   useEffect(() => {
@@ -47,5 +53,5 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
     };
     void loadOnlineSources();
   }, [defaultList, fetchJSON, onlineSourcesUrls, temporaryFileLocation]);
-  return webPages;
+  return [webPages, loading];
 }

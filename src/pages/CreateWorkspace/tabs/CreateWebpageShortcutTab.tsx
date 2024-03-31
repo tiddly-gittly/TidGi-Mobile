@@ -3,11 +3,11 @@ import { StackScreenProps } from '@react-navigation/stack';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, Button, MD2Colors, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { RootStackParameterList } from '../../../App';
-import { filterTemplate, ITemplateListItem, TemplateListItem } from '../../../components/TemplateList';
+import { filterTemplate, ITemplateListItem, LoadingContainer, TemplateListItem } from '../../../components/TemplateList';
 import { helpPageListCachePath } from '../../../constants/paths';
 import { useWorkspaceStore } from '../../../store/workspace';
 import helpPages from '../templates/helpPages.json';
@@ -30,7 +30,8 @@ export function CreateWebpageShortcutTab() {
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>['navigation']>();
   const [newPageUrl, newPageUrlSetter] = useState('');
   const addPage = useWorkspaceStore(state => state.add);
-  const webPages = useLoadOnlineSources(helpPages.onlineSources, helpPageListCachePath, helpPages.default);
+  const [webPages, loading] = useLoadOnlineSources(helpPages.onlineSources, helpPageListCachePath, helpPages.default);
+  const serverHosts = helpPages.onlineSources.map((url) => new URL(url).host);
 
   const renderItem = useMemo(() =>
     function CreateWebpageShortcutTabListItem({ item }: { item: ITemplateListItem }) {
@@ -47,6 +48,15 @@ export function CreateWebpageShortcutTab() {
       );
     }, [navigation]);
 
+  if (loading) {
+    return (
+      <LoadingContainer>
+        <ActivityIndicator animating={true} color={MD2Colors.red800} />
+        <Text>{t('AddWorkspace.LoadingFromServer')}</Text>
+        {serverHosts.map((host) => <Text key={host}>{host}</Text>)}
+      </LoadingContainer>
+    );
+  }
   return (
     <Container>
       <InputContainer>

@@ -182,7 +182,8 @@
     "Preview": "预览",
     "Use": "使用",
     "SelectSource": "换源",
-    "PreviewWebView": "预览网页"
+    "PreviewWebView": "预览网页",
+    "LoadingFromServer": "正在从服务器加载列表"
   },
   "EditWorkspace": {
     "Path": "Wiki的位置",
