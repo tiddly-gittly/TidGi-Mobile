@@ -83,7 +83,8 @@
     "PrintActiveTiddler": "打印当前笔记",
     "Wiki": "Wiki",
     "ExportWholeWikiHTML": "导出整个Wiki为HTML存入文件夹",
-    "ScanQRToSync": "扫描二维码来同步"
+    "ScanQRToSync": "扫描二维码来同步",
+    "TidGiHelpManual": "太记帮助手册"
   },
   "AddWorkspace": {
     "AddWorkspace": "添加工作区",

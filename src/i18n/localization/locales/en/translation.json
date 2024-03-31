@@ -505,7 +505,8 @@
     "PrintActiveTiddler": "Print Active Tiddler",
     "Wiki": "Wiki",
     "ExportWholeWikiHTML": "Export Whole Wiki as HTML to folder",
-    "ScanQRToSync": "Scan QR To Sync"
+    "ScanQRToSync": "Scan QR To Sync",
+    "TidGiHelpManual": "TidG iHelp Manual"
   },
   "ErrorMessage": "Error message",
   "ClickForDetails": "Click For Details",

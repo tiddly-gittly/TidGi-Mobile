@@ -5,8 +5,9 @@ import React, { useCallback } from 'react';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Card, IconButton, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
+import { useTranslation } from 'react-i18next';
 
 interface WorkspaceListProps {
   onLongPress?: (workspace: IWorkspace) => void;
@@ -16,10 +17,12 @@ interface WorkspaceListProps {
 }
 
 export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd, onPressQuickLoad }) => {
+  const { t } = useTranslation();
   const workspacesList = useWorkspaceStore(state => compact(state.workspaces));
   const theme = useTheme();
 
   const renderItem = useCallback(({ item, drag }: { drag: () => void; item: IWorkspace }) => {
+    const title = item.name === HELP_WORKSPACE_NAME ? t('Menu.TidGiHelpManual') : item.name
     return (
       <WorkspaceCard
         onPress={() => {
@@ -30,7 +33,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPre
         }}
       >
         <Card.Title
-          title={item.name}
+          title={title}
           subtitle={item.id}
           right={(props) => (
             <RightButtonsContainer>

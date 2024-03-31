@@ -67,9 +67,10 @@ interface WikiActions {
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
 
+export const HELP_WORKSPACE_NAME = '?';
 const defaultWorkspaces = [
-  { type: 'webpage', id: 'help', name: '?', uri: 'https://tidgi.fun/#:TidGi-Mobile' },
-] satisfies IPageWorkspace[];
+  { type: 'webpage', id: 'help', name: HELP_WORKSPACE_NAME, uri: 'https://tidgi.fun/#:TidGi-Mobile' },
+] satisfies IWorkspace[];
 
 export const useWorkspaceStore = create<WikiState & WikiActions>()(
   immer(devtools(
@@ -112,7 +113,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         },
         update(id, newWikiWorkspace) {
           set((state) => {
-            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
+            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             const oldWiki = state.workspaces[oldWikiIndex];
             if (oldWiki !== undefined) {
               state.workspaces[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace } as typeof oldWiki;
@@ -121,7 +122,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         },
         addServer(id, newServerID) {
           set((state) => {
-            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
+            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             const oldWiki = state.workspaces[oldWikiIndex];
             if (oldWiki !== undefined) {
               if (oldWiki.type === undefined) {
@@ -142,7 +143,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         },
         setServerActive(id, serverIDToActive, isActive = true) {
           set((state) => {
-            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id)!;
+            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             const oldWiki = state.workspaces[oldWikiIndex];
             if (oldWiki.type === undefined) {
               oldWiki.type = 'wiki';
