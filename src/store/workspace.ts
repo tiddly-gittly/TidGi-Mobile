@@ -162,7 +162,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         },
         removeAll() {
           set((state) => {
-            state.workspaces = [];
+            state.workspaces = defaultWorkspaces;
           });
         },
       }),
