@@ -26,7 +26,7 @@ export const CreateFromTemplateTab = () => {
             navigation.navigate('PreviewWebView', { uri });
           }}
           onUsePress={(uri: string) => {
-            navigation.navigate('Importer', { uri, autoImportBinary: true, addAsServer: false });
+            navigation.navigate('Importer', { uri, autoStartImport: true, addAsServer: false });
           }}
         />
       );

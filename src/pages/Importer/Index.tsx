@@ -59,9 +59,9 @@ export interface ImporterProps {
    */
   addAsServer?: boolean;
   /**
-   * Auto trigger the import of binary tiddlers after the import of the HTML
+   * Auto trigger the import of wiki after select from template list, and import binary tiddlers after the import of the HTML
    */
-  autoImportBinary?: boolean;
+  autoStartImport?: boolean;
   /**
    * The URI to auto fill the server URI input
    */
@@ -143,8 +143,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     skinnyTiddlerTextCacheDownloadPercentage,
   } = downloadPercentage;
 
-  return (
-    <Container>
+  const serverConfigs = (
+    <>
       {qrScannerOpen && (
         <LargeBarCodeScanner
           // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -190,6 +190,14 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           setServerUriToUseString(newText);
         }}
       />
+    </>
+  );
+
+  const autoStartImport = route.params.autoStartImport;
+  return (
+    <Container>
+      {/* Hide server config if is importing from template, for simplicity for new users. */}
+      {autoStartImport !== true && serverConfigs}
       {importStatus === 'idle' && !qrScannerOpen && wikiUrl !== undefined && (
         <>
           <TextInput
@@ -276,7 +284,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
           </OpenWikiButton>
           <DoneImportActionsTitleText variant='titleLarge'>{t('OptionalActions')}</DoneImportActionsTitleText>
-          <ImportBinary wikiWorkspace={createdWikiWorkspace} autoImportBinary={route.params.autoImportBinary} />
+          <ImportBinary wikiWorkspace={createdWikiWorkspace} autoImportBinary={autoStartImport} />
         </>
       )}
     </Container>
