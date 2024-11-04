@@ -130,6 +130,7 @@ var OnStreamChunksToWebViewEventTypes;
                         script.parentNode.replaceChild(newScript, script);
                     }
                     catch (error) {
+                        // FIXME: can't catch error `SyntaxError: Can't create duplicate variable: 'A'` on iOS
                         console.error("Faile to refresh script tag with error ".concat(error.message, ": newScript, script"), newScript, script, error);
                     }
                 }

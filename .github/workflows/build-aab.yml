@@ -83,6 +83,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Build tw plugins & scripts
+        run: |
+          pnpm run build:plugin
+          pnpm run build:preload
+
       - name: Build by eject eas and remove debug signing key for aab
         run: |
           pnpm exec expo prebuild -p android --clean
