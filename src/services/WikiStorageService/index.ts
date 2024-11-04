@@ -177,11 +177,9 @@ export class WikiStorageService {
     }
   }
 
-  async loadTiddlerText(title: string): Promise<string> {
+  async loadTiddlerText(title: string): Promise<string | undefined> {
+    // try load from local, then from server. But usually, user sync full tiddlers store to here, so it this gives nothing, means that tiddler just don't have text, like calendar tiddlers may not have text.
     const tiddlerText = (await this.#loadFromSqlite(title)) ?? (await this.#loadFromFS(title)) ?? await this.#loadFromServerAndSaveToFS(title);
-    if (tiddlerText === undefined) {
-      throw new Error(`${title} ${i18n.t('Log.FileNotSyncedYet')}`);
-    }
     return tiddlerText;
   }
 

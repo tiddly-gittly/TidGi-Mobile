@@ -282,7 +282,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
       const tiddlerFields: ITiddlerFields = {
         ...tiddler.fields,
-        text: tiddlerText,
+        text: tiddlerText ?? '',
         type: tiddler.fields.type ?? 'text/vnd.tiddlywiki',
         _is_skinny: undefined,
         revision: undefined,
