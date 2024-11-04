@@ -235,6 +235,10 @@ class TidGiMobileFileSystemSyncAdaptor {
       return;
     }
     try {
+      // Similar to https://github.com/TiddlyWiki/TiddlyWiki5/blob/master/core/modules/server/routes/put-tiddler.js#L36 but we just stop saving, and wait for lazy-load on client to complete, and let client to save again later.
+      if (tiddler.fields._is_skinny) {
+        return;
+      }
       const title = tiddler.fields.title;
       if (this.tiddlersToNotSave.includes(title)) {
         this.logger.log(`Ignore saveTiddler ${title}, config in TiddlersToNotSave`);

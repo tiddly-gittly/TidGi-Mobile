@@ -25,9 +25,9 @@ import { getFullSaveTiddlers } from './ignoredTiddler';
  * All methods must be async.
  */
 export class WikiStorageService {
-  #workspace: IWikiWorkspace;
-  #configStore = useConfigStore;
-  #serverStore = useServerStore;
+  readonly #workspace: IWikiWorkspace;
+  readonly #configStore = useConfigStore;
+  readonly #serverStore = useServerStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
@@ -50,6 +50,7 @@ export class WikiStorageService {
    */
   async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
     try {
+      /** Tiddlers that should save to SQLite as full tiddlers. Like plugins that starts with `$:/` */
       const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
       const { text, title: _, ...fieldsObjectToSave } = fields as (ITiddlerFieldsParam & { text?: string; title: string });
       const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
