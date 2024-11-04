@@ -42,6 +42,7 @@ class TidGiMobileFileSystemSyncAdaptor {
   wikiStorageService: WikiStorageService;
   workspaceID: string;
   recipe?: string;
+  tiddlersToNotSave: string[];
 
   constructor(options: { wiki: Wiki }) {
     if (window.service?.wikiStorageService === undefined) {
@@ -59,6 +60,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.isLoggedIn = false;
     this.isReadOnly = false;
     this.logoutIsAvailable = true;
+    this.tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
     // React-Native don't have fs monitor, so no SSE on mobile
     // this.setupSSE();
   }
@@ -234,8 +236,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     }
     try {
       const title = tiddler.fields.title;
-      const tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
-      if (tiddlersToNotSave.includes(title)) {
+      if (this.tiddlersToNotSave.includes(title)) {
         this.logger.log(`Ignore saveTiddler ${title}, config in TiddlersToNotSave`);
         // if not calling callback in sync adaptor, will cause it waiting forever
         callback(null);
