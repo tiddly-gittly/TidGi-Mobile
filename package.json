@@ -7,6 +7,7 @@
     "build:preload": "zx scripts/buildPreload.mjs",
     "build:sqlite-migration": "drizzle-kit generate:sqlite",
     "build:android-apk": "eas build --profile preview --platform android --non-interactive",
+    "build:ios-ipa": "eas build --profile preview --platform ios",
     "build:expo-sdk": "eas build --profile development --platform android --non-interactive",
     "ios": "cross-env NODE_ENV=development expo start --go --ios",
     "start": "cross-env NODE_ENV=development expo start",
