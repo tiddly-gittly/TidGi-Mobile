@@ -5,6 +5,7 @@ on:
   push:
     tags:
       - 'eas-v*.*.*'
+      - 'v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
