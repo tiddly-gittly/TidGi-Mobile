@@ -16,6 +16,7 @@
       "**/*",
       "assets/*"
     ],
+    "newArchEnabled": true,
     "ios": {
       "buildNumber": "1",
       "supportsTablet": true,
@@ -44,7 +45,7 @@
     },
     "plugins": [
       [
-        "expo-barcode-scanner",
+        "expo-camera",
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }

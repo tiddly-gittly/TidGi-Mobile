@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
-import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
+import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,7 @@ interface ServerEditModalProps {
   onClose: () => void;
 }
 
-const SmallBarCodeScanner = styled(BarCodeScanner)`
+const SmallCameraView = styled(CameraView)`
   height: 80%;
   width: 100%;
 `;
@@ -57,6 +57,14 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   const [editedLocation, setEditedLocation] = useState(((server?.location) != null) || {});
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [scannedString, setScannedString] = useState('');
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  useEffect(() => {
+    const getCameraPermissions = async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === PermissionStatus.GRANTED);
+    };
+    void getCameraPermissions();
+  }, []);
   useEffect(() => {
     if (scannedString !== '') {
       try {
@@ -67,9 +75,9 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       }
     }
   }, [scannedString]);
-  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
+  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
+    const { data, type } = scanningResult;
+    if (type === 'qr') {
       try {
         setQrScannerOpen(false);
         setScannedString(data);
@@ -101,11 +109,10 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
 
   return (
     <ModalContainer>
-      {qrScannerOpen && (
-        <SmallBarCodeScanner
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
-          onBarCodeScanned={handleBarCodeScanned}
+      {qrScannerOpen && hasPermission && (
+        <SmallCameraView
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         />
       )}
       <ScanQRButton

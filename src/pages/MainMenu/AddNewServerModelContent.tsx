@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
-import { BarCodeScannedCallback, BarCodeScanner } from 'expo-barcode-scanner';
+import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
@@ -15,7 +15,7 @@ interface WikiEditModalProps {
   onClose: () => void;
 }
 
-const SmallBarCodeScanner = styled(BarCodeScanner)`
+const SmallCameraView = styled(CameraView)`
   height: 80%;
   width: 100%;
 `;
@@ -53,14 +53,14 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
 
   useEffect(() => {
     void (async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === PermissionStatus.GRANTED);
     })();
   }, []);
 
-  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
+  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
+    const { data, type } = scanningResult;
+    if (type === 'qr') {
       try {
         setQrScannerOpen(false);
         setServerUrlString(data);
@@ -92,10 +92,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   return (
     <ModalContainer>
       {qrScannerOpen && (
-        <SmallBarCodeScanner
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
-          onBarCodeScanned={handleBarCodeScanned}
+        <SmallCameraView
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         />
       )}
       <ScanQRButton

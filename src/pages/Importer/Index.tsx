@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-nested-ternary */
 /* eslint-disable unicorn/no-useless-undefined */
 import { StackScreenProps } from '@react-navigation/stack';
-import { BarCodeScannedCallback, BarCodeScanner, PermissionStatus } from 'expo-barcode-scanner';
+import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Collapsible from 'react-native-collapsible';
@@ -23,7 +23,7 @@ const Container = styled.View`
 const ButtonText = styled.Text`
   height: 30px;
 `;
-const LargeBarCodeScanner = styled(BarCodeScanner)`
+const LargeCameraView = styled(CameraView)`
   height: 80%;
   width: 100%;
 `;
@@ -79,17 +79,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [addServer] = useServerStore(state => [state.add, state.update]);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
-    const getBarCodeScannerPermissions = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
+    const getCameraPermissions = async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === PermissionStatus.GRANTED);
     };
 
-    void getBarCodeScannerPermissions();
+    void getCameraPermissions();
   }, []);
 
-  const handleBarCodeScanned = useCallback<BarCodeScannedCallback>(({ type, data }) => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (type === BarCodeScanner.Constants.BarCodeType.qr) {
+  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
+    const { data, type } = scanningResult;
+    if (type === 'qr') {
       try {
         setQrScannerOpen(false);
         setServerUriToUseString(data);
@@ -146,10 +146,11 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const serverConfigs = (
     <>
       {qrScannerOpen && (
-        <LargeBarCodeScanner
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr as string]}
-          onBarCodeScanned={handleBarCodeScanned}
+        <LargeCameraView
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr'],
+          }}
         />
       )}
       <ScanQRButton
