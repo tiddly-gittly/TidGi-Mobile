@@ -73,7 +73,7 @@ export class CustomWebView extends PureComponent<CustomWebViewProps> {
         onMessage={onMessageReference.current}
         ref={webViewReference}
         injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
-        webviewDebuggingEnabled={true /* Open chrome://inspect/#devices to debug the WebView */}
+        webviewDebuggingEnabled={true /* Open chrome://inspect/#devices , or Development menu on Safari to debug the WebView. https://github.com/react-native-webview/react-native-webview/blob/master/docs/Debugging.md#debugging-webview-contents */}
       />
     );
   }
