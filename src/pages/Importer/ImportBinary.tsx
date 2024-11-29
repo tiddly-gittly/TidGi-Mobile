@@ -47,8 +47,8 @@ export function ImportBinary(props: { autoImportBinary?: boolean; wikiWorkspace:
                 ? `${t('Downloading.FetchAndWrite')} ${Math.floor(importBinaryFetchAndWritPercentage * 100)}%`
                 : t('Log.SynchronizationFinish'))}
           </Text>
-          <ProgressBar progress={importBinaryReadListPercentage} color={MD3Colors.tertiary40} />
-          <ProgressBar progress={importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar animatedValue={importBinaryReadListPercentage} color={MD3Colors.tertiary40} />
+          <ProgressBar animatedValue={importBinaryFetchAndWritPercentage} color={MD3Colors.tertiary50} />
         </>
       )}
       {importBinaryError !== undefined && (

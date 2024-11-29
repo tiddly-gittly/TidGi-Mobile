@@ -124,7 +124,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   // TODO: check if webViewKeyToReloadAfterRecycleByOS on component is working. Sometimes the source works, but preload is not applied
   return (
     <>
-      <TopProgressBar progress={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
+      <TopProgressBar animatedValue={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
       <WebViewContainer showProgressBar={showProgressBar}>
         <CustomWebView
           webViewReference={webViewReference}

@@ -246,13 +246,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         <>
           <Text variant='titleLarge'>{t('Loading')}</Text>
           <Text>{t('Downloading.HTML')}</Text>
-          <ProgressBar progress={skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
+          <ProgressBar animatedValue={skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
           <Text>{t('Downloading.TiddlersListAndEssential')}</Text>
-          <ProgressBar progress={skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
-          <ProgressBar progress={nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
-          <ProgressBar progress={binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral60} />
+          <ProgressBar animatedValue={skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
+          <ProgressBar animatedValue={nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
+          <ProgressBar animatedValue={binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral60} />
           <Text>{t('Downloading.TiddlerTexts')}</Text>
-          <ProgressBar progress={skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral70} />
+          <ProgressBar animatedValue={skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral70} />
         </>
       )}
       {importStatus === 'sqlite' && (
@@ -266,9 +266,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 ? `${t('Downloading.Text')} ${Math.floor(addTextToSQLitePercentage * 100)}%`
                 : t('Log.SynchronizationFinish'))}
           </Text>
-          <ProgressBar progress={addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary40} />
-          <ProgressBar progress={addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
-          <ProgressBar progress={addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
+          <ProgressBar animatedValue={addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary40} />
+          <ProgressBar animatedValue={addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
+          <ProgressBar animatedValue={addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (
