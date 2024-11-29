@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite/next';
+import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite';
 import { Dispatch, SetStateAction } from 'react';
 import { Writable } from 'readable-stream';
 import Chain, { chain } from 'stream-chain';

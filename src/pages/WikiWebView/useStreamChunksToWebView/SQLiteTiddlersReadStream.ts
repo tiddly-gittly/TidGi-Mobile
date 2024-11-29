@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null */
 import { max } from 'drizzle-orm';
 import { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
-import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite/next';
+import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite';
 import { Readable } from 'readable-stream';
 import { sqliteServiceService } from '../../../services/SQLiteService';
 import { TiddlersSQLModel } from '../../../services/SQLiteService/orm';

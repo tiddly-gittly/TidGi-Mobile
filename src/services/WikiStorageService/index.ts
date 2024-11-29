@@ -5,7 +5,6 @@ import * as fs from 'expo-file-system';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
-import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/workspace';
@@ -18,7 +17,7 @@ import { getFullSaveTiddlers } from './ignoredTiddler';
 /**
  * Service that can be used to save/load wiki data
  *
- * - proxy by `src/pages/WikiWebView/WikiStorageService/registerWikiStorageServiceOnWebView.ts` to be `window.service.wikiStorageService`
+ * - proxy by `react-native-postmessage-cat` to be `window.service.wikiStorageService`
  * - then used in `plugins/src/expo-file-system-syncadaptor/file-system-syncadaptor.ts` inside webview
  *
  * Don't forget to register method in WikiStorageServiceIPCDescriptor. Otherwise you will get `window.service.wikiStorageService.methodName is not a function` error.
@@ -124,7 +123,7 @@ export class WikiStorageService {
             orderBy: desc(TiddlerChangeSQLModel.timestamp),
           });
 
-          if (recentUpdate !== undefined && recentUpdate.operation === TiddlersLogOperation.UPDATE && recentUpdate.title === title) {
+          if (recentUpdate !== undefined && recentUpdate.operation as TiddlersLogOperation === TiddlersLogOperation.UPDATE && recentUpdate.title === title) {
             // If we are frequently update same title, then update the timestamp of last update, instead of put a new UPDATE log.
             await transaction.update(TiddlerChangeSQLModel)
               .set({ timestamp: newOperation.timestamp })

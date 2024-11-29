@@ -1,12 +1,13 @@
 import React, { MutableRefObject, PureComponent } from 'react';
 import { Text } from 'react-native-paper';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import type { WebViewErrorEvent, WebViewNavigationEvent } from 'react-native-webview/lib/RNCWebViewNativeComponent';
 import { FAKE_USER_AGENT } from '../../constants/webview';
 
 interface CustomWebViewProps {
   backgroundColor: string;
-  injectedJavaScriptBeforeContentLoaded: string;
-  onLoadEnd: () => void;
+  injectedJavaScript: string;
+  onLoadEnd: (event: WebViewNavigationEvent | WebViewErrorEvent) => void;
   onLoadStart: () => void;
   onMessageReference: MutableRefObject<(event: WebViewMessageEvent) => void>;
   preferredLanguage: string | undefined | null;
@@ -23,7 +24,7 @@ export class CustomWebView extends PureComponent<CustomWebViewProps> {
       onLoadEnd,
       onLoadStart,
       onMessageReference,
-      injectedJavaScriptBeforeContentLoaded,
+      injectedJavaScript,
       triggerFullReload,
     } = this.props;
 
@@ -47,12 +48,13 @@ export class CustomWebView extends PureComponent<CustomWebViewProps> {
         mixedContentMode='always'
         allowsAirPlayForMediaPlayback
         allowsFullscreenVideo
+        javaScriptEnabled
         userAgent={FAKE_USER_AGENT}
         // add DOCTYPE at load time to prevent Quirks Mode
         source={{
           html: `<!doctype html><html lang="${
             preferredLanguage ?? 'en'
-          }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/></body></html>`,
+          }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/>Loading...<script>${injectedJavaScript}</script></body></html>`,
           /**
            * Add baseUrl to fix `SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.`
            * @url https://github.com/react-native-webview/react-native-webview/issues/1635#issuecomment-1021425071
@@ -75,7 +77,6 @@ export class CustomWebView extends PureComponent<CustomWebViewProps> {
         onLoadStart={onLoadStart}
         onMessage={onMessageReference.current}
         ref={webViewReference}
-        injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
         webviewDebuggingEnabled={true /* Open chrome://inspect/#devices , or Development menu on Safari to debug the WebView. https://github.com/react-native-webview/react-native-webview/blob/master/docs/Debugging.md#debugging-webview-contents */}
       />
     );

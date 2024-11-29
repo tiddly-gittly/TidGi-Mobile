@@ -74,7 +74,6 @@ export function useWikiWebViewNotification({ id }: { id?: string }) {
 }
 
 async function registerForPushNotifications() {
-  let token: string | undefined;
   if (Platform.OS === 'android') {
     await setNotificationChannelAsync('default', {
       name: 'default',
@@ -104,7 +103,7 @@ async function registerForPushNotifications() {
   if (finalStatus !== PermissionStatus.GRANTED) {
     alert('Failed to get push token for push notification!');
   }
-  token = (await getDevicePushTokenAsync()).data as string;
+  const token = (await getDevicePushTokenAsync()).data as string;
 
   setNotificationHandler({
     handleNotification: async () => ({

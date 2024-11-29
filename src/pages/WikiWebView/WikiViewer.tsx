@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions } from 'react-native';
+import { Dimensions, Platform } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
@@ -140,10 +140,10 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           onLoadEnd={onLoadEnd}
           onLoadStart={onLoadStart}
           onMessageReference={onMessageReference}
-          injectedJavaScriptBeforeContentLoaded={preloadScript}
+          injectedJavaScript={preloadScript}
           triggerFullReload={triggerFullReload}
         />
       </WebViewContainer>
     </>
   );
-};
+}

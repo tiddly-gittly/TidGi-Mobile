@@ -47,7 +47,6 @@ export enum OnStreamChunksToWebViewEventTypes {
         break;
       }
       case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
-        // @ts-ignore
         window.service?.wikiHookService?.setWebviewReceiverReady?.();
         break;
       }
@@ -130,7 +129,6 @@ export enum OnStreamChunksToWebViewEventTypes {
           try {
             script.parentNode.replaceChild(newScript, script);
           } catch (error) {
-            // FIXME: can't catch error `SyntaxError: Can't create duplicate variable: 'A'` on iOS
             console.error(`Faile to refresh script tag with error ${(error as Error).message}: newScript, script`, newScript, script, error);
           }
         }
