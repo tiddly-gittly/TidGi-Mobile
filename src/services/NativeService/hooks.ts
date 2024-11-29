@@ -14,7 +14,7 @@ export function useRequestNativePermissions() {
   useEffect(() => {
     void (async () => {
       await nativeService.requestCameraPermission();
-      await nativeService.requestMicrophonePermission();
+      // await nativeService.requestMicrophonePermission();
     })();
   }, []);
 }

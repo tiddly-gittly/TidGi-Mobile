@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { Camera } from 'expo-camera';
+import { Camera, PermissionStatus } from 'expo-camera';
 import * as fs from 'expo-file-system';
 import { ShareIntent } from 'expo-share-intent';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
@@ -40,12 +40,12 @@ export class NativeService {
 
   async requestCameraPermission(): Promise<boolean> {
     const { status } = await Camera.requestCameraPermissionsAsync();
-    return status === 'granted';
+    return status === PermissionStatus.GRANTED;
   }
 
   async requestMicrophonePermission(): Promise<boolean> {
     const { status } = await Camera.requestMicrophonePermissionsAsync();
-    return status === 'granted';
+    return status === PermissionStatus.GRANTED;
   }
 
   #wikiHookServices?: WikiHookService;
