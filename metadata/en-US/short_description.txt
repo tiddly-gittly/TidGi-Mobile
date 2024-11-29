@@ -1,1 +1,1 @@
-A Note App that is local-first, uses tid/md pure text file, all-in-one with calendar/todo/diary widget, lazy-loading, backlink & outline & Zettelkasten, and syncs with the open-source TidGi-Desktop.
+Calendar/to-do/journal/whiteboard all-in-one, running Life Gamification, Outline, and other note taking features with 800+ plugins of TiddlyWiki platform, local-first, rich text editing support based on tid/md plain text format, and free synchronization with TidGi-Desktop.
