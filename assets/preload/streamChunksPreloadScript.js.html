@@ -48,7 +48,8 @@ var OnStreamChunksToWebViewEventTypes;
                 break;
             }
             case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
-                // @ts-ignore
+                // @ts-ignore error TS2339: Property 'service' does not exist on type 'Window & typeof globalThis'
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
                 (_c = (_b = (_a = window.service) === null || _a === void 0 ? void 0 : _a.wikiHookService) === null || _b === void 0 ? void 0 : _b.setWebviewReceiverReady) === null || _c === void 0 ? void 0 : _c.call(_b);
                 break;
             }
@@ -130,7 +131,6 @@ var OnStreamChunksToWebViewEventTypes;
                         script.parentNode.replaceChild(newScript, script);
                     }
                     catch (error) {
-                        // FIXME: can't catch error `SyntaxError: Can't create duplicate variable: 'A'` on iOS
                         console.error("Faile to refresh script tag with error ".concat(error.message, ": newScript, script"), newScript, script, error);
                     }
                 }
