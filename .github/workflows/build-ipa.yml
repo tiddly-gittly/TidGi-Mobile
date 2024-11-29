@@ -62,10 +62,20 @@ jobs:
           pnpm run build:plugin
           pnpm run build:preload
 
-      - name: Build IPA
-        run: expo build:ios --non-interactive --no-publish --type archive
-      - name: Download IPA
-        run: curl "$(expo url:ipa --non-interactive)" -o app.ipa
+      - name: 🏗 Setup Expo and EAS
+        uses: expo/expo-github-action@v7
+        with:
+          token: ${{ secrets.EXPO_TOKEN }}
+          expo-version: latest
+          eas-version: latest
+
+      - name: 👷 Build app
+        run: |
+          eas build --local \
+            --non-interactive \
+            --output=./app-build \
+            --platform=ios \
+            --profile=preview
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
