@@ -1,8 +1,9 @@
-## Usage
-
-- It is recommended to install the TidGi-desktop first, and then scan the code to synchronize it to the mobile version. In the knowledge base created on the desktop, there is a QR code to be scanned in “MobileSync” on the sidebar.
-- Of course, you can also use only the mobile version, directly click on “Add Workspace”, you can create a new knowledge base for the mobile version through several online templates.
-- You can directly click the + button to create notes and simply start using it.
-- Advanced usage is very rich, refer to the “Help Manual” that comes with it for tutorials.
-- There are many alternative layouts, basically are micro apps inside the wiki. You can open them via a button that looks like three squares.
-- Use CPL layout, you can search and install 800+ free open-source plugins, and read their documentation sites.
+* There are life gamification, outline, principles recording, and other 800+ plugins based note-taking features from TiddlyWiki platform.
+* Local-first rich text editing support based on tid/md plain text format, and free synchronisation with TidGi Desktop.
+* It is recommended to install the TidGi-desktop first, and then scan the code to synchronize it to the mobile version. In the knowledge base created on the desktop, there is a QR code to be scanned in “MobileSync” on the sidebar.
+* Of course, you can also use only the mobile version, directly click on “Add Workspace”, you can create a new knowledge base for the mobile version through several online templates.
+* You can directly click the + button to create notes and simply start using it.
+* Advanced usage is very rich, refer to the “Help Manual” that comes with it for tutorials.
+* There are many alternative layouts, basically are micro apps inside the wiki. You can open them via a button that looks like three squares.
+* Use CPL layout, you can search and install 800+ free open-source plugins, and read their documentation sites.
+* You can develop your own mini-application using HTML CSS and JS or WikiText, directly on your phone, package them and distribute them to others using the Gatha plugin installed via the CPL. Or use these technologies to completely customize your own knowledge base. Don't forget to back up your data to your desktop regularly.

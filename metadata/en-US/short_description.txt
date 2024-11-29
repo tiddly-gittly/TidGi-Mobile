@@ -1,1 +1,1 @@
-Calendar/to-do/journal/whiteboard all-in-one, running Life Gamification, Outline, and other note taking features with 800+ plugins of TiddlyWiki platform, local-first, rich text editing support based on tid/md plain text format, and free synchronization with TidGi-Desktop.
+Calendar/todo/journal all-in-one note plugin platform
