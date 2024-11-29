@@ -1,4 +1,3 @@
-import { brand } from 'expo-device';
 import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';

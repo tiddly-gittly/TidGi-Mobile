@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { useNavigation } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { isDevice } from 'expo-device';
 import {
   addNotificationResponseReceivedListener,
   AndroidImportance,
@@ -11,6 +10,7 @@ import {
   dismissNotificationAsync,
   getDevicePushTokenAsync,
   getPermissionsAsync,
+  PermissionStatus,
   removeNotificationSubscription,
   requestPermissionsAsync,
   scheduleNotificationAsync,
@@ -84,34 +84,34 @@ async function registerForPushNotifications() {
     });
   }
 
-  if (isDevice) {
-    const { status: existingStatus } = await getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await requestPermissionsAsync({
-        ios: {
-          allowAlert: true,
-          allowBadge: true,
-          allowSound: true,
-          allowAnnouncements: true,
-        },
-      });
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      alert('Failed to get push token for push notification!');
-    }
-    token = (await getDevicePushTokenAsync()).data as string;
-
-    setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      }),
+  // const { isDevice } = await import('expo-device');
+  // if (!isDevice) {
+  //   alert('Must use physical device for Push Notifications');
+  //   return;
+  // }
+  const { status: existingStatus } = await getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== PermissionStatus.GRANTED) {
+    const { status } = await requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
     });
-  } else {
-    alert('Must use physical device for Push Notifications');
+    finalStatus = status;
   }
+  if (finalStatus !== PermissionStatus.GRANTED) {
+    alert('Failed to get push token for push notification!');
+  }
+  token = (await getDevicePushTokenAsync()).data as string;
+
+  setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
   return token;
 }
