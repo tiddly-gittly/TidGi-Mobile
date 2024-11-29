@@ -92,7 +92,7 @@ jobs:
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean
 
-      # TODO: https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
+      # Don't need this, because we already remove expo-application that blocks f-droid https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
       # - name: Remove prorietary bits (for fix f-droid)
       #   run: npx zx scripts/fit-f-droid.mjs
 

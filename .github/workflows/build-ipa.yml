@@ -62,20 +62,10 @@ jobs:
           pnpm run build:plugin
           pnpm run build:preload
 
-      - name: 🏗 Setup Expo and EAS
-        uses: expo/expo-github-action@v7
-        with:
-          token: ${{ secrets.EXPO_TOKEN }}
-          expo-version: latest
-          eas-version: latest
-
-      - name: 👷 Build app
+      - name: Build by eject eas
         run: |
-          eas build --local \
-            --non-interactive \
-            --output=./app-build \
-            --platform=ios \
-            --profile=preview
+          pnpm exec expo prebuild -p ios --clean
+          npx pod-install
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
