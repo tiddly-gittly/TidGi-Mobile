@@ -7,6 +7,7 @@ interface CustomWebViewProps {
   backgroundColor: string;
   injectedJavaScriptBeforeContentLoaded: string;
   onLoadEnd: () => void;
+  onLoadStart: () => void;
   onMessageReference: MutableRefObject<(event: WebViewMessageEvent) => void>;
   preferredLanguage: string | undefined | null;
   triggerFullReload: () => void;
@@ -20,6 +21,7 @@ export class CustomWebView extends PureComponent<CustomWebViewProps> {
       webViewReference,
       preferredLanguage,
       onLoadEnd,
+      onLoadStart,
       onMessageReference,
       injectedJavaScriptBeforeContentLoaded,
       triggerFullReload,
@@ -70,6 +72,7 @@ export class CustomWebView extends PureComponent<CustomWebViewProps> {
           triggerFullReload();
         }}
         onLoadEnd={onLoadEnd}
+        onLoadStart={onLoadStart}
         onMessage={onMessageReference.current}
         ref={webViewReference}
         injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}

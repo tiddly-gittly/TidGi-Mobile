@@ -77,6 +77,12 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     console.info('triggerFullReload due to WebViewKeyToReloadAfterRecycleByOS');
     setWebViewKeyToReloadAfterRecycleByOS(latest => latest + 1);
   }, []);
+  const onLoadStart = useCallback(() => {
+    // on ios, or at least ipad, on first time open the javascript is disabled (online wiki will show tiddlers list in noscript, and offline wiki will show nothing because preload script is not working), need to quit and reopen wiki to enable javascript, https://github.com/react-native-webview/react-native-webview/issues/3616
+    if (Platform.OS === 'ios' && webViewKeyToReloadAfterRecycleByOS === 0) {
+      triggerFullReload();
+    }
+  }, [triggerFullReload, webViewKeyToReloadAfterRecycleByOS]);
   servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   useEffect(() => {
     console.log('resetWebviewReceiverReady on webViewKeyToReloadAfterRecycleByOS and init');
@@ -132,6 +138,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           key={webViewKeyToReloadAfterRecycleByOS}
           preferredLanguage={preferredLanguage ?? detectedLanguage}
           onLoadEnd={onLoadEnd}
+          onLoadStart={onLoadStart}
           onMessageReference={onMessageReference}
           injectedJavaScriptBeforeContentLoaded={preloadScript}
           triggerFullReload={triggerFullReload}
