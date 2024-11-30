@@ -1,7 +1,11 @@
+/* eslint-disable security-node/detect-crlf */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
+import { compact } from 'lodash';
 import { useEffect } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { WikiStorageService } from '../WikiStorageService';
 import { nativeService } from '.';
 import { NativeServiceIPCDescriptor } from './descriptor';
 
@@ -41,6 +45,8 @@ export function useRegisterReceivingShareIntent() {
     debug: true,
   });
 
+  const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
+
   useEffect(() => {
     if (error !== undefined) {
       console.log(
@@ -49,9 +55,16 @@ export function useRegisterReceivingShareIntent() {
     }
     void (async () => {
       try {
-        if (hasShareIntent) {
+        if (hasShareIntent && defaultWiki !== undefined) {
           await nativeService.receivingShareIntent(shareIntent);
           resetShareIntent();
+          // put into default workspace's database, with random title
+          const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
+          const randomTitle = `SharedContent-${Date.now()}`;
+          await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, {
+            text: shareIntent.text,
+            url: shareIntent.webUrl,
+          });
         }
       } catch (error) {
         console.log(
@@ -61,5 +74,5 @@ export function useRegisterReceivingShareIntent() {
         );
       }
     })();
-  }, [hasShareIntent, shareIntent, resetShareIntent, error]);
+  }, [hasShareIntent, shareIntent, resetShareIntent, error, defaultWiki]);
 }

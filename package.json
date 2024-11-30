@@ -34,6 +34,7 @@
     "expo-camera": "16.0.7",
     "expo-file-system": "18.0.4",
     "expo-haptics": "14.0.0",
+    "expo-linking": "~7.0.3",
     "expo-localization": "16.0.0",
     "expo-notifications": "0.29.8",
     "expo-share-intent": "^3.0.0",
