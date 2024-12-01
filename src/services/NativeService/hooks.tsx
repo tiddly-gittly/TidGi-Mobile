@@ -89,11 +89,12 @@ export function useRegisterReceivingShareIntent() {
           creator: i18n.t('Share.TidGiMobileShare'),
           tags: newTagForSharedContent,
         };
+        if (shareIntent.webUrl) fields = { ...fields, url: shareIntent.webUrl };
         switch (shareIntent.type) {
           case 'text':
           case 'weburl': {
             if (shareIntent.text) fields = { ...fields, text: shareIntent.text };
-            if (shareIntent.webUrl) fields = { ...fields, url: shareIntent.webUrl };
+            await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
             break;
           }
           case 'media':
@@ -101,22 +102,20 @@ export function useRegisterReceivingShareIntent() {
             if (shareIntent.files) {
               for (const file of shareIntent.files) {
                 const fileContent = await fs.readAsStringAsync(file.path, { encoding: fs.EncodingType.Base64 });
-                fields = {
+                const fileFields = {
                   ...fields,
                   type: file.mimeType,
-                  size: file.size,
                   width: file.width,
                   height: file.height,
                   duration: file.duration,
                   text: fileContent,
                 };
-                await storageOfDefaultWorkspace.saveTiddler(file.fileName, fields);
+                await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
               }
             }
             break;
           }
         }
-        await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
         setImportSuccessSnackBarVisible(true);
       } catch (error) {
         console.log(

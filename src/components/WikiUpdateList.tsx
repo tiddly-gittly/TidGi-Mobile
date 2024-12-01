@@ -93,12 +93,16 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onLongPress, wiki, las
               {selectedChange
                 ? (
                   <ScrollableContent>
-                    {Object.entries(selectedChange.fields ?? {}).map(([key, value]) => (
-                      <FieldRow key={key}>
-                        <FieldKey>{key}:</FieldKey>
-                        <Text>{String(value)}</Text>
-                      </FieldRow>
-                    ))}
+                    {Object.entries(selectedChange.fields ?? {}).map(([key, value]) => {
+                      const displayValue = String(value);
+                      const truncatedValue = displayValue.length > 1024 ? `${displayValue.slice(0, 1024)}......` : displayValue;
+                      return (
+                        <FieldRow key={key}>
+                          <FieldKey>{key}:</FieldKey>
+                          <Text>{truncatedValue}</Text>
+                        </FieldRow>
+                      );
+                    })}
                   </ScrollableContent>
                 )
                 : <Text>No details available</Text>}

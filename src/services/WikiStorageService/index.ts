@@ -6,7 +6,6 @@ import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
-import { useServerStore } from '../../store/server';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
 import { sqliteServiceService } from '../SQLiteService';
@@ -44,13 +43,22 @@ export class WikiStorageService {
   }
 
   /**
-   * Return the e-tag
+   * Save tiddler. Return the e-tag.
+   * `tags` field should be string, and fields can't contain `null`, otherwise TW won't boot.
    */
   async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
     try {
       /** Tiddlers that should save to SQLite as full tiddlers. Like plugins that starts with `$:/` */
       const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
       const { text, title: _, ...fieldsObjectToSave } = fields as (ITiddlerFieldsParam & { text?: string; title: string });
+      // if there is `null` in a field, it will cause TW silent fail when booting
+      (Object.keys(fieldsObjectToSave) as Array<keyof typeof fieldsObjectToSave>).forEach(key => {
+        if (fieldsObjectToSave[key] === null || fieldsObjectToSave[key] === undefined) {
+          // @ts-expect-error Index signature in type '{ readonly [x: string]: unknown; readonly [x: number]: unknown; created?: string | undefined; modified?: string | undefined; }' only permits reading.ts(2542)
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete fieldsObjectToSave[key];
+        }
+      });
       const changeCount = '0'; // this.wikiInstance.wiki.getChangeCount(title).toString();
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
