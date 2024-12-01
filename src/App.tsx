@@ -39,7 +39,7 @@ export const App: React.FC = () => {
   const colorScheme = useColorScheme();
   const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
   const [translucentStatusBar, hideStatusBar] = useConfigStore(state => [state.translucentStatusBar, state.hideStatusBar]);
-  useRegisterReceivingShareIntent();
+  const { importSuccessSnackBar } = useRegisterReceivingShareIntent();
 
   return (
     <I18nextProvider i18n={i18n}>
@@ -103,6 +103,7 @@ export const App: React.FC = () => {
                 component={PreviewWebView}
               />
             </Stack.Navigator>
+            {importSuccessSnackBar}
           </NavigationContainer>
         </ThemeProvider>
       </PaperProvider>

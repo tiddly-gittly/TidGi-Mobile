@@ -1,9 +1,12 @@
 /* eslint-disable security-node/detect-crlf */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
+import { format } from 'date-fns';
 import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
+import i18n from '../../i18n';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { WikiStorageService } from '../WikiStorageService';
 import { nativeService } from '.';
@@ -24,6 +27,18 @@ export function useRequestNativePermissions() {
 }
 
 export function useRegisterReceivingShareIntent() {
+  const [importSuccessSnackBarVisible, setImportSuccessSnackBarVisible] = useState(false);
+  const importSuccessSnackBar = (
+    <Snackbar
+      visible={importSuccessSnackBarVisible}
+      onDismiss={() => {
+        setImportSuccessSnackBarVisible(false);
+      }}
+    >
+      {i18n.t('Share.ImportSuccess')}
+    </Snackbar>
+  );
+
   /** If you get error on development:
    * ```
    *  Error: Cannot find native module 'ExpoShareIntentModule', js engine: hermes
@@ -37,15 +52,13 @@ export function useRegisterReceivingShareIntent() {
    * Also comment out all code inside `useRegisterReceivingShareIntent`.
    */
   if (process.env.NODE_ENV === 'development') {
-    return;
+    return { importSuccessSnackBar };
   }
   const { useShareIntent } = require('expo-share-intent') as { useShareIntent: typeof IUseShareIntent };
   /* eslint-disable react-hooks/rules-of-hooks */
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
     debug: true,
   });
-
-  const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
 
   useEffect(() => {
     if (error !== undefined) {
@@ -55,16 +68,20 @@ export function useRegisterReceivingShareIntent() {
     }
     void (async () => {
       try {
+        const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
         if (hasShareIntent && defaultWiki !== undefined) {
           await nativeService.receivingShareIntent(shareIntent);
           resetShareIntent();
           // put into default workspace's database, with random title
           const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
-          const randomTitle = `SharedContent-${Date.now()}`;
+          const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
           await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, {
             text: shareIntent.text,
             url: shareIntent.webUrl,
+            created: format(new Date(), 'yyyyMMddHHmmssSSS'),
+            creator: i18n.t('Share.TidGiMobileShare'),
           });
+          setImportSuccessSnackBarVisible(true);
         }
       } catch (error) {
         console.log(
@@ -74,5 +91,7 @@ export function useRegisterReceivingShareIntent() {
         );
       }
     })();
-  }, [hasShareIntent, shareIntent, resetShareIntent, error, defaultWiki]);
+  }, [hasShareIntent, shareIntent, resetShareIntent, error]);
+
+  return { importSuccessSnackBar };
 }
