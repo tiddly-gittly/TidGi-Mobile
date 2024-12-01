@@ -520,7 +520,9 @@
     "TidGiMobileShare": "Shared from TidGi Mobile",
     "ImportSuccess": "Import Success",
     "TagForSharedContent": "Tag for shared content",
-    "Clipped": "Clipped"
+    "Clipped": "Clipped",
+    "FastImport": "Fast Import",
+    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in “Recent”."
   },
   "Description": "Description",
   "Tags": "Tags",

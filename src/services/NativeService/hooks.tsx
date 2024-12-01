@@ -1,18 +1,11 @@
 /* eslint-disable security-node/detect-crlf */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { format } from 'date-fns';
-import * as fs from 'expo-file-system';
 import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
-import { compact } from 'lodash';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
-import { ITiddlerFieldsParam } from 'tiddlywiki';
 
 import i18n from '../../i18n';
-import { useConfigStore } from '../../store/config';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { WikiStorageService } from '../WikiStorageService';
 import { nativeService } from '.';
 import { NativeServiceIPCDescriptor } from './descriptor';
 
@@ -42,8 +35,6 @@ export function useRegisterReceivingShareIntent() {
       {i18n.t('Share.ImportSuccess')}
     </Snackbar>
   );
-  const [tagForSharedContent] = useConfigStore(state => [state.tagForSharedContent]);
-  const newTagForSharedContent = useMemo(() => tagForSharedContent ?? i18n.t('Share.Clipped'), [tagForSharedContent]);
 
   /** If you get error on development:
    * ```
@@ -75,44 +66,8 @@ export function useRegisterReceivingShareIntent() {
     void (async () => {
       try {
         if (!hasShareIntent) return;
-        const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
-        if (defaultWiki === undefined) return;
         await nativeService.receivingShareIntent(shareIntent);
         resetShareIntent();
-        // put into default workspace's database, with random title
-        const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
-        const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
-        const created = format(new Date(), 'yyyyMMddHHmmssSSS');
-        let fields: ITiddlerFieldsParam = {
-          created,
-          modified: created,
-          creator: i18n.t('Share.TidGiMobileShare'),
-          tags: newTagForSharedContent,
-        };
-        if (shareIntent.webUrl) fields = { ...fields, url: shareIntent.webUrl };
-        switch (shareIntent.type) {
-          case 'text':
-          case 'weburl': {
-            if (shareIntent.text) fields = { ...fields, text: shareIntent.text };
-            await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
-            break;
-          }
-          case 'media':
-          case 'file': {
-            if (shareIntent.files) {
-              for (const file of shareIntent.files) {
-                const fileContent = await fs.readAsStringAsync(file.path, { encoding: fs.EncodingType.Base64 });
-                const fileFields = {
-                  ...fields,
-                  type: file.mimeType,
-                  text: fileContent,
-                };
-                await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
-              }
-            }
-            break;
-          }
-        }
         setImportSuccessSnackBarVisible(true);
       } catch (error) {
         console.log(
@@ -122,7 +77,7 @@ export function useRegisterReceivingShareIntent() {
         );
       }
     })();
-  }, [hasShareIntent, shareIntent, resetShareIntent, error, newTagForSharedContent]);
+  }, [hasShareIntent, shareIntent, resetShareIntent, error]);
 
   return { importSuccessSnackBar };
 }

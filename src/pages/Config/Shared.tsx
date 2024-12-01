@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
 
-import { TextInput, Text } from 'react-native-paper';
+import { Switch, Text, TextInput } from 'react-native-paper';
+import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
 import { useConfigStore } from '../../store/config';
 
 const StyledTextInput = styled(TextInput)`
@@ -13,13 +14,17 @@ const StyledTextInput = styled(TextInput)`
 export function Shared(): JSX.Element {
   const { t } = useTranslation();
 
-  const [initialTagForSharedContent] = useConfigStore(state => [state.tagForSharedContent]);
+  const [initialTagForSharedContent, fastImport] = useConfigStore(state => [state.tagForSharedContent, state.fastImport]);
   const [tagForSharedContent, tagForSharedContentSetter] = useState(initialTagForSharedContent);
   const setConfig = useConfigStore(state => state.set);
 
   const tagForSharedContentOnChange = useDebouncedCallback((newText: string) => {
     setConfig({ tagForSharedContent: newText });
   }, []);
+
+  const fastImportOnChange = (value: boolean) => {
+    setConfig({ fastImport: value });
+  };
 
   return (
     <>
@@ -33,6 +38,14 @@ export function Shared(): JSX.Element {
         }}
       />
       <Text>{t('Share.TagForSharedContentDescription')}</Text>
+      <Text variant='titleLarge'>{t('Share.FastImport')}</Text>
+      <SwitchContainer>
+        <FlexibleText>{t('Share.FastImportDescription')}</FlexibleText>
+        <Switch
+          value={fastImport}
+          onValueChange={fastImportOnChange}
+        />
+      </SwitchContainer>
     </>
   );
 }

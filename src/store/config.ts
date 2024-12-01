@@ -8,6 +8,7 @@ export interface ConfigState {
   /** the initial value should be undefined, so an initial true value won't immediately trigger autoOpen */
   autoOpenDefaultWiki?: boolean;
   defaultDownloadLocation?: string;
+  fastImport: boolean;
   hideStatusBar?: boolean;
   keepAliveInBackground: boolean;
   preferredLanguage?: string;
@@ -23,6 +24,7 @@ export interface ConfigState {
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: undefined,
+  fastImport: true,
   hideStatusBar: false,
   keepAliveInBackground: true,
   preferredLanguage: undefined,
@@ -30,9 +32,9 @@ const defaultConfig: ConfigState = {
   syncInBackground: true,
   syncInterval: 60 * 1000,
   syncIntervalBackground: 60 * 30 * 1000,
+  tagForSharedContent: undefined,
   theme: 'default',
   translucentStatusBar: true,
-  tagForSharedContent: undefined,
   userName: '',
 };
 interface ConfigActions {

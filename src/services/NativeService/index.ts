@@ -1,11 +1,18 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
+import { format } from 'date-fns';
 import { Camera, PermissionStatus } from 'expo-camera';
 import * as fs from 'expo-file-system';
-import { ShareIntent } from 'expo-share-intent';
+import type { ShareIntent } from 'expo-share-intent';
+import { compact } from 'lodash';
+
+import type { ITiddlerFieldsParam } from 'tiddlywiki';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
+import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import type { WikiHookService } from '../WikiHookService';
+import { WikiStorageService } from '../WikiStorageService';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
 /**
@@ -73,40 +80,91 @@ export class NativeService {
     }
   }
 
+  async receivingShareIntent(shareIntent: ShareIntent) {
+    const configs = useConfigStore.getState();
+    if (configs.fastImport) {
+      await this.storeSharedContentToStorage(shareIntent);
+    } else {
+      await this.importSharedContentToWiki(shareIntent);
+    }
+  }
+
   /**
    * If wiki has not started, android will store files in a queue, wait for getReceivedFiles to be called.
    * Even wiki previously loaded, but after go background for a while, it may be unloaded too. We need to wait not only webview loaded, need wiki core loaded, then call this.
    */
-  async receivingShareIntent(shareIntent: ShareIntent) {
-    // wait for wiki start, and use injectJavascript to add tiddler, for user to edit.
-    // To get All Recived Urls
-
-    // files returns as JSON Array example
-    // [{ filePath: null, text: null, weblink: null, mimeType: null, contentUri: null, fileName: null, extension: null }]
+  async importSharedContentToWiki(shareIntent: ShareIntent) {
     const { text, files } = shareIntent;
     let script = '';
-    if (files !== null) {
-      console.log(text, files);
-      if (text) {
-        script = importTextTiddlers([text]);
-      } else {
-        if (files.length === 0) return;
-        const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
-          if (file.path === null) return file;
-          /**
-           * based on tiddlywiki file type parsers `$tw.utils.registerFileType("image/jpeg","base64",[".jpg",".jpeg"],{flags:["image"]});`
-           * we need to use base64 encoding to load file
-           */
-          const text = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: 'base64' });
-          return { ...file, text };
-        }));
-        script = importBinaryTiddlers(filesWithFileLoadedToText);
+    switch (shareIntent.type) {
+      case 'text':
+      case 'weburl': {
+        if (text) {
+          script = importTextTiddlers([text]);
+        }
+        break;
+      }
+      case 'media':
+      case 'file': {
+        if (files && files.length > 0) {
+          const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
+            const text = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: 'base64' });
+            return { ...file, text, type: file.mimeType };
+          }));
+          script = importBinaryTiddlers(filesWithFileLoadedToText);
+        }
+        break;
       }
     }
     if (!script) return;
     openDefaultWikiIfNotAlreadyThere();
     const wikiHookService = await this.getCurrentWikiHookServices();
     await wikiHookService.executeAfterTwReady(script);
+  }
+
+  /**
+   * Directly store shared content to default workspace's sqlite, very fast, don't need to wait for wiki to load.
+   */
+  async storeSharedContentToStorage(shareIntent: ShareIntent) {
+    const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
+    if (defaultWiki === undefined) return;
+    const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
+    const configs = useConfigStore.getState();
+    const tagForSharedContent = configs.tagForSharedContent;
+    const newTagForSharedContent = tagForSharedContent ?? i18n.t('Share.Clipped');
+    // put into default workspace's database, with random title
+    const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
+    const created = format(new Date(), 'yyyyMMddHHmmssSSS');
+    let fields: ITiddlerFieldsParam = {
+      created,
+      modified: created,
+      creator: i18n.t('Share.TidGiMobileShare'),
+      tags: newTagForSharedContent,
+    };
+    if (shareIntent.webUrl) fields = { ...fields, url: shareIntent.webUrl };
+    switch (shareIntent.type) {
+      case 'text':
+      case 'weburl': {
+        if (shareIntent.text) fields = { ...fields, text: shareIntent.text };
+        await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
+        break;
+      }
+      case 'media':
+      case 'file': {
+        if (shareIntent.files) {
+          for (const file of shareIntent.files) {
+            const fileContent = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: fs.EncodingType.Base64 });
+            const fileFields = {
+              ...fields,
+              type: file.mimeType,
+              text: fileContent,
+            };
+            await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
+          }
+        }
+        break;
+      }
+    }
   }
 
   async saveFileToFs(filename: string, text: string, mimeType?: string): Promise<string | false> {
