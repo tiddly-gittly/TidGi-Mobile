@@ -132,7 +132,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
               const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? LAST_SYNC_TO_SYNC_ALL;
               console.log(`Add new server to wiki ${oldWiki.name} with last sync ${lastSync} to server ${newServerID}`);
-              const updatedServers = [...oldWiki.syncedServers.map(oldServers => ({ ...oldServers, syncActive: false })), {
+              const updatedServers = [...oldWiki.syncedServers, {
                 serverID: newServerID,
                 lastSync,
                 syncActive: true,
