@@ -1,11 +1,14 @@
 /* eslint-disable security-node/detect-crlf */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { format } from 'date-fns';
+import * as fs from 'expo-file-system';
 import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
 import { useEffect, useMemo, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
+import { ITiddlerFieldsParam } from 'tiddlywiki';
+
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
@@ -80,14 +83,40 @@ export function useRegisterReceivingShareIntent() {
         const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
         const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
         const created = format(new Date(), 'yyyyMMddHHmmssSSS');
-        await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, {
-          text: shareIntent.text,
-          url: shareIntent.webUrl,
+        let fields: ITiddlerFieldsParam = {
           created,
           modified: created,
           creator: i18n.t('Share.TidGiMobileShare'),
           tags: newTagForSharedContent,
-        });
+        };
+        switch (shareIntent.type) {
+          case 'text':
+          case 'weburl': {
+            if (shareIntent.text) fields = { ...fields, text: shareIntent.text };
+            if (shareIntent.webUrl) fields = { ...fields, url: shareIntent.webUrl };
+            break;
+          }
+          case 'media':
+          case 'file': {
+            if (shareIntent.files) {
+              for (const file of shareIntent.files) {
+                const fileContent = await fs.readAsStringAsync(file.path, { encoding: fs.EncodingType.Base64 });
+                fields = {
+                  ...fields,
+                  type: file.mimeType,
+                  size: file.size,
+                  width: file.width,
+                  height: file.height,
+                  duration: file.duration,
+                  text: fileContent,
+                };
+                await storageOfDefaultWorkspace.saveTiddler(file.fileName, fields);
+              }
+            }
+            break;
+          }
+        }
+        await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
         setImportSuccessSnackBarVisible(true);
       } catch (error) {
         console.log(
@@ -97,7 +126,7 @@ export function useRegisterReceivingShareIntent() {
         );
       }
     })();
-  }, [hasShareIntent, shareIntent, resetShareIntent, error, tagForSharedContent]);
+  }, [hasShareIntent, shareIntent, resetShareIntent, error, newTagForSharedContent]);
 
   return { importSuccessSnackBar };
 }
