@@ -11,6 +11,7 @@ import { General } from './General';
 import { Language } from './Language';
 import { Performance } from './Performance';
 import { ServerAndSync } from './ServerAndSync';
+import { Shared } from './Shared';
 import { TiddlyWiki } from './TiddlyWiki';
 
 const PreferencesList = styled.SectionList`
@@ -32,6 +33,7 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
     { title: t('Preference.Performance'), data: [Performance] },
     { title: t('Preference.TiddlyWiki'), data: [TiddlyWiki] },
     { title: t('Preference.Sync'), data: [ServerAndSync] },
+    { title: t('Preference.Shared'), data: [Shared] },
     { title: t('Preference.Languages'), data: [Language] },
     { title: t('ContextMenu.About'), data: [About] },
     { title: t('Preference.DeveloperTools'), data: [Developer] },

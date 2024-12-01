@@ -15,9 +15,10 @@ export interface ConfigState {
   syncInBackground: boolean;
   syncInterval: number;
   syncIntervalBackground: number;
+  /** Undefined means unset, use default value. If is empty string, then means user deleted the default value, then don't set the tag. */
+  tagForSharedContent?: string;
   theme: ColorSchemeName | 'default';
   translucentStatusBar?: boolean;
-  userName: string;
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: undefined,
@@ -30,7 +31,7 @@ const defaultConfig: ConfigState = {
   syncIntervalBackground: 60 * 30 * 1000,
   theme: 'default',
   translucentStatusBar: true,
-  userName: '',
+  tagForSharedContent: undefined,
 };
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;

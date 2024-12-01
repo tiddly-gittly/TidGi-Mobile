@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import i18n from '../../i18n';
+import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { WikiStorageService } from '../WikiStorageService';
 import { nativeService } from '.';
@@ -38,6 +39,7 @@ export function useRegisterReceivingShareIntent() {
       {i18n.t('Share.ImportSuccess')}
     </Snackbar>
   );
+  const [tagForSharedContent] = useConfigStore(state => [state.tagForSharedContent]);
 
   /** If you get error on development:
    * ```
@@ -75,11 +77,14 @@ export function useRegisterReceivingShareIntent() {
           // put into default workspace's database, with random title
           const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
           const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
+          const created = format(new Date(), 'yyyyMMddHHmmssSSS');
           await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, {
             text: shareIntent.text,
             url: shareIntent.webUrl,
-            created: format(new Date(), 'yyyyMMddHHmmssSSS'),
+            created,
+            modified: created,
             creator: i18n.t('Share.TidGiMobileShare'),
+            tags: [tagForSharedContent ?? i18n.t('Share.Clipped')],
           });
           setImportSuccessSnackBarVisible(true);
         }
