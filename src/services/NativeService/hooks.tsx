@@ -3,7 +3,7 @@
 import { format } from 'date-fns';
 import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import i18n from '../../i18n';
@@ -40,6 +40,7 @@ export function useRegisterReceivingShareIntent() {
     </Snackbar>
   );
   const [tagForSharedContent] = useConfigStore(state => [state.tagForSharedContent]);
+  const newTagForSharedContent = useMemo(() => tagForSharedContent ?? i18n.t('Share.Clipped'), [tagForSharedContent]);
 
   /** If you get error on development:
    * ```
@@ -70,24 +71,24 @@ export function useRegisterReceivingShareIntent() {
     }
     void (async () => {
       try {
+        if (!hasShareIntent) return;
         const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
-        if (hasShareIntent && defaultWiki !== undefined) {
-          await nativeService.receivingShareIntent(shareIntent);
-          resetShareIntent();
-          // put into default workspace's database, with random title
-          const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
-          const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
-          const created = format(new Date(), 'yyyyMMddHHmmssSSS');
-          await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, {
-            text: shareIntent.text,
-            url: shareIntent.webUrl,
-            created,
-            modified: created,
-            creator: i18n.t('Share.TidGiMobileShare'),
-            tags: [tagForSharedContent ?? i18n.t('Share.Clipped')],
-          });
-          setImportSuccessSnackBarVisible(true);
-        }
+        if (defaultWiki === undefined) return;
+        await nativeService.receivingShareIntent(shareIntent);
+        resetShareIntent();
+        // put into default workspace's database, with random title
+        const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
+        const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
+        const created = format(new Date(), 'yyyyMMddHHmmssSSS');
+        await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, {
+          text: shareIntent.text,
+          url: shareIntent.webUrl,
+          created,
+          modified: created,
+          creator: i18n.t('Share.TidGiMobileShare'),
+          tags: newTagForSharedContent === '' ? [] : [newTagForSharedContent],
+        });
+        setImportSuccessSnackBarVisible(true);
       } catch (error) {
         console.log(
           `Failed to registerReceivingShareIntent, This is normal if you are using Expo Go for dev. To debug sharing feature, create a dev build "pnpm start:devClient" instead. ${
@@ -96,7 +97,7 @@ export function useRegisterReceivingShareIntent() {
         );
       }
     })();
-  }, [hasShareIntent, shareIntent, resetShareIntent, error]);
+  }, [hasShareIntent, shareIntent, resetShareIntent, error, tagForSharedContent]);
 
   return { importSuccessSnackBar };
 }
