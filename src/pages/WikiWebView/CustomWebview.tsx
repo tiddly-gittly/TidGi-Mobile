@@ -1,21 +1,25 @@
-import React, { MutableRefObject, PureComponent } from 'react';
+import React, { Component, MutableRefObject } from 'react';
 import { Text } from 'react-native-paper';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
-import type { WebViewErrorEvent, WebViewNavigationEvent } from 'react-native-webview/lib/RNCWebViewNativeComponent';
 import { FAKE_USER_AGENT } from '../../constants/webview';
 
 interface CustomWebViewProps {
   backgroundColor: string;
   injectedJavaScript: string;
-  onLoadEnd: (event: WebViewNavigationEvent | WebViewErrorEvent) => void;
-  onLoadStart: () => void;
+  onLoadEnd?: () => void;
+  onLoadStart?: () => void;
   onMessageReference: MutableRefObject<(event: WebViewMessageEvent) => void>;
   preferredLanguage: string | undefined | null;
+  reloadingKey: string | number;
   triggerFullReload: () => void;
   webViewReference: MutableRefObject<WebView | null>;
 }
 
-export class CustomWebView extends PureComponent<CustomWebViewProps> {
+export class CustomWebView extends Component<CustomWebViewProps> {
+  shouldComponentUpdate(nextProps: CustomWebViewProps) {
+    return this.props.reloadingKey !== nextProps.reloadingKey;
+  }
+
   render() {
     const {
       backgroundColor,

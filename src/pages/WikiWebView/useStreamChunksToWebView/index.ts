@@ -11,10 +11,10 @@ import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
  * @url https://github.com/react-native-webview/react-native-webview/issues/3126
  * @returns
  */
-export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebView | null>, servicesOfWorkspace: {
-  wikiHookService: WikiHookService;
-  wikiStorageService: WikiStorageService;
-}) {
+export function useStreamChunksToWebView(
+  webViewReference: MutableRefObject<WebView | null>,
+  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
+) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
     console.log(`sendDataToWebView ${messageType}`);
@@ -41,12 +41,12 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
    */
   const injectHtmlAndTiddlersStore = useCallback(async ({ html, tiddlersStream, setLoadHtmlError }: IHtmlContent) => {
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
-    if (webViewReference.current !== null) {
+    if (webViewReference.current !== null && servicesOfWorkspace.current !== undefined) {
       try {
         // Huawei HONOR device need to wait for a while before sending large data, otherwise first message (send HTML) will lost, cause white screen (no HTML loaded). Maybe its webview has bug.
         // Instead of `if (brand === 'HONOR') await new Promise<void>(resolve => setTimeout(resolve, 1000));}`, we use heart beat to check if it is ready.
         // This is also required when app bring from background after a while, the webview will be recycled, and need to wait for it to resume before sending large data, otherwise first few data will be lost.
-        await servicesOfWorkspace.wikiHookService.waitForWebviewReceiverReady(() => {
+        await servicesOfWorkspace.current.wikiHookService.waitForWebviewReceiverReady(() => {
           sendDataToWebView(OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY);
         });
         /**
@@ -97,7 +97,7 @@ export function useStreamChunksToWebView(webViewReference: MutableRefObject<WebV
         throw error;
       }
     }
-  }, [webViewReference, servicesOfWorkspace.wikiHookService, sendDataToWebView]);
+  }, [webViewReference, servicesOfWorkspace, sendDataToWebView]);
 
   return { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage };
 }

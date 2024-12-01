@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useMergedReference } from 'react-native-postmessage-cat';
 import { IWikiWorkspace } from '../store/workspace';
 import { AppDataServiceIPCDescriptor } from './AppDataService/descriptor';
@@ -58,10 +59,16 @@ export function useRegisterService(workspace: IWikiWorkspace) {
   /**
    * Services that are limited to the workspace. Can not be accessed globally.
    */
-  const servicesOfWorkspace = {
-    wikiStorageService,
-    wikiHookService,
-  };
+  const servicesOfWorkspace = useRef<{
+    wikiHookService: typeof wikiHookService;
+    wikiStorageService: typeof wikiStorageService;
+  }>();
+  useEffect(() => {
+    servicesOfWorkspace.current = {
+      wikiStorageService,
+      wikiHookService,
+    };
+  }, [wikiStorageService, wikiHookService]);
 
   return [mergedWebViewReference, mergedOnMessageReference, registerServiceOnWebView, servicesOfWorkspace] as const;
 }

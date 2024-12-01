@@ -66,7 +66,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView, servicesOfWorkspace] = useRegisterService(wikiWorkspace);
-  useSetWebViewReferenceToService(servicesOfWorkspace.wikiHookService, webViewReference);
+  useSetWebViewReferenceToService(servicesOfWorkspace, webViewReference);
   // TODO: goback not seem to working
   // useHandleGoBack(webViewReference);
   /**
@@ -83,12 +83,12 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       triggerFullReload();
     }
   }, [triggerFullReload, webViewKeyToReloadAfterRecycleByOS]);
-  servicesOfWorkspace.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
+  servicesOfWorkspace.current?.wikiHookService?.setLatestTriggerFullReloadCallback?.(triggerFullReload);
   useEffect(() => {
     console.log('resetWebviewReceiverReady on webViewKeyToReloadAfterRecycleByOS and init');
-    servicesOfWorkspace.wikiHookService.resetWebviewReceiverReady();
+    servicesOfWorkspace.current?.wikiHookService?.resetWebviewReceiverReady?.();
     void backgroundSyncService.updateServerOnlineStatus();
-  }, [servicesOfWorkspace.wikiHookService, webViewKeyToReloadAfterRecycleByOS]);
+  }, [servicesOfWorkspace, webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError, loading, streamChunksToWebViewPercentage } = useTiddlyWiki(
     wikiWorkspace,
     loaded,
@@ -127,7 +127,6 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
    * Quick load is very fast, progress bar will flash and disappear. So we don't show it.
    */
   const showProgressBar = loading && !quickLoad;
-  // TODO: check if webViewKeyToReloadAfterRecycleByOS on component is working. Sometimes the source works, but preload is not applied
   return (
     <>
       <TopProgressBar animatedValue={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
@@ -135,10 +134,10 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
         <CustomWebView
           webViewReference={webViewReference}
           backgroundColor={theme.colors.background}
-          key={webViewKeyToReloadAfterRecycleByOS}
+          reloadingKey={webViewKeyToReloadAfterRecycleByOS}
           preferredLanguage={preferredLanguage ?? detectedLanguage}
-          onLoadEnd={onLoadEnd}
           onLoadStart={onLoadStart}
+          onLoadEnd={onLoadEnd}
           onMessageReference={onMessageReference}
           injectedJavaScript={preloadScript}
           triggerFullReload={triggerFullReload}

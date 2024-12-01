@@ -25,10 +25,7 @@ export function useTiddlyWiki(
   webViewReference: MutableRefObject<WebView | null>,
   keyToTriggerReload: number,
   quickLoad: boolean,
-  servicesOfWorkspace: {
-    wikiHookService: WikiHookService;
-    wikiStorageService: WikiStorageService;
-  },
+  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
   const tiddlersStreamReference = useRef<SQLiteTiddlersReadStream | undefined>();
