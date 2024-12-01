@@ -524,6 +524,7 @@
   "Delete": "Delete",
   "Edit": "Edit",
   "Open": "Open",
+  "Close": "Close",
   "Import": {
     "ImportWiki": "Import Wiki"
   },

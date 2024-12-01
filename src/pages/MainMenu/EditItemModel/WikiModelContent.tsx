@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import * as Haptics from 'expo-haptics';
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Modal, Portal, Text, TextInput, useTheme } from 'react-native-paper';
@@ -33,7 +33,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [updateWiki, deleteWiki, setServerActive] = useWorkspaceStore(state => [state.update, state.remove, state.setServerActive]);
 
   const [editedName, setEditedName] = useState(wiki?.name ?? '');
-  const [editedSelectiveSyncFilter, setEditedSelectiveSyncFilter] = useState(wiki?.selectiveSyncFilter ?? '');
   const [editedWikiFolderLocation, setEditedWikiFolderLocation] = useState(wiki?.wikiFolderLocation ?? '');
   const [selectedServerID, setSelectedServerID] = useState<string | undefined>();
   const [serverModalVisible, setServerModalVisible] = useState(false);
@@ -41,15 +40,6 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
   const [performanceToolsModelVisible, setPerformanceToolsModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
-
-  const handleSave = useCallback(() => {
-    if (id === undefined) return;
-    updateWiki(id, {
-      name: editedName,
-      selectiveSyncFilter: editedSelectiveSyncFilter,
-    });
-    onClose();
-  }, [editedName, editedSelectiveSyncFilter, id, onClose, updateWiki]);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -61,8 +51,16 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
 
   return (
     <ModalContainer>
-      <StyledTextInput label={t('EditWorkspace.Name')} value={editedName} onChangeText={setEditedName} />
-      <StyledTextInput label={t('AddWorkspace.SelectiveSyncFilter')} value={editedSelectiveSyncFilter} onChangeText={setEditedSelectiveSyncFilter} />
+      <StyledTextInput
+        label={t('EditWorkspace.Name')}
+        value={editedName}
+        onChangeText={(editedName) => {
+          setEditedName(editedName);
+          updateWiki(id, {
+            name: editedName,
+          });
+        }}
+      />
       <StyledTextInput label={t('AddWorkspace.WorkspaceFolder')} value={editedWikiFolderLocation} onChangeText={setEditedWikiFolderLocation} />
 
       <SyncTextButton workspaceID={id} />
@@ -118,18 +116,12 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       </Button>
 
       <ButtonsContainer>
-        <Button onPress={onClose}>{t('Cancel')}</Button>
         <Button
           onPress={() => {
             Alert.alert(
               t('ConfirmDelete'),
               t('ConfirmDeleteDescription'),
               [
-                {
-                  text: t('Cancel'),
-                  onPress: () => {},
-                  style: 'cancel',
-                },
                 {
                   text: t('Delete'),
                   onPress: async () => {
@@ -138,15 +130,18 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
                     onClose();
                   },
                 },
+                {
+                  text: t('Cancel'),
+                  onPress: () => {},
+                  style: 'cancel',
+                },
               ],
             );
           }}
         >
           {t('Delete')}
         </Button>
-        <Button onPress={handleSave}>
-          <Text>{t('EditWorkspace.Save')}</Text>
-        </Button>
+        <Button onPress={onClose}>{t('Close')}</Button>
       </ButtonsContainer>
       <Portal>
         <ThemeProvider theme={theme}>

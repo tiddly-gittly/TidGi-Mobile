@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Switch, Text } from 'react-native-paper';
+import { Button, Switch, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { FlexibleText, SwitchContainer } from '../../../components/PreferenceWidgets';
@@ -19,6 +19,7 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
   const updateWorkspace = useWorkspaceStore(state => state.update);
+  const [editedSelectiveSyncFilter, setEditedSelectiveSyncFilter] = useState(wiki?.selectiveSyncFilter ?? '');
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -34,6 +35,9 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
       <SectionContainer>
         <Text variant='titleLarge'>{t('AddWorkspace.ImportBinaryFiles')}</Text>
         <ImportBinary wikiWorkspace={wiki} />
+      </SectionContainer>
+      <SectionContainer>
+        <StyledTextInput label={t('AddWorkspace.SelectiveSyncFilter')} value={editedSelectiveSyncFilter} onChangeText={setEditedSelectiveSyncFilter} multiline />
       </SectionContainer>
       <SectionContainer>
         <Text variant='titleLarge'>{t('Preference.EnableQuickLoad')}</Text>
@@ -63,4 +67,7 @@ const SectionContainer = styled.View`
   justify-content: baseline;
   align-items: stretch;
   margin-top: 15px;
+`;
+const StyledTextInput = styled(TextInput)`
+  margin-bottom: 10px;
 `;
