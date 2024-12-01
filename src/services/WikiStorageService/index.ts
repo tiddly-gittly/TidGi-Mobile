@@ -26,7 +26,6 @@ import { getFullSaveTiddlers } from './ignoredTiddler';
 export class WikiStorageService {
   readonly #workspace: IWikiWorkspace;
   readonly #configStore = useConfigStore;
-  readonly #serverStore = useServerStore;
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;

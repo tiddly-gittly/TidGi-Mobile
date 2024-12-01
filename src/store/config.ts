@@ -19,6 +19,7 @@ export interface ConfigState {
   tagForSharedContent?: string;
   theme: ColorSchemeName | 'default';
   translucentStatusBar?: boolean;
+  userName: string;
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: undefined,
@@ -32,6 +33,7 @@ const defaultConfig: ConfigState = {
   theme: 'default',
   translucentStatusBar: true,
   tagForSharedContent: undefined,
+  userName: '',
 };
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;
