@@ -1,29 +1,30 @@
 name: Build IPA
+# not working without xcode p12 file
 
-on:
-  workflow_dispatch:
-  push:
-    tags:
-      - 'ipa-v*.*.*'
-      - 'v*.*.*'
-    paths-ignore:
-      - 'README.md'
-      - 'wiki/**'
-      - 'public/**'
-      - 'scripts/**'
-      - '.vscode'
-      - '.idea'
-  pull_request:
-    branches:
-      - master
-      - main
-    paths-ignore:
-      - 'README.md'
-      - 'wiki/**'
-      - 'public/**'
-      - '.scripts/**'
-      - '.vscode'
-      - '.idea'
+# on:
+#   workflow_dispatch:
+#   push:
+#     tags:
+#       - 'ipa-v*.*.*'
+#       - 'v*.*.*'
+#     paths-ignore:
+#       - 'README.md'
+#       - 'wiki/**'
+#       - 'public/**'
+#       - 'scripts/**'
+#       - '.vscode'
+#       - '.idea'
+#   pull_request:
+#     branches:
+#       - master
+#       - main
+#     paths-ignore:
+#       - 'README.md'
+#       - 'wiki/**'
+#       - 'public/**'
+#       - '.scripts/**'
+#       - '.vscode'
+#       - '.idea'
 
 jobs:
   build:
