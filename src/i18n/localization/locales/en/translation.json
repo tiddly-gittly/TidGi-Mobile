@@ -186,6 +186,7 @@
     "ResetDefaultIcon": "Reset Default Icon",
     "NoRevert": "Caution! This operation can't be reverted.",
     "LastVisitState": "Last page visited",
+    "SetLastSyncDate": "Adjust last sync date",
     "URL": "Wiki URL",
     "Port": "Local host server port",
     "PathDescription": "Location of your local wiki folder.",

@@ -190,6 +190,7 @@
     "Path": "Wiki的位置",
     "Save": "保存",
     "Cancel": "取消",
+    "SetLastSyncDate": "调整上次同步时间",
     "HibernateTitle": "开启休眠",
     "DisableAudioTitle": "关闭声音",
     "DisableNotificationTitle": "关闭提醒",

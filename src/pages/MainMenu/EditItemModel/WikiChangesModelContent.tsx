@@ -1,3 +1,4 @@
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -30,12 +31,26 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     })
   );
   const [serverIDToView, setServerIDToView] = useState<string | undefined>(availableServersToPick[0]?.id);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [date, setDate] = useState(new Date());
+  const updateWiki = useWorkspaceStore(state => state.update);
 
   const [lastSyncToFilterLogs, setLastSyncToFilterLogs] = useState<Date | undefined>();
   useEffect(() => {
     const lastSync = wiki?.syncedServers?.find(item => item.serverID === serverIDToView)?.lastSync;
     setLastSyncToFilterLogs(lastSync === undefined ? new Date(0) : new Date(lastSync));
   }, [serverIDToView, wiki?.syncedServers]);
+
+  const onLastSyncChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    const currentDate = selectedDate ?? date;
+    setShowDatePicker(false);
+    setDate(currentDate);
+    if (wiki !== undefined && serverIDToView !== undefined) {
+      updateWiki(wiki.id, {
+        syncedServers: wiki.syncedServers.map(server => server.serverID === serverIDToView ? { ...server, lastSync: currentDate.getTime() } : server),
+      });
+    }
+  };
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -48,6 +63,22 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   return (
     <ModalContainer>
       <CloseButton mode='outlined' onPress={onClose}>{t('Menu.Close')}</CloseButton>
+      <Button
+        onPress={() => {
+          setShowDatePicker(true);
+        }}
+        mode='outlined'
+      >
+        <Text>{t('EditWorkspace.SetLastSyncDate')}</Text>
+      </Button>
+      {showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode='date'
+          display='default'
+          onChange={onLastSyncChange}
+        />
+      )}
       <Picker
         selectionColor={theme.colors.primary}
         style={pickerStyle}
