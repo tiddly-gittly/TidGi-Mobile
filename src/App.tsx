@@ -46,7 +46,7 @@ export const App: React.FC = () => {
       <PaperProvider theme={theme}>
         <ThemeProvider theme={theme}>
           <StatusBar translucent={translucentStatusBar} hidden={hideStatusBar} />
-          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
+          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation} navigationInChildEnabled>
             <Stack.Navigator initialRouteName='MainMenu'>
               <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
               <Stack.Screen
