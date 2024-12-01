@@ -15,7 +15,7 @@ module.exports = function(api) {
         libraryName: 'date-fns',
         libraryDirectory: '',
         camel2DashComponentName: false, // default: true
-      }],
+      }, 'import-date-fns'],
       '@babel/plugin-transform-flow-strip-types',
       ['@babel/plugin-transform-private-methods', { loose: true }],
       'babel-plugin-transform-typescript-metadata',
