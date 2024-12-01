@@ -86,7 +86,7 @@ export function useRegisterReceivingShareIntent() {
           created,
           modified: created,
           creator: i18n.t('Share.TidGiMobileShare'),
-          tags: newTagForSharedContent === '' ? [] : [newTagForSharedContent],
+          tags: newTagForSharedContent,
         });
         setImportSuccessSnackBarVisible(true);
       } catch (error) {
