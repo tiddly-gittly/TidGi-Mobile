@@ -105,9 +105,6 @@ export function useRegisterReceivingShareIntent() {
                 const fileFields = {
                   ...fields,
                   type: file.mimeType,
-                  width: file.width,
-                  height: file.height,
-                  duration: file.duration,
                   text: fileContent,
                 };
                 await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);

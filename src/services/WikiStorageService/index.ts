@@ -44,7 +44,7 @@ export class WikiStorageService {
 
   /**
    * Save tiddler. Return the e-tag.
-   * `tags` field should be string, and fields can't contain `null`, otherwise TW won't boot.
+   * `tags` field should be string, and fields can't contain `null` or number or array, otherwise TW won't boot.
    */
   async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
     try {
