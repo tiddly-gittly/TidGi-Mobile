@@ -67,8 +67,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-      - name: Initialize and Update Submodules
-        run: pnpm run init-submodules
       - name: Fix gradle error
         run: pnpm exec zx scripts/fix-gradle.mjs
 
@@ -93,10 +91,6 @@ jobs:
         run: |
           pnpm exec expo prebuild -p android --clean
           pnpm exec zx scripts/removeDebugSigningConfigs.mjs
-
-      # TODO: https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
-      # - name: Remove prorietary bits (for fix f-droid)
-      #   run: npx zx scripts/fit-f-droid.mjs
 
       - name: Build AAB
         run: |

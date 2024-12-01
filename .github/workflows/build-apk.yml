@@ -67,8 +67,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-      - name: Initialize and Update Submodules
-        run: pnpm run init-submodules
       - name: Fix gradle error
         run: pnpm exec zx scripts/fix-gradle.mjs
 

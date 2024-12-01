@@ -1,3 +1,6 @@
+/**
+ * expo-notifications is not installed to prevent install expo-application which has proprietary code.
+ */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
