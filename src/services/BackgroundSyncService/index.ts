@@ -55,9 +55,9 @@ export async function unregisterBackgroundSyncAsync() {
 }
 
 export class BackgroundSyncService {
-  #serverStore = useServerStore;
-  #configStore = useConfigStore;
-  #workspacestore = useWorkspaceStore;
+  readonly #serverStore = useServerStore;
+  readonly #configStore = useConfigStore;
+  readonly #workspacestore = useWorkspaceStore;
 
   public startBackgroundSync() {
     const syncInterval = this.#configStore.getState().syncInterval;
@@ -141,7 +141,7 @@ export class BackgroundSyncService {
             operation: change.operation as TiddlersLogOperation,
             timestamp: new Date(change.timestamp).toISOString(), // Convert Date to string
           };
-          if (change.operation === TiddlersLogOperation.DELETE) return result;
+          if (change.operation as TiddlersLogOperation === TiddlersLogOperation.DELETE) return result;
           // for update and insert, add text and fields to it
           const title = change.title;
           // const skinnyTiddlerWithText = await tiddlerRepo.findOne({ where: { title } });
