@@ -38,9 +38,15 @@ Install [tw-mobile-sync](https://github.com/tiddly-gittly/tw-mobile-sync) plugin
 
 tw-mobile-sync >= **0.6.0** works with TidGi-Mobile >= **v0.3**
 
-## How it stores and uses data
+## Privacy: How it stores and uses data
 
-When syncing from a TidGi-Desktop app:
+We do not send any information from your phone to the internet.
+
+You can optionally syncing data from your phone to a local TidGi-Desktop app on your local WiFi.
+
+### How it stores data locally on your phone
+
+This is a local-first app, it stores data in following format, and never leaving your local WiFi network:
 
 1. HTML, contains some of core tw things like `$:/boot` and raw HTML created by [$:/tags/RawMarkup](https://tiddlywiki.com/#SystemTag%3A%20%24%3A%2Ftags%2FRawMarkup)
     1. To update the TiddlyWiki version or the raw markup, you need to perform a full-resync (delete and recreate)
@@ -56,7 +62,4 @@ Currently, only normal tiddlers in SQLite are certainly synced back to TidGi-Des
 
 ## Permissions
 
-All these features can be accessible from tiddlywiki plugin, so you can develop plugins to notify you about ToDo, or record locations of visited places, etc.
-
-1. Notification: We use notification to switch between full-screen wiki and menu, and also allow plugin to show notification.
-2. Location: To store server location, later can show them on a map.
+1. Only requires for camera permission to scan QR code for sync URL from your local server.
