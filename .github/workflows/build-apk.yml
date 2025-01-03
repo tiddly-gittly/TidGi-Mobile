@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'fdroid-v*.*.*'
       - 'v*.*.*'
     paths-ignore:
       - 'README.md'

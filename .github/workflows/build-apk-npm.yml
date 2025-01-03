@@ -5,7 +5,6 @@ on:
   push:
     tags:
       - 'fdroid-v*.*.*'
-      - 'v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
@@ -48,7 +47,7 @@ jobs:
           echo "BUILD_TOOLS_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)" >> $GITHUB_ENV
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --force
       - name: Fix gradle error
         run: npx zx scripts/fix-gradle.mjs
 
