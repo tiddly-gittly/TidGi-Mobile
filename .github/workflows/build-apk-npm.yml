@@ -1,0 +1,106 @@
+name: Build APK with NPM
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'fdroid-v*.*.*'
+      - 'v*.*.*'
+    paths-ignore:
+      - 'README.md'
+      - 'wiki/**'
+      - 'public/**'
+      - 'scripts/**'
+      - '.vscode'
+      - '.idea'
+  pull_request:
+    branches:
+      - master
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'wiki/**'
+      - 'public/**'
+      - '.scripts/**'
+      - '.vscode'
+      - '.idea'
+
+jobs:
+  build:
+    name: Install and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22.x
+      - name: Set Up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu' # See 'Supported distributions' for available options
+          java-version: '17'
+      - name: Setup Gradle # fix `incompatible version of Kotlin. The binary version of its metadata is 1.9.0, expected version is 1.7.1.`
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.0.1 # use the gradle version I saw on eas build's console, which might match the kotlin version?
+      - name: Set Build Tools Version
+        run: |
+          echo "BUILD_TOOLS_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: npm install
+      - name: Fix gradle error
+        run: npx zx scripts/fix-gradle.mjs
+
+      ## configure cash for gradle : will help to reduce build time
+      - name: Cache Gradle Wrapper and Dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build tw plugins & scripts
+        run: |
+          cd plugins && npm i && cd ..
+          npm run build:plugin
+          npm run build:preload
+
+      - name: Build by eject eas and not remove debug signing key for apk
+        run: npx expo prebuild -p android --clean
+
+      # Don't need this, because we already remove expo-application that blocks f-droid https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
+      # - name: Remove prorietary bits (for fix f-droid)
+      #   run: npx zx scripts/fit-f-droid.mjs
+
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew clean
+          ./gradlew assembleRelease --no-daemon --warning-mode all
+
+      ## sign generated apk
+      - name: Sign APK
+        id: sign_app_apk
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+          alias: ${{ secrets.ANDROID_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/release/app-release-signed.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
