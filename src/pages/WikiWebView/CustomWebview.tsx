@@ -58,7 +58,7 @@ export class CustomWebView extends Component<CustomWebViewProps> {
         source={{
           html: `<!doctype html><html lang="${
             preferredLanguage ?? 'en'
-          }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder"/>Loading...</body></html>`,
+          }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder" style="display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 24px;">Loading...</div></body></html>`,
           /**
            * Add baseUrl to fix `SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.`
            * @url https://github.com/react-native-webview/react-native-webview/issues/1635#issuecomment-1021425071
