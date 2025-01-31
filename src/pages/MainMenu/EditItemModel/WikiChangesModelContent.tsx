@@ -1,9 +1,10 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { WikiUpdateList } from '../../../components/WikiUpdateList';
 import { useServerStore } from '../../../store/server';
@@ -21,19 +22,24 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const wiki = useWorkspaceStore(state =>
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
-  const availableServersToPick = useServerStore(state =>
-    Object.entries(state.servers).filter(([id]) => wiki?.syncedServers?.map(item => item.serverID)?.includes?.(id)).map(([id, server]) => {
-      const lastSync = wiki?.syncedServers?.find(item => item.serverID === id)?.lastSync;
-      return ({
-        id,
-        label: `${server.name} (${lastSync === undefined ? '-' : new Date(lastSync).toLocaleString()})`,
+
+  const availableServersToPick = useMemo(() => {
+    if (wiki === undefined) return [];
+    return Object.entries(useServerStore.getState().servers)
+      .filter(([id]) => wiki.syncedServers?.map(item => item.serverID)?.includes?.(id))
+      .map(([id, server]) => {
+        const lastSync = wiki.syncedServers?.find(item => item.serverID === id)?.lastSync;
+        return {
+          id,
+          label: `${server.name} (${lastSync === undefined ? '-' : new Date(lastSync).toLocaleString()})`,
+        };
       });
-    })
-  );
+  }, [wiki]);
+
   const [serverIDToView, setServerIDToView] = useState<string | undefined>(availableServersToPick[0]?.id);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [date, setDate] = useState(new Date());
-  const updateWiki = useWorkspaceStore(state => state.update);
+  const updateWiki = useWorkspaceStore(useShallow(state => state.update));
 
   const [lastSyncToFilterLogs, setLastSyncToFilterLogs] = useState<Date | undefined>();
   useEffect(() => {

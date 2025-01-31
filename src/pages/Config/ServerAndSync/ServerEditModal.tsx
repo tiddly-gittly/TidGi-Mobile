@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
 import { useWorkspaceStore } from '../../../store/workspace';
 
@@ -26,21 +27,117 @@ const ScanQRButton = styled(Button)`
   height: 3em;
 `;
 
+interface QRScannerProps {
+  handleBarcodeScanned: (scanningResult: BarcodeScanningResult) => void;
+  hasPermission: boolean | null;
+  qrScannerOpen: boolean;
+  setQrScannerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const QRScanner: React.FC<QRScannerProps> = ({ qrScannerOpen, hasPermission, handleBarcodeScanned, setQrScannerOpen }) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      {qrScannerOpen && hasPermission && (
+        <SmallCameraView
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        />
+      )}
+      <ScanQRButton
+        mode={'outlined'}
+        onPress={() => {
+          setQrScannerOpen(!qrScannerOpen);
+        }}
+      >
+        <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
+      </ScanQRButton>
+    </>
+  );
+};
+
+interface ServerFormProps {
+  editedName: string;
+  editedProvider: ServerProvider;
+  editedStatus: ServerStatus;
+  editedUri: string;
+  pickerStyle: object;
+  setEditedName: React.Dispatch<React.SetStateAction<string>>;
+  setEditedProvider: React.Dispatch<React.SetStateAction<ServerProvider>>;
+  setEditedStatus: React.Dispatch<React.SetStateAction<ServerStatus>>;
+  setEditedUri: React.Dispatch<React.SetStateAction<string>>;
+}
+
+const ServerForm: React.FC<ServerFormProps> = (
+  { editedName, setEditedName, editedUri, setEditedUri, editedProvider, setEditedProvider, editedStatus, setEditedStatus, pickerStyle },
+) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      <StyledTextInput label={t('EditWorkspace.ServerName')} value={editedName} onChangeText={setEditedName} />
+      <StyledTextInput label={t('EditWorkspace.ServerURI')} value={editedUri} onChangeText={setEditedUri} />
+      <Picker selectedValue={editedProvider} onValueChange={setEditedProvider} style={pickerStyle}>
+        <Picker.Item label={t('EditWorkspace.TidGiDesktop')} value={ServerProvider.TidGiDesktop} style={pickerStyle} />
+        <Picker.Item label={t('EditWorkspace.TiddlyHost')} value={ServerProvider.TiddlyHost} enabled={false} style={pickerStyle} />
+      </Picker>
+      <Picker selectedValue={editedStatus} onValueChange={setEditedStatus} style={pickerStyle}>
+        <Picker.Item label={t('EditWorkspace.ServerDisconnected')} value={ServerStatus.disconnected} style={pickerStyle} />
+        <Picker.Item label={t('EditWorkspace.ServerOnline')} value={ServerStatus.online} style={pickerStyle} />
+      </Picker>
+    </>
+  );
+};
+
+interface ActionButtonsProps {
+  handleSave: () => void;
+  onClose: () => void;
+  onRemoveServer: (serverIDToRemove: string) => void;
+  server: { id: string };
+}
+
+const ActionButtons: React.FC<ActionButtonsProps> = ({ handleSave, onRemoveServer, server, onClose }) => {
+  const { t } = useTranslation();
+  return (
+    <ButtonsContainer>
+      <Button onPress={handleSave}>
+        <Text>{t('EditWorkspace.Save')}</Text>
+      </Button>
+      <Button
+        onPress={() => {
+          Alert.alert(
+            t('ConfirmDelete'),
+            t('ConfirmDeleteDescription'),
+            [
+              {
+                text: t('EditWorkspace.Cancel'),
+                onPress: () => {},
+                style: 'cancel',
+              },
+              {
+                text: t('Delete'),
+                onPress: () => {
+                  onRemoveServer(server.id);
+                  onClose();
+                },
+              },
+            ],
+          );
+        }}
+      >
+        {t('Delete')}
+      </Button>
+      <Button onPress={onClose}>{t('EditWorkspace.Cancel')}</Button>
+    </ButtonsContainer>
+  );
+};
+
 export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
   const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
   const server = useServerStore(state => id === undefined ? undefined : state.servers[id]);
-  const updateServer = useServerStore(state => state.update);
-  const deleteServer = useServerStore(state => state.remove);
-  const removeSyncedServersFromWorkspace = useWorkspaceStore(state => (serverIDToRemove: string) => {
-    state.workspaces.forEach(workspace => {
-      if (workspace.type === 'wiki' && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
-        workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
-        state.update(workspace.id, workspace);
-      }
-    });
-  });
+  const [updateServer, deleteServer] = useServerStore(useShallow(state => [state.update, state.remove]));
+  const removeSyncedServersFromWorkspace = useWorkspaceStore(state => state.removeSyncedServersFromWorkspace);
   const onRemoveServer = useCallback((serverIDToRemove: string) => {
     void Haptics.impactAsync();
     deleteServer(serverIDToRemove);
@@ -53,10 +150,7 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   const [editedProvider, setEditedProvider] = useState<ServerProvider>(server?.provider ?? ServerProvider.TidGiDesktop);
   const [editedStatus, setEditedStatus] = useState<ServerStatus>(server?.status ?? ServerStatus.online);
 
-  // This is for location field. You might want to implement a proper method to pick a location.
-  const [editedLocation, setEditedLocation] = useState(((server?.location) != null) || {});
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [scannedString, setScannedString] = useState('');
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   useEffect(() => {
     const getCameraPermissions = async () => {
@@ -65,22 +159,13 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     };
     void getCameraPermissions();
   }, []);
-  useEffect(() => {
-    if (scannedString !== '') {
-      try {
-        const url = new URL(scannedString);
-        setEditedUri(url.origin);
-      } catch (error) {
-        console.warn('Not a valid URL', error);
-      }
-    }
-  }, [scannedString]);
+
   const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
     const { data, type } = scanningResult;
     if (type === 'qr') {
       try {
         setQrScannerOpen(false);
-        setScannedString(data);
+        setEditedUri(data);
       } catch (error) {
         console.warn('Not a valid URL', error);
       }
@@ -102,77 +187,35 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       uri: editedUri,
       provider: editedProvider,
       status: editedStatus,
-      location: editedLocation,
     });
     onClose();
   };
 
   return (
     <ModalContainer>
-      {qrScannerOpen && hasPermission && (
-        <SmallCameraView
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        />
-      )}
-      <ScanQRButton
-        mode={'outlined'}
-        onPress={() => {
-          setQrScannerOpen(!qrScannerOpen);
-        }}
-      >
-        {/* eslint-disable-next-line react-native/no-raw-text */}
-        <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
-      </ScanQRButton>
-
-      <StyledTextInput label={t('EditWorkspace.ServerName')} value={editedName} onChangeText={setEditedName} />
-      <StyledTextInput label={t('EditWorkspace.ServerURI')} value={editedUri} onChangeText={setEditedUri} />
-
-      {/* You might need a dropdown or picker for provider and status */}
-      <Picker selectedValue={editedProvider} onValueChange={setEditedProvider} style={pickerStyle}>
-        <Picker.Item label={t('EditWorkspace.TidGiDesktop')} value={ServerProvider.TidGiDesktop} style={pickerStyle} />
-        <Picker.Item label={t('EditWorkspace.TiddlyHost')} value={ServerProvider.TiddlyHost} enabled={false} style={pickerStyle} />
-      </Picker>
-
-      <Picker selectedValue={editedStatus} onValueChange={setEditedStatus} style={pickerStyle}>
-        <Picker.Item label={t('EditWorkspace.ServerDisconnected')} value={ServerStatus.disconnected} style={pickerStyle} />
-        <Picker.Item label={t('EditWorkspace.ServerOnline')} value={ServerStatus.online} style={pickerStyle} />
-      </Picker>
-
-      {/* Implement a location picker or a method to input/edit location if required */}
-
-      <ButtonsContainer>
-        <Button onPress={handleSave}>
-          <Text>{t('EditWorkspace.Save')}</Text>
-        </Button>
-        <Button
-          onPress={() => {
-            // Prompt the user with an alert for confirmation.
-            Alert.alert(
-              t('ConfirmDelete'),
-              t('ConfirmDeleteDescription'),
-              [
-                {
-                  text: t('EditWorkspace.Cancel'),
-                  onPress: () => {},
-                  style: 'cancel',
-                },
-                {
-                  text: t('Delete'),
-                  onPress: () => {
-                    // Proceed with deletion if confirm is pressed.}
-                    onRemoveServer(server.id);
-                    onClose();
-                  },
-                },
-              ],
-            );
-          }}
-        >
-          {t('Delete')}
-        </Button>
-        <Button onPress={onClose}>{t('EditWorkspace.Cancel')}</Button>
-      </ButtonsContainer>
+      <QRScanner
+        qrScannerOpen={qrScannerOpen}
+        hasPermission={hasPermission}
+        handleBarcodeScanned={handleBarcodeScanned}
+        setQrScannerOpen={setQrScannerOpen}
+      />
+      <ServerForm
+        editedName={editedName}
+        setEditedName={setEditedName}
+        editedUri={editedUri}
+        setEditedUri={setEditedUri}
+        editedProvider={editedProvider}
+        setEditedProvider={setEditedProvider}
+        editedStatus={editedStatus}
+        setEditedStatus={setEditedStatus}
+        pickerStyle={pickerStyle}
+      />
+      <ActionButtons
+        handleSave={handleSave}
+        onRemoveServer={onRemoveServer}
+        server={server}
+        onClose={onClose}
+      />
     </ModalContainer>
   );
 }

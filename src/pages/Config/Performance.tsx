@@ -1,13 +1,14 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch, Text } from 'react-native-paper';
+import { useShallow } from 'zustand/react/shallow';
 import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
 import { useConfigStore } from '../../store/config';
 
 export function Performance(): JSX.Element {
   const { t } = useTranslation();
 
-  const [keepAliveInBackground, autoOpenDefaultWiki] = useConfigStore(state => [state.keepAliveInBackground, state.autoOpenDefaultWiki]);
+  const [keepAliveInBackground, autoOpenDefaultWiki] = useConfigStore(useShallow(state => [state.keepAliveInBackground, state.autoOpenDefaultWiki]));
   const setConfig = useConfigStore(state => state.set);
 
   return (

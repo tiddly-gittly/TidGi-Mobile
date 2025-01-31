@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { Card, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import { backgroundSyncService } from '../services/BackgroundSyncService';
 import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
 
@@ -19,7 +20,7 @@ interface ServerListProps {
 export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, onlineOnly, serverIDs, activeIDs = [] }) => {
   const { t } = useTranslation();
   const theme = useTheme();
-  const serverList = useServerStore(state => compact(serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id])));
+  const serverList = useServerStore(useShallow(state => compact(serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]))));
   useEffect(() => {
     if (onlineOnly === true) {
       void backgroundSyncService.updateServerOnlineStatus();

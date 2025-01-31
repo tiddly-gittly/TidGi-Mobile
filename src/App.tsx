@@ -12,6 +12,7 @@ import { I18nextProvider, useTranslation } from 'react-i18next';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { ThemeProvider } from 'styled-components';
+import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
@@ -38,7 +39,7 @@ export const App: React.FC = () => {
   const themeConfig = useConfigStore(state => state.theme);
   const colorScheme = useColorScheme();
   const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
-  const [translucentStatusBar, hideStatusBar] = useConfigStore(state => [state.translucentStatusBar, state.hideStatusBar]);
+  const [translucentStatusBar, hideStatusBar] = useConfigStore(useShallow(state => [state.translucentStatusBar, state.hideStatusBar]));
   const { importSuccessSnackBar } = useRegisterReceivingShareIntent();
 
   return (

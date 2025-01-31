@@ -2,6 +2,7 @@ import useDebouncedCallback from 'beautiful-react-hooks/useDebouncedCallback';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { Switch, Text, TextInput } from 'react-native-paper';
 import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
@@ -14,7 +15,7 @@ const StyledTextInput = styled(TextInput)`
 export function Shared(): JSX.Element {
   const { t } = useTranslation();
 
-  const [initialTagForSharedContent, fastImport] = useConfigStore(state => [state.tagForSharedContent, state.fastImport]);
+  const [initialTagForSharedContent, fastImport] = useConfigStore(useShallow(state => [state.tagForSharedContent, state.fastImport]));
   const [tagForSharedContent, tagForSharedContentSetter] = useState(initialTagForSharedContent);
   const setConfig = useConfigStore(state => state.set);
 

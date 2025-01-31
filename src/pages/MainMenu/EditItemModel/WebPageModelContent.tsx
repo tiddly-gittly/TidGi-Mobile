@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { IPageWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
@@ -17,7 +18,7 @@ interface ModalProps {
 export function WebPageEditModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const page = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w): w is IPageWorkspace => w.id === id && w.type === 'webpage'));
-  const [updatePage, deletePage] = useWorkspaceStore(state => [state.update, state.remove]);
+  const [updatePage, deletePage] = useWorkspaceStore(useShallow(state => [state.update, state.remove]));
   const [editedName, setEditedName] = useState(page?.name ?? '');
   const [editedUri, setEditedUri] = useState(page?.uri ?? '');
 

@@ -63,6 +63,7 @@ interface WikiActions {
   addServer: (id: string, newServerID: string) => void;
   remove: (id: string) => void;
   removeAll: () => void;
+  removeSyncedServersFromWorkspace: (serverIDToRemove: string) => void;
   setServerActive: (id: string, serverIDToActive: string, isActive?: boolean) => void;
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
@@ -163,6 +164,16 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         removeAll() {
           set((state) => {
             state.workspaces = defaultWorkspaces;
+          });
+        },
+        removeSyncedServersFromWorkspace(serverIDToRemove) {
+          set((state) => {
+            state.workspaces.forEach(workspace => {
+              if (workspace.type === 'wiki' && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
+                workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
+                state.update(workspace.id, workspace);
+              }
+            });
           });
         },
       }),

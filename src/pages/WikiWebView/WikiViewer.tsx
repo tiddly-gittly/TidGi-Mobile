@@ -5,6 +5,7 @@ import { Dimensions, Platform } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import { detectedLanguage } from '../../i18n';
 import { backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
@@ -61,7 +62,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const onLoadEnd = useCallback(() => {
     setLoaded(true);
   }, []);
-  const [rememberLastVisitState, preferredLanguage] = useConfigStore(state => [state.rememberLastVisitState, state.preferredLanguage]);
+  const [rememberLastVisitState, preferredLanguage] = useConfigStore(useShallow(state => [state.rememberLastVisitState, state.preferredLanguage]));
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */

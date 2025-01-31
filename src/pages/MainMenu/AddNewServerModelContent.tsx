@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { useServerStore } from '../../store/server';
 import { useWorkspaceStore } from '../../store/workspace';
@@ -31,14 +32,14 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const theme = useTheme();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [addServerToWiki] = useWorkspaceStore(state => [state.addServer]);
-  const [addServer, updateServer] = useServerStore(state => [state.add, state.update]);
+  const [addServerToWiki] = useWorkspaceStore(useShallow(state => [state.addServer]));
+  const addServer = useServerStore(useShallow(state => state.add));
   const [serverName, setServerName] = useState('');
   const [serverUrlString, setServerUrlString] = useState('');
   const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
-  const [servers, availableServersToPick] = useServerStore(
+  const [servers, availableServersToPick] = useServerStore(useShallow(
     state => [state.servers, Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` }))],
-  );
+  ));
 
   const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>(availableServersToPick?.[0]?.id ?? '');
   const handleFillSelectedServer = useCallback(() => {
@@ -74,9 +75,6 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     if (id === undefined) return;
     const serverUrl = new URL(serverUrlString);
     const newServer = addServer({ uri: serverUrl.origin, name: serverName });
-    // void nativeService.getLocationWithTimeout().then(coords => {
-    //   if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
-    // });
     addServerToWiki(id, newServer.id);
     onClose();
   }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString]);

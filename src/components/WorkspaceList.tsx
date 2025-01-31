@@ -1,13 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import * as Haptics from 'expo-haptics';
 import { compact } from 'lodash';
-import React, { useCallback } from 'react';
-import DraggableFlatList from 'react-native-draggable-flatlist';
+import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, IconButton, useTheme } from 'react-native-paper';
+import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
-import { useTranslation } from 'react-i18next';
 
 interface WorkspaceListProps {
   onLongPress?: (workspace: IWorkspace) => void;
@@ -16,61 +16,71 @@ interface WorkspaceListProps {
   onReorderEnd?: (workspaces: IWorkspace[]) => void;
 }
 
-export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd, onPressQuickLoad }) => {
+const WorkspaceListItem: React.FC<{
+  item: IWorkspace;
+  onLongPress?: (workspace: IWorkspace) => void;
+  onPress?: (workspace: IWorkspace) => void;
+  onPressQuickLoad?: (workspace: IWorkspace) => void;
+}> = ({ item, onPress, onLongPress, onPressQuickLoad }) => {
   const { t } = useTranslation();
-  const workspacesList = useWorkspaceStore(state => compact(state.workspaces));
   const theme = useTheme();
+  const drag = useReorderableDrag();
+  const title = item.name === HELP_WORKSPACE_NAME ? t('Menu.TidGiHelpManual') : item.name;
 
-  const renderItem = useCallback(({ item, drag }: { drag: () => void; item: IWorkspace }) => {
-    const title = item.name === HELP_WORKSPACE_NAME ? t('Menu.TidGiHelpManual') : item.name
-    return (
-      <WorkspaceCard
-        onPress={() => {
-          onPress?.(item);
-        }}
-        onLongPress={() => {
-          onLongPress?.(item);
-        }}
-      >
-        <Card.Title
-          title={title}
-          subtitle={item.id}
-          right={(props) => (
-            <RightButtonsContainer>
-              {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
-              {(item as IWikiWorkspace).enableQuickLoad === true && (
-                <IconButton
-                  {...props}
-                  icon='speedometer'
-                  onPress={() => onPressQuickLoad?.(item)}
-                />
-              )}
-              <ItemRightIconButton
+  return (
+    <WorkspaceCard
+      onPress={() => {
+        onPress?.(item);
+      }}
+      onLongPress={() => {
+        onLongPress?.(item);
+        drag();
+      }}
+    >
+      <Card.Title
+        title={title}
+        subtitle={item.id}
+        right={(props) => (
+          <RightButtonsContainer>
+            {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
+            {(item as IWikiWorkspace).enableQuickLoad === true && (
+              <IconButton
                 {...props}
-                onLongPress={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void Haptics.selectionAsync();
-                  drag();
-                }}
-                name='reorder-three-sharp'
-                color={theme.colors.onSecondaryContainer}
+                icon='speedometer'
+                onPress={() => onPressQuickLoad?.(item)}
               />
-            </RightButtonsContainer>
-          )}
-        />
-      </WorkspaceCard>
-    );
-  }, [onLongPress, onPress, onPressQuickLoad, theme]);
+            )}
+            <ItemRightIconButton
+              {...props}
+              name='reorder-three-sharp'
+              color={theme.colors.onSecondaryContainer}
+            />
+          </RightButtonsContainer>
+        )}
+      />
+    </WorkspaceCard>
+  );
+};
+
+export const WorkspaceList: React.FC<WorkspaceListProps> = ({ onPress, onLongPress, onReorderEnd, onPressQuickLoad }) => {
+  const workspacesList = useWorkspaceStore(useShallow(state => compact(state.workspaces)));
 
   return (
     <ListContainer>
-      <DraggableFlatList
+      <ReorderableList
         data={workspacesList}
-        renderItem={renderItem}
+        renderItem={({ item }) => (
+          <WorkspaceListItem
+            item={item}
+            onPress={onPress}
+            onLongPress={onLongPress}
+            onPressQuickLoad={onPressQuickLoad}
+          />
+        )}
         keyExtractor={item => item.id}
-        onDragEnd={({ data: workspaces }) => {
-          onReorderEnd?.(workspaces);
+        onReorder={({ from, to }: ReorderableListReorderEvent) => {
+          const reorderedWorkspaces = reorderItems(workspacesList, from, to);
+          onReorderEnd?.(reorderedWorkspaces);
         }}
       />
     </ListContainer>

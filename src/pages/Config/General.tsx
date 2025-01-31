@@ -2,13 +2,14 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { SegmentedButtons, Switch, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
 import { useConfigStore } from '../../store/config';
 
 export function General(): JSX.Element {
   const { t } = useTranslation();
 
-  const [translucentStatusBar, hideStatusBar] = useConfigStore(state => [state.translucentStatusBar, state.hideStatusBar]);
+  const [translucentStatusBar, hideStatusBar] = useConfigStore(useShallow(state => [state.translucentStatusBar, state.hideStatusBar]));
   const theme = useConfigStore(state => state.theme ?? 'default');
   const setConfig = useConfigStore(state => state.set);
   const supportedThemes = [

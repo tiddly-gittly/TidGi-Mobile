@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { ThemeProvider } from 'styled-components/native';
@@ -15,23 +15,24 @@ export function ServerAndSync(): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
   const clearServerList = useServerStore(state => state.clearAll);
-  const activeIDs = useWorkspaceStore(state =>
-    state.workspaces
+  const activeIDs = useMemo(() => {
+    return useWorkspaceStore.getState().workspaces
       .filter((w): w is IWikiWorkspace => w.type === 'wiki')
       .flatMap(wiki =>
         wiki.syncedServers
           ?.filter(item => item.syncActive)
           ?.map(item => item.serverID) ?? []
-      )
-  );
-  const removeAllSyncedServersFromWorkspace = useWorkspaceStore(state => () => {
+      );
+  }, []);
+  const removeAllSyncedServersFromWorkspace = useCallback(() => {
+    const state = useWorkspaceStore.getState();
     state.workspaces.forEach(workspace => {
       if (workspace.type === 'wiki') {
         workspace.syncedServers = [];
         state.update(workspace.id, workspace);
       }
     });
-  });
+  }, []);
   const onRemoveAllServers = useCallback(() => {
     void Haptics.impactAsync();
     clearServerList();

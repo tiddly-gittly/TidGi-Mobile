@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Modal, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import Collapsible from 'react-native-collapsible';
 import { ServerList } from '../../../components/ServerList';
@@ -30,7 +31,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const wiki = useWorkspaceStore(state =>
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
-  const [updateWiki, deleteWiki, setServerActive] = useWorkspaceStore(state => [state.update, state.remove, state.setServerActive]);
+  const [updateWiki, deleteWiki, setServerActive] = useWorkspaceStore(useShallow(state => [state.update, state.remove, state.setServerActive]));
 
   const [editedName, setEditedName] = useState(wiki?.name ?? '');
   const [editedWikiFolderLocation, setEditedWikiFolderLocation] = useState(wiki?.wikiFolderLocation ?? '');

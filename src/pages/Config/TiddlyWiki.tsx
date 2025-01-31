@@ -2,6 +2,7 @@ import useDebouncedCallback from 'beautiful-react-hooks/useDebouncedCallback';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { Switch, Text, TextInput } from 'react-native-paper';
 import { FlexibleText, SwitchContainer } from '../../components/PreferenceWidgets';
@@ -14,7 +15,7 @@ const StyledTextInput = styled(TextInput)`
 export function TiddlyWiki(): JSX.Element {
   const { t } = useTranslation();
 
-  const [initialUserName, rememberLastVisitState] = useConfigStore(state => [state.userName, state.rememberLastVisitState]);
+  const [initialUserName, rememberLastVisitState] = useConfigStore(useShallow(state => [state.userName, state.rememberLastVisitState]));
   const [userName, userNameSetter] = useState(initialUserName);
   const setConfig = useConfigStore(state => state.set);
 

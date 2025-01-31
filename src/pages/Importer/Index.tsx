@@ -76,7 +76,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
   const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
   const [wikiName, setWikiName] = useState('wiki');
-  const [addServer] = useServerStore(state => [state.add, state.update]);
+  const addServer = useServerStore(state => state.add);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
     const getCameraPermissions = async () => {
