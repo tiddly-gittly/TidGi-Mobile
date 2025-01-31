@@ -19,12 +19,6 @@ export interface IServerInfo {
   /**
    * Needs location permission
    */
-  location?: {
-    /**
-     * The coordinates of the position.
-     */
-    // coords?: LocationObjectCoords;
-  };
   name: string;
   provider: ServerProvider;
   /**
