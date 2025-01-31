@@ -7,14 +7,14 @@ import { useWorkspaceStore } from '../../store/workspace';
  * Get app stores in wiki.
  */
 export class AppDataService {
-  #serverStore = useServerStore;
-  #configStore = useConfigStore;
-  #wikiStore = useWorkspaceStore;
+  readonly #serverStore = useServerStore;
+  readonly #configStore = useConfigStore;
+  readonly #wikiStore = useWorkspaceStore;
 
   // Using BehaviorSubject to manage and emit state changes as Observables
-  #serverSubject = new BehaviorSubject(this.#serverStore.getState());
-  #configSubject = new BehaviorSubject(this.#configStore.getState());
-  #wikiSubject = new BehaviorSubject(this.#wikiStore.getState());
+  readonly #serverSubject = new BehaviorSubject(this.#serverStore.getState());
+  readonly #configSubject = new BehaviorSubject(this.#configStore.getState());
+  readonly #wikiSubject = new BehaviorSubject(this.#wikiStore.getState());
 
   constructor() {
     // Subscribe to store changes and update the BehaviorSubject accordingly
