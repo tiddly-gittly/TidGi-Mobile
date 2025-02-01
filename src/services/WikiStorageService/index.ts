@@ -4,7 +4,7 @@ import { desc, eq } from 'drizzle-orm';
 import * as fs from 'expo-file-system';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiFilesPathByTitle, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
@@ -202,10 +202,13 @@ export class WikiStorageService {
 
   async #loadFromFS(title: string): Promise<string | undefined> {
     try {
-      const tiddlerFileContent = await fs.readAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title));
-      return tiddlerFileContent;
+      return await fs.readAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title));
     } catch {
-      return undefined;
+      try {
+        return await fs.readAsStringAsync(getWikiFilesPathByTitle(this.#workspace, title));
+      } catch {
+        return undefined;
+      }
     }
   }
 
