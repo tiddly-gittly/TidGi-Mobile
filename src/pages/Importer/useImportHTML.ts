@@ -7,6 +7,7 @@ import {
   getWikiBinaryTiddlersListCachePath,
   getWikiCacheFolderPath,
   getWikiFilePath,
+  getWikiFilesFolderPath,
   getWikiMainSqlitePath,
   getWikiTiddlerFolderPath,
   getWikiTiddlerSkinnyStoreCachePath,
@@ -88,8 +89,11 @@ export function useImportHTML() {
         await fs.deleteAsync(getWikiMainSqlitePath(newWorkspace));
       } catch {}
       await fs.makeDirectoryAsync(newWorkspace.wikiFolderLocation, { intermediates: true });
-      await fs.makeDirectoryAsync(getWikiCacheFolderPath(newWorkspace), { intermediates: true });
-      await fs.makeDirectoryAsync(getWikiTiddlerFolderPath(newWorkspace), { intermediates: true });
+      await Promise.all([
+        fs.makeDirectoryAsync(getWikiCacheFolderPath(newWorkspace), { intermediates: true }),
+        fs.makeDirectoryAsync(getWikiTiddlerFolderPath(newWorkspace), { intermediates: true }),
+        fs.makeDirectoryAsync(getWikiFilesFolderPath(newWorkspace), { intermediates: true }),
+      ]);
       setCreatedWikiWorkspace(newWorkspace);
 
       setStatus('downloading');
@@ -146,8 +150,8 @@ export function useImportHTML() {
       await sqliteServiceService.closeDatabase(newWorkspace);
       setStatus('success');
     } catch (error) {
-      console.error(error, (error as Error).stack);
-      setError((error as Error).message || 'An error occurred');
+      console.error(error ?? '', (error as Error)?.stack);
+      setError((error as Error)?.message || 'An error occurred');
       setStatus('error');
       if (newWorkspaceID !== undefined) {
         removeWiki(newWorkspaceID);

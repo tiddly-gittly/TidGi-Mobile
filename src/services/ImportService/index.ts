@@ -313,8 +313,14 @@ export class ImportService {
         await Promise.all(
           tiddlerListChunk.map(item => item.value).map(async tiddler => {
             try {
-              if (!tiddler.title) return;
               // TODO: check if file already exists, skip importing. Maybe read the folder, and use that list to compare? Or can skip the compare if folder is empty (first time import)
+              if (!tiddler.title) return;
+              // Load external attachment binary from server
+              if (typeof tiddler._canonical_uri === 'string' && tiddler._canonical_uri.length > 0) {
+                await backgroundSyncService.saveCanonicalUriToFSFromServer(workspace, tiddler.title, tiddler._canonical_uri, onlineLastSyncServer);
+                return;
+              }
+              // Load tiddler binary from server
               await backgroundSyncService.saveToFSFromServer(workspace, tiddler.title, onlineLastSyncServer);
             } catch (error) {
               console.error(`loadTiddlersAsFileFromServer: Failed to load tiddler ${tiddler.title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);

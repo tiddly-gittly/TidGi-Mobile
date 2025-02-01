@@ -10,7 +10,7 @@ import { sortedUniqBy, uniq } from 'lodash';
 import pTimeout from 'p-timeout';
 import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiFilesPathByTitle, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
@@ -329,12 +329,28 @@ export class BackgroundSyncService {
     }
   }
 
+  public async saveCanonicalUriToFSFromServer(workspace: IWikiWorkspace, title: string, canonicalUri: string, onlineLastSyncServer = this.getOnlineServerForWiki(workspace)) {
+    let uri = canonicalUri;
+    // Not support file:// or open://, which only works on server side, we can't access the filesystem of server. Server should migrate to use relative path.
+    if (uri.startsWith('file:') || uri.startsWith('open:')) return;
+    if (!uri.startsWith('http')) {
+      uri = `${onlineLastSyncServer?.uri}/${uri}`;
+    }
+    try {
+      const downloadPromise = this.#downloadTextContentToFs(uri, title, workspace, true);
+      await pTimeout(downloadPromise, { milliseconds: 20_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
+    } catch (error) {
+      console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      throw error;
+    }
+  }
+
   /**
    * Download content from url, handle delete content if download fail with 40x
    * @param url that will return a string content, or have error message in string content when 404/400
    */
-  async #downloadTextContentToFs(url: string, title: string, workspace: IWikiWorkspace) {
-    const filePath = getWikiTiddlerPathByTitle(workspace, title);
+  async #downloadTextContentToFs(url: string, title: string, workspace: IWikiWorkspace, isFile?: boolean) {
+    const filePath = isFile === true ? getWikiFilesPathByTitle(workspace, title) : getWikiTiddlerPathByTitle(workspace, title);
     const result = await fs.downloadAsync(url, filePath);
     if (result.status !== 200) {
       // delete text file if have server error like 404
