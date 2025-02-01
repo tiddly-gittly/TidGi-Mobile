@@ -12,6 +12,7 @@ export const TiddlersSQLModel = sqliteTable('tiddlers', {
 });
 
 /**
+ * This model is not directly used in TS, but `temp_tiddlers` is used in hand written SQL queries.
  * Use temp table to speed up update. Can't directly batch update existing rows, SQLite can only batch insert non-existing rows.
  * Don't know why but with expo-sqlite/next, can't create temp table during runtime, otherwise it will say not found (or only say can not rollback, but actually other error), if create table if not exist before insert, it will always creating a new table.
  */
