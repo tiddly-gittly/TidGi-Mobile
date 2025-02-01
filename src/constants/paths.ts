@@ -2,7 +2,7 @@ import * as fs from 'expo-file-system';
 import type { IWikiWorkspace } from '../store/workspace';
 
 export const WIKI_FOLDER_PATH = fs.documentDirectory === null ? undefined : `${fs.documentDirectory}wikis/`;
-export const APP_CACHE_FOLDER_PATH = fs.cacheDirectory === null ? `${fs.documentDirectory!}/cache/` : fs.cacheDirectory;
+export const APP_CACHE_FOLDER_PATH = fs.cacheDirectory ?? `${fs.documentDirectory!}/cache/`;
 export const WIKI_FILE_NAME = 'index.html';
 export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
 export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/tiddlers/`;
@@ -23,7 +23,7 @@ export const WIKI_SMALL_TEXT_STORE_CACHE_NAME = 'text-tiddlerStore.json';
 export const WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME = 'skinny-tiddlerStore.json';
 export const WIKI_BINARY_TIDDLERS_LIST_CACHE_NAME = 'binaryTiddlersList.json';
 export const getWikiCacheFolderPath = (workspace: IWikiWorkspace) => `${fs.cacheDirectory ?? `${workspace.wikiFolderLocation}/cache/`}`;
- /**
+/**
  * We download json to the cache folder (batch download as a single json is faster), then move it to the sqlite later.
  */
 export const getWikiTiddlerSkinnyStoreCachePath = (workspace: IWikiWorkspace) => `${getWikiCacheFolderPath(workspace)}${workspace.id}-${WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME}`;
