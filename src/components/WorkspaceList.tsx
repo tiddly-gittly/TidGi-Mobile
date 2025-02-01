@@ -34,7 +34,6 @@ const WorkspaceListItem: React.FC<{
       }}
       onLongPress={() => {
         onLongPress?.(item);
-        drag();
       }}
     >
       <Card.Title
@@ -54,6 +53,9 @@ const WorkspaceListItem: React.FC<{
               {...props}
               name='reorder-three-sharp'
               color={theme.colors.onSecondaryContainer}
+              onLongPress={() => {
+                drag();
+              }}
             />
           </RightButtonsContainer>
         )}
