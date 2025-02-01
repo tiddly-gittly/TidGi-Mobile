@@ -12,7 +12,9 @@ interface CustomWebViewProps {
   preferredLanguage: string | undefined | null;
   reloadingKey: string | number;
   triggerFullReload: () => void;
+  useFileProtocol: boolean;
   webViewReference: MutableRefObject<WebView | null>;
+  wikiFolderLocation: string;
 }
 
 export class CustomWebView extends Component<CustomWebViewProps> {
@@ -29,6 +31,8 @@ export class CustomWebView extends Component<CustomWebViewProps> {
       onLoadStart,
       onMessageReference,
       injectedJavaScript,
+      wikiFolderLocation,
+      useFileProtocol,
       triggerFullReload,
     } = this.props;
 
@@ -61,9 +65,11 @@ export class CustomWebView extends Component<CustomWebViewProps> {
           }"><head><meta charset="UTF-8" /></head><body><div id="tidgi-mobile-webview-before-loaded-place-holder" style="display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 24px;">Loading...</div></body></html>`,
           /**
            * Add baseUrl to fix `SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.`
+           * But a `file://` based url is needed to load images from the local file system. So we can only use one of them.
            * @url https://github.com/react-native-webview/react-native-webview/issues/1635#issuecomment-1021425071
+           * @url2 https://github.com/react-native-webview/react-native-webview/issues/1786#issuecomment-2629065357
            */
-          baseUrl: 'http://localhost',
+          baseUrl: useFileProtocol ? `${wikiFolderLocation}/` : 'http://localhost:5212',
         }}
         injectedJavaScriptBeforeContentLoaded={injectedJavaScript}
         // source={{ uri: 'about:blank#%E6%9E%97%E4%B8%80%E4%BA%8C:%E6%9E%97%E4%B8%80%E4%BA%8C%20Index' }}

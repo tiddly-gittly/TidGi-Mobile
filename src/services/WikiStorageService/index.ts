@@ -201,6 +201,8 @@ export class WikiStorageService {
   }
 
   async #loadFromFS(title: string): Promise<string | undefined> {
+    // DEBUG: console title
+    console.log(`title`, title);
     try {
       return await fs.readAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title));
     } catch {

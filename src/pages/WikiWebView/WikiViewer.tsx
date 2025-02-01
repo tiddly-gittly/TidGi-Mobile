@@ -142,6 +142,8 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           onMessageReference={onMessageReference}
           injectedJavaScript={preloadScript}
           triggerFullReload={triggerFullReload}
+          wikiFolderLocation={wikiWorkspace.wikiFolderLocation}
+          useFileProtocol={wikiWorkspace.allowReadFileAttachment}
         />
       </WebViewContainer>
     </>

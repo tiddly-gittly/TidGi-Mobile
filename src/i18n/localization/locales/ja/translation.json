@@ -438,6 +438,8 @@
     "NotAvailable": "利用不可",
     "EnableQuickLoad": "クイックロードを有効にする",
     "EnableQuickLoadDescription": "有効にすると、巨大なWikiに追加された新しいコンテンツを素早く開くために、過去数日間のTiddlersのみを読み込みます。新しいコンテンツを素早く追加するだけで、古いコンテンツを見る必要のないシナリオに最適です。",
+    "AllowReadFileAttachment": "ファイル添付の読み取りを許可",
+    "AllowReadFileAttachmentDescription": "ファイル添付（_canonical_uri を介してロードされる外部ファイルと画像）の読み取りを許可します。オンにすると、ホワイトボードなどのウェブページのローカルストレージが必要なアプリケーションが使用できなくなります。",
     "TranslucentStatusBar": "半透明のステータスバー",
     "TranslucentStatusBarDescription": "インターフェイスをステータスバーの下に表示し、ステータスバーのテキストと重なります。表示スペースを増やすことができますが、インターフェイス要素がステータスバーによって隠されることがあります。",
     "HideStatusBar": "ステータスバーを非表示にする",

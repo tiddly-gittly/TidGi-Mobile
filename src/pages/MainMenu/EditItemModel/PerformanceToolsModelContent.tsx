@@ -51,6 +51,18 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
           />
         </SwitchContainer>
       </SectionContainer>
+      <SectionContainer>
+        <Text variant='titleLarge'>{t('Preference.AllowReadFileAttachment')}</Text>
+        <SwitchContainer>
+          <FlexibleText>{t('Preference.AllowReadFileAttachmentDescription')}</FlexibleText>
+          <Switch
+            value={wiki.allowReadFileAttachment}
+            onValueChange={(value) => {
+              updateWorkspace(id, { allowReadFileAttachment: value });
+            }}
+          />
+        </SwitchContainer>
+      </SectionContainer>
     </ModalContainer>
   );
 }

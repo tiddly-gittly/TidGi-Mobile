@@ -32,6 +32,10 @@ export interface IWikiWorkspace {
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
+  /**
+   * Allow reading file attachments in the workspace.
+   */
+  allowReadFileAttachment?: boolean;
 }
 export interface IPageWorkspace {
   id: string;
@@ -95,6 +99,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   id,
                   wikiFolderLocation,
                   selectiveSyncFilter: defaultTextBasedTiddlerFilter,
+                  allowReadFileAttachment: true,
                 } satisfies IWikiWorkspace;
                 state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];
                 result = cloneDeep(newWikiWorkspaceWithID);

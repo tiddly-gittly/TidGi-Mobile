@@ -454,6 +454,8 @@
     "NotAvailable": "不可用",
     "EnableQuickLoad": "启用快速加载",
     "EnableQuickLoadDescription": "启用后仅加载最近几天的条目，以便快速打开巨型知识库新增内容。适合仅需快速添加内容，不需要查看旧有内容的场景。",
+    "AllowReadFileAttachment": "允许读取文件附件",
+    "AllowReadFileAttachmentDescription": "允许读取文件附件（通过 _canonical_uri 加载的外部文件和图片）。打开时会导致无法使用白板等需要网页本地存储的应用。",
     "TranslucentStatusBar": "半透明状态栏",
     "TranslucentStatusBarDescription": "让界面显示在状态栏之下，和状态栏重叠展示，获得更多展示空间，但界面元素有可能被状态栏遮挡。",
     "HideStatusBar": "隐藏状态栏",
