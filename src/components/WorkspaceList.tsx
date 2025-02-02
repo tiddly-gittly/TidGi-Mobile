@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import { compact } from 'lodash';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -54,6 +55,7 @@ const WorkspaceListItem: React.FC<{
               name='reorder-three-sharp'
               color={theme.colors.onSecondaryContainer}
               onLongPress={() => {
+                void Haptics.selectionAsync();
                 drag();
               }}
             />
