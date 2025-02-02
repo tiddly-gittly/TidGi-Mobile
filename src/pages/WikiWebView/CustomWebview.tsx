@@ -36,10 +36,12 @@ export class CustomWebView extends Component<CustomWebViewProps> {
       useFileProtocol,
       androidHardwareAcceleration,
       triggerFullReload,
+      reloadingKey,
     } = this.props;
 
     return (
       <WebView
+        key={reloadingKey}
         style={{ backgroundColor }}
         originWhitelist={['*']}
         mediaPlaybackRequiresUserAction={false}

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Text } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
+import { useShallow } from 'zustand/react/shallow';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { useCloseSQLite } from '../../services/SQLiteService/hooks';
@@ -25,7 +26,7 @@ export interface WikiWebViewProps {
 export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'WikiWebView'>> = ({ route }) => {
   const { t } = useTranslation();
   const { id, quickLoad } = route.params;
-  const activeWorkspace = useWorkspaceStore(state => state.workspaces.find(wiki => wiki.id === id));
+  const activeWorkspace = useWorkspaceStore(useShallow(state => state.workspaces.find(wiki => wiki.id === id)));
   useCloseSQLite(activeWorkspace);
   const [webviewSideReceiver, webviewSideReceiverSetter] = useState<string | undefined>(undefined);
   useEffect(() => {

@@ -117,11 +117,11 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       ${webviewSideReceiver}
 
       window.preloadScriptLoaded = true;
-      console.log('WikiViewer preloadScriptLoaded');
+      console.log('WikiViewer preloadScriptLoaded with reloadingKey ${webViewKeyToReloadAfterRecycleByOS}');
       
       true; // note: this is required, or you'll sometimes get silent failures
   `;
-  }, [registerWikiStorageServiceOnWebView, rememberLastVisitState, webviewSideReceiver, wikiWorkspace]);
+  }, [registerWikiStorageServiceOnWebView, rememberLastVisitState, webViewKeyToReloadAfterRecycleByOS, webviewSideReceiver, wikiWorkspace]);
 
   if (loadHtmlError) {
     return <ErrorText variant='titleLarge'>{loadHtmlError}</ErrorText>;
