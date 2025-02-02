@@ -25,7 +25,7 @@ export function useStreamChunksToWebView(
     });
     webViewReference.current.injectJavaScript(`
       var receiveData = () => {
-        console.log(\`TidGi calling receiveData() with ${messageType}, window.preloadScriptLoaded \${window.preloadScriptLoaded ? '√' : 'x'}, window.onStreamChunksToWebView \${window.onStreamChunksToWebView ? '√' : 'x'}\`);
+        console.log(\`TidGi calling receiveData() with ${messageType}, window.preloadScriptLoaded \${window.preloadScriptLoaded ? '√' : 'x'}, window.onStreamChunksToWebView \${window.onStreamChunksToWebView ? '√' : 'x'}, window.service.wikiStorageService \${window.service?.wikiStorageService ? '√' : 'x'}\`);
         if (window.preloadScriptLoaded !== true || !window.onStreamChunksToWebView) {
           setTimeout(receiveData, 100);
         } else {
