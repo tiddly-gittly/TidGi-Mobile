@@ -36,25 +36,11 @@ export function useRegisterReceivingShareIntent() {
     </Snackbar>
   );
 
-  /** If you get error on development:
-   * ```
-   *  Error: Cannot find native module 'ExpoShareIntentModule', js engine: hermes
-   * Invariant Violation: "main" has not been registered. This can happen if:
-   * Metro (the local dev server) is run from the wrong folder. Check if Metro is running, stop it and restart it in the current project.
-   * A module failed to load due to an error and `AppRegistry.registerComponent` wasn't called., js engine: hermes
-   * ```
-   *
-   * Comment out this import will work.
-   *
-   * Also comment out all code inside `useRegisterReceivingShareIntent`.
-   */
-  if (process.env.NODE_ENV === 'development') {
-    return { importSuccessSnackBar };
-  }
   const { useShareIntent } = require('expo-share-intent') as { useShareIntent: typeof IUseShareIntent };
   /* eslint-disable react-hooks/rules-of-hooks */
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
     debug: true,
+    disabled: process.env.NODE_ENV === 'development',
   });
 
   useEffect(() => {

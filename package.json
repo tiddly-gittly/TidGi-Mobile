@@ -3,6 +3,7 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "android": "cross-env NODE_ENV=development expo start --go --android",
+    "simulate-production": "cross-env NODE_ENV=production expo start --go --android --no-dev --minify",
     "build:plugin": "zx scripts/buildPlugins.mjs",
     "build:preload": "zx scripts/buildPreload.mjs",
     "build:sqlite-migration": "drizzle-kit generate",
@@ -14,6 +15,7 @@
     "start:tunnel": "cross-env NODE_ENV=development expo start --tunnel --android",
     "start:devClient": "cross-env NODE_ENV=development npx expo start --dev-client --android",
     "web": "cross-env NODE_ENV=development expo start --web",
+    "postinstall": "patch-package",
     "init-submodules": "git submodule update --init --recursive"
   },
   "dependencies": {
@@ -87,6 +89,7 @@
     "drizzle-kit": "^0.30.4",
     "eslint-config-tidgi": "^1.2.3",
     "eslint-plugin-react-native": "^5.0.0",
+    "patch-package": "^8.0.0",
     "tw5-typed": "^0.5.14",
     "typescript": "^5.7.3",
     "zx": "^8.3.2"

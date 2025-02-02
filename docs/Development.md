@@ -48,6 +48,13 @@ This will use Expo's EAS to build. It only have limited free tries, so be sure t
 
 Build the api in the github action can be triggered by tagging `fdroid-v*.*.*`, but this is still a WIP.
 
+## Debug after build
+
+```sh
+adb shell
+katyusha:/ $ logcat | grep ren.onetwo.tidgi.mobile
+```
+
 ## FAQ on setting up development environment
 
 ### None of these files exist: \* node_modules/expo/AppEntry
