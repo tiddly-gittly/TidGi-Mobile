@@ -442,7 +442,9 @@
     "TranslucentStatusBar": "Translucent Status Bar",
     "TranslucentStatusBarDescription": "Allow the interface to be displayed below the status bar, overlapping with \n text on status bar, for more display space, but interface elements may be obscured by the status bar.",
     "HideStatusBar": "Hide Status Bar",
-    "HideStatusBarDescription": "Completely hide the status bar, more display space is available when hidden, but opening the status bar may require additional action. Does not take effect on bangs screen dig hole screen."
+    "HideStatusBarDescription": "Completely hide the status bar, more display space is available when hidden, but opening the status bar may require additional action. Does not take effect on bangs screen dig hole screen.",
+    "AndroidHardwareAcceleration": "Android Hardware Acceleration",
+    "AndroidHardwareAccelerationDescription": "Enabling it may potentially solve the issues of white screens on some device models or page crashes after being left in the background for a long time. However, it will reduce performance and cause videos to fail to load."
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",

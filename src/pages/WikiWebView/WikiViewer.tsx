@@ -62,7 +62,9 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const onLoadEnd = useCallback(() => {
     setLoaded(true);
   }, []);
-  const [rememberLastVisitState, preferredLanguage] = useConfigStore(useShallow(state => [state.rememberLastVisitState, state.preferredLanguage]));
+  const [rememberLastVisitState, preferredLanguage, androidHardwareAcceleration] = useConfigStore(
+    useShallow(state => [state.rememberLastVisitState, state.preferredLanguage, state.androidHardwareAcceleration]),
+  );
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
@@ -144,6 +146,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           triggerFullReload={triggerFullReload}
           wikiFolderLocation={wikiWorkspace.wikiFolderLocation}
           useFileProtocol={wikiWorkspace.allowReadFileAttachment}
+          androidHardwareAcceleration={androidHardwareAcceleration}
         />
       </WebViewContainer>
     </>

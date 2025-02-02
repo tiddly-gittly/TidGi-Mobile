@@ -21,6 +21,7 @@ export interface ConfigState {
   theme: ColorSchemeName | 'default';
   translucentStatusBar?: boolean;
   userName: string;
+  androidHardwareAcceleration?: boolean;
 }
 const defaultConfig: ConfigState = {
   autoOpenDefaultWiki: undefined,
@@ -36,6 +37,7 @@ const defaultConfig: ConfigState = {
   theme: 'default',
   translucentStatusBar: true,
   userName: '',
+  androidHardwareAcceleration: true,
 };
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;

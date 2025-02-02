@@ -459,7 +459,9 @@
     "TranslucentStatusBar": "半透明状态栏",
     "TranslucentStatusBarDescription": "让界面显示在状态栏之下，和状态栏重叠展示，获得更多展示空间，但界面元素有可能被状态栏遮挡。",
     "HideStatusBar": "隐藏状态栏",
-    "HideStatusBarDescription": "完全隐藏状态栏，隐藏后可以获得更多展示空间，但打开状态栏可能需要额外操作。在刘海屏挖孔屏上不生效。"
+    "HideStatusBarDescription": "完全隐藏状态栏，隐藏后可以获得更多展示空间，但打开状态栏可能需要额外操作。在刘海屏挖孔屏上不生效。",
+    "AndroidHardwareAcceleration": "安卓硬件加速",
+    "AndroidHardwareAccelerationDescription": "开启后可能可以解决有的机型上白屏或后台放久了页面崩溃的问题，但会降低性能并导致无法加载视频。"
   },
   "Error": {
     "InitWikiGitError": "E-1 笔记仓库初始化失败错误",
