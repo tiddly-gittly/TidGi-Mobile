@@ -20,7 +20,7 @@ import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspac
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
-import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
+// import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
@@ -40,7 +40,7 @@ export const App: React.FC = () => {
   const colorScheme = useColorScheme();
   const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
   const [translucentStatusBar, hideStatusBar] = useConfigStore(useShallow(state => [state.translucentStatusBar, state.hideStatusBar]));
-  const { importSuccessSnackBar } = useRegisterReceivingShareIntent();
+  // const { importSuccessSnackBar } = useRegisterReceivingShareIntent();
 
   return (
     <I18nextProvider i18n={i18n}>
