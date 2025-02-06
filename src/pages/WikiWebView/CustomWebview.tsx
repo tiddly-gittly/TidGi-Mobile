@@ -4,6 +4,7 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { FAKE_USER_AGENT } from '../../constants/webview';
 
 interface CustomWebViewProps {
+  androidHardwareAcceleration: boolean | undefined;
   backgroundColor: string;
   injectedJavaScript: string;
   onLoadEnd?: () => void;
@@ -13,7 +14,6 @@ interface CustomWebViewProps {
   reloadingKey: string | number;
   triggerFullReload: () => void;
   useFileProtocol: boolean | undefined;
-  androidHardwareAcceleration: boolean | undefined;
   webViewReference: MutableRefObject<WebView | null>;
   wikiFolderLocation: string;
 }
@@ -93,7 +93,8 @@ export class CustomWebView extends Component<CustomWebViewProps> {
         onMessage={onMessageReference.current}
         ref={webViewReference}
         webviewDebuggingEnabled={true /* Open chrome://inspect/#devices , or Development menu on Safari to debug the WebView. https://github.com/react-native-webview/react-native-webview/blob/master/docs/Debugging.md#debugging-webview-contents */}
-        renderToHardwareTextureAndroid={androidHardwareAcceleration}
+        // renderToHardwareTextureAndroid={androidHardwareAcceleration}
+        androidLayerType={androidHardwareAcceleration === false ? 'software' : 'hardware'}
       />
     );
   }
