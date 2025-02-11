@@ -66,8 +66,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-      # - name: Fix gradle error
-      #   run: pnpm exec zx scripts/fix-gradle.mjs
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v4
@@ -101,7 +99,6 @@ jobs:
 
       ## sign generated apk
       - name: Sign APK
-        id: sign_app_apk
         uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: android/app/build/outputs/apk/release
@@ -133,8 +130,16 @@ jobs:
           cd android
           ./gradlew clean
           ./gradlew assembleRelease --no-daemon --warning-mode all
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+          alias: ${{ secrets.ANDROID_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - name: Rename Development Build APK
-        run: mv android/app/build/outputs/apk/release/app-release-unsigned.apk android/app/build/outputs/apk/release/app-release-dev-client.apk
+        run: mv android/app/build/outputs/apk/release/app-release-signed.apk android/app/build/outputs/apk/release/app-release-dev-client.apk
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
