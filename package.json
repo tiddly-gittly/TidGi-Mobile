@@ -15,7 +15,6 @@
     "start:tunnel": "cross-env NODE_ENV=development expo start --tunnel --android",
     "start:devClient": "cross-env NODE_ENV=development npx expo start --dev-client --android",
     "web": "cross-env NODE_ENV=development expo start --web",
-    "postinstall": "patch-package",
     "init-submodules": "git submodule update --init --recursive"
   },
   "dependencies": {
@@ -58,6 +57,7 @@
     "react-native-localize": "^3.4.1",
     "react-native-paper": "^5.13.1",
     "react-native-postmessage-cat": "^0.3.1",
+    "react-native-reanimated": "~3.16.1",
     "react-native-reorderable-list": "^0.11.0",
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0",
@@ -92,7 +92,6 @@
     "drizzle-kit": "^0.30.4",
     "eslint-config-tidgi": "^1.2.3",
     "eslint-plugin-react-native": "^5.0.0",
-    "patch-package": "^8.0.0",
     "tw5-typed": "^0.5.14",
     "typescript": "^5.7.3",
     "zx": "^8.3.2"
