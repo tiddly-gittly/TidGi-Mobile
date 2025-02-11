@@ -121,3 +121,27 @@ jobs:
           files: android/app/build/outputs/apk/release/app-release-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optionally create an development build
+      - name: Install expo-dev-client
+        run: pnpm install expo-dev-client
+      # Same step as above
+      - name: Build by eject eas and not remove debug signing key for apk
+        run: pnpm exec expo prebuild -p android --clean
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew clean
+          ./gradlew assembleRelease --no-daemon --warning-mode all
+      - name: Rename Development Build APK
+        run: mv android/app/build/outputs/apk/release/app-release-unsigned.apk android/app/build/outputs/apk/release/app-release-dev-client.apk
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          generate_release_notes: false
+          files: |
+            android/app/build/outputs/apk/release/app-release-dev-client.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
