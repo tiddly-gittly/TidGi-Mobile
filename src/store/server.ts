@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cloneDeep } from 'lodash';
 import { create } from 'zustand';
-import { createJSONStorage, devtools, persist } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { expoFileSystemStorage } from '../utils/expoFileSystemStorage';
 
 export enum ServerStatus {
   disconnected = 'disconnected',
@@ -88,7 +88,7 @@ export const useServerStore = create<ServerState & ServerActions>()(
       }),
       {
         name: 'server-storage',
-        storage: createJSONStorage(() => AsyncStorage),
+        storage: expoFileSystemStorage,
       },
     ),
   )),

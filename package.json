@@ -18,7 +18,6 @@
     "init-submodules": "git submodule update --init --recursive"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-community/datetimepicker": "8.2.0",
     "@react-native-picker/picker": "2.9.0",
     "@react-navigation/bottom-tabs": "^7.2.0",

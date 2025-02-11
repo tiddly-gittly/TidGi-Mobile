@@ -23,6 +23,7 @@ export const WIKI_SMALL_TEXT_STORE_CACHE_NAME = 'text-tiddlerStore.json';
 export const WIKI_SKINNY_TIDDLER_STORE_CACHE_NAME = 'skinny-tiddlerStore.json';
 export const WIKI_BINARY_TIDDLERS_LIST_CACHE_NAME = 'binaryTiddlersList.json';
 export const getWikiCacheFolderPath = (workspace: IWikiWorkspace) => `${fs.cacheDirectory ?? `${workspace.wikiFolderLocation}/cache/`}`;
+export const PERSIST_STORAGE_PATH = fs.documentDirectory === null ? undefined : `${fs.documentDirectory}persistStorage/`;
 /**
  * We download json to the cache folder (batch download as a single json is faster), then move it to the sqlite later.
  */

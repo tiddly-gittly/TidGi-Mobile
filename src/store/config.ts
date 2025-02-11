@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ColorSchemeName } from 'react-native';
 import { create } from 'zustand';
-import { createJSONStorage, devtools, persist } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { expoFileSystemStorage } from '../utils/expoFileSystemStorage';
 
 export interface ConfigState {
   androidHardwareAcceleration?: boolean;
@@ -60,7 +60,7 @@ export const useConfigStore = create<ConfigState & ConfigActions>()(
       }),
       {
         name: 'config-storage',
-        storage: createJSONStorage(() => AsyncStorage),
+        storage: expoFileSystemStorage,
       },
     ),
   )),

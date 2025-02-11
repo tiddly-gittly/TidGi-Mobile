@@ -1,14 +1,18 @@
 /* eslint-disable @typescript-eslint/consistent-type-assertions */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cloneDeep, uniqBy } from 'lodash';
 import { create } from 'zustand';
-import { createJSONStorage, devtools, persist } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { defaultTextBasedTiddlerFilter } from '../constants/filters';
 import { WIKI_FOLDER_PATH } from '../constants/paths';
+import { expoFileSystemStorage } from '../utils/expoFileSystemStorage';
 
 export interface IWikiWorkspace {
+  /**
+   * Allow reading file attachments in the workspace.
+   */
+  allowReadFileAttachment?: boolean;
   /**
    * Enable quick load button on workspace list.
    * When click on button, will only load recent tiddlers, speed up loading time for huge wiki.
@@ -32,10 +36,6 @@ export interface IWikiWorkspace {
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
-  /**
-   * Allow reading file attachments in the workspace.
-   */
-  allowReadFileAttachment?: boolean;
 }
 export interface IPageWorkspace {
   id: string;
@@ -184,7 +184,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
       }),
       {
         name: 'wiki-storage',
-        storage: createJSONStorage(() => AsyncStorage),
+        storage: expoFileSystemStorage,
       },
     ),
   )),
