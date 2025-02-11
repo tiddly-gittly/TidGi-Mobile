@@ -47,7 +47,7 @@ export const App: React.FC = () => {
       <PaperProvider theme={theme}>
         <ThemeProvider theme={theme}>
           <StatusBar translucent={translucentStatusBar} hidden={hideStatusBar} />
-          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation} navigationInChildEnabled>
+          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
             <Stack.Navigator initialRouteName='MainMenu'>
               <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
               <Stack.Screen
@@ -57,7 +57,7 @@ export const App: React.FC = () => {
                   presentation: 'modal' as const,
                   headerTitle: t('Preference.Title'),
                   headerTitleStyle: { color: theme.colors.primary },
-                  headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={(navigation as NavigationProp<ReactNavigation.RootParamList>).goBack} />,
+                  headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={navigation.goBack} />,
                 })}
               />
               <Stack.Screen
@@ -73,7 +73,7 @@ export const App: React.FC = () => {
                       color={theme.colors.primary}
                       style={{ marginRight: 10 }}
                       onPress={() => {
-                        (navigation as NavigationProp<ReactNavigation.RootParamList>).navigate('Config' as never);
+                        navigation.navigate('Config' as never);
                       }}
                     />
                   ),
