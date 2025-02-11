@@ -5,6 +5,7 @@ import { createJSONStorage, devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 
 export interface ConfigState {
+  androidHardwareAcceleration?: boolean;
   /** the initial value should be undefined, so an initial true value won't immediately trigger autoOpen */
   autoOpenDefaultWiki?: boolean;
   defaultDownloadLocation?: string;
@@ -21,9 +22,9 @@ export interface ConfigState {
   theme: ColorSchemeName | 'default';
   translucentStatusBar?: boolean;
   userName: string;
-  androidHardwareAcceleration?: boolean;
 }
 const defaultConfig: ConfigState = {
+  androidHardwareAcceleration: true,
   autoOpenDefaultWiki: undefined,
   fastImport: true,
   hideStatusBar: false,
@@ -35,9 +36,8 @@ const defaultConfig: ConfigState = {
   syncIntervalBackground: 60 * 30 * 1000,
   tagForSharedContent: undefined,
   theme: 'default',
-  translucentStatusBar: true,
+  translucentStatusBar: false,
   userName: '',
-  androidHardwareAcceleration: true,
 };
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;
