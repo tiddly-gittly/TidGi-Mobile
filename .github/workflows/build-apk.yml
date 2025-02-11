@@ -66,8 +66,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-      - name: Fix gradle error
-        run: pnpm exec zx scripts/fix-gradle.mjs
+      # - name: Fix gradle error
+      #   run: pnpm exec zx scripts/fix-gradle.mjs
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v4
