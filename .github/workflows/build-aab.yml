@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
@@ -70,8 +70,8 @@ jobs:
         run: pnpm exec zx scripts/fix-gradle.mjs
 
       ## configure cash for gradle : will help to reduce build time
-      - name: Cache Gradle Wrapper and Dependencies
-        uses: actions/cache@v2
+      - uses: actions/cache@v4
+        name: Cache Gradle Wrapper and Dependencies
         with:
           path: |
             ~/.gradle/caches

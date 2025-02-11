@@ -52,8 +52,8 @@ jobs:
         run: npx zx scripts/fix-gradle.mjs
 
       ## configure cash for gradle : will help to reduce build time
-      - name: Cache Gradle Wrapper and Dependencies
-        uses: actions/cache@v2
+      - uses: actions/cache@v4
+        name: Cache Gradle Wrapper and Dependencies
         with:
           path: |
             ~/.gradle/caches
