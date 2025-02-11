@@ -42,10 +42,10 @@ jobs:
         with:
           distribution: 'zulu' # See 'Supported distributions' for available options
           java-version: '17'
-      - name: Setup Gradle # fix `incompatible version of Kotlin. The binary version of its metadata is 1.9.0, expected version is 1.7.1.`
+      - name: Setup Gradle # fix `incompatible version of Kotlin. The binary version of its metadata is 1.9.0, expected version is 1.7.1.` or `Task :react-native-gesture-handler:generateReleaseBuildConfig: This version (1.3.2) of the Compose Compiler requires Kotlin version 1.7.20 but you appear to be using Kotlin version 1.9.25 which is not known to be compatible.  Please fix your configuration`
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.0.1 # use the gradle version I saw on eas build's console, which might match the kotlin version?
+          gradle-version: 8.10.2 # use the gradle version I saw on eas build's console, which might match the kotlin version?. Create an EAS build, and look at its "Run gradlew" step for text like `Welcome to Gradle 8.10.2!`
       - name: Set Build Tools Version
         run: |
           echo "BUILD_TOOLS_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)" >> $GITHUB_ENV
