@@ -3,7 +3,7 @@
     "name": "TidGi",
     "scheme": "tidgi",
     "slug": "tidgi-mobile",
-    "version": "0.8.2",
+    "version": "0.9.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
