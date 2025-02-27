@@ -4,10 +4,11 @@ import { desc, eq } from 'drizzle-orm';
 import * as fs from 'expo-file-system';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiFilesPathByTitle, getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiFilesPathByCanonicalUri, getWikiFilesPathByTitle, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
 import { backgroundSyncService } from '../BackgroundSyncService';
+import { ISkinnyTiddler } from '../ImportService/types';
 import { sqliteServiceService } from '../SQLiteService';
 import { TiddlerChangeSQLModel, TiddlersSQLModel } from '../SQLiteService/orm';
 import { IWikiServerStatusObject, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -193,7 +194,25 @@ export class WikiStorageService {
     try {
       const { orm } = await sqliteServiceService.getDatabase(this.#workspace);
       const tiddlers = await orm.select().from(TiddlersSQLModel).where(eq(TiddlersSQLModel.title, title)).limit(1);
-      return tiddlers[0]?.text ?? undefined;
+      const tiddler = tiddlers[0];
+      if (tiddler === undefined) {
+        return undefined;
+      }
+      // Try load external attachment binary from fs, if no text
+      if (tiddler.text === null) {
+        let canonicalUri: string | undefined;
+        try {
+          canonicalUri = (JSON.parse(tiddler.fields) as ISkinnyTiddler | undefined)?._canonical_uri;
+        } catch {
+          console.warn(`Failed to parse canonical_uri from no-text tiddler's fields for title: ${title}`);
+        }
+        if (typeof canonicalUri === 'string' && canonicalUri.length > 0) {
+          const filePath = getWikiFilesPathByCanonicalUri(this.#workspace, decodeURIComponent(canonicalUri));
+          return await fs.readAsStringAsync(filePath);
+        }
+      } else {
+        return tiddler.text;
+      }
     } catch (error) {
       console.error(`SQL error when getting ${title} : ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       return undefined;
@@ -201,8 +220,6 @@ export class WikiStorageService {
   }
 
   async #loadFromFS(title: string): Promise<string | undefined> {
-    // DEBUG: console title
-    console.log(`title`, title);
     try {
       return await fs.readAsStringAsync(getWikiTiddlerPathByTitle(this.#workspace, title));
     } catch {

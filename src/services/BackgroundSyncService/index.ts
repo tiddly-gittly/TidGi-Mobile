@@ -10,7 +10,7 @@ import { sortedUniqBy, uniq } from 'lodash';
 import pTimeout from 'p-timeout';
 import { Alert } from 'react-native';
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiFilesPathByTitle, getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiFilesPathByCanonicalUri, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
@@ -321,7 +321,8 @@ export class BackgroundSyncService {
         return;
       }
       const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
-      const downloadPromise = this.#downloadTextContentToFs(getTiddlerUrl.toString(), title, workspace);
+      const filePath = getWikiTiddlerPathByTitle(workspace, title);
+      const downloadPromise = this.#downloadTextContentToFs(getTiddlerUrl.toString(), filePath);
       await pTimeout(downloadPromise, { milliseconds: 20_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
     } catch (error) {
       console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
@@ -337,10 +338,11 @@ export class BackgroundSyncService {
       uri = `${onlineLastSyncServer?.uri}/${uri}`;
     }
     try {
-      const downloadPromise = this.#downloadTextContentToFs(uri, title, workspace, true);
+      const filePath = getWikiFilesPathByCanonicalUri(workspace, canonicalUri);
+      const downloadPromise = this.#downloadTextContentToFs(uri, filePath);
       await pTimeout(downloadPromise, { milliseconds: 20_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
     } catch (error) {
-      console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      console.error(`Failed to load CanonicalUri tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
       throw error;
     }
   }
@@ -349,8 +351,7 @@ export class BackgroundSyncService {
    * Download content from url, handle delete content if download fail with 40x
    * @param url that will return a string content, or have error message in string content when 404/400
    */
-  async #downloadTextContentToFs(url: string, title: string, workspace: IWikiWorkspace, isFile?: boolean) {
-    const filePath = isFile === true ? getWikiFilesPathByTitle(workspace, title) : getWikiTiddlerPathByTitle(workspace, title);
+  async #downloadTextContentToFs(url: string, filePath: string) {
     const result = await fs.downloadAsync(url, filePath);
     if (result.status !== 200) {
       // delete text file if have server error like 404

@@ -14,6 +14,10 @@ export const getWikiFilesFolderPath = (workspace: IWikiWorkspace) => `${workspac
 const INVALID_CHARACTERS_REGEX = /["#%&'*/:<=>?\\{}]/g;
 export const getWikiTiddlerPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiTiddlerFolderPath(workspace)}${title.replaceAll(INVALID_CHARACTERS_REGEX, '_')}`;
 export const getWikiFilesPathByTitle = (workspace: IWikiWorkspace, title: string) => `${getWikiFilesFolderPath(workspace)}${title.replaceAll(INVALID_CHARACTERS_REGEX, '_')}`;
+/**
+ * Return file path like `file:///data/user/0/host.exp.exponent/files/wikis/wiki_88370/files/TiddlyWikiIconBlack.png`, similar to `getWikiFilesFolderPath`, but canonicalUri should bring its own `files/` prefix.
+ */
+export const getWikiFilesPathByCanonicalUri = (workspace: IWikiWorkspace, canonicalUri: string) => `${workspace.wikiFolderLocation}/${canonicalUri}`;
 export const SYSTEM_STORE_CACHE_NAME = 'system-tiddlerStore.json';
 /**
  * non-skinny tiddlers, like system tiddlers and state tiddlers.
