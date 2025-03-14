@@ -2,14 +2,14 @@
 /* eslint-disable unicorn/no-null */
 import { Picker } from '@react-native-picker/picker';
 import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useServerStore } from '../../store/server';
-import { useWorkspaceStore } from '../../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -28,7 +28,9 @@ const ScanQRButton = styled(Button)`
 
 export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find(w => w.id === id));
+  const wiki = useWorkspaceStore(state =>
+    id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
+  );
   const theme = useTheme();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
@@ -36,10 +38,20 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const addServer = useServerStore(useShallow(state => state.add));
   const [serverName, setServerName] = useState('');
   const [serverUrlString, setServerUrlString] = useState('');
-  const pickerStyle = { color: theme.colors.onSurface, backgroundColor: theme.colors.surface };
-  const [servers, availableServersToPick] = useServerStore(useShallow(
-    state => [state.servers, Object.entries(state.servers).map(([id, server]) => ({ id, label: `${server.name} (${server.uri})` }))],
-  ));
+  const pickerStyle = useMemo(() => ({ color: theme.colors.onSurface, backgroundColor: theme.colors.surface }), [theme.colors.onSurface, theme.colors.surface]);
+  const servers = useServerStore(useShallow(state => state.servers));
+  const availableServersToPick = useMemo(() => {
+    if (wiki === undefined) return [];
+    return Object.entries(useServerStore.getState().servers)
+      .filter(([id]) => wiki.syncedServers?.map(item => item.serverID)?.includes?.(id))
+      .map(([id, server]) => {
+        const lastSync = wiki.syncedServers?.find(item => item.serverID === id)?.lastSync;
+        return {
+          id,
+          label: `${server.name} (${lastSync === undefined ? '-' : new Date(lastSync).toLocaleString()})`,
+        };
+      });
+  }, [wiki]);
 
   const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>(availableServersToPick?.[0]?.id ?? '');
   const handleFillSelectedServer = useCallback(() => {
