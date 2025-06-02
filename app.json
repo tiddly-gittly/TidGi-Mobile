@@ -54,8 +54,12 @@
       [
         "expo-share-intent",
         {
-          "androidIntentFilters": ["*/*"],
-          "androidMultiIntentFilters": ["*/*"],
+          "androidIntentFilters": [
+            "*/*"
+          ],
+          "androidMultiIntentFilters": [
+            "*/*"
+          ],
           "iosActivationRules": {
             "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
             "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
@@ -63,7 +67,8 @@
             "NSExtensionActivationSupportsMovieWithMaxCount": 1
           }
         }
-      ]
+      ],
+      "expo-background-task"
     ],
     "extra": {
       "eas": {

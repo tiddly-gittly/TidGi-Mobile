@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null */
-import * as BackgroundFetch from 'expo-background-fetch';
+import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,14 +14,14 @@ export default function BackgroundSyncStatus() {
   const { t } = useTranslation();
   const [isRegistered, setIsRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<BackgroundFetch.BackgroundFetchStatus | null>(null);
+  const [status, setStatus] = useState<BackgroundTask.BackgroundTaskStatus | undefined>(undefined);
 
   useEffect(() => {
     void checkStatusAsync();
   }, []);
 
   const checkStatusAsync = async () => {
-    const status = await BackgroundFetch.getStatusAsync();
+    const status = await BackgroundTask.getStatusAsync();
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK_NAME);
     setStatus(status);
     setIsRegistered(isRegistered);
@@ -50,7 +50,7 @@ export default function BackgroundSyncStatus() {
       </Button>
       <Text>
         {t('Preference.BackgroundSyncStatus')} {isRegistered ? t('Preference.Registered') : t('Preference.NotRegistered')}{' '}
-        {status && BackgroundFetch.BackgroundFetchStatus[status] === 'Available' ? t('Preference.Available') : t('Preference.NotAvailable')}
+        {status !== undefined && BackgroundTask.BackgroundTaskStatus[status] === 'AVAILABLE' ? t('Preference.Available') : t('Preference.NotAvailable')}
       </Text>
     </Container>
   );

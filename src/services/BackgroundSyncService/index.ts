@@ -1,7 +1,6 @@
-/* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/promise-function-async */
 import { asc, desc, eq, gt } from 'drizzle-orm';
-import * as BackgroundFetch from 'expo-background-fetch';
+import * as BackgroundTask from 'expo-background-task';
 import Constants from 'expo-constants';
 import * as fs from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
@@ -27,31 +26,29 @@ export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
   const now = Date.now();
 
-  console.log(`Got background fetch call at date: ${new Date(now).toISOString()}`);
+  console.log(`Got background task call at date: ${new Date(now).toISOString()}`);
   const { haveUpdate } = await backgroundSyncService.sync();
 
   // Be sure to return the successful result type!
-  return haveUpdate ? BackgroundFetch.BackgroundFetchResult.NewData : BackgroundFetch.BackgroundFetchResult.NoData;
+  return haveUpdate ? BackgroundTask.BackgroundTaskResult.NewData : BackgroundTask.BackgroundTaskResult.NoData;
 });
 
 // 2. Register the task at some point in your app by providing the same name,
-// and some configuration options for how the background fetch should behave
+// and some configuration options for how the background task should behave
 // Note: This does NOT need to be in the global scope and CAN be used in your React components!
 export async function registerBackgroundSyncAsync() {
-  await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK_NAME, {
-    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000, // 30 minutes in second
-    stopOnTerminate: false, // android only,
-    startOnBoot: true, // android only
+  await BackgroundTask.registerTaskAsync(BACKGROUND_SYNC_TASK_NAME, {
+    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000 // 30 minutes in second
   });
   // immediately sync once
   await backgroundSyncService.sync();
 }
 
 // 3. (Optional) Unregister tasks by specifying the task name
-// This will cancel any future background fetch calls that match the given name
+// This will cancel any future background task calls that match the given name
 // Note: This does NOT need to be in the global scope and CAN be used in your React components!
 export async function unregisterBackgroundSyncAsync() {
-  await BackgroundFetch.unregisterTaskAsync(BACKGROUND_SYNC_TASK_NAME);
+  await BackgroundTask.unregisterTaskAsync(BACKGROUND_SYNC_TASK_NAME);
 }
 
 export class BackgroundSyncService {
