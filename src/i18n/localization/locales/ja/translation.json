@@ -527,7 +527,9 @@
     "TagForSharedContent": "共有コンテンツ用のタグ",
     "Clipped": "クリップ",
     "FastImport": "高速インポート",
-    "FastImportDescription": "Wikiを開くことなくデフォルトのワークスペースにインポートしますが、確認用のポップアップボックスは表示されません。手動でWikiを開き、「最近のもの」でインポート結果を確認できます。"
+    "FastImportDescription": "Wikiを開くことなくデフォルトのワークスペースにインポートしますが、確認用のポップアップボックスは表示されません。手動でWikiを開き、「最近のもの」でインポート結果を確認できます。",
+    "SaveMediaAsAttachment": "メディアを添付ファイルとして保存",
+    "SaveMediaAsAttachmentDescription": "有効にすると、メディアとファイルはファイルシステムに保存され、完全なコンテンツを埋め込む代わりに、wikiには _canonical_uri のみが保存されます。"
   },
   "Description": "説明",
   "Tags": "タグ",

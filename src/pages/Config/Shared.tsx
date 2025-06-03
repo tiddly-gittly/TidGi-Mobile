@@ -1,5 +1,5 @@
 import useDebouncedCallback from 'beautiful-react-hooks/useDebouncedCallback';
-import React, { useState } from 'react';
+import React, { useState, JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -15,7 +15,9 @@ const StyledTextInput = styled(TextInput)`
 export function Shared(): JSX.Element {
   const { t } = useTranslation();
 
-  const [initialTagForSharedContent, fastImport] = useConfigStore(useShallow(state => [state.tagForSharedContent, state.fastImport]));
+  const [initialTagForSharedContent, fastImport, saveMediaAsAttachment] = useConfigStore(
+    useShallow(state => [state.tagForSharedContent, state.fastImport, state.saveMediaAsAttachment]),
+  );
   const [tagForSharedContent, tagForSharedContentSetter] = useState(initialTagForSharedContent);
   const setConfig = useConfigStore(state => state.set);
 
@@ -25,6 +27,10 @@ export function Shared(): JSX.Element {
 
   const fastImportOnChange = (value: boolean) => {
     setConfig({ fastImport: value });
+  };
+
+  const saveMediaAsAttachmentOnChange = (value: boolean) => {
+    setConfig({ saveMediaAsAttachment: value });
   };
 
   return (
@@ -45,6 +51,14 @@ export function Shared(): JSX.Element {
         <Switch
           value={fastImport}
           onValueChange={fastImportOnChange}
+        />
+      </SwitchContainer>
+      <Text variant='titleLarge'>{t('Share.SaveMediaAsAttachment')}</Text>
+      <SwitchContainer>
+        <FlexibleText>{t('Share.SaveMediaAsAttachmentDescription')}</FlexibleText>
+        <Switch
+          value={saveMediaAsAttachment}
+          onValueChange={saveMediaAsAttachmentOnChange}
         />
       </SwitchContainer>
     </>

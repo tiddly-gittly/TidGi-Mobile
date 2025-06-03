@@ -512,7 +512,9 @@
     "TagForSharedContentDescription": "分享给太记移动端的内容，会自动加上这个标签。留空时表示不加任何标签。",
     "Clipped": "剪藏",
     "FastImport": "快速导入",
-    "FastImportDescription": "无需打开Wiki即可导入内容到默认工作区，但不会有弹框确认。可以手动打开Wiki后到「最近」里查看导入的结果。"
+    "FastImportDescription": "无需打开Wiki即可导入内容到默认工作区，但不会有弹框确认。可以手动打开Wiki后到「最近」里查看导入的结果。",
+    "SaveMediaAsAttachment": "媒体文件保存为附件",
+    "SaveMediaAsAttachmentDescription": "启用后，媒体和文件将保存到文件系统，在wiki中只保存 _canonical_uri，而不是嵌入完整内容。"
   },
   "Import": {
     "ImportWiki": "导入Wiki"

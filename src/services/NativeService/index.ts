@@ -7,6 +7,7 @@ import type { ShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
 
 import type { ITiddlerFieldsParam } from 'tiddlywiki';
+import { getWikiFilesPathByCanonicalUri } from '../../constants/paths';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
@@ -153,13 +154,32 @@ export class NativeService {
       case 'file': {
         if (shareIntent.files) {
           for (const file of shareIntent.files) {
-            const fileContent = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: fs.EncodingType.Base64 });
-            const fileFields = {
-              ...fields,
-              type: file.mimeType,
-              text: fileContent,
-            };
-            await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
+            if (configs.saveMediaAsAttachment) {
+              // Save file to filesystem and create tiddler with _canonical_uri
+              const canonicalUri = `files/${file.fileName || randomTitle}`;
+              const filePath = getWikiFilesPathByCanonicalUri(defaultWiki, canonicalUri);
+              const filesDirectory = `${defaultWiki.wikiFolderLocation}/files`;
+              await fs.makeDirectoryAsync(filesDirectory, { intermediates: true });
+              await fs.copyAsync({
+                from: file.path.startsWith('file://') ? file.path : `file://${file.path}`,
+                to: filePath,
+              });
+              const fileFields = {
+                ...fields,
+                type: file.mimeType,
+                _canonical_uri: canonicalUri,
+              };
+              await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
+            } else {
+              // Original behavior: embed file content as base64
+              const fileContent = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: fs.EncodingType.Base64 });
+              const fileFields = {
+                ...fields,
+                type: file.mimeType,
+                text: fileContent,
+              };
+              await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
+            }
           }
         }
         break;

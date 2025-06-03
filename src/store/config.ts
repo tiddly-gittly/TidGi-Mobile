@@ -14,6 +14,8 @@ export interface ConfigState {
   keepAliveInBackground: boolean;
   preferredLanguage?: string;
   rememberLastVisitState: boolean;
+  /** Save media and files as attachments using only _canonical_uri instead of embedding full content */
+  saveMediaAsAttachment: boolean;
   syncInBackground: boolean;
   syncInterval: number;
   syncIntervalBackground: number;
@@ -31,6 +33,7 @@ const defaultConfig: ConfigState = {
   keepAliveInBackground: true,
   preferredLanguage: undefined,
   rememberLastVisitState: true,
+  saveMediaAsAttachment: true,
   syncInBackground: true,
   syncInterval: 60 * 1000,
   syncIntervalBackground: 60 * 30 * 1000,
