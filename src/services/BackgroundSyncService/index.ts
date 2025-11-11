@@ -241,6 +241,17 @@ export class BackgroundSyncService {
         for (const title of deletes) {
           // await tiddlerRepo.delete({ title });
           await transaction.delete(TiddlersSQLModel).where(eq(TiddlersSQLModel.title, title));
+          // Also delete the file from file system if it exists
+          try {
+            const tiddlerFilePath = getWikiTiddlerPathByTitle(workspace, title);
+            const fileInfo = await fs.getInfoAsync(tiddlerFilePath);
+            if (fileInfo.exists) {
+              await fs.deleteAsync(tiddlerFilePath);
+            }
+          } catch (error) {
+            // File might not exist, which is fine
+            console.log(`Could not delete file for tiddler ${title}: ${(error as Error).message}`);
+          }
         }
 
         // Update Tiddlers
