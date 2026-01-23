@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Platform } from 'react-native';

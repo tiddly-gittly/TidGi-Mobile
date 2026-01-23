@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/no-useless-undefined */
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, MD3Colors, ProgressBar, Text } from 'react-native-paper';

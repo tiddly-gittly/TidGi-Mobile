@@ -1,7 +1,6 @@
-/* eslint-disable unicorn/no-null */
 /* eslint-disable react-native/no-raw-text */
 /* eslint-disable @typescript-eslint/no-confusing-void-expression */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { compact } from 'lodash';
 import React, { useCallback, useEffect, useState } from 'react';

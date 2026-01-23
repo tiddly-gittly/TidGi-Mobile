@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/promise-function-async */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
 import { useCallback, useState } from 'react';
 import { defaultBinaryFilter, defaultTextBasedTiddlerFilter } from '../../constants/filters';

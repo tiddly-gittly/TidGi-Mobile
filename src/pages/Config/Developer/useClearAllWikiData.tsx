@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import * as fs from 'expo-file-system';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +22,6 @@ export function useClearAllWikiData() {
   const [clearDataSnackBarErrorMessage, setClearDataSnackBarErrorMessage] = useState('');
   const clearAllWikiData = useCallback(async () => {
     try {
-      // eslint-disable-next-line unicorn/no-array-callback-reference
       await Promise.all(workspaces.map(deleteWikiFile));
       removeAllWiki();
       setClearDataSnackBarVisible(true);

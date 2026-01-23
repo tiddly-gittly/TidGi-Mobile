@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/no-null */
 import React from 'react';
 import { useWorkspaceStore } from '../../../store/workspace';
 import { WebPageEditModelContent } from './WebPageModelContent';

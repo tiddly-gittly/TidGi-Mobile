@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { Asset } from 'expo-asset';
 import * as fs from 'expo-file-system';
 import streamChunksPreloadScriptAssetID from '../../../../assets/preload/streamChunksPreloadScript.js.html';

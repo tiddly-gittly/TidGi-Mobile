@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { shareAsync } from 'expo-sharing';
 import { useCallback, useState } from 'react';
 import { Linking } from 'react-native';

@@ -25,7 +25,6 @@ export function usePromiseValue<T, DefaultValueType = T | undefined>(
         }
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependency);
 
   return value;

@@ -159,7 +159,7 @@ function getSyncIconName(isSyncSucceed: boolean | undefined, isConnected: boolea
   }
   return iconName;
 }
-function getSyncLogText(t: TFunction<'translation', undefined>, isSyncSucceed: boolean | undefined, isConnected: boolean, inSyncing: boolean) {
+function getSyncLogText(t: TFunction, isSyncSucceed: boolean | undefined, isConnected: boolean, inSyncing: boolean) {
   let syncLogText: string;
   switch (isSyncSucceed) {
     case true: {

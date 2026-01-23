@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { cloneDeep, uniqBy } from 'lodash';
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
@@ -107,7 +105,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               }
               case 'webpage': {
                 const id = String(Math.random()).substring(2, 7);
-                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+
                 const name = newWorkspace.name || `Webpage ${id}`;
                 const newPageWorkspace = { ...(newWorkspace as IPageWorkspace), id, name } satisfies IPageWorkspace;
                 state.workspaces = [newPageWorkspace, ...state.workspaces];

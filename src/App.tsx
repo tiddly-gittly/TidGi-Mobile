@@ -1,6 +1,6 @@
 /* eslint-disable react-native/no-inline-styles */
-/* eslint-disable @typescript-eslint/consistent-type-definitions */
-import { NavigationContainer, NavigationProp } from '@react-navigation/native';
+
+import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import i18n from 'i18next';
 import './i18n/index';

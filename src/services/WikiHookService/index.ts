@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable @typescript-eslint/require-await */
 import { backOff } from 'exponential-backoff';
 import { MutableRefObject } from 'react';

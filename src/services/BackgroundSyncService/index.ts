@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/promise-function-async */
 import { asc, desc, eq, gt } from 'drizzle-orm';
 import * as BackgroundTask from 'expo-background-task';
 import Constants from 'expo-constants';
@@ -38,7 +37,7 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
 // Note: This does NOT need to be in the global scope and CAN be used in your React components!
 export async function registerBackgroundSyncAsync() {
   await BackgroundTask.registerTaskAsync(BACKGROUND_SYNC_TASK_NAME, {
-    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000 // 30 minutes in second
+    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000, // 30 minutes in second
   });
   // immediately sync once
   await backgroundSyncService.sync();

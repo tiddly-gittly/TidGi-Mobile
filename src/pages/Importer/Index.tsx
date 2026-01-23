@@ -1,5 +1,3 @@
-/* eslint-disable unicorn/no-nested-ternary */
-/* eslint-disable unicorn/no-useless-undefined */
 import { StackScreenProps } from '@react-navigation/stack';
 import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import React, { FC, useCallback, useEffect, useState } from 'react';

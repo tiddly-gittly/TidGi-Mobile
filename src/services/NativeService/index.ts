@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { format } from 'date-fns';
 import { Camera, PermissionStatus } from 'expo-camera';
 import * as fs from 'expo-file-system';
@@ -69,7 +67,6 @@ export class NativeService {
     if (this.#wikiHookServices === undefined) {
       return await new Promise<WikiHookService>((resolve) => {
         const interval = setInterval(() => {
-          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
           if (this.#wikiHookServices) {
             clearInterval(interval);
             resolve(this.#wikiHookServices);

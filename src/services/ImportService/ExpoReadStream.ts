@@ -1,6 +1,3 @@
-/* eslint-disable unicorn/no-new-buffer */
-/* eslint-disable security/detect-new-buffer */
-/* eslint-disable unicorn/no-null */
 import { Buffer } from 'buffer/';
 import * as fs from 'expo-file-system';
 import { Readable } from 'readable-stream';

@@ -1,5 +1,3 @@
-/* eslint-disable security-node/detect-crlf */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
 import { useEffect, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
@@ -37,7 +35,7 @@ export function useRegisterReceivingShareIntent() {
   );
 
   const { useShareIntent } = require('expo-share-intent') as { useShareIntent: typeof IUseShareIntent };
-  /* eslint-disable react-hooks/rules-of-hooks */
+
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
     debug: true,
     disabled: process.env.NODE_ENV === 'development',

@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
 import { desc, eq } from 'drizzle-orm';
 import * as fs from 'expo-file-system';
@@ -156,7 +155,6 @@ export class WikiStorageService {
 
   async deleteTiddler(title: string): Promise<boolean> {
     try {
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
       if (!title) {
         console.warn(`Failed to delete tiddler with no title ${title}`);
         return false;

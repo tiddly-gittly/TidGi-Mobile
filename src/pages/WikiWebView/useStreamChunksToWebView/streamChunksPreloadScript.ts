@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/prefer-ts-expect-error */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable unicorn/prefer-spread */
+
 export enum OnStreamChunksToWebViewEventTypes {
   CHECK_RECEIVER_READY = 'CHECK_RECEIVER_READY',
   TIDDLER_STORE_SCRIPT_CHUNK = 'TIDDLER_STORE_SCRIPT_CHUNK',
@@ -48,7 +46,7 @@ export enum OnStreamChunksToWebViewEventTypes {
       }
       case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
         // @ts-ignore error TS2339: Property 'service' does not exist on type 'Window & typeof globalThis'
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+
         window.service?.wikiHookService?.setWebviewReceiverReady?.();
         break;
       }

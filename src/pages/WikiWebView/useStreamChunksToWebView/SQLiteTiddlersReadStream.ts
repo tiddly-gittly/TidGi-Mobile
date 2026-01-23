@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/no-null */
 import { max } from 'drizzle-orm';
 import { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { SQLiteDatabase, SQLiteStatement } from 'expo-sqlite';
@@ -71,7 +70,7 @@ export class SQLiteTiddlersReadStream extends Readable {
     }
   }
 
-  destroy(error?: Error | undefined): this {
+  destroy(error?: Error): this {
     this.preparedReadStatements.forEach(statement => {
       statement.finalizeSync();
     });

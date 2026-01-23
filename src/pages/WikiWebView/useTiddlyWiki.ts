@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/promise-function-async */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable unicorn/no-null */
 import { Asset } from 'expo-asset';
 import * as fs from 'expo-file-system';
 import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef, useState } from 'react';
@@ -64,7 +61,6 @@ export function useTiddlyWiki(
     })();
     // React Hook useMemo has a missing dependency: 'injectHtmlAndTiddlersStore', 'quickLoad', and 'workspace'. Either include it or remove the dependency array.
     // but workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError, loading, streamChunksToWebViewPercentage };
 }

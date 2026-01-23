@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import { compact } from 'lodash';
@@ -46,7 +45,7 @@ export function openDefaultWikiIfNotAlreadyThere() {
     const unsubscribe = useWorkspaceStore.subscribe(onStoreLoaded);
     setTimeout(unsubscribe, 1000);
     // wait for 1s for asyncStorage to load
-    // eslint-disable-next-line no-inner-declarations
+
     function onStoreLoaded(state: WikiState, previousState: WikiState) {
       if (previousState.workspaces.length !== state.workspaces.length) {
         openDefaultWikiIfNotAlreadyThere();

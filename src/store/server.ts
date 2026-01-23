@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { cloneDeep } from 'lodash';
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';

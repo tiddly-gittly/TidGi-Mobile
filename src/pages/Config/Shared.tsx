@@ -1,5 +1,5 @@
 import useDebouncedCallback from 'beautiful-react-hooks/useDebouncedCallback';
-import React, { useState, JSX } from 'react';
+import React, { JSX, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';

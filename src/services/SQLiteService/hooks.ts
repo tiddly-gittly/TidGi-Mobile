@@ -12,7 +12,7 @@ export function useCloseSQLite(workspace?: IWorkspace) {
           if (databaseToCloseReference.current === undefined) return;
           if (databaseToCloseReference.current?.type === 'wiki') {
             console.log(`Closing sqlite database for ${databaseToCloseReference.current.id} in useSQLiteService`);
-            // eslint-disable-next-line react-hooks/exhaustive-deps
+
             await sqliteServiceService.closeDatabase(databaseToCloseReference.current);
           }
         } catch (error) {
