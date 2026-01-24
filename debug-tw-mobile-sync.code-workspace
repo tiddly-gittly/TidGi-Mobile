@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "../tw-mobile-sync"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../TiddlyWiki5"
+		},
+		{
+			"path": "../TidGi-Desktop"
+		}
+	],
+	"settings": {
+		"i18n-ally.keystyle": "nested"
+	}
+}
