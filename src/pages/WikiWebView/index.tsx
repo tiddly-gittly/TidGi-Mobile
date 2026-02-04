@@ -6,7 +6,6 @@ import { WebView } from 'react-native-webview';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { RootStackParameterList } from '../../App';
-import { useCloseSQLite } from '../../services/SQLiteService/hooks';
 import { useWorkspaceStore } from '../../store/workspace';
 import { getWebviewSideReceiver } from './useStreamChunksToWebView/webviewSideReceiver';
 import { WikiViewer } from './WikiViewer';
@@ -27,7 +26,6 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
   const { t } = useTranslation();
   const { id, quickLoad } = route.params;
   const activeWorkspace = useWorkspaceStore(useShallow(state => state.workspaces.find(wiki => wiki.id === id)));
-  useCloseSQLite(activeWorkspace);
   const [webviewSideReceiver, webviewSideReceiverSetter] = useState<string | undefined>(undefined);
   useEffect(() => {
     void getWebviewSideReceiver().then(webviewSideReceiverSetter);

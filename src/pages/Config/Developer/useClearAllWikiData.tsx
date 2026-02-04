@@ -3,13 +3,12 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Snackbar } from 'react-native-paper';
 import { useShallow } from 'zustand/react/shallow';
-import { sqliteServiceService } from '../../../services/SQLiteService';
 import { IWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
 export const deleteWikiFile = async (wikiWorkspace: IWorkspace) => {
   if (wikiWorkspace.type === 'wiki') {
-    await sqliteServiceService.closeDatabase(wikiWorkspace, true);
-    await fs.deleteAsync(wikiWorkspace.wikiFolderLocation);
+    // Delete git repository folder
+    await fs.deleteAsync(wikiWorkspace.wikiFolderLocation, { idempotent: true });
   }
 };
 

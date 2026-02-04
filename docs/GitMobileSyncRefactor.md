@@ -298,10 +298,22 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 
 **tw-mobile-sync（插件端）**
 
-- Git Smart HTTP 服务器端点（info/refs, upload-pack, receive-pack）
-- Basic Auth 鉴权机制
-- 请求流式转发到 git 子进程
-- global.service 类型扩展（待 Desktop 实现）
+- ✅ Git Smart HTTP 服务器端点（info/refs, upload-pack, receive-pack）
+- ✅ Basic Auth 鉴权机制
+- ✅ 请求流式转发到 git 子进程
+- ✅ global.service 类型扩展（待 Desktop 实现）
+- ✅ **已删除所有旧的 SQLite API 端点：**
+  - ❌ server-sync-v1-endpoint.ts (旧同步 API v1)
+  - ❌ server-get-skinny-json-endpoint.ts (旧 JSON 端点)
+  - ❌ server-get-skinny-tiddlers-text-endpoint.ts (旧 tiddlers 文本)
+  - ❌ server-get-tiddler-text-endpoint.ts (旧单个 tiddler)
+  - ❌ server-get-non-skinny-tiddlywiki-tiddler-store-script-endpoint.ts (旧 store script)
+  - ❌ client-info-endpoint.ts (旧客户端信息)
+- ✅ **仅保留必需的端点：**
+  - ✅ GET /tw-mobile-sync/get-skinny-html (无鉴权，HTML 模板)
+  - ✅ GET /tw-mobile-sync/git/{workspaceId}/info/refs (Git Smart HTTP)
+  - ✅ POST /tw-mobile-sync/git/{workspaceId}/git-upload-pack (Git fetch/pull)
+  - ✅ POST /tw-mobile-sync/git/{workspaceId}/git-receive-pack (Git push)
 
 **TidGi-Mobile（移动端）**
 
@@ -340,11 +352,21 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 
 **已删除的旧文件：**
 
-- ❌ src/services/BackgroundSyncService/index.ts (旧 SQLite 同步)
-- ❌ src/services/WikiStorageService/index.ts (旧 SQLite 存储)
-- ❌ src/services/WikiStorageService/ignoredTiddler.ts
-- ❌ src/pages/Importer/useImportHTML.ts (旧 HTML 下载导入)
-- ❌ src/pages/WikiWebView/useStreamChunksToWebView/SQLiteTiddlersReadStream.ts
+- ❌ src/services/SQLiteService/ (整个目录已删除)
+- ❌ src/services/ImportService/ (旧的 SQLite 导入服务，已删除)
+- ❌ src/pages/Importer/ImportBinary.tsx (已删除)
+- ❌ src/pages/Importer/useImportBinary.ts (已删除)
+- ❌ src/pages/Importer/useImportHTML.ts (已删除)
+- ❌ src/pages/WikiWebView/useStreamChunksToWebView/SQLiteTiddlersReadStream.ts (已删除)
+- ❌ src/services/BackgroundSyncService/index.ts (旧 SQLite 同步，已完全替换)
+- ❌ src/services/WikiStorageService/index.ts (旧 SQLite 存储，已完全替换)
+- ❌ src/services/WikiStorageService/ignoredTiddler.ts (已删除)
+
+**清理完成：**
+- ✅ 所有 SQLite 相关代码已删除
+- ✅ 所有旧的导入逻辑已删除
+- ✅ 无向后兼容代码残留
+- ✅ 仅保留注释中的 SQLite 说明（用于文档）
 
 **新的服务结构：**
 

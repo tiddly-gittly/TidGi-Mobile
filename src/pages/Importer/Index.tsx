@@ -9,8 +9,7 @@ import { RootStackParameterList } from '../../App';
 import { ServerList } from '../../components/ServerList';
 import { gitBackgroundSyncService as backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useServerStore } from '../../store/server';
-import { ImportBinary } from './ImportBinary';
-import { useGitImport as useImportHTML } from '../../services/GitService/useGitImport';
+import { useGitImport } from '../../services/GitService/useGitImport';
 
 const Container = styled.View`
   flex: 1;
@@ -130,7 +129,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     cloneProgress,
     htmlDownloadProgress,
     createdWorkspace: createdWikiWorkspace,
-  } = useImportHTML();
+  } = useGitImport();
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
@@ -297,7 +296,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
           </OpenWikiButton>
           <DoneImportActionsTitleText variant='titleLarge'>{t('OptionalActions')}</DoneImportActionsTitleText>
-          <ImportBinary wikiWorkspace={createdWikiWorkspace} autoImportBinary={autoStartImport} />
+          <Text variant='bodyMedium' style={{ marginTop: 8 }}>
+            {t('Import.GitImportComplete')}
+          </Text>
         </>
       )}
     </Container>
