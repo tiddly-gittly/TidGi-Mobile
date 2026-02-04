@@ -6,15 +6,15 @@ import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadap
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
 import { getWikiFilePath } from '../../constants/paths';
 import { WikiHookService } from '../../services/WikiHookService';
-import { WikiStorageService } from '../../services/WikiStorageService';
+import { FileSystemWikiStorageService } from '../../services/WikiStorageService/FileSystemWikiStorageService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
-import { createSQLiteTiddlersReadStream, SQLiteTiddlersReadStream } from './useStreamChunksToWebView/SQLiteTiddlersReadStream';
+import { FileSystemTiddlersReadStream } from './useStreamChunksToWebView/FileSystemTiddlersReadStream';
 
 export interface IHtmlContent {
   html: string;
   setLoadHtmlError: Dispatch<SetStateAction<string>>;
-  tiddlersStream: SQLiteTiddlersReadStream;
+  tiddlersStream: FileSystemTiddlersReadStream;
 }
 export function useTiddlyWiki(
   workspace: IWikiWorkspace,
@@ -22,10 +22,10 @@ export function useTiddlyWiki(
   webViewReference: MutableRefObject<WebView | null>,
   keyToTriggerReload: number,
   quickLoad: boolean,
-  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
+  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
-  const tiddlersStreamReference = useRef<SQLiteTiddlersReadStream | undefined>();
+  const tiddlersStreamReference = useRef<FileSystemTiddlersReadStream | undefined>();
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * This need to use with `webviewSideReceiver`.
@@ -47,11 +47,13 @@ export function useTiddlyWiki(
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
-        const tiddlersStream = createSQLiteTiddlersReadStream(workspace, {
-          // inject tidgi syncadaptor plugins
+        
+        const tiddlersStream = new FileSystemTiddlersReadStream(workspace, {
           additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
           quickLoad,
         });
+        await tiddlersStream.init();
+        
         tiddlersStreamReference.current = tiddlersStream;
         await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
       } catch (error) {

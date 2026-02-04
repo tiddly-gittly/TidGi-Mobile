@@ -11,7 +11,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import type { WikiHookService } from '../WikiHookService';
-import { WikiStorageService } from '../WikiStorageService';
+import { FileSystemWikiStorageService as WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
 /**

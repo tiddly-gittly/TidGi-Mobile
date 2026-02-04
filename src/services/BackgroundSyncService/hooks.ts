@@ -1,8 +1,20 @@
-import { useRegisterProxy } from 'react-native-postmessage-cat';
-import { backgroundSyncService } from '.';
-import { BackgroundSyncServiceIPCDescriptor } from './descriptor';
+import { MutableRefObject, useEffect, useRef } from 'react';
+import { IWikiWorkspace } from '../../store/workspace';
+import { gitBackgroundSyncService } from './index';
 
+/**
+ * Hook for using background sync service in WebView
+ */
 export function useBackgroundSyncService() {
-  const [webViewReference, onMessageReference] = useRegisterProxy(backgroundSyncService, BackgroundSyncServiceIPCDescriptor);
-  return [webViewReference, onMessageReference] as const;
+  const serviceReference: MutableRefObject<typeof gitBackgroundSyncService | undefined> = useRef();
+
+  useEffect(() => {
+    serviceReference.current = gitBackgroundSyncService;
+  }, []);
+
+  const onMessageReference = useRef(() => {
+    // Handle messages from WebView if needed
+  });
+
+  return [serviceReference, onMessageReference] as const;
 }

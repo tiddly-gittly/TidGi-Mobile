@@ -6,7 +6,7 @@ import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-pos
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { detectedLanguage } from '../../i18n';
-import { backgroundSyncService } from '../../services/BackgroundSyncService';
+import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
@@ -89,7 +89,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   useEffect(() => {
     console.log('resetWebviewReceiverReady on webViewKeyToReloadAfterRecycleByOS and init');
     servicesOfWorkspace.current?.wikiHookService?.resetWebviewReceiverReady?.();
-    void backgroundSyncService.updateServerOnlineStatus();
+    void gitBackgroundSyncService.updateServerOnlineStatus();
   }, [servicesOfWorkspace, webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError, loading, streamChunksToWebViewPercentage } = useTiddlyWiki(
     wikiWorkspace,

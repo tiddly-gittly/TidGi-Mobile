@@ -3,7 +3,9 @@ import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { IWikiWorkspace } from '../../store/workspace';
 import { nativeService } from '../NativeService';
-import { WikiStorageService } from '../WikiStorageService';
+import { WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
+
+export { WikiStorageService };
 import { WikiHookService } from '.';
 import { WikiHookServiceIPCDescriptor } from './descriptor';
 

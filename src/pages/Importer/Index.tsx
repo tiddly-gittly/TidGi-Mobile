@@ -7,10 +7,10 @@ import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-pa
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { ServerList } from '../../components/ServerList';
-import { backgroundSyncService } from '../../services/BackgroundSyncService';
+import { gitBackgroundSyncService as backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useServerStore } from '../../store/server';
 import { ImportBinary } from './ImportBinary';
-import { useImportHTML } from './useImportHTML';
+import { useGitImport as useImportHTML } from '../../services/GitService/useGitImport';
 
 const Container = styled.View`
   flex: 1;
@@ -90,9 +90,23 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     if (type === 'qr') {
       try {
         setQrScannerOpen(false);
+        // Try to parse as JSON (Git QR format)
+        try {
+          const qrData = JSON.parse(data);
+          if (qrData.baseUrl && qrData.workspaceId && qrData.token) {
+            // Valid Git QR code
+            setServerUriToUseString(qrData.baseUrl);
+            // Store for later use
+            (window as any).__tidgiQrData = qrData;
+            return;
+          }
+        } catch {
+          // Not JSON, treat as plain URL
+        }
+        // Fallback: plain URL
         setServerUriToUseString(data);
       } catch (error) {
-        console.warn('Not a valid URL', error);
+        console.warn('Failed to parse QR code', error);
       }
     }
   }, []);
@@ -108,21 +122,42 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     }
   }, [serverUriToUseString]);
 
-  const { error: importError, status: importStatus, storeHtml, downloadPercentage, createdWikiWorkspace, resetState } = useImportHTML();
+  const {
+    importWiki,
+    resetState,
+    status: importStatus,
+    error: importError,
+    cloneProgress,
+    htmlDownloadProgress,
+    createdWorkspace: createdWikiWorkspace,
+  } = useImportHTML();
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
+    
+    // Get QR data if available (from QR scan)
+    const qrData = (window as any).__tidgiQrData;
+    
     if (addAsServer) {
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
-      // void nativeService.getLocationWithTimeout().then(coords => {
-      //   if (coords !== undefined) updateServer({ id: newServer.id, location: { coords } });
-      // });
-      await storeHtml(wikiUrl.origin, wikiName, newServer.id);
+      
+      if (qrData?.baseUrl && qrData?.workspaceId && qrData?.token) {
+        // Git import with QR code data
+        await importWiki(qrData, wikiName, newServer.id);
+      } else {
+        // No valid QR data - show error
+        alert('Please scan a QR code from TidGi Desktop to import via Git.');
+        return;
+      }
     } else {
-      await storeHtml(wikiUrl.origin, wikiName);
+      alert('Server must be added for Git synchronization.');
+      return;
     }
+    
     setWikiUrl(undefined);
-  }, [addAsServer, addServer, storeHtml, wikiName, wikiUrl?.origin]);
+    // Clean up QR data
+    delete (window as any).__tidgiQrData;
+  }, [addAsServer, addServer, importWiki, wikiName, wikiUrl?.origin]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -130,16 +165,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   if (!hasPermission) {
     return <Text>No access to camera</Text>;
   }
-  const {
-    addFieldsToSQLitePercentage,
-    addSystemTiddlersToSQLitePercentage,
-    addTextToSQLitePercentage,
-    binaryTiddlersListDownloadPercentage,
-    nonSkinnyTiddlerStoreScriptDownloadPercentage,
-    skinnyHtmlDownloadPercentage,
-    skinnyTiddlerStoreScriptDownloadPercentage,
-    skinnyTiddlerTextCacheDownloadPercentage,
-  } = downloadPercentage;
 
   const serverConfigs = (
     <>
@@ -240,33 +265,22 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </Button>
         </>
       )}
-      {importStatus === 'downloading' && (
+      {importStatus === 'cloning' && (
+        <>
+          <Text variant='titleLarge'>{t('Loading')}</Text>
+          <Text>{t('Sync.CloningRepository')}</Text>
+          <Text>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
+          <ProgressBar 
+            animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0} 
+            color={MD3Colors.primary40} 
+          />
+        </>
+      )}
+      {importStatus === 'downloading-html' && (
         <>
           <Text variant='titleLarge'>{t('Loading')}</Text>
           <Text>{t('Downloading.HTML')}</Text>
-          <ProgressBar animatedValue={skinnyHtmlDownloadPercentage} color={MD3Colors.neutral30} />
-          <Text>{t('Downloading.TiddlersListAndEssential')}</Text>
-          <ProgressBar animatedValue={skinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral40} />
-          <ProgressBar animatedValue={nonSkinnyTiddlerStoreScriptDownloadPercentage} color={MD3Colors.neutral50} />
-          <ProgressBar animatedValue={binaryTiddlersListDownloadPercentage} color={MD3Colors.neutral60} />
-          <Text>{t('Downloading.TiddlerTexts')}</Text>
-          <ProgressBar animatedValue={skinnyTiddlerTextCacheDownloadPercentage} color={MD3Colors.neutral70} />
-        </>
-      )}
-      {importStatus === 'sqlite' && (
-        <>
-          <Text>
-            {t('Downloading.AddToSQLite')} {addSystemTiddlersToSQLitePercentage < 1
-              ? `${t('Downloading.SystemTiddlers')} ${Math.floor(addSystemTiddlersToSQLitePercentage * 100)}%`
-              : (addFieldsToSQLitePercentage < 1
-                ? `${t('Downloading.Fields')} ${Math.floor(addFieldsToSQLitePercentage * 100)}%`
-                : addTextToSQLitePercentage < 1
-                ? `${t('Downloading.Text')} ${Math.floor(addTextToSQLitePercentage * 100)}%`
-                : t('Log.SynchronizationFinish'))}
-          </Text>
-          <ProgressBar animatedValue={addSystemTiddlersToSQLitePercentage} color={MD3Colors.tertiary40} />
-          <ProgressBar animatedValue={addFieldsToSQLitePercentage} color={MD3Colors.tertiary50} />
-          <ProgressBar animatedValue={addTextToSQLitePercentage} color={MD3Colors.tertiary60} />
+          <ProgressBar animatedValue={htmlDownloadProgress} color={MD3Colors.neutral30} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (

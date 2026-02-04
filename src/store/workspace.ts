@@ -49,6 +49,14 @@ export interface IWikiServerSync {
    * Is currently syncing
    */
   syncActive: boolean;
+  /**
+   * Git remote token for authentication (not synced to tidgi.config.json)
+   */
+  token?: string;
+  /**
+   * Remote workspace ID (for git remote URL)
+   */
+  remoteWorkspaceId?: string;
 }
 /**
  * use `1` (1970 - 1 - 1 00:00:00:001 UTC) to sync every thing to the newly added server.

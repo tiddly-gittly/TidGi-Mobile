@@ -11,13 +11,16 @@ import { useShallow } from 'zustand/react/shallow';
 import Collapsible from 'react-native-collapsible';
 import { ServerList } from '../../../components/ServerList';
 import { SyncTextButton } from '../../../components/SyncButton';
-import { backgroundSyncService } from '../../../services/BackgroundSyncService';
+import { GitSyncStatus } from '../../../components/GitSyncStatus';
+import { SubWikiManager } from '../../../components/SubWikiManager';
+import { gitBackgroundSyncService } from '../../../services/BackgroundSyncService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
 import { ServerEditModalContent } from '../../Config/ServerAndSync/ServerEditModal';
 import { AddNewServerModelContent } from '../AddNewServerModelContent';
 import { PerformanceToolsModelContent } from './PerformanceToolsModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
+import { WorkspaceSettings } from '../../WikiSettings/WorkspaceSettings';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -40,6 +43,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
   const [wikiChangeLogModelVisible, setWikiChangeLogModelVisible] = useState(false);
   const [performanceToolsModelVisible, setPerformanceToolsModelVisible] = useState(false);
   const [expandServerList, setExpandServerList] = useState(false);
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [showSubWikiManager, setShowSubWikiManager] = useState(false);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -67,7 +72,7 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
       <Button
         mode='text'
         onPress={() => {
-          void backgroundSyncService.updateServerOnlineStatus();
+          void gitBackgroundSyncService.updateServerOnlineStatus();
           setExpandServerList(!expandServerList);
         }}
       >
@@ -96,6 +101,37 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
         >
           <Text>{t('EditWorkspace.AddNewServer')}</Text>
         </Button>
+      </Collapsible>
+
+      {/* Git Sync Status */}
+      <GitSyncStatus workspace={wiki} />
+
+      {/* Workspace Settings Button */}
+      <Button
+        mode='text'
+        icon='cog'
+        onPress={() => {
+          setShowWorkspaceSettings(!showWorkspaceSettings);
+        }}
+      >
+        <Text>{t('WorkspaceSettings.Title')}</Text>
+      </Button>
+      <Collapsible collapsed={!showWorkspaceSettings}>
+        <WorkspaceSettings workspace={wiki} />
+      </Collapsible>
+
+      {/* Sub-wiki Management */}
+      <Button
+        mode='text'
+        icon='file-tree'
+        onPress={() => {
+          setShowSubWikiManager(!showSubWikiManager);
+        }}
+      >
+        <Text>{t('SubWiki.ManageSubWikis')}</Text>
+      </Button>
+      <Collapsible collapsed={!showSubWikiManager}>
+        <SubWikiManager workspace={wiki} />
       </Collapsible>
 
       <Button

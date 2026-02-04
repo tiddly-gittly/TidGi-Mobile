@@ -2,7 +2,7 @@ import { TFunction } from 'i18next';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
-import { backgroundSyncService } from '../services/BackgroundSyncService';
+import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 
 export interface ISyncIconButtonProps {
@@ -28,13 +28,13 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
         if (wiki === undefined) return;
         setInSyncing(true);
         try {
-          await backgroundSyncService.updateServerOnlineStatus();
-          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+          await gitBackgroundSyncService.updateServerOnlineStatus();
+          const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
           if (server === undefined) {
             setIsConnected(false);
             return;
           }
-          setIsSyncSucceed(await backgroundSyncService.syncWikiWithServer(wiki, server));
+          setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {
@@ -55,14 +55,14 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
-  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof backgroundSyncService.getOnlineServerForWiki>>>();
+  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof gitBackgroundSyncService.getOnlineServerForWiki>>>();
   useEffect(() => {
     if (wiki === undefined) {
       setIsConnected(false);
       return;
     }
-    void backgroundSyncService.updateServerOnlineStatus().then(() => {
-      const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+    void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
+      const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
       if (server === undefined) {
         setIsConnected(false);
       } else {
@@ -82,12 +82,12 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
         if (wiki === undefined) return;
         setInSyncing(true);
         try {
-          await backgroundSyncService.updateServerOnlineStatus();
-          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+          await gitBackgroundSyncService.updateServerOnlineStatus();
+          const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
           if (server === undefined) {
             throw new Error('No server available');
           }
-          setIsSyncSucceed(await backgroundSyncService.syncWikiWithServer(wiki, server));
+          setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {
@@ -116,7 +116,7 @@ export function SyncAllTextButton() {
       onPress={async () => {
         setInSyncing(true);
         try {
-          const { haveConnectedServer } = await backgroundSyncService.sync();
+          const { haveConnectedServer } = await gitBackgroundSyncService.sync();
           if (haveConnectedServer) {
             setIsSyncSucceed(true);
           } else {

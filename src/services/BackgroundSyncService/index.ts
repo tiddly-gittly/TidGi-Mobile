@@ -1,381 +1,379 @@
-import { asc, desc, eq, gt } from 'drizzle-orm';
+/**
+ * Git-based Background Sync Service
+ * Replaces SQLite-based sync with git pull/push operations
+ */
+
 import * as BackgroundTask from 'expo-background-task';
-import Constants from 'expo-constants';
-import * as fs from 'expo-file-system';
+import * as Device from 'expo-device';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
-import { sortedUniqBy, uniq } from 'lodash';
-import pTimeout from 'p-timeout';
 import { Alert } from 'react-native';
-import type { ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiFilesPathByCanonicalUri, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
-import { IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { sqliteServiceService } from '../SQLiteService';
-import { TiddlerChangeSQLModel, TiddlersSQLModel } from '../SQLiteService/orm';
-import { getFullSaveTiddlers, getSyncIgnoredTiddlers } from '../WikiStorageService/ignoredTiddler';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
-import { ISyncEndPointRequest, ISyncEndPointResponse, ITiddlywikiServerStatus } from './types';
+import { gitClone, gitCommit, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, IGitRemote } from '../GitService';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
-// 1. Define the task by providing a name and the function that should be executed
-// Note: This needs to be called in the global scope (e.g outside of your React components)
+
+// Define background task
 TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
   const now = Date.now();
-
   console.log(`Got background task call at date: ${new Date(now).toISOString()}`);
-  const { haveUpdate } = await backgroundSyncService.sync();
-
-  // Be sure to return the successful result type!
+  const { haveUpdate } = await gitBackgroundSyncService.sync();
   return haveUpdate ? BackgroundTask.BackgroundTaskResult.NewData : BackgroundTask.BackgroundTaskResult.NoData;
 });
 
-// 2. Register the task at some point in your app by providing the same name,
-// and some configuration options for how the background task should behave
-// Note: This does NOT need to be in the global scope and CAN be used in your React components!
+// Register background sync
 export async function registerBackgroundSyncAsync() {
   await BackgroundTask.registerTaskAsync(BACKGROUND_SYNC_TASK_NAME, {
-    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000, // 30 minutes in second
+    minimumInterval: useConfigStore.getState().syncIntervalBackground / 1000,
   });
-  // immediately sync once
-  await backgroundSyncService.sync();
+  await gitBackgroundSyncService.sync();
 }
 
-// 3. (Optional) Unregister tasks by specifying the task name
-// This will cancel any future background task calls that match the given name
-// Note: This does NOT need to be in the global scope and CAN be used in your React components!
+// Unregister background sync
 export async function unregisterBackgroundSyncAsync() {
   await BackgroundTask.unregisterTaskAsync(BACKGROUND_SYNC_TASK_NAME);
 }
 
-export class BackgroundSyncService {
+/**
+ * Service for syncing wikis using git
+ */
+export class GitBackgroundSyncService {
   readonly #serverStore = useServerStore;
+  readonly #workspaceStore = useWorkspaceStore;
   readonly #configStore = useConfigStore;
-  readonly #workspacestore = useWorkspaceStore;
 
   public startBackgroundSync() {
     const syncInterval = this.#configStore.getState().syncInterval;
     setInterval(this.sync.bind(this), syncInterval);
   }
 
-  public async sync() {
-    const workspaces = this.#workspacestore.getState().workspaces;
+  /**
+   * Sync all workspaces with their configured servers
+   */
+  public async sync(): Promise<{ haveUpdate: boolean; haveConnectedServer: boolean }> {
+    const workspaces = this.#workspaceStore.getState().workspaces;
     let haveUpdate = false;
     let haveConnectedServer = false;
+
     await this.updateServerOnlineStatus();
-    for (const wiki of workspaces) {
-      if (wiki.type === 'wiki') {
-        const server = this.getOnlineServerForWiki(wiki);
+
+    for (const workspace of workspaces) {
+      if (workspace.type === 'wiki') {
+        const server = this.getOnlineServerForWorkspace(workspace);
         if (server !== undefined) {
-          haveConnectedServer ||= true;
-          haveUpdate ||= await this.syncWikiWithServer(wiki, server);
+          haveConnectedServer = true;
+          try {
+            const updated = await this.syncWorkspaceWithServer(workspace, server);
+            haveUpdate = haveUpdate || updated;
+          } catch (error) {
+            console.error(`Failed to sync workspace ${workspace.name}:`, error);
+          }
         }
       }
     }
+
     return { haveUpdate, haveConnectedServer };
   }
 
-  public async updateServerOnlineStatus() {
+  /**
+   * Update server online status
+   */
+  public async updateServerOnlineStatus(): Promise<void> {
     const newServers: Record<string, IServerInfo> = {};
+    
     await Promise.all(
-      Object.values(this.#serverStore.getState().servers).map(async server => {
+      Object.values(this.#serverStore.getState().servers).map(async (server) => {
         try {
-          // TODO: add fetched server version to store
-          await this.#fetchServerStatus(server);
+          await this.fetchServerStatus(server);
           newServers[server.id] = { ...server, status: ServerStatus.online };
         } catch {
           newServers[server.id] = { ...server, status: ServerStatus.disconnected };
         }
       }),
     );
+
     this.#serverStore.setState({ servers: newServers });
   }
 
-  async #fetchServerStatus(server: IServerInfo) {
-    const statusUrl = new URL(`status`, server.uri);
+  /**
+   * Fetch server status
+   */
+  private async fetchServerStatus(server: IServerInfo): Promise<void> {
+    const statusUrl = new URL('status', server.uri);
     const controller = new AbortController();
-    const abortTimeoutID = setTimeout(() => {
-      controller.abort();
-    }, 1000);
-    const response = await fetch(statusUrl, { signal: controller.signal }).then(response => response.json() as Promise<{ status: ITiddlywikiServerStatus }>);
-    clearTimeout(abortTimeoutID);
-    return response;
-  }
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-  public getOnlineServerForWiki(wiki: IWikiWorkspace): (IServerInfo & { lastSync: number; syncActive: boolean }) | undefined {
-    const onlineLastSyncServer = wiki.syncedServers
-      .filter(serverInfoInWiki => serverInfoInWiki.syncActive)
-      .sort((a, b) => b.lastSync - a.lastSync)
-      .map(server => this.#serverStore.getState().servers[server.serverID])
-      .find(server => server?.status === ServerStatus.online);
-    const serverInfoInWiki = wiki.syncedServers.find(server => server.serverID === onlineLastSyncServer?.id);
-    if (onlineLastSyncServer === undefined || serverInfoInWiki === undefined) return undefined;
-    return {
-      ...onlineLastSyncServer,
-      lastSync: serverInfoInWiki.lastSync,
-      syncActive: serverInfoInWiki.syncActive,
-    };
-  }
-
-  public async getChangeLogsSinceLastSync(wiki: IWikiWorkspace, lastSync: number, newerFirst?: boolean): Promise<Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange>> {
     try {
-      const { orm } = await sqliteServiceService.getDatabase(wiki);
-      const lastSyncTimestamp: number = new Date(lastSync).getTime();
-      const changeLogs = await orm.select().from(TiddlerChangeSQLModel).where(gt(TiddlerChangeSQLModel.timestamp, lastSyncTimestamp)).orderBy(
-        newerFirst === true ? desc(TiddlerChangeSQLModel.timestamp) : asc(TiddlerChangeSQLModel.timestamp),
-      );
+      const response = await fetch(statusUrl.toString(), {
+        method: 'GET',
+        signal: controller.signal,
+      });
 
-      const filteredChangeLogs = changeLogs.filter(change => !getSyncIgnoredTiddlers(change.title).includes(change.title));
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
 
-      const changeWithTiddlerFields: Array<{ fields?: ITiddlerFieldsParam } & ITiddlerChange> = await Promise.all(
-        filteredChangeLogs.map(async change => {
-          const result: { fields?: ITiddlerFieldsParam } & ITiddlerChange = {
-            id: change.id,
-            title: change.title,
-            operation: change.operation as TiddlersLogOperation,
-            timestamp: new Date(change.timestamp).toISOString(), // Convert Date to string
-          };
-          if (change.operation as TiddlersLogOperation === TiddlersLogOperation.DELETE) return result;
-          // for update and insert, add text and fields to it
-          const title = change.title;
-          // const skinnyTiddlerWithText = await tiddlerRepo.findOne({ where: { title } });
-          const [skinnyTiddlerWithText] = await orm.select().from(TiddlersSQLModel).where(eq(TiddlersSQLModel.title, title)).limit(1);
-          if (skinnyTiddlerWithText === undefined) return result;
+  /**
+   * Get online server for workspace (public method for UI)
+   */
+  public getOnlineServerForWiki(workspace: IWikiWorkspace): IServerInfo | undefined {
+    return this.getOnlineServerForWorkspace(workspace);
+  }
 
-          /**
-           * This may have text if it is `getFullSaveTiddlers` tiddler, otherwise it is skinny tiddler without text.
-           */
-          const fieldsParameter = JSON.parse(skinnyTiddlerWithText.fields ?? '{}') as ITiddlerFieldsParam;
-          // @ts-expect-error Index signature in type 'ITiddlerFieldsParam' only permits reading.ts(2542)
-          if ('_is_skinny' in fieldsParameter) delete fieldsParameter._is_skinny;
-          // @ts-expect-error Index signature in type 'ITiddlerFieldsParam' only permits reading.ts(2542)
-          if ('bag' in fieldsParameter) delete fieldsParameter.bag;
-          // @ts-expect-error Index signature in type 'ITiddlerFieldsParam' only permits reading.ts(2542)
-          if ('revision' in fieldsParameter) delete fieldsParameter.revision;
+  /**
+   * Sync workspace with specific server (public method for UI)
+   */
+  public async syncWikiWithServer(workspace: IWikiWorkspace, server: IServerInfo): Promise<boolean> {
+    return await this.syncWorkspaceWithServer(workspace, server);
+  }
 
-          let text;
-          try {
-            text = skinnyTiddlerWithText.text ?? fieldsParameter.text ?? (await fs.readAsStringAsync(getWikiTiddlerPathByTitle(wiki, title)));
-          } catch (error) {
-            console.error(`Failed to load file ${title} in getChangeLogsSinceLastSync ${(error as Error).message}`);
-          }
-          const fields = {
-            ...fieldsParameter,
-            text,
-          } satisfies ITiddlerFieldsParam;
+  /**
+   * Get change logs since last sync (for UI display)
+   * Parses git log to extract tiddler file changes
+   */
+  public async getChangeLogsSinceLastSync(workspace: IWikiWorkspace): Promise<ITiddlerChange[]> {
+    try {
+      const syncedServer = workspace.syncedServers[0];
+      if (!syncedServer) return [];
 
-          result.fields = fields;
-          return result;
-        }),
-      );
+      // Get git log since last sync
+      const git = await import('isomorphic-git');
+      const fs = await import('expo-file-system');
+      
+      const lastSyncTime = syncedServer.lastSync || 0;
+      const lastSyncDate = new Date(lastSyncTime);
+      
+      // Get commits since last sync
+      const commits = await git.log({
+        fs: fs as any,
+        dir: workspace.wikiFolderLocation,
+        ref: 'HEAD',
+        since: lastSyncDate,
+      });
 
-      return changeWithTiddlerFields;
+      const changes: ITiddlerChange[] = [];
+      
+      // Parse each commit to extract tiddler changes
+      for (const commit of commits) {
+        // Get changed files in this commit
+        const changedFiles = await git.walk({
+          fs: fs as any,
+          dir: workspace.wikiFolderLocation,
+          trees: [git.TREE({ ref: commit.oid }), git.TREE({ ref: `${commit.oid}^` })],
+          map: async (filepath, [newTree, oldTree]) => {
+            // Skip if not a tiddler file
+            if (!filepath.endsWith('.tid') && !filepath.endsWith('.meta')) {
+              return null;
+            }
+
+            // Determine operation type
+            let operation: TiddlersLogOperation;
+            if (!await oldTree?.type()) {
+              operation = TiddlersLogOperation.INSERT;
+            } else if (!await newTree?.type()) {
+              operation = TiddlersLogOperation.DELETE;
+            } else {
+              operation = TiddlersLogOperation.UPDATE;
+            }
+
+            // Extract tiddler title from filename
+            const filename = filepath.split('/').pop() || '';
+            const title = filename.replace(/\.(tid|meta)$/, '').replace(/_/g, ' ');
+
+            return {
+              title,
+              operation,
+              timestamp: commit.commit.committer.timestamp * 1000,
+              fields: {}, // Could parse file content if needed
+            };
+          },
+        });
+
+        changes.push(...changedFiles.filter(Boolean) as ITiddlerChange[]);
+      }
+
+      return changes;
     } catch (error) {
-      console.error(error, (error as Error).stack);
+      console.error('Failed to get change logs:', error);
       return [];
     }
   }
 
-  public async syncWikiWithServer(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }): Promise<boolean> {
-    const changes = await this.getChangeLogsSinceLastSync(wiki, server.lastSync);
-    const syncUrl = new URL('tw-mobile-sync/sync', server.uri);
+  /**
+   * Get online server for workspace
+   */
+  private getOnlineServerForWorkspace(workspace: IWikiWorkspace): IServerInfo | undefined {
+    const servers = this.#serverStore.getState().servers;
+    
+    for (const syncedServer of workspace.syncedServers) {
+      const server = servers[syncedServer.serverID];
+      if (server?.status === ServerStatus.online) {
+        return server;
+      }
+    }
 
-    const request: ISyncEndPointRequest = {
-      deleted: uniq(changes.filter(change => change.operation === TiddlersLogOperation.DELETE).map(change => change.title)),
-      lastSync: server.lastSync,
-      tiddlers: sortedUniqBy(
-        changes.filter((change): change is { fields: ITiddlerFieldsParam } & ITiddlerChange =>
-          (change.operation === TiddlersLogOperation.INSERT || change.operation === TiddlersLogOperation.UPDATE) && change.fields?.title !== undefined
-        ).map(change => change.fields),
-        'title',
-      ),
-    };
+    return undefined;
+  }
 
-    try {
-      const response = await fetch(syncUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-requested-with': 'TiddlyWiki',
-          'User-Agent': `${await Constants.getWebViewUserAgentAsync() ?? `TidGi-Mobile`} ${wiki.name}`,
-        },
-        body: JSON.stringify(request),
-      }).then(async response => {
-        switch (response.status) {
-          case 201:
-          case 200: {
-            return await (response.json() as Promise<ISyncEndPointResponse>);
-          }
-          case 401: {
-            throw new Error(i18n.t('Log.Unauthorized'));
-          }
-          default: {
-            throw new Error(`${i18n.t('Log.SyncFailedSystemError')} ${response.status} ${await response.text()}`);
-          }
-        }
-      });
-      if (response === undefined) return false;
-      const { deletes, updates } = response;
-      await this.#updateTiddlersFromServer(wiki, deletes, updates);
-      this.#updateLastSyncTimestamp(wiki, server);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      return true;
-    } catch (error) {
-      console.error(error, (error as Error).stack);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(`${server.name} ${i18n.t('Log.SynchronizationFailed')}`, `${(error as Error).message} ${i18n.t('Log.SynchronizationFailedDetail')}`, undefined, {
-        cancelable: true,
-      });
+  /**
+   * Sync workspace with server using git
+   */
+  private async syncWorkspaceWithServer(
+    workspace: IWikiWorkspace,
+    server: IServerInfo,
+  ): Promise<boolean> {
+    const remote = this.getRemoteConfig(workspace, server);
+    if (remote === undefined) {
+      console.warn(`No remote config found for workspace ${workspace.name}`);
       return false;
     }
-  }
 
-  async #updateTiddlersFromServer(workspace: IWikiWorkspace, deletes: string[], updates: ITiddlerFieldsParam[]) {
+    let haveUpdate = false;
+
     try {
-      const dataSource = (await sqliteServiceService.getDatabase(workspace)).orm;
-      await dataSource.transaction(async (transaction) => {
-        // Delete Tiddlers
-        for (const title of deletes) {
-          // await tiddlerRepo.delete({ title });
-          await transaction.delete(TiddlersSQLModel).where(eq(TiddlersSQLModel.title, title));
-          // Also delete the file from file system if it exists
-          try {
-            const tiddlerFilePath = getWikiTiddlerPathByTitle(workspace, title);
-            const fileInfo = await fs.getInfoAsync(tiddlerFilePath);
-            if (fileInfo.exists) {
-              await fs.deleteAsync(tiddlerFilePath);
-            }
-          } catch (error) {
-            // File might not exist, which is fine
-            console.log(`Could not delete file for tiddler ${title}: ${(error as Error).message}`);
-          }
-        }
+      // Mark sync as active
+      this.setServerActive(workspace.id, server.id, true);
 
-        // Update Tiddlers
-        for (const tiddlerFields of updates) {
-          const { text, title, ...fieldsObjectToSave } = tiddlerFields as ITiddlerFieldsParam & { text?: string; title: string };
-          const ignore = getSyncIgnoredTiddlers(title).includes(title);
-          if (ignore) continue;
-          const saveFullTiddler = getFullSaveTiddlers(title).includes(title);
-
-          /**
-           * If no text, or text is saved to fs, this will be null.
-           */
-          let textToSaveToSQLite: string | null = null;
-          let fieldsStringToSave: string;
-          // for `$:/` tiddlers, if being skinny will throw error like `"Linked List only accepts string values, not " + value;`
-          if (saveFullTiddler) {
-            fieldsStringToSave = JSON.stringify({
-              text,
-              title,
-              ...fieldsObjectToSave,
-            });
-          } else {
-            // prevent save huge duplicated content to SQLite, if not necessary
-            if (text !== undefined && backgroundSyncService.checkIsLargeText(text, fieldsObjectToSave.type as string)) {
-              // save to fs instead of sqlite. See `WikiStorageService.#loadFromServer` for how we load it later.
-              // `BackgroundSyncService.#updateTiddlersFromServer` will use saveToFSFromServer, but here we already have the text, so we can save it directly
-              // don't set encoding here, otherwise read as utf8 will failed.
-              await fs.writeAsStringAsync(getWikiTiddlerPathByTitle(workspace, title), text);
-              textToSaveToSQLite = null;
-            } else {
-              textToSaveToSQLite = text ?? null;
-            }
-            fieldsStringToSave = JSON.stringify({
-              _is_skinny: '',
-              title,
-              ...fieldsObjectToSave,
-            });
-          }
-          // Check if a tiddler with the same title already exists
-          const existingTiddler = await transaction.query.TiddlersSQLModel.findFirst({
-            columns: {
-              title: true,
-            },
-            where: eq(TiddlersSQLModel.title, title),
-          });
-          /**
-           * Save or update tiddler
-           */
-          const newTiddler = {
-            title,
-            text: textToSaveToSQLite,
-            fields: fieldsStringToSave,
-          } satisfies typeof TiddlersSQLModel.$inferInsert;
-          if (existingTiddler === undefined) {
-            await transaction.insert(TiddlersSQLModel).values(newTiddler);
-          } else {
-            await transaction.update(TiddlersSQLModel).set(newTiddler).where(eq(TiddlersSQLModel.title, title));
-          }
-        }
-      });
-    } catch (error) {
-      console.error(error, (error as Error).stack);
-    }
-  }
-
-  public checkIsLargeText(text: string, mimeType = 'text/plain') {
-    const blob = new Blob([text], { type: mimeType });
-    return blob.size > 2 * 1024 * 1024; // 2MB
-  }
-
-  public async saveToFSFromServer(workspace: IWikiWorkspace, title: string, onlineLastSyncServer = this.getOnlineServerForWiki(workspace)) {
-    try {
-      if (onlineLastSyncServer === undefined) {
-        console.error(`saveToFSFromServer: Cannot find online server for workspace ${workspace.id}`);
-        return;
+      // 1. Pull latest changes
+      try {
+        await gitPull(workspace, remote);
+        haveUpdate = true;
+      } catch (error) {
+        console.error('Git pull failed:', error);
+        // Continue to try push even if pull fails
       }
-      const getTiddlerUrl = new URL(`/tw-mobile-sync/get-tiddler-text/${encodeURIComponent(title)}`, onlineLastSyncServer.uri);
-      const filePath = getWikiTiddlerPathByTitle(workspace, title);
-      const downloadPromise = this.#downloadTextContentToFs(getTiddlerUrl.toString(), filePath);
-      await pTimeout(downloadPromise, { milliseconds: 20_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
+
+      // 2. Check if there are local changes
+      const hasChanges = await gitHasChanges(workspace);
+      if (!hasChanges) {
+        // No local changes, just update lastSync
+        this.updateLastSync(workspace.id, server.id);
+        return haveUpdate;
+      }
+
+      // 3. Commit local changes
+      try {
+        await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+      } catch (error) {
+        console.error('Git commit failed:', error);
+        throw error;
+      }
+
+      // 4. Try to push
+      try {
+        await gitPush(workspace, remote);
+        this.updateLastSync(workspace.id, server.id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        if ((error as Error).message === 'PUSH_CONFLICT') {
+          // Push to conflict branch
+          await this.handlePushConflict(workspace, remote, server);
+        } else {
+          throw error;
+        }
+      }
+
+      return true;
     } catch (error) {
-      console.error(`Failed to load tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
-      throw error;
+      console.error(`Sync failed for workspace ${workspace.name}:`, error);
+      Alert.alert(
+        i18n.t('Sync.SyncFailed'),
+        `${workspace.name}: ${(error as Error).message}`,
+      );
+      return false;
+    } finally {
+      this.setServerActive(workspace.id, server.id, false);
     }
   }
 
-  public async saveCanonicalUriToFSFromServer(workspace: IWikiWorkspace, title: string, canonicalUri: string, onlineLastSyncServer = this.getOnlineServerForWiki(workspace)) {
-    let uri = canonicalUri;
-    // Not support file:// or open://, which only works on server side, we can't access the filesystem of server. Server should migrate to use relative path.
-    if (uri.startsWith('file:') || uri.startsWith('open:')) return;
-    if (!uri.startsWith('http')) {
-      uri = `${onlineLastSyncServer?.uri}/${uri}`;
-    }
+  /**
+   * Handle push conflict by pushing to temporary branch
+   */
+  private async handlePushConflict(
+    workspace: IWikiWorkspace,
+    remote: IGitRemote,
+    server: IServerInfo,
+  ): Promise<void> {
+    const deviceId = Device.modelName ?? 'unknown';
+    
     try {
-      const filePath = getWikiFilesPathByCanonicalUri(workspace, canonicalUri);
-      const downloadPromise = this.#downloadTextContentToFs(uri, filePath);
-      await pTimeout(downloadPromise, { milliseconds: 20_000, message: `${i18n.t('AddWorkspace.DownloadBinaryTimeout')}: ${title}` });
+      const branchName = await gitPushToConflictBranch(workspace, remote, deviceId);
+      
+      Alert.alert(
+        i18n.t('Sync.ConflictDetected'),
+        i18n.t('Sync.ConflictMessage', { branch: branchName }),
+        [
+          {
+            text: i18n.t('Common.OK'),
+            style: 'default',
+          },
+        ],
+      );
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (error) {
-      console.error(`Failed to load CanonicalUri tiddler ${title} from server: ${(error as Error).message} ${(error as Error).stack ?? ''}`);
+      console.error('Failed to push to conflict branch:', error);
       throw error;
     }
   }
 
   /**
-   * Download content from url, handle delete content if download fail with 40x
-   * @param url that will return a string content, or have error message in string content when 404/400
+   * Get remote config for workspace and server
    */
-  async #downloadTextContentToFs(url: string, filePath: string) {
-    const result = await fs.downloadAsync(url, filePath);
-    if (result.status !== 200) {
-      // delete text file if have server error like 404
-      const content = await fs.readAsStringAsync(filePath);
-      const errorMessage = `${content} Status: ${result.status}`;
-      await fs.deleteAsync(filePath);
-      throw new Error(errorMessage);
+  private getRemoteConfig(workspace: IWikiWorkspace, server: IServerInfo): IGitRemote | undefined {
+    const syncedServer = workspace.syncedServers.find(s => s.serverID === server.id);
+    if (syncedServer === undefined) {
+      return undefined;
     }
+
+    // Get token from syncedServer
+    const token = syncedServer.token;
+    if (token === undefined || token === '') {
+      console.warn(`No token found for workspace ${workspace.name} and server ${server.id}`);
+      return undefined;
+    }
+
+    // Use remoteWorkspaceId if available, otherwise fall back to workspace.id
+    const workspaceId = syncedServer.remoteWorkspaceId ?? workspace.id;
+
+    return {
+      baseUrl: server.uri,
+      workspaceId,
+      token,
+    };
   }
 
-  #updateLastSyncTimestamp(wiki: IWikiWorkspace, server: IServerInfo & { lastSync: number }) {
-    const syncedServer = wiki.syncedServers.find(syncedServer => syncedServer.serverID === server.id)!;
-    const newSyncedServers: IWikiServerSync = { ...syncedServer, lastSync: Date.now() };
-    const update = this.#workspacestore.getState().update;
-    const newWiki = { ...wiki, syncedServers: wiki.syncedServers.map(syncedServer => syncedServer.serverID === server.id ? newSyncedServers : syncedServer) };
-    update(wiki.id, newWiki);
+  /**
+   * Mark server as active/inactive for workspace
+   */
+  private setServerActive(workspaceId: string, serverId: string, isActive: boolean): void {
+    this.#workspaceStore.getState().setServerActive(workspaceId, serverId, isActive);
+  }
+
+  /**
+   * Update last sync time
+   */
+  private updateLastSync(workspaceId: string, serverId: string): void {
+    const workspaces = this.#workspaceStore.getState().workspaces;
+    const workspace = workspaces.find(w => w.id === workspaceId);
+    
+    if (workspace?.type === 'wiki') {
+      const syncedServer = workspace.syncedServers.find(s => s.serverID === serverId);
+      if (syncedServer !== undefined) {
+        syncedServer.lastSync = Date.now();
+        this.#workspaceStore.setState({ workspaces });
+      }
+    }
   }
 }
 
-export const backgroundSyncService = new BackgroundSyncService();
+export const gitBackgroundSyncService = new GitBackgroundSyncService();
+export const backgroundSyncService = gitBackgroundSyncService; // Alias for compatibility

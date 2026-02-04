@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /* eslint-disable unicorn/no-null */
 import debounce from 'lodash/debounce';
-import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
+import type { IChangedTiddlers, ITiddlerFields, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import type { AppDataService } from '../../../src/services/AppDataService/index.js';
-import type { BackgroundSyncService } from '../../../src/services/BackgroundSyncService/index.js';
+import type { GitBackgroundSyncService } from '../../../src/services/BackgroundSyncService/index.js';
 import type { NativeService } from '../../../src/services/NativeService/index.js';
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
-import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
+import type { FileSystemWikiStorageService as WikiStorageService } from '../../../src/services/WikiStorageService/FileSystemWikiStorageService.js';
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 // type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;

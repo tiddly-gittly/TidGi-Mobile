@@ -48,6 +48,7 @@
     "exponential-backoff": "^3.1.2",
     "i18next": "^25.2.1",
     "immer": "^10.1.1",
+    "isomorphic-git": "^1.36.3",
     "lodash": "^4.17.21",
     "memize": "^2.1.0",
     "p-timeout": "^6.1.4",

@@ -2,9 +2,16 @@ import { MutableRefObject, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';
 import type { WikiHookService } from '../../../services/WikiHookService';
-import type { WikiStorageService } from '../../../services/WikiStorageService';
+import type { FileSystemWikiStorageService } from '../../../services/WikiStorageService/FileSystemWikiStorageService';
+import { FileSystemTiddlersReadStream } from './FileSystemTiddlersReadStream';
 import { IHtmlContent } from '../useTiddlyWiki';
 import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
+
+export interface IUseStreamChunksToWebViewParameters {
+  html: string;
+  setLoadHtmlError: Dispatch<SetStateAction<string>>;
+  tiddlersStream: FileSystemTiddlersReadStream;
+}
 
 /**
  * WebView can't load large html string, so we have to send it using postMessage and load it inside the webview
@@ -13,7 +20,7 @@ import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
  */
 export function useStreamChunksToWebView(
   webViewReference: MutableRefObject<WebView | null>,
-  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
+  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {

@@ -1,0 +1,310 @@
+/**
+ * FileSystem-based Wiki Storage Service
+ * Replaces SQLite-based storage with git repository filesystem storage
+ *
+ * Purpose: Save/load tiddlers as .tid/.meta files in workspace git repository
+ */
+
+import * as FileSystem from 'expo-file-system';
+import { Observable } from 'rxjs';
+import type { IChangedTiddlers, ITiddlerFieldsParam } from 'tiddlywiki';
+import { getWikiFilesPathByCanonicalUri, getWikiFilesPathByTitle, getWikiTiddlerFolderPath, getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { useConfigStore } from '../../store/config';
+import { IWikiWorkspace } from '../../store/workspace';
+import { backgroundSyncService } from '../BackgroundSyncService';
+import { IWikiServerStatusObject } from './types';
+import { processFields, shouldSaveFullTiddler } from './tiddlerFileParser';
+import { TiddlerRoutingService } from './TiddlerRoutingService';
+
+/**
+ * Service for reading/writing tiddlers to filesystem as .tid/.meta files
+ * Used by expo-file-system-syncadaptor in WebView
+ */
+export class FileSystemWikiStorageService {
+  readonly #workspace: IWikiWorkspace;
+  readonly #configStore = useConfigStore;
+  readonly #routingService: TiddlerRoutingService;
+
+  constructor(workspace: IWikiWorkspace) {
+    this.#workspace = workspace;
+    this.#routingService = new TiddlerRoutingService();
+  }
+
+  async getStatus(): Promise<IWikiServerStatusObject> {
+    return {
+      anonymous: false,
+      read_only: false,
+      space: {
+        recipe: 'default',
+      },
+      username: this.#configStore.getState().userName,
+    };
+  }
+
+  /**
+   * Save tiddler to filesystem as .tid file
+   * Returns e-tag for the saved tiddler
+   */
+  async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
+    try {
+      const { text, title: _, ...fieldsToSave } = fields as (ITiddlerFieldsParam & { text?: string; title: string });
+      
+      // Remove null/undefined fields (create new object to avoid readonly issues)
+      const mutableFields: Record<string, any> = {};
+      Object.keys(fieldsToSave).forEach(key => {
+        const value = fieldsToSave[key];
+        if (value !== null && value !== undefined) {
+          mutableFields[key] = value;
+        }
+      });
+
+      const processedFields = processFields({ title, ...mutableFields });
+      const changeCount = '0';
+      const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
+
+      // Ensure tiddlers folder exists
+      const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
+      const folderInfo = await FileSystem.getInfoAsync(tiddlerFolderPath);
+      if (!folderInfo.exists) {
+        await FileSystem.makeDirectoryAsync(tiddlerFolderPath, { intermediates: true });
+      }
+
+      // Use routing service to determine file path
+      const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields, this.#workspace);
+      const fullPath = `${this.#workspace.wikiFolderLocation}/${relativePath}`;
+
+      // Ensure parent directory exists
+      const parentDir = fullPath.substring(0, fullPath.lastIndexOf('/'));
+      const dirInfo = await FileSystem.getInfoAsync(parentDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(parentDir, { intermediates: true });
+      }
+
+      // For binary tiddlers with canonical_uri, save metadata separately
+      if (processedFields._canonical_uri) {
+        await this.#saveBinaryTiddlerMetadata(title, processedFields, fullPath);
+      } else {
+        // Save as .tid file
+        await this.#saveTextTiddler(title, text ?? '', fieldsToSave, fullPath);
+      }
+
+      return Etag;
+    } catch (error) {
+      console.error(`Failed to save tiddler ${title}: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Save text tiddler as .tid file
+   */
+  async #saveTextTiddler(title: string, text: string, fields: Record<string, any>, filePath: string): Promise<void> {
+    
+    // Build header lines
+    const headerLines: string[] = [];
+    Object.keys(fields).forEach(key => {
+      if (key !== 'text' && key !== 'title') {
+        const value = fields[key];
+        // Convert arrays to TW format
+        if (Array.isArray(value)) {
+          const formatted = value.map(v => v.includes(' ') ? `[[${v}]]` : v).join(' ');
+          headerLines.push(`${key}: ${formatted}`);
+        } else if (typeof value === 'string') {
+          headerLines.push(`${key}: ${value}`);
+        } else {
+          headerLines.push(`${key}: ${String(value)}`);
+        }
+      }
+    });
+
+    // Add title field
+    headerLines.unshift(`title: ${title}`);
+
+    // Combine header and text
+    const content = headerLines.join('\n') + '\n\n' + text;
+
+    await FileSystem.writeAsStringAsync(filePath, content);
+  }
+
+  /**
+   * Save binary tiddler metadata as .meta file
+   */
+  async #saveBinaryTiddlerMetadata(title: string, fields: Record<string, any>, binaryPath: string): Promise<void> {
+    const metaPath = `${binaryPath}.meta`;
+
+    // Build meta content
+    const metaLines: string[] = [`title: ${title}`];
+    Object.keys(fields).forEach(key => {
+      if (key !== 'text' && key !== 'title' && key !== '_canonical_uri') {
+        const value = fields[key];
+        if (Array.isArray(value)) {
+          const formatted = value.map(v => v.includes(' ') ? `[[${v}]]` : v).join(' ');
+          metaLines.push(`${key}: ${formatted}`);
+        } else {
+          metaLines.push(`${key}: ${String(value)}`);
+        }
+      }
+    });
+
+    await FileSystem.writeAsStringAsync(metaPath, metaLines.join('\n'));
+  }
+
+  /**
+   * Delete tiddler from filesystem
+   */
+  async deleteTiddler(title: string): Promise<boolean> {
+    try {
+      if (!title) {
+        console.warn(`Failed to delete tiddler with no title`);
+        return false;
+      }
+
+      const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
+      
+      // Check if file exists and delete
+      const fileInfo = await FileSystem.getInfoAsync(tidPath);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(tidPath);
+      }
+
+      // Also try to delete from files folder
+      const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
+      const filesInfo = await FileSystem.getInfoAsync(filesPath);
+      if (filesInfo.exists) {
+        await FileSystem.deleteAsync(filesPath);
+        
+        // Delete corresponding .meta file
+        const metaPath = `${filesPath}.meta`;
+        const metaInfo = await FileSystem.getInfoAsync(metaPath);
+        if (metaInfo.exists) {
+          await FileSystem.deleteAsync(metaPath);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Failed to delete tiddler ${title}: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Load tiddler text from filesystem
+   */
+  async loadTiddlerText(title: string): Promise<string | undefined> {
+    const tiddlerText = (await this.#loadFromFS(title)) ?? await this.#loadFromServerAndSaveToFS(title);
+    return tiddlerText;
+  }
+
+  /**
+   * Load tiddler from filesystem
+   */
+  async #loadFromFS(title: string): Promise<string | undefined> {
+    try {
+      // Try .tid file first
+      const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
+      const tidInfo = await FileSystem.getInfoAsync(tidPath);
+      if (tidInfo.exists) {
+        const content = await FileSystem.readAsStringAsync(tidPath);
+        // Extract text part (after first blank line)
+        const parts = content.split(/\r?\n\r?\n/);
+        if (parts.length >= 2) {
+          return parts.slice(1).join('\n\n');
+        }
+      }
+
+      // Try files folder
+      return await FileSystem.readAsStringAsync(getWikiFilesPathByTitle(this.#workspace, title));
+    } catch {
+      // Try canonical_uri path
+      try {
+        const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
+        const files = await FileSystem.readDirectoryAsync(tiddlerFolderPath);
+        
+        // Find corresponding .meta file
+        for (const filename of files) {
+          if (filename.endsWith('.meta')) {
+            const metaPath = `${tiddlerFolderPath}${filename}`;
+            const metaContent = await FileSystem.readAsStringAsync(metaPath);
+            
+            // Check if this meta file is for our title
+            if (metaContent.includes(`title: ${title}`)) {
+              // Load the actual binary file
+              const binaryPath = metaPath.replace('.meta', '');
+              return await FileSystem.readAsStringAsync(binaryPath);
+            }
+          }
+        }
+      } catch {
+        // Ignore
+      }
+      
+      return undefined;
+    }
+  }
+
+  /**
+   * Load from server and save to FS
+   * Git sync model: updates come via git pull, not individual tiddler fetches
+   */
+  async #loadFromServerAndSaveToFS(title: string): Promise<string | undefined> {
+    // In Git-based sync, we don't fetch individual tiddlers
+    // Instead, the entire repo is synced via git pull
+    // This method is kept for interface compatibility but delegates to git sync
+    console.log(`Individual tiddler fetch not supported in Git mode: ${title}`);
+    console.log('Use git pull to sync all changes from server');
+    return undefined;
+  }
+
+  /**
+   * Get wiki change observer
+   * Watches filesystem for changes and emits change events
+   */
+  getWikiChangeObserver$() {
+    return new Observable<IChangedTiddlers>((observer) => {
+      // Implementation: Watch git status for changes
+      // This provides real-time updates when files change on disk
+      
+      let isWatching = true;
+      const checkInterval = 3000; // Check every 3 seconds
+      
+      const checkForChanges = async () => {
+        if (!isWatching) return;
+        
+        try {
+          // Use git status to detect changes
+          // This is more efficient than filesystem watching
+          const { gitHasChanges } = await import('../GitService');
+          const hasChanges = await gitHasChanges(this.#workspace);
+          
+          if (hasChanges) {
+            // Emit change event (could be more specific if we parse git diff)
+            observer.next({
+              // Simplified: just signal that changes exist
+              // Full implementation would parse git diff to get specific tiddlers
+            } as IChangedTiddlers);
+          }
+        } catch (error) {
+          console.error('Error checking for changes:', error);
+        }
+        
+        // Schedule next check
+        if (isWatching) {
+          setTimeout(checkForChanges, checkInterval);
+        }
+      };
+      
+      // Start watching
+      void checkForChanges();
+      
+      // Cleanup
+      return () => {
+        isWatching = false;
+      };
+    });
+  }
+}
+
+// Export alias for compatibility
+export { FileSystemWikiStorageService as WikiStorageService };
+
