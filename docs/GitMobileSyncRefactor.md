@@ -244,16 +244,20 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 
 ### 阶段一：桌面端 Git Smart HTTP 服务
 
-1. ⏸️ TidGi-Desktop: 在 startNodeJSWiki.ts 启动参数加入 csrf-disable=yes (待Desktop实现)
-2. ⏸️ TidGi-Desktop: 扩展 git service 接口，暴露 git 可执行路径与 workspace->repoPath 映射 (待Desktop实现)
-3. ⏸️ TidGi-Desktop: 在 wikiWorker/services.ts 注入新接口到 global.service (待Desktop实现)
-4. ✅ tw-mobile-sync: 新增 Git Smart HTTP 路由模块
-   - ✅ src/tw-mobile-sync/server/Git/utils.ts
-   - ✅ src/tw-mobile-sync/server/Git/git-info-refs-endpoint.ts + .meta
-   - ✅ src/tw-mobile-sync/server/Git/git-upload-pack-endpoint.ts + .meta
-   - ✅ src/tw-mobile-sync/server/Git/git-receive-pack-endpoint.ts + .meta
-5. ✅ tw-mobile-sync: 实现 workspace 级 Basic Auth 校验
-6. ✅ tw-mobile-sync: 实现 git-upload-pack/git-receive-pack 请求处理（stream 方式）
+1. ✅ TidGi-Desktop: **不需要** 在 startNodeJSWiki.ts 加 csrf-disable=yes（移动端客户端加 X-Requested-With header）
+2. ✅ TidGi-Desktop: 在 workspace service 添加 token API（getWorkspaceToken, validateWorkspaceToken）
+3. ✅ TidGi-Desktop: 在 git service 添加 Git Smart HTTP 处理方法
+   - ✅ getWorkspaceRepoPath(workspaceId)
+   - ✅ getGitExecutablePath()
+   - ✅ handleInfoRefs(workspaceId, service, req, res)
+   - ✅ handleUploadPack(workspaceId, req, res)
+   - ✅ handleReceivePack(workspaceId, req, res)
+4. ✅ tw-mobile-sync: Git Smart HTTP 端点改为调用 Desktop service（不再 spawn）
+   - ✅ git-info-refs-endpoint.ts（调用 Desktop 的 validateWorkspaceToken + handleInfoRefs）
+   - ✅ git-upload-pack-endpoint.ts（调用 Desktop 的 handleUploadPack）
+   - ✅ git-receive-pack-endpoint.ts（调用 Desktop 的 validateWorkspaceToken + handleReceivePack）
+5. ✅ tw-mobile-sync: 清理 utils.ts 移除不再需要的函数（validateToken, getRepoPath, getGitPath）
+6. ✅ tw-mobile-sync: 移除"服务缺失就放行"的 TODO 逻辑（确保安全）
 
 ### 阶段二：移动端文件系统工作区
 
@@ -280,6 +284,8 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 4. ✅ TidGi-Mobile: 实现临时分支冲突处理策略
    - ✅ gitPushToConflictBranch in GitService/index.ts
    - ✅ handlePushConflict in GitBackgroundSyncService
+5. ✅ TidGi-Mobile: 添加 X-Requested-With header 绕过 CSRF 校验
+   - ✅ createAuthHeader 返回 {'X-Requested-With': 'TiddlyWiki-TidGi-Mobile'}
 
 ### 阶段四：路由与保存
 
@@ -296,12 +302,15 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 
 ### 已完成 ✅
 
-**tw-mobile-sync（插件端）**
+**tw-mobile-sync（插件端）- 完全重构为调用 Desktop service**
 
-- ✅ Git Smart HTTP 服务器端点（info/refs, upload-pack, receive-pack）
-- ✅ Basic Auth 鉴权机制
-- ✅ 请求流式转发到 git 子进程
-- ✅ global.service 类型扩展（待 Desktop 实现）
+- ✅ Git Smart HTTP 端点改为"鉴权 + 调用 Desktop service"模式（不再 spawn git）
+- ✅ Basic Auth 鉴权机制（调用 Desktop workspace.validateWorkspaceToken）
+- ✅ git-info-refs-endpoint.ts - 调用 Desktop git.handleInfoRefs
+- ✅ git-upload-pack-endpoint.ts - 调用 Desktop git.handleUploadPack
+- ✅ git-receive-pack-endpoint.ts - 调用 Desktop git.handleReceivePack
+- ✅ utils.ts 清理：移除 validateToken/getRepoPath/getGitPath（已由 Desktop 托管）
+- ✅ 移除"服务缺失就放行"的 TODO 逻辑（确保安全）
 - ✅ **已删除所有旧的 SQLite API 端点：**
   - ❌ server-sync-v1-endpoint.ts (旧同步 API v1)
   - ❌ server-get-skinny-json-endpoint.ts (旧 JSON 端点)
@@ -315,7 +324,23 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
   - ✅ POST /tw-mobile-sync/git/{workspaceId}/git-upload-pack (Git fetch/pull)
   - ✅ POST /tw-mobile-sync/git/{workspaceId}/git-receive-pack (Git push)
 
-**TidGi-Mobile（移动端）**
+**TidGi-Desktop（桌面端）- 完整实现 Git Smart HTTP 托管**
+
+- ✅ Workspace service 扩展
+  - ✅ src/services/workspaces/interface.ts - 添加 getWorkspaceToken/validateWorkspaceToken 方法签名
+  - ✅ src/services/workspaces/index.ts - 实现 token 读取与校验（基于 workspace.authToken）
+- ✅ Git service 扩展
+  - ✅ src/services/git/interface.ts - 添加 repoPath、gitPath、handle* 方法签名
+  - ✅ src/services/git/index.ts - 完整实现：
+    - ✅ getWorkspaceRepoPath(workspaceId) - 返回 workspace.wikiFolderLocation
+    - ✅ getGitExecutablePath() - 返回 dugite bundled git 路径（LOCAL_GIT_DIRECTORY + '/cmd/git'）
+    - ✅ handleInfoRefs(workspaceId, service, req, res) - spawn git 处理 info/refs（流式）
+    - ✅ handleUploadPack(workspaceId, req, res) - spawn git-upload-pack（流式 pipe）
+    - ✅ handleReceivePack(workspaceId, req, res) - spawn git-receive-pack（流式 pipe）
+- ✅ **CSRF 策略**：不需要 csrf-disable=yes，移动端客户端加 X-Requested-With header
+- ✅ IPC 代理：所有新增方法已注册到 WorkspaceServiceIPCDescriptor 和 GitServiceIPCDescriptor
+
+**TidGi-Mobile（移动端）- CSRF 绕过**
 
 - ✅ **完全移除旧的 SQLite 实现**（已删除旧代码，无向后兼容）
 - ✅ 文件系统 tiddler 解析器（.tid/.meta）
@@ -349,6 +374,9 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
   - ✅ WorkspaceSettings.tsx - tidgi.config.json 编辑
   - ✅ WikiModelContent.tsx - 集成新组件
 - ✅ 插件类型修复（file-system-syncadaptor.ts）
+- ✅ **CSRF header 添加**
+  - ✅ src/services/GitService/index.ts - createAuthHeader 返回 {'X-Requested-With': 'TiddlyWiki-TidGi-Mobile'}
+  - ✅ 所有 Git 操作（clone/pull/push）自动带上此 header
 
 **已删除的旧文件：**
 
@@ -375,13 +403,14 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 - ✅ src/services/GitService/ (Git 操作模块)
 - ✅ src/pages/WikiWebView/useStreamChunksToWebView/FileSystemTiddlersReadStream.ts
 
-### 待完成 ⏸️📋
+### 待完成 ⏸️📋测试与集成）**
 
-**TidGi-Desktop（待实施）**
+- 📋 验证 dugite 打包后 git-upload-pack/git-receive-pack 可用性
+- 📋 验证 Git Smart HTTP 流式传输性能
+- 📋 E2E 测试：移动端 push/pull 完整流程
 
-- csrf-disable=yes 启动参数
-- global.service.git.getGitExecutablePath()
-- global.service.git.getWorkspaceRepoPath()
+**TidGi-Mobile**
+
 - global.service.workspace.validateWorkspaceToken()
 - global.service.workspace.getWorkspaceToken()
 
