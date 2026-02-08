@@ -20,121 +20,167 @@ export interface IGitRemote {
 /**
  * Get the FS adapter for isomorphic-git
  * Maps Expo FileSystem to isomorphic-git's FS interface
+ * Follows Node.js fs.promises API structure
+ * Note: Many Expo FileSystem operations are synchronous but wrapped in async for API compatibility
  */
+/* eslint-disable @typescript-eslint/require-await */
 const fs = {
-  async readFile(filepath: string, options?: { encoding?: string }) {
-    try {
-      const file = new File(filepath);
-      if (options?.encoding === 'utf8') {
-        return await file.text();
+  promises: {
+    async readFile(filepath: string, options?: { encoding?: 'utf8' } | 'utf8'): Promise<string | Buffer> {
+      try {
+        const file = new File(filepath);
+        const encoding = typeof options === 'string' ? options : options?.encoding;
+
+        if (encoding === 'utf8') {
+          return await file.text();
+        }
+
+        // For binary, return Buffer
+        const arrayBuffer = await file.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+      } catch {
+        const error = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        error.errno = -2;
+        error.path = filepath;
+        throw error;
       }
-      // For binary, read as base64
-      const arrayBuffer = await file.arrayBuffer();
-      return Buffer.from(arrayBuffer).toString('base64');
-    } catch (error) {
-      throw new Error(`readFile failed: ${(error as Error).message}`);
-    }
-  },
+    },
 
-  async writeFile(filepath: string, data: string | Uint8Array) {
-    try {
-      const file = new File(filepath);
-      const dir = file.parentDirectory;
-      const dirExists = dir.exists;
-      if (!dirExists) {
-        await dir.create();
+    async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
+      try {
+        const file = new File(filepath);
+        const directory = file.parentDirectory;
+        const directoryExists = directory.exists;
+
+        if (!directoryExists) {
+          directory.create();
+        }
+
+        if (typeof data === 'string') {
+          file.write(data);
+        } else if (Buffer.isBuffer(data)) {
+          // Convert Buffer to Uint8Array
+          file.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+        } else {
+          file.write(data);
+        }
+      } catch {
+        const error = new Error(`ENOENT: failed to write file '${filepath}'`) as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        throw error;
       }
+    },
 
-      if (typeof data === 'string') {
-        await file.write(data);
-      } else {
-        // For Uint8Array, write directly
-        await file.write(new Uint8Array(data));
+    async unlink(filepath: string): Promise<void> {
+      try {
+        const file = new File(filepath);
+        const fileExists = file.exists;
+
+        if (fileExists) {
+          file.delete();
+        }
+      } catch {
+        const error = new Error(`ENOENT: no such file or directory, unlink '${filepath}'`) as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        throw error;
       }
-    } catch (error) {
-      throw new Error(`writeFile failed: ${(error as Error).message}`);
-    }
-  },
+    },
 
-  async unlink(filepath: string) {
-    try {
-      const file = new File(filepath);
-      const fileExists = file.exists;
-      if (fileExists) {
-        await file.delete();
+    async readdir(filepath: string): Promise<string[]> {
+      try {
+        const directory = new Directory(filepath);
+        const entries = directory.list();
+        return entries.map(entry => entry.name);
+      } catch {
+        const error = new Error(`ENOENT: no such file or directory, scandir '${filepath}'`) as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        throw error;
       }
-    } catch (error) {
-      throw new Error(`unlink failed: ${(error as Error).message}`);
-    }
-  },
+    },
 
-  async readdir(filepath: string) {
-    try {
-      const dir = new Directory(filepath);
-      const entries = await dir.list();
-      return entries.map(entry => entry.name);
-    } catch (error) {
-      throw new Error(`readdir failed: ${(error as Error).message}`);
-    }
-  },
-
-  async mkdir(filepath: string) {
-    try {
-      const dir = new Directory(filepath);
-      await dir.create();
-    } catch (error) {
-      throw new Error(`mkdir failed: ${(error as Error).message}`);
-    }
-  },
-
-  async rmdir(filepath: string) {
-    try {
-      const dir = new Directory(filepath);
-      const dirExists = dir.exists;
-      if (dirExists) {
-        await dir.delete();
+    async mkdir(filepath: string, options?: { recursive?: boolean }): Promise<void> {
+      try {
+        const directory = new Directory(filepath);
+        directory.create();
+      } catch (error) {
+        if (!options?.recursive) {
+          throw error;
+        }
       }
-    } catch (error) {
-      throw new Error(`rmdir failed: ${(error as Error).message}`);
-    }
-  },
+    },
 
-  async stat(filepath: string) {
-    try {
-      const file = new File(filepath);
-      const exists = file.exists;
-      if (!exists) {
-        throw new Error('ENOENT');
+    async rmdir(filepath: string): Promise<void> {
+      try {
+        const directory = new Directory(filepath);
+        const directoryExists = directory.exists;
+
+        if (directoryExists) {
+          directory.delete();
+        }
+      } catch {
+        const error = new Error(`ENOENT: no such file or directory, rmdir '${filepath}'`) as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        throw error;
       }
-      const info = await file.info();
-      const isDir = (info as any).type === 'directory';
-      return {
-        isFile: () => !isDir,
-        isDirectory: () => isDir,
-        isSymbolicLink: () => false,
-        size: info.size ?? 0,
-        mode: 0o666,
-        mtimeMs: info.modificationTime ?? 0,
-      };
-    } catch (error) {
-      throw new Error(`stat failed: ${(error as Error).message}`);
-    }
-  },
+    },
 
-  async lstat(filepath: string) {
-    return this.stat(filepath);
-  },
+    async stat(filepath: string): Promise<{
+      isFile: () => boolean;
+      isDirectory: () => boolean;
+      isSymbolicLink: () => boolean;
+      size: number;
+      mode: number;
+      mtimeMs: number;
+    }> {
+      try {
+        const file = new File(filepath);
+        const exists = file.exists;
 
-  async readlink(filepath: string) {
-    throw new Error('readlink not supported');
-  },
+        if (!exists) {
+          const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
+          error.code = 'ENOENT';
+          throw error;
+        }
 
-  async symlink(target: string, filepath: string) {
-    throw new Error('symlink not supported');
-  },
+        const info = file.info();
+        const infoWithType = info as { size?: number; modificationTime?: number; type?: string };
+        const isDirectory = infoWithType.type === 'directory';
 
-  async chmod(filepath: string, mode: number) {
-    // No-op on mobile
+        return {
+          isFile: () => !isDirectory,
+          isDirectory: () => isDirectory,
+          isSymbolicLink: () => false,
+          size: info.size ?? 0,
+          mode: 0o666,
+          mtimeMs: info.modificationTime ?? Date.now(),
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw error;
+        }
+        const error_ = new Error(`stat failed: ${(error as Error).message}`) as NodeJS.ErrnoException;
+        error_.code = 'ENOENT';
+        throw error_;
+      }
+    },
+
+    async lstat(filepath: string) {
+      // Expo FileSystem doesn't support symlinks, so lstat is same as stat
+      return this.stat(filepath);
+    },
+
+    async readlink(_filepath: string): Promise<string> {
+      throw new Error('readlink not supported on mobile');
+    },
+
+    async symlink(_target: string, _filepath: string): Promise<void> {
+      throw new Error('symlink not supported on mobile');
+    },
+
+    async chmod(_filepath: string, _mode: number): Promise<void> {
+      // No-op on mobile - Expo FileSystem doesn't support chmod
+    },
   },
 };
 
@@ -159,13 +205,13 @@ export async function gitClone(
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const url = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
 
   try {
     await git.clone({
       fs,
       http,
-      dir,
+      dir: directory,
       url,
       ref: 'main',
       singleBranch: true,
@@ -176,7 +222,7 @@ export async function gitClone(
       },
     });
 
-    console.log(`Successfully cloned repository to ${dir}`);
+    console.log(`Successfully cloned repository to ${directory}`);
   } catch (error) {
     console.error(`Git clone failed: ${(error as Error).message}`);
     throw new Error(`Failed to clone repository: ${(error as Error).message}`);
@@ -191,13 +237,13 @@ export async function gitPull(
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
 
   try {
     await git.pull({
       fs,
       http,
-      dir,
+      dir: directory,
       ref: 'main',
       singleBranch: true,
       headers: createAuthHeader(remote.token),
@@ -224,21 +270,21 @@ export async function gitCommit(
   workspace: IWikiWorkspace,
   message: string,
 ): Promise<string> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
 
   try {
     // Stage all changes
-    const status = await git.statusMatrix({ fs, dir });
-    for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
+    const status = await git.statusMatrix({ fs, dir: directory });
+    for (const [filepath, _headStatus, workdirStatus, stageStatus] of status) {
       // workdirStatus 0 = absent, 2 = present
       // stageStatus 0 = absent, 2 = present, 3 = added
       if (workdirStatus !== stageStatus) {
         if (workdirStatus === 0) {
           // File deleted
-          await git.remove({ fs, dir, filepath });
+          await git.remove({ fs, dir: directory, filepath });
         } else {
           // File added or modified
-          await git.add({ fs, dir, filepath });
+          await git.add({ fs, dir: directory, filepath });
         }
       }
     }
@@ -246,7 +292,7 @@ export async function gitCommit(
     // Commit
     const sha = await git.commit({
       fs,
-      dir,
+      dir: directory,
       message,
       author: {
         name: 'TidGi Mobile',
@@ -270,13 +316,13 @@ export async function gitPush(
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
 
   try {
     await git.push({
       fs,
       http,
-      dir,
+      dir: directory,
       remote: 'origin',
       ref: 'main',
       headers: createAuthHeader(remote.token),
@@ -306,26 +352,26 @@ export async function gitPushToConflictBranch(
   remote: IGitRemote,
   deviceId: string,
 ): Promise<string> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
   const timestamp = Date.now();
   const branchName = `client/${deviceId}/${timestamp}`;
 
   try {
     // Create and checkout new branch
-    await git.branch({ fs, dir, ref: branchName, checkout: true });
+    await git.branch({ fs, dir: directory, ref: branchName, checkout: true });
 
     // Push to remote
     await git.push({
       fs,
       http,
-      dir,
+      dir: directory,
       remote: 'origin',
       ref: branchName,
       headers: createAuthHeader(remote.token),
     });
 
     // Switch back to main
-    await git.checkout({ fs, dir, ref: 'main' });
+    await git.checkout({ fs, dir: directory, ref: 'main' });
 
     console.log(`Pushed to conflict branch: ${branchName}`);
     return branchName;
@@ -339,11 +385,11 @@ export async function gitPushToConflictBranch(
  * Check if repository has uncommitted changes
  */
 export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
 
   try {
-    const status = await git.statusMatrix({ fs, dir });
-    return status.some(([_, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
+    const status = await git.statusMatrix({ fs, dir: directory });
+    return status.some(([_filepath, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
   } catch (error) {
     console.error(`Failed to check git status: ${(error as Error).message}`);
     return false;
@@ -354,11 +400,11 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
  * Initialize a new git repository
  */
 export async function gitInit(workspace: IWikiWorkspace): Promise<void> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
 
   try {
-    await git.init({ fs, dir, defaultBranch: 'main' });
-    console.log(`Initialized git repository at ${dir}`);
+    await git.init({ fs, dir: directory, defaultBranch: 'main' });
+    console.log(`Initialized git repository at ${directory}`);
   } catch (error) {
     console.error(`Git init failed: ${(error as Error).message}`);
     throw new Error(`Failed to initialize repository: ${(error as Error).message}`);
@@ -372,13 +418,13 @@ export async function gitAddRemote(
   workspace: IWikiWorkspace,
   remote: IGitRemote,
 ): Promise<void> {
-  const dir = workspace.wikiFolderLocation;
+  const directory = workspace.wikiFolderLocation;
   const url = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
 
   try {
     await git.addRemote({
       fs,
-      dir,
+      dir: directory,
       remote: 'origin',
       url,
     });
