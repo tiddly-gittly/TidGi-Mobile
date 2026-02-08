@@ -5,7 +5,7 @@
  * Purpose: Parse workspace configuration from git repo, preserving Desktop-specific fields
  */
 
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { IWikiWorkspace } from '../../store/workspace';
 
 /**
@@ -78,23 +78,23 @@ export function getTidgiConfigPath(workspace: IWikiWorkspace): string {
 export async function readTidgiConfig(workspace: IWikiWorkspace): Promise<ITidgiConfig> {
   try {
     const configPath = getTidgiConfigPath(workspace);
-    const fileInfo = await FileSystem.getInfoAsync(configPath);
+    const file = new File(configPath);
 
-    if (!fileInfo.exists) {
+    if (!file.exists) {
       // Return defaults if file doesn't exist
       return { ...DEFAULT_CONFIG };
     }
 
-    const content = await FileSystem.readAsStringAsync(configPath);
+    const content = await file.text();
     const parsedConfig = JSON.parse(content) as Record<string, unknown>;
 
     // Merge with defaults for known fields only
     const config: ITidgiConfig = {
       ...parsedConfig,
-      // Apply defaults only if not present
-      enableQuickLoad: parsedConfig.enableQuickLoad ?? DEFAULT_CONFIG.enableQuickLoad,
-      includeTagTree: parsedConfig.includeTagTree ?? DEFAULT_CONFIG.includeTagTree,
-      allowReadFileAttachment: parsedConfig.allowReadFileAttachment ?? DEFAULT_CONFIG.allowReadFileAttachment,
+      // Apply defaults only if not present, with proper type checking
+      enableQuickLoad: typeof parsedConfig.enableQuickLoad === 'boolean' ? parsedConfig.enableQuickLoad : DEFAULT_CONFIG.enableQuickLoad,
+      includeTagTree: typeof parsedConfig.includeTagTree === 'boolean' ? parsedConfig.includeTagTree : DEFAULT_CONFIG.includeTagTree,
+      allowReadFileAttachment: typeof parsedConfig.allowReadFileAttachment === 'boolean' ? parsedConfig.allowReadFileAttachment : DEFAULT_CONFIG.allowReadFileAttachment,
     };
 
     return config;
@@ -126,7 +126,7 @@ export async function writeTidgiConfig(
 
     // Write back to file
     const content = JSON.stringify(newConfig, null, 2);
-    await FileSystem.writeAsStringAsync(configPath, content);
+    await new File(configPath).write(content);
   } catch (error) {
     console.error(`Failed to write tidgi.config.json: ${(error as Error).message}`);
     throw error;
@@ -178,6 +178,6 @@ export async function syncWorkspaceToConfig(workspace: IWikiWorkspace): Promise<
 export { readTidgiConfig as getTidgiConfig };
 export async function saveTidgiConfig(wikiFolderPath: string, config: ITidgiConfig): Promise<void> {
   // Create temporary workspace object for writeTidgiConfig
-  const tempWorkspace = { wikiFolderLocation: wikiFolderPath } as IWikiWorkspace;
-  await writeTidgiConfig(tempWorkspace, config);
+  const temporaryWorkspace = { wikiFolderLocation: wikiFolderPath } as IWikiWorkspace;
+  await writeTidgiConfig(temporaryWorkspace, config);
 }

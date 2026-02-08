@@ -16,5 +16,9 @@ export default [
         tsconfigRootDir: __dirname,
       },
     },
+    rules: {
+      'react-native/no-inline-styles': 'off',
+      'react-native/no-raw-text': 'off',
+    },
   },
 ];

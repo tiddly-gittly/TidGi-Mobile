@@ -4,12 +4,12 @@
  */
 
 import React, { FC, useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
-import { ActivityIndicator, Button, Card, Dialog, Portal, ProgressBar, Snackbar, Text } from 'react-native-paper';
-import { styled } from 'styled-components/native';
 import { useTranslation } from 'react-i18next';
-import { IWikiWorkspace } from '../../store/workspace';
-import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
+import { View } from 'react-native';
+import { ActivityIndicator, Button, Card, Dialog, Portal, Snackbar, Text } from 'react-native-paper';
+import { styled } from 'styled-components/native';
+import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
+import { IWikiWorkspace } from '../store/workspace';
 
 const Container = styled(View)`
   padding: 8px;
@@ -56,10 +56,10 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
   const handleSync = useCallback(async () => {
     setSyncing(true);
     setSyncError(null);
-    
+
     try {
       const { haveUpdate, haveConnectedServer } = await gitBackgroundSyncService.sync();
-      
+
       if (!haveConnectedServer) {
         setSnackbarMessage(t('Sync.NoServerConnected'));
         setSnackbarVisible(true);
@@ -70,7 +70,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
         setSnackbarMessage(t('Sync.AlreadyUpToDate'));
         setSnackbarVisible(true);
       }
-      
+
       // Update last sync time
       const syncedServer = workspace.syncedServers[0];
       if (syncedServer) {
@@ -78,7 +78,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
       }
     } catch (error) {
       const errorMessage = (error as Error).message;
-      
+
       if (errorMessage === 'PUSH_CONFLICT') {
         // Show conflict dialog
         setShowConflictDialog(true);
@@ -117,15 +117,15 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
     <Container>
       <StatusCard>
         <StatusRow>
-          <StatusText variant="titleMedium">
+          <StatusText variant='titleMedium'>
             {t('Sync.GitSynchronization')}
           </StatusText>
-          {syncing && <ActivityIndicator size="small" />}
+          {syncing && <ActivityIndicator size='small' />}
         </StatusRow>
 
         {lastSyncTime !== null && (
           <StatusRow>
-            <StatusText variant="bodySmall">
+            <StatusText variant='bodySmall'>
               {t('Sync.LastSync')}: {formatLastSyncTime(lastSyncTime)}
             </StatusText>
           </StatusRow>
@@ -133,7 +133,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
 
         {syncError && (
           <StatusRow>
-            <StatusText variant="bodySmall" style={{ color: 'red' }}>
+            <StatusText variant='bodySmall' style={{ color: 'red' }}>
               {t('Sync.Error')}: {syncError}
             </StatusText>
           </StatusRow>
@@ -141,7 +141,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
 
         <StatusRow>
           <Button
-            mode="contained"
+            mode='contained'
             onPress={handleSync}
             disabled={syncing}
             icon={syncing ? undefined : 'sync'}
@@ -154,23 +154,32 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
 
       {/* Conflict Dialog */}
       <Portal>
-        <Dialog visible={showConflictDialog} onDismiss={() => setShowConflictDialog(false)}>
+        <Dialog
+          visible={showConflictDialog}
+          onDismiss={() => {
+            setShowConflictDialog(false);
+          }}
+        >
           <Dialog.Title>{t('Sync.ConflictDetected')}</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">
+            <Text variant='bodyMedium'>
               {t('Sync.ConflictDescription')}
             </Text>
             {conflictBranch && (
-              <Text variant="bodySmall" style={{ marginTop: 8, fontFamily: 'monospace' }}>
+              <Text variant='bodySmall' style={{ marginTop: 8, fontFamily: 'monospace' }}>
                 {t('Sync.ConflictBranch')}: {conflictBranch}
               </Text>
             )}
-            <Text variant="bodySmall" style={{ marginTop: 12 }}>
+            <Text variant='bodySmall' style={{ marginTop: 12 }}>
               {t('Sync.ConflictInstructions')}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setShowConflictDialog(false)}>
+            <Button
+              onPress={() => {
+                setShowConflictDialog(false);
+              }}
+            >
               {t('Common.OK')}
             </Button>
           </Dialog.Actions>
@@ -180,7 +189,9 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
       {/* Success/Error Snackbar */}
       <Snackbar
         visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
+        onDismiss={() => {
+          setSnackbarVisible(false);
+        }}
         duration={3000}
       >
         {snackbarMessage}

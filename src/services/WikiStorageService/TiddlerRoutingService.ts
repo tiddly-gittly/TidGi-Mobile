@@ -4,7 +4,7 @@
  */
 
 import { ITiddlerFields } from 'tiddlywiki';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IWikiWorkspace } from '../../store/workspace';
 import { readTidgiConfig } from './tidgiConfigManager';
 
 /**
@@ -38,8 +38,8 @@ export class TiddlerRoutingService {
   /**
    * Set WebView reference for communication
    */
-  public setWebViewRef(webViewRef: any) {
-    this.#webViewRef = webViewRef;
+  public setWebViewRef(webViewReference: any) {
+    this.#webViewRef = webViewReference;
   }
 
   /**
@@ -66,7 +66,7 @@ export class TiddlerRoutingService {
 
     // Fallback: Native routing with limited filter support
     const config = await readTidgiConfig(workspace);
-    
+
     // Check if tiddler matches workspace rules
     if (this.#shouldRouteToWorkspace(title, fields, config)) {
       return {
@@ -93,14 +93,14 @@ export class TiddlerRoutingService {
   ): Promise<IRoutingResult | null> {
     return new Promise((resolve, reject) => {
       const messageId = `route-${Date.now()}`;
-      
+
       // Listen for response
       const handleMessage = (event: any) => {
         try {
           const data = JSON.parse(event.nativeEvent.data);
           if (data.messageId === messageId) {
             window.removeEventListener('message', handleMessage);
-            
+
             if (data.error) {
               reject(new Error(data.error));
             } else {
@@ -151,22 +151,22 @@ export class TiddlerRoutingService {
   ): boolean {
     // Check tag-based routing
     if (config.tagNames && config.tagNames.length > 0) {
-      const tiddlerTags = (fields.tags as string[] | undefined) || [];
-      
+      const tiddlerTags = (fields.tags) || [];
+
       // Check direct tag match
       const hasMatchingTag = config.tagNames.some(tag => tiddlerTags.includes(tag));
       if (hasMatchingTag) return true;
-      
+
       // Check if tiddler title is a tag name (it's a "tag tiddler")
       if (config.tagNames.includes(title)) return true;
-      
+
       // Note: includeTagTree requires WebView filter evaluation
       // Will be fully implemented when sub-wiki UI is added
     }
 
     // Note: customFilters requires WebView filter evaluation
     // Will be fully implemented when sub-wiki UI is added
-    
+
     return false;
   }
 
@@ -181,10 +181,10 @@ export class TiddlerRoutingService {
   ): Promise<string> {
     // Load config to check for fileSystemPathFilters
     const config = await readTidgiConfig(workspace);
-    
+
     // Sanitize title for filesystem
     const sanitized = title.replace(/["#%&'*/:<=>?\\{}]/g, '_');
-    
+
     // Check if it's a binary tiddler with canonical_uri
     if (fields._canonical_uri) {
       // Already has a path, use it
@@ -193,7 +193,7 @@ export class TiddlerRoutingService {
 
     // Check tiddler type
     const type = fields.type as string | undefined;
-    
+
     // Binary tiddlers go to files/
     if (type && this.isBinaryType(type)) {
       return `files/${sanitized}`;
@@ -235,7 +235,7 @@ export class TiddlerRoutingService {
    */
   public async getRoutingConfig(workspace: IWikiWorkspace): Promise<IWorkspaceRoutingConfig> {
     const config = await readTidgiConfig(workspace);
-    
+
     return {
       id: workspace.id,
       name: workspace.name || config.name || 'Untitled',

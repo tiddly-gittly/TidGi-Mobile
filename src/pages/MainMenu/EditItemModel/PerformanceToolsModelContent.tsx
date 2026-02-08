@@ -5,7 +5,6 @@ import { styled } from 'styled-components/native';
 
 import { FlexibleText, SwitchContainer } from '../../../components/PreferenceWidgets';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
-import { ImportBinary } from '../../Importer/ImportBinary';
 
 interface ModalProps {
   id: string | undefined;
@@ -32,10 +31,6 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
   return (
     <ModalContainer>
       <CloseButton mode='outlined' onPress={onClose}>{t('Menu.Close')}</CloseButton>
-      <SectionContainer>
-        <Text variant='titleLarge'>{t('AddWorkspace.ImportBinaryFiles')}</Text>
-        <ImportBinary wikiWorkspace={wiki} />
-      </SectionContainer>
       <SectionContainer>
         <StyledTextInput label={t('AddWorkspace.SelectiveSyncFilter')} value={editedSelectiveSyncFilter} onChangeText={setEditedSelectiveSyncFilter} multiline />
       </SectionContainer>

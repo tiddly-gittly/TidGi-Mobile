@@ -6,7 +6,7 @@ import { defaultLanguage, detectedLanguage, supportedLanguages } from '../../i18
 import { useConfigStore } from '../../store/config';
 
 export function Language(): JSX.Element {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   const currentLanguage = useConfigStore(state => state.preferredLanguage ?? detectedLanguage);
   const setConfig = useConfigStore(state => state.set);
@@ -17,7 +17,7 @@ export function Language(): JSX.Element {
       <SegmentedContainer>
         <SegmentedButtons
           value={currentLanguage ?? defaultLanguage}
-          onValueChange={async (newValue) => {
+          onValueChange={(newValue) => {
             // when tap again, set to undefined
             const preferredLanguage = currentLanguage === newValue ? undefined : newValue;
             setConfig({ preferredLanguage });

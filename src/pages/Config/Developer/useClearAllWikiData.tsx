@@ -1,4 +1,4 @@
-import * as fs from 'expo-file-system';
+import { Directory } from 'expo-file-system';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Snackbar } from 'react-native-paper';
@@ -8,7 +8,10 @@ import { IWorkspace, useWorkspaceStore } from '../../../store/workspace';
 export const deleteWikiFile = async (wikiWorkspace: IWorkspace) => {
   if (wikiWorkspace.type === 'wiki') {
     // Delete git repository folder
-    await fs.deleteAsync(wikiWorkspace.wikiFolderLocation, { idempotent: true });
+    const dir = new Directory(wikiWorkspace.wikiFolderLocation);
+    if (dir.exists) {
+      await dir.delete();
+    }
   }
 };
 

@@ -17,12 +17,12 @@ export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'Creat
       <Tab.Screen
         name='CreateFromTemplate'
         component={CreateFromTemplateTab}
-        options={{ title: t('AddWorkspace.CreateFromTemplate'), tabBarIcon: ({ color }) => <Ionicons name='copy' color={color} size={26} /> }}
+        options={{ title: t('AddWorkspace.CreateFromTemplate'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='copy' color={color} size={26} /> }}
       />
       <Tab.Screen
         name='CreateWebpageShortcut'
         component={CreateWebpageShortcutTab}
-        options={{ title: t('AddWorkspace.CreateWebpageShortcut'), tabBarIcon: ({ color }) => <Ionicons name='bookmark' color={color} size={26} /> }}
+        options={{ title: t('AddWorkspace.CreateWebpageShortcut'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='bookmark' color={color} size={26} /> }}
       />
     </Tab.Navigator>
   );

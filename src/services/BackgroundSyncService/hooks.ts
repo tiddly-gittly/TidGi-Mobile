@@ -1,20 +1,15 @@
-import { MutableRefObject, useEffect, useRef } from 'react';
-import { IWikiWorkspace } from '../../store/workspace';
-import { gitBackgroundSyncService } from './index';
+import { MutableRefObject, useRef } from 'react';
+import type { WebView } from 'react-native-webview';
 
 /**
  * Hook for using background sync service in WebView
+ * Note: BackgroundSyncService doesn't need WebView reference as it runs in native context
  */
 export function useBackgroundSyncService() {
-  const serviceReference: MutableRefObject<typeof gitBackgroundSyncService | undefined> = useRef();
-
-  useEffect(() => {
-    serviceReference.current = gitBackgroundSyncService;
-  }, []);
-
+  const webViewReference: MutableRefObject<WebView | null> = useRef(null);
   const onMessageReference = useRef(() => {
-    // Handle messages from WebView if needed
+    // Background sync doesn't handle WebView messages
   });
 
-  return [serviceReference, onMessageReference] as const;
+  return [webViewReference, onMessageReference] as const;
 }

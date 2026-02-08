@@ -3,7 +3,7 @@
  * Handles clone, pull, push with Basic Auth
  */
 
-import * as FileSystem from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 import git from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import { IWikiWorkspace } from '../../store/workspace';
@@ -24,10 +24,13 @@ export interface IGitRemote {
 const fs = {
   async readFile(filepath: string, options?: { encoding?: string }) {
     try {
+      const file = new File(filepath);
       if (options?.encoding === 'utf8') {
-        return await FileSystem.readAsStringAsync(filepath);
+        return await file.text();
       }
-      return await FileSystem.readAsStringAsync(filepath, { encoding: FileSystem.EncodingType.Base64 });
+      // For binary, read as base64
+      const arrayBuffer = await file.arrayBuffer();
+      return Buffer.from(arrayBuffer).toString('base64');
     } catch (error) {
       throw new Error(`readFile failed: ${(error as Error).message}`);
     }
@@ -35,17 +38,18 @@ const fs = {
 
   async writeFile(filepath: string, data: string | Uint8Array) {
     try {
-      const dir = filepath.substring(0, filepath.lastIndexOf('/'));
-      const dirInfo = await FileSystem.getInfoAsync(dir);
-      if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      const file = new File(filepath);
+      const dir = file.parentDirectory;
+      const dirExists = dir.exists;
+      if (!dirExists) {
+        await dir.create();
       }
 
       if (typeof data === 'string') {
-        await FileSystem.writeAsStringAsync(filepath, data);
+        await file.write(data);
       } else {
-        const base64 = Buffer.from(data).toString('base64');
-        await FileSystem.writeAsStringAsync(filepath, base64, { encoding: FileSystem.EncodingType.Base64 });
+        // For Uint8Array, write directly
+        await file.write(new Uint8Array(data));
       }
     } catch (error) {
       throw new Error(`writeFile failed: ${(error as Error).message}`);
@@ -54,7 +58,11 @@ const fs = {
 
   async unlink(filepath: string) {
     try {
-      await FileSystem.deleteAsync(filepath);
+      const file = new File(filepath);
+      const fileExists = file.exists;
+      if (fileExists) {
+        await file.delete();
+      }
     } catch (error) {
       throw new Error(`unlink failed: ${(error as Error).message}`);
     }
@@ -62,7 +70,9 @@ const fs = {
 
   async readdir(filepath: string) {
     try {
-      return await FileSystem.readDirectoryAsync(filepath);
+      const dir = new Directory(filepath);
+      const entries = await dir.list();
+      return entries.map(entry => entry.name);
     } catch (error) {
       throw new Error(`readdir failed: ${(error as Error).message}`);
     }
@@ -70,7 +80,8 @@ const fs = {
 
   async mkdir(filepath: string) {
     try {
-      await FileSystem.makeDirectoryAsync(filepath, { intermediates: true });
+      const dir = new Directory(filepath);
+      await dir.create();
     } catch (error) {
       throw new Error(`mkdir failed: ${(error as Error).message}`);
     }
@@ -78,7 +89,11 @@ const fs = {
 
   async rmdir(filepath: string) {
     try {
-      await FileSystem.deleteAsync(filepath, { idempotent: true });
+      const dir = new Directory(filepath);
+      const dirExists = dir.exists;
+      if (dirExists) {
+        await dir.delete();
+      }
     } catch (error) {
       throw new Error(`rmdir failed: ${(error as Error).message}`);
     }
@@ -86,13 +101,16 @@ const fs = {
 
   async stat(filepath: string) {
     try {
-      const info = await FileSystem.getInfoAsync(filepath);
-      if (!info.exists) {
+      const file = new File(filepath);
+      const exists = file.exists;
+      if (!exists) {
         throw new Error('ENOENT');
       }
+      const info = await file.info();
+      const isDir = (info as any).type === 'directory';
       return {
-        isFile: () => !info.isDirectory,
-        isDirectory: () => info.isDirectory === true,
+        isFile: () => !isDir,
+        isDirectory: () => isDir,
         isSymbolicLink: () => false,
         size: info.size ?? 0,
         mode: 0o666,
@@ -122,11 +140,13 @@ const fs = {
 
 /**
  * Create auth header for git operations
+ * Includes CSRF header to bypass TiddlyWiki's CSRF protection
  */
-function createAuthHeader(token: string): { Authorization: string } {
+function createAuthHeader(token: string): { Authorization: string; 'X-Requested-With': string } {
   const credentials = Buffer.from(`:${token}`).toString('base64');
   return {
     Authorization: `Basic ${credentials}`,
+    'X-Requested-With': 'TiddlyWiki-TidGi-Mobile',
   };
 }
 
@@ -268,12 +288,12 @@ export async function gitPush(
     console.log('Successfully pushed changes');
   } catch (error) {
     console.error(`Git push failed: ${(error as Error).message}`);
-    
+
     // Check if it's a conflict
     if ((error as Error).message.includes('failed to push') || (error as Error).message.includes('non-fast-forward')) {
       throw new Error('PUSH_CONFLICT');
     }
-    
+
     throw new Error(`Failed to push: ${(error as Error).message}`);
   }
 }
@@ -323,9 +343,7 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
 
   try {
     const status = await git.statusMatrix({ fs, dir });
-    return status.some(([_, headStatus, workdirStatus, stageStatus]) => 
-      workdirStatus !== headStatus || stageStatus !== headStatus
-    );
+    return status.some(([_, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
   } catch (error) {
     console.error(`Failed to check git status: ${(error as Error).message}`);
     return false;

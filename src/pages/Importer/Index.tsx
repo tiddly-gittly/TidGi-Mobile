@@ -8,8 +8,8 @@ import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { ServerList } from '../../components/ServerList';
 import { gitBackgroundSyncService as backgroundSyncService } from '../../services/BackgroundSyncService';
-import { useServerStore } from '../../store/server';
 import { useGitImport } from '../../services/GitService/useGitImport';
+import { useServerStore } from '../../store/server';
 
 const Container = styled.View`
   flex: 1;
@@ -133,13 +133,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
-    
+
     // Get QR data if available (from QR scan)
     const qrData = (window as any).__tidgiQrData;
-    
+
     if (addAsServer) {
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
-      
+
       if (qrData?.baseUrl && qrData?.workspaceId && qrData?.token) {
         // Git import with QR code data
         await importWiki(qrData, wikiName, newServer.id);
@@ -152,7 +152,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       alert('Server must be added for Git synchronization.');
       return;
     }
-    
+
     setWikiUrl(undefined);
     // Clean up QR data
     delete (window as any).__tidgiQrData;
@@ -269,9 +269,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <Text variant='titleLarge'>{t('Loading')}</Text>
           <Text>{t('Sync.CloningRepository')}</Text>
           <Text>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
-          <ProgressBar 
-            animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0} 
-            color={MD3Colors.primary40} 
+          <ProgressBar
+            animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+            color={MD3Colors.primary40}
           />
         </>
       )}

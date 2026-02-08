@@ -3,7 +3,7 @@
  * Replaces HTML download with git clone
  */
 
-import * as FileSystem from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 import { useState } from 'react';
 import { getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
 import { gitClone, IGitRemote } from '../../services/GitService';
@@ -22,7 +22,7 @@ export function useGitImport() {
   const [error, setError] = useState<string | undefined>();
   const [cloneProgress, setCloneProgress] = useState({ phase: '', loaded: 0, total: 0 });
   const [htmlDownloadProgress, setHtmlDownloadProgress] = useState(0);
-  
+
   const addWiki = useWorkspaceStore(state => state.add);
   const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWorkspace, setCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
@@ -61,8 +61,12 @@ export function useGitImport() {
       setCreatedWorkspace(newWorkspace);
 
       // Clean up any existing folder
-      await FileSystem.deleteAsync(newWorkspace.wikiFolderLocation, { idempotent: true });
-      await FileSystem.makeDirectoryAsync(newWorkspace.wikiFolderLocation, { intermediates: true });
+      const dir = new Directory(newWorkspace.wikiFolderLocation);
+      const dirExists = dir.exists;
+      if (dirExists) {
+        await dir.delete();
+      }
+      await dir.create();
 
       // 2. Clone repository
       setStatus('cloning');
@@ -79,24 +83,27 @@ export function useGitImport() {
       // 3. Download skinny HTML
       setStatus('downloading-html');
       const skinnyHtmlUrl = new URL('/tw-mobile-sync/get-skinny-html', qrData.baseUrl);
-      
-      const downloadResumable = FileSystem.createDownloadResumable(
-        skinnyHtmlUrl.toString(),
-        getWikiFilePath(newWorkspace),
-        {},
-        (downloadProgress) => {
-          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-          setHtmlDownloadProgress(progress);
-        },
-      );
 
-      await downloadResumable.downloadAsync();
+      const response = await fetch(skinnyHtmlUrl.toString(), {
+        headers: {
+          Authorization: `Bearer ${qrData.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to download HTML: ${response.statusText}`);
+      }
+
+      const htmlContent = await response.text();
+      const htmlFile = new File(getWikiFilePath(newWorkspace));
+      await htmlFile.write(htmlContent);
+      setHtmlDownloadProgress(1);
 
       setStatus('success');
       return newWorkspace;
-    } catch (err) {
-      console.error('Git import failed:', err);
-      setError((err as Error).message);
+    } catch (error_) {
+      console.error('Git import failed:', error_);
+      setError((error_ as Error).message);
       setStatus('error');
 
       // Clean up on error
@@ -104,7 +111,7 @@ export function useGitImport() {
         removeWiki(workspaceId);
       }
 
-      throw err;
+      throw error_;
     }
   };
 

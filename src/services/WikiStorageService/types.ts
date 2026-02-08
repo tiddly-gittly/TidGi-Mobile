@@ -9,6 +9,7 @@ export interface ISkinnyTiddlerWithText {
   title: string;
 }
 export interface ITiddlerChange {
+  fields?: Record<string, unknown>;
   id: number;
   operation: TiddlersLogOperation;
   timestamp: string;

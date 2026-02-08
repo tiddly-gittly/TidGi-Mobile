@@ -29,14 +29,14 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
         const value = line.substring(colonIndex + 1).trim();
         if (name) {
           fields = fields || {};
-          fields[name] = value;
+          (fields as any)[name] = value;
         }
       }
     }
     // The text is everything after the first blank line
     if (split.length >= 2) {
       fields = fields || {};
-      fields.text = split.slice(1).join('\n\n');
+      (fields as any).text = split.slice(1).join('\n\n');
     }
   }
   return fields as ITiddlerFields;
@@ -81,12 +81,12 @@ export function parseMetadataFile(text: string, fields?: Partial<ITiddlerFields>
  */
 export function processFields(fields: Partial<ITiddlerFields>): Record<string, any> {
   const result: Record<string, any> = { ...fields };
-  
+
   // Process tags field
   if (typeof result.tags === 'string') {
     result.tags = parseStringArray(result.tags);
   }
-  
+
   // Process list field
   if (typeof result.list === 'string') {
     result.list = parseStringArray(result.list);
@@ -122,13 +122,13 @@ export function getFileType(filename: string): 'tid' | 'meta' | 'json' | 'binary
   if (lowerName.endsWith('.tid')) return 'tid';
   if (lowerName.endsWith('.meta')) return 'meta';
   if (lowerName.endsWith('.json')) return 'json';
-  
+
   // Check for binary file extensions
   const binaryExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.zip', '.mp4', '.mp3'];
-  for (const ext of binaryExtensions) {
-    if (lowerName.endsWith(ext)) return 'binary';
+  for (const extension of binaryExtensions) {
+    if (lowerName.endsWith(extension)) return 'binary';
   }
-  
+
   return 'unknown';
 }
 
@@ -138,12 +138,12 @@ export function getFileType(filename: string): 'tid' | 'meta' | 'json' | 'binary
  */
 export function getTitleFromFilename(filename: string): string {
   // Remove extension
-  let title = filename.replace(/\.(tid|meta|json)$/i, '');
-  
+  const title = filename.replace(/\.(tid|meta|json)$/i, '');
+
   // Restore special characters that were replaced with underscore
   // This should match the INVALID_CHARACTERS_REGEX in paths.ts
   // For now, keep underscore as is (lossy conversion)
-  
+
   return title;
 }
 
@@ -163,22 +163,22 @@ export function makeSkinnyTiddler(fields: ITiddlerFields): Omit<ITiddlerFields, 
 export function shouldSaveFullTiddler(fields: ITiddlerFields): boolean {
   const title = fields.title;
   const type = fields.type;
-  
+
   // System tiddlers
   if (title.startsWith('$:/')) {
     return true;
   }
-  
+
   // Plugins
   if (type === 'application/json' && fields['plugin-type']) {
     return true;
   }
-  
+
   // Small tiddlers (less than 10KB)
   const textLength = (fields.text || '').length;
   if (textLength < 10000) {
     return true;
   }
-  
+
   return false;
 }

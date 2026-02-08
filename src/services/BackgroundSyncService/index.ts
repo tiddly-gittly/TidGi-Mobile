@@ -12,8 +12,8 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { gitCommit, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, IGitRemote } from '../GitService';
 import { ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
-import { gitClone, gitCommit, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, IGitRemote } from '../GitService';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 
@@ -21,8 +21,13 @@ export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
   const now = Date.now();
   console.log(`Got background task call at date: ${new Date(now).toISOString()}`);
-  const { haveUpdate } = await gitBackgroundSyncService.sync();
-  return haveUpdate ? BackgroundTask.BackgroundTaskResult.NewData : BackgroundTask.BackgroundTaskResult.NoData;
+  try {
+    await gitBackgroundSyncService.sync();
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (error) {
+    console.error('Background sync failed:', error);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
 });
 
 // Register background sync
@@ -84,7 +89,7 @@ export class GitBackgroundSyncService {
    */
   public async updateServerOnlineStatus(): Promise<void> {
     const newServers: Record<string, IServerInfo> = {};
-    
+
     await Promise.all(
       Object.values(this.#serverStore.getState().servers).map(async (server) => {
         try {
@@ -105,7 +110,9 @@ export class GitBackgroundSyncService {
   private async fetchServerStatus(server: IServerInfo): Promise<void> {
     const statusUrl = new URL('status', server.uri);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 5000);
 
     try {
       const response = await fetch(statusUrl.toString(), {
@@ -147,10 +154,10 @@ export class GitBackgroundSyncService {
       // Get git log since last sync
       const git = await import('isomorphic-git');
       const fs = await import('expo-file-system');
-      
+
       const lastSyncTime = syncedServer.lastSync || 0;
       const lastSyncDate = new Date(lastSyncTime);
-      
+
       // Get commits since last sync
       const commits = await git.log({
         fs: fs as any,
@@ -160,7 +167,7 @@ export class GitBackgroundSyncService {
       });
 
       const changes: ITiddlerChange[] = [];
-      
+
       // Parse each commit to extract tiddler changes
       for (const commit of commits) {
         // Get changed files in this commit
@@ -212,7 +219,7 @@ export class GitBackgroundSyncService {
    */
   private getOnlineServerForWorkspace(workspace: IWikiWorkspace): IServerInfo | undefined {
     const servers = this.#serverStore.getState().servers;
-    
+
     for (const syncedServer of workspace.syncedServers) {
       const server = servers[syncedServer.serverID];
       if (server?.status === ServerStatus.online) {
@@ -303,10 +310,10 @@ export class GitBackgroundSyncService {
     server: IServerInfo,
   ): Promise<void> {
     const deviceId = Device.modelName ?? 'unknown';
-    
+
     try {
       const branchName = await gitPushToConflictBranch(workspace, remote, deviceId);
-      
+
       Alert.alert(
         i18n.t('Sync.ConflictDetected'),
         i18n.t('Sync.ConflictMessage', { branch: branchName }),
@@ -364,7 +371,7 @@ export class GitBackgroundSyncService {
   private updateLastSync(workspaceId: string, serverId: string): void {
     const workspaces = this.#workspaceStore.getState().workspaces;
     const workspace = workspaces.find(w => w.id === workspaceId);
-    
+
     if (workspace?.type === 'wiki') {
       const syncedServer = workspace.syncedServers.find(s => s.serverID === serverId);
       if (syncedServer !== undefined) {

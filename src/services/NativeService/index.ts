@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { Camera, PermissionStatus } from 'expo-camera';
-import * as fs from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 import type { ShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
 
@@ -106,7 +106,10 @@ export class NativeService {
       case 'file': {
         if (files && files.length > 0) {
           const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
-            const text = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: 'base64' });
+            const filePath = file.path.startsWith('file://') ? file.path : `file://${file.path}`;
+            const fileHandle = new File(filePath);
+            const arrayBuffer = await fileHandle.arrayBuffer();
+            const text = Buffer.from(arrayBuffer).toString('base64');
             return { ...file, text, type: file.mimeType };
           }));
           script = importBinaryTiddlers(filesWithFileLoadedToText);
@@ -156,11 +159,14 @@ export class NativeService {
               const canonicalUri = `files/${file.fileName || randomTitle}`;
               const filePath = getWikiFilesPathByCanonicalUri(defaultWiki, canonicalUri);
               const filesDirectory = `${defaultWiki.wikiFolderLocation}/files`;
-              await fs.makeDirectoryAsync(filesDirectory, { intermediates: true });
-              await fs.copyAsync({
-                from: file.path.startsWith('file://') ? file.path : `file://${file.path}`,
-                to: filePath,
-              });
+              const dir = new Directory(filesDirectory);
+              if (!dir.exists) {
+                await dir.create();
+              }
+              const sourceFile = new File(file.path.startsWith('file://') ? file.path : `file://${file.path}`);
+              const destinationFile = new File(filePath);
+              await sourceFile.copy(destinationFile);
+
               const fileFields = {
                 ...fields,
                 type: file.mimeType,
@@ -169,7 +175,10 @@ export class NativeService {
               await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
             } else {
               // Original behavior: embed file content as base64
-              const fileContent = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: fs.EncodingType.Base64 });
+              const filePath = file.path.startsWith('file://') ? file.path : `file://${file.path}`;
+              const fileHandle = new File(filePath);
+              const arrayBuffer = await fileHandle.arrayBuffer();
+              const fileContent = Buffer.from(arrayBuffer).toString('base64');
               const fileFields = {
                 ...fields,
                 type: file.mimeType,
@@ -185,6 +194,11 @@ export class NativeService {
   }
 
   async saveFileToFs(filename: string, text: string, mimeType?: string): Promise<string | false> {
+    // TODO: StorageAccessFramework not available in expo-file-system 19.x
+    // Need to implement alternative file saving mechanism
+    console.warn('saveFileToFs not implemented for expo-file-system 19.x');
+    return false;
+    /*
     const configs = useConfigStore.getState();
     const result = await fs.StorageAccessFramework.requestDirectoryPermissionsAsync(configs.defaultDownloadLocation);
     if (!result.granted) {
@@ -200,6 +214,7 @@ export class NativeService {
       console.error('Error saving file:', error);
       return false;
     }
+    */
   }
 }
 

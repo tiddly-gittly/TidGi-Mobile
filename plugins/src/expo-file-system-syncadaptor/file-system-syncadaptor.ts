@@ -8,6 +8,12 @@ import type { NativeService } from '../../../src/services/NativeService/index.js
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
 import type { FileSystemWikiStorageService as WikiStorageService } from '../../../src/services/WikiStorageService/FileSystemWikiStorageService.js';
 
+interface Logger {
+  alert: (message: string) => void;
+  log: (...args: any[]) => void;
+  setSaveBuffer?: (logger: Logger) => void;
+}
+
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 // type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
 type ISyncAdaptorPutTiddlersCallback = (error: Error | null | string, etag?: {
@@ -21,7 +27,7 @@ declare global {
     isInTidGi?: boolean;
     service?: {
       appDataService: AppDataService;
-      backgroundSyncService: BackgroundSyncService;
+      backgroundSyncService: GitBackgroundSyncService;
       nativeService: NativeService;
       wikiHookService: WikiHookService;
       wikiStorageService: WikiStorageService;
@@ -56,7 +62,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.wiki = options.wiki;
     this.hasStatus = false;
     this.isAnonymous = false;
-    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor');
+    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor') as any;
     this.isLoggedIn = false;
     this.isReadOnly = false;
     this.logoutIsAvailable = true;
@@ -148,7 +154,7 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 
   setLoggerSaveBuffer(loggerForSaving: Logger) {
-    this.logger.setSaveBuffer(loggerForSaving);
+    this.logger.setSaveBuffer?.(loggerForSaving);
   }
 
   isReady() {

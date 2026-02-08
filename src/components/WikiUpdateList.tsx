@@ -106,7 +106,7 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onLongPress, wiki, las
   useEffect(() => {
     void (async () => {
       if (lastSyncDate === undefined) return;
-      const changes = await gitBackgroundSyncService.getChangeLogsSinceLastSync(wiki, lastSyncDate.getTime(), true);
+      const changes = await gitBackgroundSyncService.getChangeLogsSinceLastSync(wiki);
       setChangesAfterLastSync(compact(changes));
     })();
   }, [wiki, lastSyncDate]);

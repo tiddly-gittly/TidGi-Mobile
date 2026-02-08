@@ -5,12 +5,19 @@
  * Purpose: Read .tid/.meta files from filesystem and stream them as JSON chunks to WebView
  */
 
-import * as FileSystem from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 import { Readable } from 'readable-stream';
-import { getWikiFilesFolderPath, getWikiTiddlerFolderPath } from '../../../constants/paths';
-import { getFileType, getTitleFromFilename, makeSkinnyTiddler, parseJSONSafe, parseMetadataFile, parseTiddlerFile, processFields, shouldSaveFullTiddler } from '../../../services/WikiStorageService/tiddlerFileParser';
+import type { ITiddlerFields } from 'tiddlywiki';
+import { getWikiTiddlerFolderPath } from '../../../constants/paths';
+import {
+  getTitleFromFilename,
+  makeSkinnyTiddler,
+  parseMetadataFile,
+  parseTiddlerFile,
+  processFields,
+  shouldSaveFullTiddler,
+} from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
-import { ITiddlerFields } from 'tiddlywiki';
 
 export interface IFileSystemTiddlersReadStreamOptions {
   additionalContent?: string[];
@@ -32,7 +39,7 @@ export class FileSystemTiddlersReadStream extends Readable {
   private readonly chunkSize: number;
   private readonly additionalContent?: string[];
   private readonly quickLoadLimit: number;
-  
+
   private tiddlerFiles: string[] = [];
   private currentIndex = 0;
   private hasStarted = false;
@@ -49,21 +56,22 @@ export class FileSystemTiddlersReadStream extends Readable {
   async init(): Promise<void> {
     try {
       const tiddlerFolderPath = getWikiTiddlerFolderPath(this.workspace);
-      
+
       // Check if tiddlers folder exists
-      const folderInfo = await FileSystem.getInfoAsync(tiddlerFolderPath);
-      if (!folderInfo.exists) {
+      const folder = new Directory(tiddlerFolderPath);
+      const folderExists = folder.exists;
+      if (!folderExists) {
         console.warn(`Tiddlers folder does not exist: ${tiddlerFolderPath}`);
         return;
       }
 
       // Read all files in tiddlers folder
-      const files = await FileSystem.readDirectoryAsync(tiddlerFolderPath);
-      
+      const entries = await folder.list();
+
       // Filter for .tid files only (skip .meta as they're paired with binary files)
-      this.tiddlerFiles = files
-        .filter(filename => filename.endsWith('.tid'))
-        .map(filename => `${tiddlerFolderPath}${filename}`);
+      this.tiddlerFiles = entries
+        .filter(entry => entry.name.endsWith('.tid'))
+        .map(entry => entry.uri);
 
       console.log(`Found ${this.tiddlerFiles.length} tiddler files in ${tiddlerFolderPath}`);
     } catch (error) {
@@ -78,7 +86,7 @@ export class FileSystemTiddlersReadStream extends Readable {
       if (!this.hasStarted) {
         this.hasStarted = true;
         this.push('[');
-        
+
         // Add additional content if provided
         if (this.additionalContent && this.additionalContent.length > 0) {
           const additionalJson = this.additionalContent.join(',');
@@ -109,12 +117,12 @@ export class FileSystemTiddlersReadStream extends Readable {
       // Read and process a chunk of tiddlers
       const chunk: any[] = [];
       const endIndex = Math.min(this.currentIndex + this.chunkSize, this.tiddlerFiles.length);
-      const limitedEndIndex = this.quickLoadLimit > 0 
+      const limitedEndIndex = this.quickLoadLimit > 0
         ? Math.min(endIndex, this.currentIndex + (this.quickLoadLimit - this.tiddlerCount))
         : endIndex;
 
-      for (let i = this.currentIndex; i < limitedEndIndex; i++) {
-        const filePath = this.tiddlerFiles[i];
+      for (let index = this.currentIndex; index < limitedEndIndex; index++) {
+        const filePath = this.tiddlerFiles[index];
         const tiddler = await this.readTiddlerFromFile(filePath);
         if (tiddler) {
           // Create skinny tiddler unless it should save full
@@ -130,10 +138,12 @@ export class FileSystemTiddlersReadStream extends Readable {
       if (chunk.length > 0) {
         const chunkJson = chunk.map(t => JSON.stringify(t)).join(',');
         this.push(chunkJson);
-        
+
         // Add comma if not the last chunk
-        if (this.currentIndex < this.tiddlerFiles.length && 
-            (this.quickLoadLimit <= 0 || this.tiddlerCount < this.quickLoadLimit)) {
+        if (
+          this.currentIndex < this.tiddlerFiles.length &&
+          (this.quickLoadLimit <= 0 || this.tiddlerCount < this.quickLoadLimit)
+        ) {
           this.push(',');
         }
       }
@@ -148,40 +158,43 @@ export class FileSystemTiddlersReadStream extends Readable {
    */
   private async readTiddlerFromFile(filePath: string): Promise<ITiddlerFields | null> {
     try {
-      const content = await FileSystem.readAsStringAsync(filePath);
+      const file = new File(filePath);
+      const content = await file.text();
       const filename = filePath.split('/').pop() ?? '';
-      
+
       // Derive title from filename
       const title = getTitleFromFilename(filename);
-      
+
       // Parse the .tid file
       const fields = parseTiddlerFile(content, { title });
-      
+
       // Check if there's a corresponding binary file with .meta
       // For binary files, the pattern is: file.ext + file.ext.meta
       const metaPath = filePath.replace(/\.tid$/, '.meta');
       const binaryPath = filePath.replace(/\.tid$/, '');
-      
-      const metaInfo = await FileSystem.getInfoAsync(metaPath);
-      if (metaInfo.exists) {
+
+      const metaFile = new File(metaPath);
+      const metaExists = metaFile.exists;
+      if (metaExists) {
         // This is metadata for a binary file
-        const metaContent = await FileSystem.readAsStringAsync(metaPath);
+        const metaContent = await metaFile.text();
         const metaFields = parseMetadataFile(metaContent);
-        
+
         // Merge fields
         Object.assign(fields, metaFields);
-        
+
         // Check if binary file exists
-        const binaryInfo = await FileSystem.getInfoAsync(binaryPath);
-        if (binaryInfo.exists) {
+        const binaryFile = new File(binaryPath);
+        const binaryExists = binaryFile.exists;
+        if (binaryExists) {
           // Set canonical_uri to point to files/ folder
           const relativeUri = `files/${filename.replace(/\.tid$/, '')}`;
-          fields._canonical_uri = relativeUri;
+          (fields as any)._canonical_uri = relativeUri;
         }
       }
-      
+
       // Process and return fields
-      return processFields(fields);
+      return processFields(fields) as ITiddlerFields;
     } catch (error) {
       console.error(`Error reading tiddler file ${filePath}: ${(error as Error).message}`);
       return null;

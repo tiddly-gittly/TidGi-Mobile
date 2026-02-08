@@ -4,11 +4,11 @@
  */
 
 import React, { FC, useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView, View } from 'react-native';
 import { Button, Card, Chip, Dialog, IconButton, List, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { useTranslation } from 'react-i18next';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IWikiWorkspace } from '../store/workspace';
 
 const Container = styled(ScrollView)`
   flex: 1;
@@ -42,12 +42,6 @@ const TagsContainer = styled.View`
   margin-top: 4px;
 `;
 
-const ButtonRow = styled.View`
-  flex-direction: row;
-  gap: 8px;
-  margin-top: 16px;
-`;
-
 interface ISubWikiConfig {
   customFilters?: string;
   id: string;
@@ -66,7 +60,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
   const [subWikis, setSubWikis] = useState<ISubWikiConfig[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingSubWiki, setEditingSubWiki] = useState<ISubWikiConfig | null>(null);
-  
+
   // Form state
   const [newName, setNewName] = useState('');
   const [newPath, setNewPath] = useState('');
@@ -139,7 +133,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
 
   return (
     <Container>
-      <Text variant="titleLarge" style={{ marginBottom: 16 }}>
+      <Text variant='titleLarge' style={{ marginBottom: 16 }}>
         {t('SubWiki.SubWikis')} ({subWikis.length})
       </Text>
 
@@ -150,30 +144,34 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
               <SubWikiTitle>{subWiki.name}</SubWikiTitle>
               <View style={{ flexDirection: 'row' }}>
                 <IconButton
-                  icon="pencil"
+                  icon='pencil'
                   size={20}
-                  onPress={() => handleEditSubWiki(subWiki)}
+                  onPress={() => {
+                    handleEditSubWiki(subWiki);
+                  }}
                 />
                 <IconButton
-                  icon="delete"
+                  icon='delete'
                   size={20}
-                  onPress={() => handleDeleteSubWiki(subWiki.id)}
+                  onPress={() => {
+                    handleDeleteSubWiki(subWiki.id);
+                  }}
                 />
               </View>
             </SubWikiHeader>
 
-            <Text variant="bodySmall">
+            <Text variant='bodySmall'>
               {t('SubWiki.Path')}: {subWiki.path}
             </Text>
 
             {subWiki.tagNames.length > 0 && (
               <>
-                <Text variant="bodySmall" style={{ marginTop: 4 }}>
+                <Text variant='bodySmall' style={{ marginTop: 4 }}>
                   {t('SubWiki.Tags')}:
                 </Text>
                 <TagsContainer>
                   {subWiki.tagNames.map(tag => (
-                    <Chip key={tag} mode="outlined" compact>
+                    <Chip key={tag} mode='outlined' compact>
                       {tag}
                     </Chip>
                   ))}
@@ -182,13 +180,13 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
             )}
 
             {subWiki.includeTagTree && (
-              <Text variant="bodySmall" style={{ marginTop: 4 }}>
+              <Text variant='bodySmall' style={{ marginTop: 4 }}>
                 ✓ {t('SubWiki.IncludeTagTree')}
               </Text>
             )}
 
             {subWiki.customFilters && (
-              <Text variant="bodySmall" style={{ marginTop: 4 }}>
+              <Text variant='bodySmall' style={{ marginTop: 4 }}>
                 {t('SubWiki.CustomFilters')}: {subWiki.customFilters.substring(0, 50)}...
               </Text>
             )}
@@ -197,9 +195,11 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
       ))}
 
       <Button
-        mode="contained"
-        icon="plus"
-        onPress={() => setShowAddDialog(true)}
+        mode='contained'
+        icon='plus'
+        onPress={() => {
+          setShowAddDialog(true);
+        }}
         style={{ marginTop: 8 }}
       >
         {t('SubWiki.AddSubWiki')}
@@ -223,7 +223,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 label={t('SubWiki.Name')}
                 value={newName}
                 onChangeText={setNewName}
-                mode="outlined"
+                mode='outlined'
                 style={{ marginBottom: 12 }}
               />
 
@@ -231,12 +231,12 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 label={t('SubWiki.Path')}
                 value={newPath}
                 onChangeText={setNewPath}
-                mode="outlined"
-                placeholder="subfolder/"
+                mode='outlined'
+                placeholder='subfolder/'
                 style={{ marginBottom: 12 }}
               />
 
-              <Text variant="labelLarge" style={{ marginBottom: 8 }}>
+              <Text variant='labelLarge' style={{ marginBottom: 8 }}>
                 {t('SubWiki.RoutingRules')}
               </Text>
 
@@ -244,10 +244,10 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 label={t('SubWiki.AddTag')}
                 value={tagInput}
                 onChangeText={setTagInput}
-                mode="outlined"
+                mode='outlined'
                 right={
                   <TextInput.Icon
-                    icon="plus"
+                    icon='plus'
                     onPress={handleAddTag}
                   />
                 }
@@ -260,8 +260,10 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                   {newTagNames.map(tag => (
                     <Chip
                       key={tag}
-                      onClose={() => handleRemoveTag(tag)}
-                      mode="outlined"
+                      onClose={() => {
+                        handleRemoveTag(tag);
+                      }}
+                      mode='outlined'
                     >
                       {tag}
                     </Chip>
@@ -275,7 +277,9 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 right={() => (
                   <IconButton
                     icon={newIncludeTagTree ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                    onPress={() => setNewIncludeTagTree(!newIncludeTagTree)}
+                    onPress={() => {
+                      setNewIncludeTagTree(!newIncludeTagTree);
+                    }}
                   />
                 )}
               />
@@ -284,19 +288,21 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 label={t('SubWiki.CustomFilters')}
                 value={newCustomFilters}
                 onChangeText={setNewCustomFilters}
-                mode="outlined"
+                mode='outlined'
                 multiline
                 numberOfLines={4}
-                placeholder="[tag[MyTag]]\n[prefix[$:/]]"
+                placeholder='[tag[MyTag]]\n[prefix[$:/]]'
                 style={{ marginTop: 12 }}
               />
             </ScrollView>
           </Dialog.ScrollArea>
           <Dialog.Actions>
-            <Button onPress={() => {
-              setShowAddDialog(false);
-              resetForm();
-            }}>
+            <Button
+              onPress={() => {
+                setShowAddDialog(false);
+                resetForm();
+              }}
+            >
               {t('Common.Cancel')}
             </Button>
             <Button onPress={handleSaveSubWiki}>

@@ -13,7 +13,6 @@ import {
   getDevicePushTokenAsync,
   getPermissionsAsync,
   PermissionStatus,
-  removeNotificationSubscription,
   requestPermissionsAsync,
   scheduleNotificationAsync,
   setNotificationChannelAsync,
@@ -24,8 +23,8 @@ import { Platform } from 'react-native';
 import type { RootStackParameterList } from '../../App';
 
 export function useWikiWebViewNotification({ id }: { id?: string }) {
-  const responseListener = useRef<ReturnType<typeof addNotificationResponseReceivedListener>>();
-  const gotoWikiListNotificationIdentifier = useRef<string | undefined>();
+  const responseListener = useRef<ReturnType<typeof addNotificationResponseReceivedListener> | undefined>(undefined);
+  const gotoWikiListNotificationIdentifier = useRef<string | undefined>(undefined);
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'WikiWebView'>['navigation']>();
 
   useEffect(() => {
@@ -66,7 +65,7 @@ export function useWikiWebViewNotification({ id }: { id?: string }) {
 
     return () => {
       if (responseListener.current !== undefined) {
-        removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
       if (gotoWikiListNotificationIdentifier.current !== undefined) {
         void dismissNotificationAsync(gotoWikiListNotificationIdentifier.current);
@@ -112,6 +111,8 @@ async function registerForPushNotifications() {
       shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
     }),
   });
   return token;

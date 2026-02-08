@@ -25,7 +25,7 @@ export function useTiddlyWiki(
   servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
-  const tiddlersStreamReference = useRef<FileSystemTiddlersReadStream | undefined>();
+  const tiddlersStreamReference = useRef<FileSystemTiddlersReadStream | undefined>(undefined);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * This need to use with `webviewSideReceiver`.
@@ -47,13 +47,13 @@ export function useTiddlyWiki(
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
-        
+
         const tiddlersStream = new FileSystemTiddlersReadStream(workspace, {
           additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
           quickLoad,
         });
         await tiddlersStream.init();
-        
+
         tiddlersStreamReference.current = tiddlersStream;
         await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
       } catch (error) {

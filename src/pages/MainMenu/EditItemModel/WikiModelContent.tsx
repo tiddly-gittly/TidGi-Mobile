@@ -9,18 +9,18 @@ import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
 import Collapsible from 'react-native-collapsible';
-import { ServerList } from '../../../components/ServerList';
-import { SyncTextButton } from '../../../components/SyncButton';
 import { GitSyncStatus } from '../../../components/GitSyncStatus';
+import { ServerList } from '../../../components/ServerList';
 import { SubWikiManager } from '../../../components/SubWikiManager';
+import { SyncTextButton } from '../../../components/SyncButton';
 import { gitBackgroundSyncService } from '../../../services/BackgroundSyncService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { deleteWikiFile } from '../../Config/Developer/useClearAllWikiData';
 import { ServerEditModalContent } from '../../Config/ServerAndSync/ServerEditModal';
+import { WorkspaceSettings } from '../../WikiSettings/WorkspaceSettings';
 import { AddNewServerModelContent } from '../AddNewServerModelContent';
 import { PerformanceToolsModelContent } from './PerformanceToolsModelContent';
 import { WikiChangesModelContent } from './WikiChangesModelContent';
-import { WorkspaceSettings } from '../../WikiSettings/WorkspaceSettings';
 
 interface WikiEditModalProps {
   id: string | undefined;
