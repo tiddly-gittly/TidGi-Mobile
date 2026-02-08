@@ -10,9 +10,7 @@ export interface ISyncIconButtonProps {
 }
 export function SyncIconButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
-  const wiki = useWorkspaceStore(state =>
-    workspaceID === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === workspaceID && (w.type === undefined || w.type === 'wiki'))
-  );
+  const wiki = useWorkspaceStore(state => state.workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined);
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
@@ -23,7 +21,7 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
     <IconButton
       {...props}
       icon={iconName}
-      iconColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80)}
+      iconColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80) : undefined}
       onPress={async () => {
         if (wiki === undefined) return;
         setInSyncing(true);
@@ -48,16 +46,14 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
 export function SyncTextButton(props: ISyncIconButtonProps) {
   const { t } = useTranslation();
   const { workspaceID } = props;
-  const wiki = useWorkspaceStore(state =>
-    workspaceID === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === workspaceID && (w.type === undefined || w.type === 'wiki'))
-  );
+  const wiki = useWorkspaceStore(state => state.workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined);
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof gitBackgroundSyncService.getOnlineServerForWiki>>>();
   useEffect(() => {
-    if (wiki === undefined) {
+    if (!wiki) {
       setIsConnected(false);
       return;
     }
@@ -77,7 +73,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       mode='outlined'
       disabled={inSyncing}
       loading={inSyncing}
-      buttonColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80)}
+      buttonColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80) : undefined}
       onPress={async () => {
         if (wiki === undefined) return;
         setInSyncing(true);

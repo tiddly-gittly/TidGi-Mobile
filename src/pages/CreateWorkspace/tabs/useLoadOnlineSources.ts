@@ -37,7 +37,7 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
             // try read from cache first
             content = await file.text();
             // stale while revalidate
-            void fetchJSON(sourceUrl).catch(error => {
+            void fetchJSON(sourceUrl).catch((error: unknown) => {
               console.warn('Failed to fetch online sources when swr in useLoadOnlineSources', error);
             });
           } else {

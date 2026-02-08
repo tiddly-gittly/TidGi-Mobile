@@ -1,8 +1,8 @@
-import { MutableRefObject, useCallback, useEffect } from 'react';
+import { RefObject, useCallback, useEffect } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import type { WebView } from 'react-native-webview';
 
-export function useHandleGoBack(webViewReference: MutableRefObject<WebView | null>) {
+export function useHandleGoBack(webViewReference: RefObject<WebView | null>) {
   const onAndroidBackPress = useCallback(() => {
     if (webViewReference.current !== null) {
       webViewReference.current.goBack();

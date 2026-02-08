@@ -1,4 +1,4 @@
-import { Dispatch, MutableRefObject, SetStateAction, useCallback, useState } from 'react';
+import { Dispatch, RefObject, SetStateAction, useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { Writable } from 'readable-stream';
 import type { WikiHookService } from '../../../services/WikiHookService';
@@ -19,8 +19,8 @@ export interface IUseStreamChunksToWebViewParameters {
  * @returns
  */
 export function useStreamChunksToWebView(
-  webViewReference: MutableRefObject<WebView | null>,
-  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
+  webViewReference: RefObject<WebView | null>,
+  servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
@@ -60,7 +60,7 @@ export function useStreamChunksToWebView(
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
          */
         sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
-        await tiddlersStream.init();
+        tiddlersStream.init();
         /**
          * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
          */
@@ -69,7 +69,7 @@ export function useStreamChunksToWebView(
         });
         const webviewSendDataWriteStream = new Writable({
           objectMode: true,
-          write: (tiddlersJSONArrayString: string, encoding, next) => {
+          write: (tiddlersJSONArrayString: string, _encoding, next) => {
             try {
               sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK, tiddlersJSONArrayString);
               next();

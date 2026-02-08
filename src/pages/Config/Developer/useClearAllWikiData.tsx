@@ -5,12 +5,12 @@ import { Snackbar } from 'react-native-paper';
 import { useShallow } from 'zustand/react/shallow';
 import { IWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
-export const deleteWikiFile = async (wikiWorkspace: IWorkspace) => {
+export const deleteWikiFile = (wikiWorkspace: IWorkspace): void => {
   if (wikiWorkspace.type === 'wiki') {
     // Delete git repository folder
-    const dir = new Directory(wikiWorkspace.wikiFolderLocation);
-    if (dir.exists) {
-      await dir.delete();
+    const directory = new Directory(wikiWorkspace.wikiFolderLocation);
+    if (directory.exists) {
+      directory.delete();
     }
   }
 };
@@ -22,9 +22,11 @@ export function useClearAllWikiData() {
 
   const [clearDataSnackBarVisible, setClearDataSnackBarVisible] = useState(false);
   const [clearDataSnackBarErrorMessage, setClearDataSnackBarErrorMessage] = useState('');
-  const clearAllWikiData = useCallback(async () => {
+  const clearAllWikiData = useCallback(() => {
     try {
-      await Promise.all(workspaces.map(deleteWikiFile));
+      for (const workspace of workspaces) {
+        deleteWikiFile(workspace);
+      }
       removeAllWiki();
       setClearDataSnackBarVisible(true);
     } catch (error) {

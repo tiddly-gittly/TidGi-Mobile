@@ -30,8 +30,9 @@ export function useWikiWebViewNotification({ id }: { id?: string }) {
   useEffect(() => {
     responseListener.current = addNotificationResponseReceivedListener(response => {
       // response is like `{"actionIdentifier": "expo.modules.notifications.actions.DEFAULT", "notification": {"date": 1693231845518, "request": {"content": [Object], "identifier": "98a087f5-0383-4b8e-bda8-b386521cc999", "trigger": [Object]}}}`
-      const route = response.notification.request.content.data.route as 'MainMenu';
-      if (route && id) {
+      const data = response.notification.request.content.data as { route?: 'MainMenu' } | undefined;
+      const route = data?.route;
+      if (route === 'MainMenu') {
         navigation.reset({
           index: 0,
           routes: [{ name: route, params: { fromWikiID: id } }],

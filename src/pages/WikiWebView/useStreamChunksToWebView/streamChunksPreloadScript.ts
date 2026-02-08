@@ -47,7 +47,7 @@ export enum OnStreamChunksToWebViewEventTypes {
       case OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY: {
         // @ts-ignore error TS2339: Property 'service' does not exist on type 'Window & typeof globalThis'
 
-        window.service?.wikiHookService?.setWebviewReceiverReady?.();
+        window.service?.wikiHookService.setWebviewReceiverReady();
         break;
       }
     }

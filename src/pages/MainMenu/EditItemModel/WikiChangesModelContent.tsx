@@ -26,9 +26,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const availableServersToPick = useMemo(() => {
     if (wiki === undefined) return [];
     return Object.entries(useServerStore.getState().servers)
-      .filter(([id]) => wiki.syncedServers?.map(item => item.serverID)?.includes?.(id))
+      .filter(([id]) => wiki.syncedServers.map(item => item.serverID).includes(id))
       .map(([id, server]) => {
-        const lastSync = wiki.syncedServers?.find(item => item.serverID === id)?.lastSync;
+        const lastSync = wiki.syncedServers.find(item => item.serverID === id)?.lastSync;
         return {
           id,
           label: `${server.name} (${lastSync === undefined ? '-' : new Date(lastSync).toLocaleString()})`,
@@ -43,11 +43,11 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
 
   const [lastSyncToFilterLogs, setLastSyncToFilterLogs] = useState<Date | undefined>();
   useEffect(() => {
-    const lastSync = wiki?.syncedServers?.find(item => item.serverID === serverIDToView)?.lastSync;
+    const lastSync = wiki?.syncedServers.find(item => item.serverID === serverIDToView)?.lastSync;
     setLastSyncToFilterLogs(lastSync === undefined ? new Date(0) : new Date(lastSync));
-  }, [serverIDToView, wiki?.syncedServers]);
+  }, [serverIDToView, wiki]);
 
-  const onLastSyncChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+  const onLastSyncChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
     const currentDate = selectedDate ?? date;
     setShowDatePicker(false);
     setDate(currentDate);

@@ -46,7 +46,7 @@ export class FileSystemTiddlersReadStream extends Readable {
     this.quickLoadLimit = options?.quickLoad === true ? QUICK_LOAD_LIMIT : -1;
   }
 
-  async init(): Promise<void> {
+  init(): void {
     try {
       const tiddlerFolderPath = getWikiTiddlerFolderPath(this.workspace);
 
@@ -122,7 +122,7 @@ export class FileSystemTiddlersReadStream extends Readable {
       }
 
       // Read and process a chunk of tiddlers
-      const chunk: any[] = [];
+      const chunk: Array<Record<string, string | string[]>> = [];
       const endIndex = Math.min(this.currentIndex + this.chunkSize, this.tiddlerFiles.length);
       const limitedEndIndex = this.quickLoadLimit > 0
         ? Math.min(endIndex, this.currentIndex + (this.quickLoadLimit - this.tiddlerCount))
@@ -134,7 +134,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         if (tiddler) {
           // Create skinny tiddler unless it should save full
           const tiddlerToSave = shouldSaveFullTiddler(tiddler) ? tiddler : makeSkinnyTiddler(tiddler);
-          chunk.push(tiddlerToSave);
+          chunk.push(tiddlerToSave as Record<string, string | string[]>);
           this.tiddlerCount++;
         }
       }

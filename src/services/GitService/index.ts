@@ -138,14 +138,14 @@ const fs = {
         // Check directory first since File class is for files only
         const directory = new Directory(filepath);
         if (directory.exists) {
-          const dirInfo = directory.info();
+          const directoryInfo = directory.info();
           return {
             isFile: () => false,
             isDirectory: () => true,
             isSymbolicLink: () => false,
             size: 0,
             mode: 0o777,
-            mtimeMs: dirInfo.modificationTime ?? Date.now(),
+            mtimeMs: directoryInfo.modificationTime ?? Date.now(),
           };
         }
 
@@ -160,7 +160,7 @@ const fs = {
           isFile: () => true,
           isDirectory: () => false,
           isSymbolicLink: () => false,
-          size: file.size ?? 0,
+          size: file.size,
           mode: 0o666,
           mtimeMs: file.modificationTime ?? Date.now(),
         };

@@ -10,7 +10,7 @@ export function useOpenDirectory() {
   const [openDocumentDirectorySnackBarErrorMessage, setOpenDocumentDirectorySnackBarErrorMessage] = useState('');
 
   const openDocumentDirectory = useCallback(async () => {
-    if (WIKI_FOLDER_PATH === undefined) return;
+    if (!WIKI_FOLDER_PATH) return;
     setIsOpeningDirectory(true);
 
     try {

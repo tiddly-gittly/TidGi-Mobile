@@ -5,7 +5,7 @@
  * Purpose: Parse .tid and .meta files from filesystem into tiddler field objects
  */
 
-import { ITiddlerFields } from 'tiddlywiki';
+import type { ITiddlerFields } from 'tw5-typed';
 
 /**
  * Parse a tiddler DIV in a *.tid file. It looks like this:
@@ -32,7 +32,7 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
         const value = line.substring(colonIndex + 1).trim();
         if (name) {
           fields = fields ?? {};
-          (fields as any)[name] = value;
+          (fields as Record<string, string | string[]>)[name] = value;
         }
       }
     }
@@ -40,7 +40,7 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
     // Preserve body text exactly as-is (no re-joining)
     if (bodyText) {
       fields = fields ?? {};
-      (fields as any).text = bodyText;
+      (fields as Partial<ITiddlerFields> & { text: string }).text = bodyText;
     }
   }
   return fields as ITiddlerFields;
@@ -49,9 +49,9 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
 /**
  * Parse JSON safely without throwing
  */
-export function parseJSONSafe(text: string, fallbackValue?: any): any {
+export function parseJSONSafe<T = unknown>(text: string, fallbackValue?: T): T | undefined {
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch {
     return fallbackValue;
   }
@@ -61,8 +61,8 @@ export function parseJSONSafe(text: string, fallbackValue?: any): any {
  * Parse metadata from a .meta file
  * A .meta file contains only field definitions without text body
  */
-export function parseMetadataFile(text: string, fields?: Partial<ITiddlerFields>): Record<string, any> {
-  const result: Record<string, any> = fields ? { ...fields } : {};
+export function parseMetadataFile(text: string, fields?: Partial<ITiddlerFields>): Record<string, string | string[]> {
+  const result: Record<string, string | string[]> = fields ? { ...fields } as Record<string, string | string[]> : {};
   const lines = text.split(/\r?\n/mg);
   for (const line of lines) {
     const colonIndex = line.indexOf(':');
@@ -83,8 +83,8 @@ export function parseMetadataFile(text: string, fields?: Partial<ITiddlerFields>
  * - Parse 'list' into array
  * - Parse date fields
  */
-export function processFields(fields: Partial<ITiddlerFields>): Record<string, any> {
-  const result: Record<string, any> = { ...fields };
+export function processFields(fields: Partial<ITiddlerFields>): Record<string, string | string[] | number> {
+  const result: Record<string, string | string[] | number> = { ...fields } as Record<string, string | string[] | number>;
 
   // Process tags field
   if (typeof result.tags === 'string') {
@@ -155,8 +155,7 @@ export function getTitleFromFilename(filename: string): string {
  * Create skinny tiddler (without text field) for faster loading
  */
 export function makeSkinnyTiddler(fields: ITiddlerFields): Omit<ITiddlerFields, 'text'> {
-  const skinny = { ...fields };
-  delete (skinny as any).text;
+  const { text: _text, ...skinny } = fields;
   return skinny;
 }
 

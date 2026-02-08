@@ -6,11 +6,11 @@ export const useWikiFolders = () => {
   const [foldername, setFolderName] = useState<string[]>([]);
 
   useEffect(() => {
-    const loadFolderName = async () => {
+    const loadFolderName = () => {
       if (!WIKI_FOLDER_PATH) return;
       try {
-        const dir = new Directory(WIKI_FOLDER_PATH);
-        const entries = await dir.list();
+        const directory = new Directory(WIKI_FOLDER_PATH);
+        const entries = directory.list();
         const wikiFolderNames = entries.map(entry => entry.name);
         setFolderName(wikiFolderNames);
       } catch (error) {
@@ -18,7 +18,7 @@ export const useWikiFolders = () => {
       }
     };
 
-    void loadFolderName();
+    loadFolderName();
   }, []);
 
   return foldername;

@@ -20,8 +20,8 @@ export function ServerAndSync(): JSX.Element {
       .filter((w): w is IWikiWorkspace => w.type === 'wiki')
       .flatMap(wiki =>
         wiki.syncedServers
-          ?.filter(item => item.syncActive)
-          ?.map(item => item.serverID) ?? []
+          .filter(item => item.syncActive)
+          .map(item => item.serverID)
       );
   }, []);
   const removeAllSyncedServersFromWorkspace = useCallback(() => {

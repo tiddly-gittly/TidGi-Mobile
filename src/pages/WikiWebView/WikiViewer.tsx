@@ -85,10 +85,10 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       triggerFullReload();
     }
   }, [triggerFullReload, webViewKeyToReloadAfterRecycleByOS]);
-  servicesOfWorkspace.current?.wikiHookService?.setLatestTriggerFullReloadCallback?.(triggerFullReload);
+  servicesOfWorkspace.current?.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   useEffect(() => {
     console.log('resetWebviewReceiverReady on webViewKeyToReloadAfterRecycleByOS and init');
-    servicesOfWorkspace.current?.wikiHookService?.resetWebviewReceiverReady?.();
+    servicesOfWorkspace.current?.wikiHookService.resetWebviewReceiverReady();
     void gitBackgroundSyncService.updateServerOnlineStatus();
   }, [servicesOfWorkspace, webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError, loading, streamChunksToWebViewPercentage } = useTiddlyWiki(

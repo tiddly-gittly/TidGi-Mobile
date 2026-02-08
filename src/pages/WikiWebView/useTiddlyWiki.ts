@@ -1,6 +1,6 @@
 import { Asset } from 'expo-asset';
-import * as fs from 'expo-file-system';
-import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef, useState } from 'react';
+import { File } from 'expo-file-system';
+import { Dispatch, RefObject, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { WebView } from 'react-native-webview';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
@@ -19,10 +19,10 @@ export interface IHtmlContent {
 export function useTiddlyWiki(
   workspace: IWikiWorkspace,
   loaded: boolean,
-  webViewReference: MutableRefObject<WebView | null>,
+  webViewReference: RefObject<WebView | null>,
   keyToTriggerReload: number,
   quickLoad: boolean,
-  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
+  servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
   const tiddlersStreamReference = useRef<FileSystemTiddlersReadStream | undefined>(undefined);
@@ -42,7 +42,8 @@ export function useTiddlyWiki(
         /**
          * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
          */
-        const html = `<!doctype html>${await fs.readAsStringAsync(getWikiFilePath(workspace))}`;
+        const wikiFile = new File(getWikiFilePath(workspace));
+        const html = `<!doctype html>${await wikiFile.text()}`;
         const pluginJSONStrings = await getTidGiMobilePlugins();
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
@@ -52,7 +53,7 @@ export function useTiddlyWiki(
           additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
           quickLoad,
         });
-        await tiddlersStream.init();
+        tiddlersStream.init();
 
         tiddlersStreamReference.current = tiddlersStream;
         await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
@@ -73,17 +74,19 @@ export interface ITidGiMobilePlugins {
 }
 async function getTidGiMobilePlugins(): Promise<ITidGiMobilePlugins> {
   const assets = await Asset.loadAsync([expoFileSystemSyncadaptorAssetID, expoFileSystemSyncadaptorUiAssetID]);
-  const expoFileSystemSyncadaptorFileUri = assets?.[0]?.localUri;
-  const expoFileSystemSyncadaptorUiFileUri = assets?.[1]?.localUri;
+  const expoFileSystemSyncadaptorFileUri = assets[0].localUri;
+  const expoFileSystemSyncadaptorUiFileUri = assets[1].localUri;
   if (!expoFileSystemSyncadaptorFileUri) {
     throw new Error(`expoFileSystemSyncadaptor plugin failed to load, ID: ${expoFileSystemSyncadaptorAssetID}`);
   }
   if (!expoFileSystemSyncadaptorUiFileUri) {
     throw new Error(`expoFileSystemSyncadaptorUiAsset plugin failed to load, ID: ${expoFileSystemSyncadaptorUiAssetID}`);
   }
+  const syncadaptorFile = new File(expoFileSystemSyncadaptorFileUri);
+  const syncadaptorUiFile = new File(expoFileSystemSyncadaptorUiFileUri);
   const [expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all([
-    fs.readAsStringAsync(expoFileSystemSyncadaptorFileUri),
-    fs.readAsStringAsync(expoFileSystemSyncadaptorUiFileUri),
+    syncadaptorFile.text(),
+    syncadaptorUiFile.text(),
   ]);
   return ({
     expoFileSystemSyncadaptor,

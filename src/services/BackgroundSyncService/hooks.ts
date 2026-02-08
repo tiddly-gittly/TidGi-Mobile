@@ -1,4 +1,4 @@
-import { MutableRefObject, useRef } from 'react';
+import { RefObject, useRef } from 'react';
 import type { WebView } from 'react-native-webview';
 
 /**
@@ -6,7 +6,7 @@ import type { WebView } from 'react-native-webview';
  * Note: BackgroundSyncService doesn't need WebView reference as it runs in native context
  */
 export function useBackgroundSyncService() {
-  const webViewReference: MutableRefObject<WebView | null> = useRef(null);
+  const webViewReference: RefObject<WebView | null> = useRef(null);
   const onMessageReference = useRef(() => {
     // Background sync doesn't handle WebView messages
   });

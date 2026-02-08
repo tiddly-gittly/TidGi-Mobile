@@ -45,7 +45,7 @@ export const CreateFromTemplateTab = () => {
     <FlatList
       data={filterTemplate(webPages)}
       renderItem={renderItem}
-      keyExtractor={(item, index) => `template-${index}`}
+      keyExtractor={(_item, index) => `template-${index}`}
     />
   );
 };

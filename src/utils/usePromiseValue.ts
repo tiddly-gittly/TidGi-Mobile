@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { AsyncReturnType } from 'type-fest';
 
 /**
  * Use value from service, especially constant value that never changes
@@ -7,12 +6,12 @@ import { AsyncReturnType } from 'type-fest';
  * @param valuePromise A promise contain the value we want to use in React
  * @param defaultValue empty array or undefined, as initial value
  */
-export function usePromiseValue<T, DefaultValueType = T | undefined>(
+export function usePromiseValue<T>(
   asyncValue: () => Promise<T>,
-  defaultValue?: AsyncReturnType<typeof asyncValue>,
+  defaultValue?: T,
   dependency: unknown[] = [],
-): T | DefaultValueType {
-  const [value, valueSetter] = useState<T | DefaultValueType>(defaultValue as T | DefaultValueType);
+): T | undefined {
+  const [value, valueSetter] = useState<T | undefined>(defaultValue);
   // use initial value
   useEffect(() => {
     void (async () => {

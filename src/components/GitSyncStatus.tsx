@@ -30,6 +30,23 @@ const StatusText = styled(Text)`
   flex: 1;
 `;
 
+const ErrorText = styled(Text)`
+  color: red;
+`;
+
+const SyncButton = styled(Button)`
+  flex: 1;
+`;
+
+const ConflictBranchText = styled(Text)`
+  margin-top: 8px;
+  font-family: monospace;
+`;
+
+const ConflictInstructionsText = styled(Text)`
+  margin-top: 12px;
+`;
+
 export interface IGitSyncStatusProps {
   workspace: IWikiWorkspace;
 }
@@ -46,8 +63,8 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
 
   // Get last sync time from workspace
   useEffect(() => {
-    const syncedServer = workspace.syncedServers[0];
-    if (syncedServer) {
+    if (workspace.syncedServers.length > 0) {
+      const syncedServer = workspace.syncedServers[0];
       setLastSyncTime(syncedServer.lastSync);
     }
   }, [workspace]);
@@ -72,8 +89,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
       }
 
       // Update last sync time
-      const syncedServer = workspace.syncedServers[0];
-      if (syncedServer) {
+      if (workspace.syncedServers.length > 0) {
         setLastSyncTime(Date.now());
       }
     } catch (error) {
@@ -133,22 +149,21 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
 
         {syncError && (
           <StatusRow>
-            <StatusText variant='bodySmall' style={{ color: 'red' }}>
+            <ErrorText variant='bodySmall'>
               {t('Sync.Error')}: {syncError}
-            </StatusText>
+            </ErrorText>
           </StatusRow>
         )}
 
         <StatusRow>
-          <Button
+          <SyncButton
             mode='contained'
             onPress={handleSync}
             disabled={syncing}
             icon={syncing ? undefined : 'sync'}
-            style={{ flex: 1 }}
           >
             {syncing ? t('Sync.Syncing') : t('Sync.SyncNow')}
-          </Button>
+          </SyncButton>
         </StatusRow>
       </StatusCard>
 
@@ -166,13 +181,13 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
               {t('Sync.ConflictDescription')}
             </Text>
             {conflictBranch && (
-              <Text variant='bodySmall' style={{ marginTop: 8, fontFamily: 'monospace' }}>
+              <ConflictBranchText variant='bodySmall'>
                 {t('Sync.ConflictBranch')}: {conflictBranch}
-              </Text>
+              </ConflictBranchText>
             )}
-            <Text variant='bodySmall' style={{ marginTop: 12 }}>
+            <ConflictInstructionsText variant='bodySmall'>
               {t('Sync.ConflictInstructions')}
-            </Text>
+            </ConflictInstructionsText>
           </Dialog.Content>
           <Dialog.Actions>
             <Button

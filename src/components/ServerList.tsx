@@ -49,7 +49,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, on
         <Card.Title
           left={(props) => <Ionicons name={serverInfo.status === ServerStatus.online ? 'wifi' : 'cloud-offline'} color={theme.colors.primary} {...props} />}
           title={serverInfo.name}
-          subtitle={activeIDs?.includes(serverInfo.id) ? t('EditWorkspace.SyncActive') : t('EditWorkspace.SyncNotActive')}
+          subtitle={activeIDs.includes(serverInfo.id) ? t('EditWorkspace.SyncActive') : t('EditWorkspace.SyncNotActive')}
         />
       </ServerCard>
     );

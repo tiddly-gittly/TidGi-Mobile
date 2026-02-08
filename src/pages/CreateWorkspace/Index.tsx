@@ -7,9 +7,15 @@ import { RootStackParameterList } from '../../App';
 import { CreateFromTemplateTab } from './tabs/CreateFromTemplateTab';
 import { CreateWebpageShortcutTab } from './tabs/CreateWebpageShortcutTab';
 
-const Tab = createMaterialBottomTabNavigator();
+type CreateWorkspaceTabParameterList = {
+  CreateFromTemplate: undefined;
+  CreateWebpageShortcut: undefined;
+};
 
-export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>> = ({ navigation }) => {
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+const Tab = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
+
+export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>> = ({ navigation: _navigation }) => {
   const { t } = useTranslation();
 
   return (

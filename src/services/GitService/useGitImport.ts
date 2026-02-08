@@ -31,7 +31,7 @@ export function useGitImport() {
    * Import wiki from server via git clone
    */
   const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string) => {
-    if (WIKI_FOLDER_PATH === undefined) {
+    if (!WIKI_FOLDER_PATH) {
       setError('Wiki folder path not available');
       return;
     }
@@ -61,11 +61,11 @@ export function useGitImport() {
       setCreatedWorkspace(newWorkspace);
 
       // Clean up any existing folder
-      const dir = new Directory(newWorkspace.wikiFolderLocation);
-      if (dir.exists) {
-        dir.delete();
+      const directory = new Directory(newWorkspace.wikiFolderLocation);
+      if (directory.exists) {
+        directory.delete();
       }
-      dir.create();
+      directory.create();
 
       // 2. Clone repository
       setStatus('cloning');

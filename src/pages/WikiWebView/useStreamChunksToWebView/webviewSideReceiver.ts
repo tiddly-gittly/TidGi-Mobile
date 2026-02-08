@@ -1,5 +1,5 @@
 import { Asset } from 'expo-asset';
-import * as fs from 'expo-file-system';
+import { File } from 'expo-file-system';
 import streamChunksPreloadScriptAssetID from '../../../../assets/preload/streamChunksPreloadScript.js.html';
 import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
 
@@ -25,10 +25,11 @@ declare global {
 
 export const getWebviewSideReceiver = async () => {
   const [asset] = await Asset.loadAsync([streamChunksPreloadScriptAssetID]);
-  const streamChunksPreloadScriptFileUri = asset?.localUri;
+  const streamChunksPreloadScriptFileUri = asset.localUri;
   if (!streamChunksPreloadScriptFileUri) {
     throw new Error(`streamChunksPreloadScript failed to load, ID: ${streamChunksPreloadScriptAssetID}`);
   }
-  const webviewSideReceiver = await fs.readAsStringAsync(streamChunksPreloadScriptFileUri);
+  const file = new File(streamChunksPreloadScriptFileUri);
+  const webviewSideReceiver = await file.text();
   return webviewSideReceiver;
 };

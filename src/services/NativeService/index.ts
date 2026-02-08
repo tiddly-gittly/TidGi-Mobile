@@ -159,13 +159,13 @@ export class NativeService {
               const canonicalUri = `files/${file.fileName || randomTitle}`;
               const filePath = getWikiFilesPathByCanonicalUri(defaultWiki, canonicalUri);
               const filesDirectory = `${defaultWiki.wikiFolderLocation}/files`;
-              const dir = new Directory(filesDirectory);
-              if (!dir.exists) {
-                await dir.create();
+              const directory = new Directory(filesDirectory);
+              if (!directory.exists) {
+                directory.create();
               }
               const sourceFile = new File(file.path.startsWith('file://') ? file.path : `file://${file.path}`);
               const destinationFile = new File(filePath);
-              await sourceFile.copy(destinationFile);
+              sourceFile.copy(destinationFile);
 
               const fileFields = {
                 ...fields,
@@ -193,11 +193,11 @@ export class NativeService {
     }
   }
 
-  async saveFileToFs(filename: string, text: string, mimeType?: string): Promise<string | false> {
+  saveFileToFs(_filename: string, _text: string, _mimeType?: string): Promise<string | false> {
     // TODO: StorageAccessFramework not available in expo-file-system 19.x
     // Need to implement alternative file saving mechanism
     console.warn('saveFileToFs not implemented for expo-file-system 19.x');
-    return false;
+    return Promise.resolve(false);
     /*
     const configs = useConfigStore.getState();
     const result = await fs.StorageAccessFramework.requestDirectoryPermissionsAsync(configs.defaultDownloadLocation);

@@ -1,6 +1,3 @@
-/* eslint-disable react-native/no-raw-text */
-/* eslint-disable @typescript-eslint/no-confusing-void-expression */
-
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { compact } from 'lodash';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -131,7 +128,9 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onLongPress, wiki, las
       />
       <ChangeDetailsModal
         visible={modalVisible}
-        onDismiss={() => setModalVisible(false)}
+        onDismiss={() => {
+          setModalVisible(false);
+        }}
         selectedChange={selectedChange}
       />
     </>

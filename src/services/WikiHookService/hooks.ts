@@ -1,4 +1,4 @@
-import { MutableRefObject, useEffect, useMemo } from 'react';
+import { RefObject, useEffect, useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { IWikiWorkspace } from '../../store/workspace';
@@ -16,8 +16,8 @@ export function useWikiHookService(workspace: IWikiWorkspace) {
 }
 
 export function useSetWebViewReferenceToService(
-  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
-  webViewReference: MutableRefObject<WebView | null>,
+  servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
+  webViewReference: RefObject<WebView | null>,
 ) {
   useEffect(() => {
     if (servicesOfWorkspace.current !== undefined) {

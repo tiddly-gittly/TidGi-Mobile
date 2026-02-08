@@ -15,6 +15,15 @@ const Container = styled(ScrollView)`
   padding: 16px;
 `;
 
+const SaveButton = styled(Button)`
+  margin-top: 16px;
+  margin-bottom: 32px;
+`;
+
+const DescriptionText = styled(Text)`
+  margin-bottom: 12px;
+`;
+
 const Section = styled(Card)`
   margin-bottom: 16px;
   padding: 16px;
@@ -134,9 +143,9 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
 
       <Section>
         <SectionTitle>{t('WorkspaceSettings.SubWikiRouting')}</SectionTitle>
-        <Text variant='bodySmall' style={{ marginBottom: 12 }}>
+        <DescriptionText variant='bodySmall'>
           {t('WorkspaceSettings.RoutingDescription')}
-        </Text>
+        </DescriptionText>
 
         <List.Item
           title={t('WorkspaceSettings.TagNames')}
@@ -192,19 +201,20 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
 
       <Section>
         <SectionTitle>{t('WorkspaceSettings.AdvancedFilters')}</SectionTitle>
-        <Text variant='bodySmall' style={{ marginBottom: 12 }}>
+        <DescriptionText variant='bodySmall'>
           {t('WorkspaceSettings.FiltersDescription')}
-        </Text>
+        </DescriptionText>
 
         <TextInput
           label={t('WorkspaceSettings.CustomFilters')}
           value={typeof config.customFilters === 'string' ? config.customFilters : JSON.stringify(config.customFilters || [])}
           onChangeText={(text) => {
             try {
-              const parsed = JSON.parse(text);
-              setConfig({ ...config, customFilters: parsed });
+              const parsed: unknown = JSON.parse(text);
+              setConfig({ ...config, customFilters: parsed as Array<{ filter: string; path: string }> });
             } catch {
-              setConfig({ ...config, customFilters: text as any });
+              // If parsing fails, store as string temporarily for user to fix
+              setConfig({ ...config, customFilters: text as unknown as Array<{ filter: string; path: string }> });
             }
           }}
           mode='outlined'
@@ -216,7 +226,7 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
         <FilterInputContainer>
           <TextInput
             label={t('WorkspaceSettings.FileSystemPathFilters')}
-            value={Array.isArray(config.fileSystemPathFilters) ? config.fileSystemPathFilters.join('\n') : (config.fileSystemPathFilters || '')}
+            value={Array.isArray(config.fileSystemPathFilters) ? config.fileSystemPathFilters.join('\n') : ''}
             onChangeText={(text) => {
               const filters = text.split('\n').filter(Boolean);
               setConfig({ ...config, fileSystemPathFilters: filters });
@@ -229,14 +239,13 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
         </FilterInputContainer>
       </Section>
 
-      <Button
+      <SaveButton
         mode='contained'
         onPress={handleSave}
         icon='content-save'
-        style={{ marginTop: 16, marginBottom: 32 }}
       >
         {t('Settings.Save')}
-      </Button>
+      </SaveButton>
     </Container>
   );
 };

@@ -3,7 +3,7 @@
  * Communicates with WebView to determine tiddler routing and file paths
  */
 
-import { ITiddlerFields } from 'tiddlywiki';
+import type { ITiddlerFields } from 'tw5-typed';
 import { IWikiWorkspace } from '../../store/workspace';
 import { readTidgiConfig } from './tidgiConfigManager';
 

@@ -1,5 +1,3 @@
-/* eslint-disable react-native/no-inline-styles */
-
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import i18n from 'i18next';
@@ -11,7 +9,7 @@ import React from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
-import { ThemeProvider } from 'styled-components';
+import { styled, ThemeProvider } from 'styled-components';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
@@ -20,6 +18,10 @@ import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspac
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
+
+const SettingsIcon = styled(Ionicons)`
+  margin-right: 10px;
+`;
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
@@ -67,11 +69,10 @@ export const App: React.FC = () => {
                   headerTitle: t('Sidebar.Main'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerRight: () => (
-                    <Ionicons
+                    <SettingsIcon
                       name='settings'
                       size={32}
                       color={theme.colors.primary}
-                      style={{ marginRight: 10 }}
                       onPress={() => {
                         navigation.navigate('Config' as never);
                       }}

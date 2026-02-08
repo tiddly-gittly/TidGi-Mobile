@@ -93,12 +93,12 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
           set((state) => {
             switch (newWorkspace.type) {
               case 'wiki': {
-                if (WIKI_FOLDER_PATH === undefined) return;
+                if (!WIKI_FOLDER_PATH) return;
                 // name can't be empty
                 newWorkspace.name = newWorkspace.name || 'wiki';
                 // can have same name, but not same id
                 const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name || workspace.id === newWorkspace.name);
-                const id = sameNameWorkspace === undefined ? newWorkspace.name : `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
+                const id = sameNameWorkspace ? `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}` : newWorkspace.name;
                 const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
                 const newWikiWorkspaceWithID = {
                   ...(newWorkspace as IWikiWorkspace),
@@ -126,8 +126,8 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         update(id, newWikiWorkspace) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
-            const oldWiki = state.workspaces[oldWikiIndex];
-            if (oldWiki !== undefined) {
+            if (oldWikiIndex >= 0) {
+              const oldWiki = state.workspaces[oldWikiIndex];
               state.workspaces[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace } as typeof oldWiki;
             }
           });
@@ -135,9 +135,9 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         addServer(id, newServerID) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
-            const oldWiki = state.workspaces[oldWikiIndex];
-            if (oldWiki !== undefined) {
-              if (oldWiki.type === undefined) {
+            if (oldWikiIndex >= 0) {
+              const oldWiki = state.workspaces[oldWikiIndex];
+              if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
               }
               if (oldWiki.type !== 'wiki') return;
@@ -156,14 +156,16 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         setServerActive(id, serverIDToActive, isActive = true) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
-            const oldWiki = state.workspaces[oldWikiIndex];
-            if (oldWiki.type === undefined) {
-              oldWiki.type = 'wiki';
-            }
-            if (oldWiki.type !== 'wiki') return;
-            const serverToChange = oldWiki?.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
-            if (serverToChange !== undefined) {
-              serverToChange.syncActive = isActive;
+            if (oldWikiIndex >= 0) {
+              const oldWiki = state.workspaces[oldWikiIndex];
+              if (!oldWiki.type) {
+                oldWiki.type = 'wiki';
+              }
+              if (oldWiki.type !== 'wiki') return;
+              const serverToChange = oldWiki.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
+              if (serverToChange) {
+                serverToChange.syncActive = isActive;
+              }
             }
           });
         },

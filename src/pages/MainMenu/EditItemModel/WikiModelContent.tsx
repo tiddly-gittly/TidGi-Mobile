@@ -1,5 +1,3 @@
-/* eslint-disable react-native/no-inline-styles */
-
 import * as Haptics from 'expo-haptics';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -160,8 +158,8 @@ export function WikiEditModalContent({ id, onClose }: WikiEditModalProps): JSX.E
               [
                 {
                   text: t('Delete'),
-                  onPress: async () => {
-                    await deleteWikiFile(wiki);
+                  onPress: () => {
+                    deleteWikiFile(wiki);
                     deleteWiki(id);
                     onClose();
                   },

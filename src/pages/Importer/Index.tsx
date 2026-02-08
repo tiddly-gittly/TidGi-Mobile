@@ -11,6 +11,12 @@ import { gitBackgroundSyncService as backgroundSyncService } from '../../service
 import { useGitImport } from '../../services/GitService/useGitImport';
 import { useServerStore } from '../../store/server';
 
+interface GitQRData {
+  baseUrl: string;
+  token: string;
+  workspaceId: string;
+}
+
 const Container = styled.View`
   flex: 1;
   padding: 20px;
@@ -44,6 +50,9 @@ const OpenWikiButton = styled(Button)`
 const DoneImportActionsTitleText = styled(Text)`
   margin-top: 30px;
 `;
+const ImportCompleteText = styled(Text)`
+  margin-top: 8px;
+`;
 const ImportStatusText = styled.Text`
   width: 100%;
   display: flex;
@@ -73,7 +82,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
   const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
   const [wikiName, setWikiName] = useState('wiki');
-  const [qrData, setQrData] = useState<{ baseUrl: string; workspaceId: string; token: string } | undefined>();
+  const [qrData, setQrData] = useState<GitQRData | undefined>();
   const addServer = useServerStore(state => state.add);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
@@ -92,11 +101,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         setQrScannerOpen(false);
         // Try to parse as JSON (Git QR format)
         try {
-          const parsed = JSON.parse(data);
-          if (parsed.baseUrl && parsed.workspaceId && parsed.token) {
+          const parsed = JSON.parse(data) as unknown;
+          if (
+            parsed !== null &&
+            typeof parsed === 'object' &&
+            'baseUrl' in parsed &&
+            'workspaceId' in parsed &&
+            'token' in parsed &&
+            typeof parsed.baseUrl === 'string' &&
+            typeof parsed.workspaceId === 'string' &&
+            typeof parsed.token === 'string'
+          ) {
             // Valid Git QR code
             setServerUriToUseString(parsed.baseUrl);
-            setQrData(parsed);
+            setQrData(parsed as GitQRData);
             return;
           }
         } catch {
@@ -137,7 +155,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     if (addAsServer) {
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
 
-      if (qrData?.baseUrl && qrData?.workspaceId && qrData?.token) {
+      if (qrData) {
         // Git import with QR code data
         await importWiki(qrData, wikiName, newServer.id);
       } else {
@@ -179,7 +197,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           setQrScannerOpen(!qrScannerOpen);
         }}
       >
-        {/* eslint-disable-next-line react-native/no-raw-text */}
         <ButtonText>{t('AddWorkspace.ToggleQRCodeScanner')}</ButtonText>
       </ScanQRButton>
       <Button
@@ -228,7 +245,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           />
           <ImportWikiButton
             mode='elevated'
-            disabled={importStatus !== 'idle'}
             onPress={addServerAndImport}
             labelStyle={{ padding: ButtonLabelPadding }}
           >
@@ -238,7 +254,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ImportWikiButton>
         </>
       )}
-      {!((['idle', 'error', 'success'] as Array<typeof importStatus>).includes(importStatus)) && (
+      {!['idle', 'error', 'success'].includes(importStatus) && (
         <>
           <ImportStatusText>
             <Text>{t('Loading')}{' '}</Text>
@@ -292,9 +308,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
           </OpenWikiButton>
           <DoneImportActionsTitleText variant='titleLarge'>{t('OptionalActions')}</DoneImportActionsTitleText>
-          <Text variant='bodyMedium' style={{ marginTop: 8 }}>
+          <ImportCompleteText variant='bodyMedium'>
             {t('Import.GitImportComplete')}
-          </Text>
+          </ImportCompleteText>
         </>
       )}
     </Container>

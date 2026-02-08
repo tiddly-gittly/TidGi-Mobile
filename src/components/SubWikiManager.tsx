@@ -5,7 +5,7 @@
 
 import React, { FC, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { Button, Card, Chip, Dialog, IconButton, List, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace } from '../store/workspace';
@@ -42,6 +42,42 @@ const TagsContainer = styled.View`
   margin-top: 4px;
 `;
 
+const TitleText = styled(Text)`
+  margin-bottom: 16px;
+`;
+
+const ActionsRow = styled.View`
+  flex-direction: row;
+`;
+
+const SmallMarginText = styled(Text)`
+  margin-top: 4px;
+`;
+
+const AddButton = styled(Button)`
+  margin-top: 8px;
+`;
+
+const DialogInput = styled(TextInput)`
+  margin-bottom: 12px;
+`;
+
+const RoutingRulesLabel = styled(Text)`
+  margin-bottom: 8px;
+`;
+
+const TagInputField = styled(TextInput)`
+  margin-bottom: 8px;
+`;
+
+const TagsDialogContainer = styled(TagsContainer)`
+  margin-bottom: 12px;
+`;
+
+const CustomFiltersInput = styled(TextInput)`
+  margin-top: 12px;
+`;
+
 interface ISubWikiConfig {
   customFilters?: string;
   id: string;
@@ -55,7 +91,7 @@ export interface ISubWikiManagerProps {
   workspace: IWikiWorkspace;
 }
 
-export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
+export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace: _workspace }) => {
   const { t } = useTranslation();
   const [subWikis, setSubWikis] = useState<ISubWikiConfig[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -133,16 +169,16 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
 
   return (
     <Container>
-      <Text variant='titleLarge' style={{ marginBottom: 16 }}>
+      <TitleText variant='titleLarge'>
         {t('SubWiki.SubWikis')} ({subWikis.length})
-      </Text>
+      </TitleText>
 
       {subWikis.map(subWiki => (
         <SubWikiCard key={subWiki.id}>
           <CardContent>
             <SubWikiHeader>
               <SubWikiTitle>{subWiki.name}</SubWikiTitle>
-              <View style={{ flexDirection: 'row' }}>
+              <ActionsRow>
                 <IconButton
                   icon='pencil'
                   size={20}
@@ -157,7 +193,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                     handleDeleteSubWiki(subWiki.id);
                   }}
                 />
-              </View>
+              </ActionsRow>
             </SubWikiHeader>
 
             <Text variant='bodySmall'>
@@ -166,9 +202,9 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
 
             {subWiki.tagNames.length > 0 && (
               <>
-                <Text variant='bodySmall' style={{ marginTop: 4 }}>
+                <SmallMarginText variant='bodySmall'>
                   {t('SubWiki.Tags')}:
-                </Text>
+                </SmallMarginText>
                 <TagsContainer>
                   {subWiki.tagNames.map(tag => (
                     <Chip key={tag} mode='outlined' compact>
@@ -180,30 +216,29 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
             )}
 
             {subWiki.includeTagTree && (
-              <Text variant='bodySmall' style={{ marginTop: 4 }}>
+              <SmallMarginText variant='bodySmall'>
                 ✓ {t('SubWiki.IncludeTagTree')}
-              </Text>
+              </SmallMarginText>
             )}
 
             {subWiki.customFilters && (
-              <Text variant='bodySmall' style={{ marginTop: 4 }}>
+              <SmallMarginText variant='bodySmall'>
                 {t('SubWiki.CustomFilters')}: {subWiki.customFilters.substring(0, 50)}...
-              </Text>
+              </SmallMarginText>
             )}
           </CardContent>
         </SubWikiCard>
       ))}
 
-      <Button
+      <AddButton
         mode='contained'
         icon='plus'
         onPress={() => {
           setShowAddDialog(true);
         }}
-        style={{ marginTop: 8 }}
       >
         {t('SubWiki.AddSubWiki')}
-      </Button>
+      </AddButton>
 
       {/* Add/Edit Dialog */}
       <Portal>
@@ -219,28 +254,26 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
           </Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView>
-              <TextInput
+              <DialogInput
                 label={t('SubWiki.Name')}
                 value={newName}
                 onChangeText={setNewName}
                 mode='outlined'
-                style={{ marginBottom: 12 }}
               />
 
-              <TextInput
+              <DialogInput
                 label={t('SubWiki.Path')}
                 value={newPath}
                 onChangeText={setNewPath}
                 mode='outlined'
                 placeholder='subfolder/'
-                style={{ marginBottom: 12 }}
               />
 
-              <Text variant='labelLarge' style={{ marginBottom: 8 }}>
+              <RoutingRulesLabel variant='labelLarge'>
                 {t('SubWiki.RoutingRules')}
-              </Text>
+              </RoutingRulesLabel>
 
-              <TextInput
+              <TagInputField
                 label={t('SubWiki.AddTag')}
                 value={tagInput}
                 onChangeText={setTagInput}
@@ -252,11 +285,10 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                   />
                 }
                 onSubmitEditing={handleAddTag}
-                style={{ marginBottom: 8 }}
               />
 
               {newTagNames.length > 0 && (
-                <TagsContainer style={{ marginBottom: 12 }}>
+                <TagsDialogContainer>
                   {newTagNames.map(tag => (
                     <Chip
                       key={tag}
@@ -268,7 +300,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                       {tag}
                     </Chip>
                   ))}
-                </TagsContainer>
+                </TagsDialogContainer>
               )}
 
               <List.Item
@@ -284,7 +316,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 )}
               />
 
-              <TextInput
+              <CustomFiltersInput
                 label={t('SubWiki.CustomFilters')}
                 value={newCustomFilters}
                 onChangeText={setNewCustomFilters}
@@ -292,7 +324,6 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
                 multiline
                 numberOfLines={4}
                 placeholder='[tag[MyTag]]\n[prefix[$:/]]'
-                style={{ marginTop: 12 }}
               />
             </ScrollView>
           </Dialog.ScrollArea>
