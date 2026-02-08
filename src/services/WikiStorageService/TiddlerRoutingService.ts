@@ -91,7 +91,7 @@ export class TiddlerRoutingService {
   }
 
   /**
-   * Get file path for a tiddler
+   * Get file path for a tiddler (async — uses config from disk)
    * Returns relative path within workspace
    */
   public async getTiddlerFilePath(
@@ -101,7 +101,30 @@ export class TiddlerRoutingService {
   ): Promise<string> {
     // Load config to check for fileSystemPathFilters
     const config = await readTidgiConfig(workspace);
+    return this.computeFilePath(title, fields, config);
+  }
 
+  /**
+   * Synchronous version — computes the default path without reading config.
+   * Useful for deletion fallback when we need a best-guess path.
+   */
+  public getTiddlerFilePathSync(
+    title: string,
+    _fields: ITiddlerFields,
+    _workspace: IWikiWorkspace,
+  ): string {
+    const sanitized = title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_');
+    return `tiddlers/${sanitized}.tid`;
+  }
+
+  /**
+   * Compute file path from title, fields, and loaded config
+   */
+  private computeFilePath(
+    title: string,
+    fields: ITiddlerFields,
+    config: Awaited<ReturnType<typeof readTidgiConfig>>,
+  ): string {
     // Sanitize title for filesystem
     const sanitized = title.replace(/["#%&'*/:<=>?\\{}]/g, '_');
 

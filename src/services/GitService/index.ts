@@ -138,13 +138,14 @@ const fs = {
         // Check directory first since File class is for files only
         const directory = new Directory(filepath);
         if (directory.exists) {
+          const dirInfo = directory.info();
           return {
             isFile: () => false,
             isDirectory: () => true,
             isSymbolicLink: () => false,
             size: 0,
             mode: 0o777,
-            mtimeMs: Date.now(),
+            mtimeMs: dirInfo.modificationTime ?? Date.now(),
           };
         }
 
@@ -155,14 +156,13 @@ const fs = {
           throw error;
         }
 
-        const info = file.info();
         return {
           isFile: () => true,
           isDirectory: () => false,
           isSymbolicLink: () => false,
-          size: info.size ?? 0,
+          size: file.size ?? 0,
           mode: 0o666,
-          mtimeMs: Date.now(),
+          mtimeMs: file.modificationTime ?? Date.now(),
         };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -353,7 +353,8 @@ export async function gitPush(
 }
 
 /**
- * Push to temporary conflict branch
+ * Push local commits to a temporary conflict branch, then reset main to origin/main.
+ * This avoids an infinite conflict loop where the same local commits keep conflicting.
  */
 export async function gitPushToConflictBranch(
   workspace: IWikiWorkspace,
@@ -365,10 +366,10 @@ export async function gitPushToConflictBranch(
   const branchName = `client/${deviceId}/${timestamp}`;
 
   try {
-    // Create and checkout new branch
-    await git.branch({ fs, dir: directory, ref: branchName, checkout: true });
+    // Create the conflict branch from current HEAD (which has local commits)
+    await git.branch({ fs, dir: directory, ref: branchName });
 
-    // Push to remote
+    // Push the conflict branch to remote
     await git.push({
       fs,
       http,
@@ -378,12 +379,31 @@ export async function gitPushToConflictBranch(
       headers: createAuthHeader(remote.token),
     });
 
-    // Switch back to main
-    await git.checkout({ fs, dir: directory, ref: 'main' });
+    // Fetch latest remote main so we have up-to-date origin/main
+    await git.fetch({
+      fs,
+      http,
+      dir: directory,
+      remote: 'origin',
+      ref: 'main',
+      singleBranch: true,
+      headers: createAuthHeader(remote.token),
+    });
 
-    console.log(`Pushed to conflict branch: ${branchName}`);
+    // Hard-reset main to origin/main by checking out with force.
+    // isomorphic-git checkout with force discards local changes.
+    await git.checkout({ fs, dir: directory, ref: 'main', force: true });
+
+    // Delete the local conflict branch (it already lives on remote)
+    await git.deleteBranch({ fs, dir: directory, ref: branchName });
+
+    console.log(`Pushed to conflict branch: ${branchName}, main reset to origin/main`);
     return branchName;
   } catch (error) {
+    // Best-effort: try to get back to main
+    try {
+      await git.checkout({ fs, dir: directory, ref: 'main', force: true });
+    } catch { /* ignore */ }
     console.error(`Failed to push to conflict branch: ${(error as Error).message}`);
     throw error;
   }

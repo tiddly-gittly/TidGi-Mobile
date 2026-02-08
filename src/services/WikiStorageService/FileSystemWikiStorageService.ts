@@ -155,7 +155,9 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Delete tiddler from filesystem
+   * Delete tiddler from filesystem.
+   * First tries the routed path, then falls back to default locations,
+   * and finally does a recursive search in the tiddlers directory.
    */
   deleteTiddler(title: string): boolean {
     try {
@@ -164,33 +166,79 @@ export class FileSystemWikiStorageService {
         return false;
       }
 
-      const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
+      // 1. Try the path from routing service (most likely location for saves we did)
+      const routedRelativePath = this.#routingService.getTiddlerFilePathSync(title, {} as ITiddlerFields, this.#workspace);
+      if (routedRelativePath) {
+        const routedFull = `${this.#workspace.wikiFolderLocation}/${routedRelativePath}`;
+        const routedFile = new File(routedFull);
+        if (routedFile.exists) {
+          routedFile.delete();
+          return true;
+        }
+      }
 
-      // Check if file exists and delete
+      // 2. Default .tid path
+      const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
       const tidFile = new File(tidPath);
       if (tidFile.exists) {
         tidFile.delete();
+        return true;
       }
 
-      // Also try to delete from files folder
+      // 3. Default files path + .meta
       const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
       const filesFile = new File(filesPath);
       if (filesFile.exists) {
         filesFile.delete();
-
-        // Delete corresponding .meta file
-        const metaPath = `${filesPath}.meta`;
-        const metaFile = new File(metaPath);
-        if (metaFile.exists) {
-          metaFile.delete();
-        }
+        const metaFile = new File(`${filesPath}.meta`);
+        if (metaFile.exists) metaFile.delete();
+        return true;
       }
 
-      return true;
+      // 4. Recursive search in tiddlers/ as last resort
+      const found = this.#findTiddlerFileRecursively(title);
+      if (found) {
+        new File(found).delete();
+        // Also delete .meta if paired
+        const metaFile = new File(`${found}.meta`);
+        if (metaFile.exists) metaFile.delete();
+        return true;
+      }
+
+      console.warn(`Tiddler file not found for deletion: ${title}`);
+      return false;
     } catch (error) {
       console.error(`Failed to delete tiddler ${title}: ${(error as Error).message}`);
       throw error;
     }
+  }
+
+  /**
+   * Search tiddlers directory recursively for a file matching the given title.
+   */
+  #findTiddlerFileRecursively(title: string): string | undefined {
+    const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
+    const sanitizedTitle = title.replaceAll(/[/\\:*?"<>|]/g, '_');
+
+    const search = (directory: Directory): string | undefined => {
+      try {
+        for (const entry of directory.list()) {
+          if (entry instanceof Directory) {
+            const found = search(entry);
+            if (found) return found;
+          } else if (entry instanceof File) {
+            // Match by sanitized title in filename
+            const name = entry.name.replace(/\.(tid|meta)$/, '');
+            if (name === sanitizedTitle && entry.name.endsWith('.tid')) {
+              return entry.uri;
+            }
+          }
+        }
+      } catch { /* ignore unreadable dirs */ }
+      return undefined;
+    };
+
+    return search(new Directory(tiddlerFolderPath));
   }
 
   /**
@@ -209,13 +257,12 @@ export class FileSystemWikiStorageService {
       // Try .tid file first
       const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
       const tidFile = new File(tidPath);
-      const tidExists = tidFile.exists;
-      if (tidExists) {
+      if (tidFile.exists) {
         const content = await tidFile.text();
-        // Extract text part (after first blank line)
-        const parts = content.split(/\r?\n\r?\n/);
-        if (parts.length >= 2) {
-          return parts.slice(1).join('\n\n');
+        // Extract text part (everything after first blank line)
+        const blankLineMatch = /\r?\n\r?\n/.exec(content);
+        if (blankLineMatch !== null) {
+          return content.substring(blankLineMatch.index + blankLineMatch[0].length);
         }
       }
 

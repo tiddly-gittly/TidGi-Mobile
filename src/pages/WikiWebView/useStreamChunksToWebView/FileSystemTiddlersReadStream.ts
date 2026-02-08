@@ -9,13 +9,7 @@ import { Directory, File } from 'expo-file-system';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
 import { getWikiTiddlerFolderPath } from '../../../constants/paths';
-import {
-  getTitleFromFilename,
-  makeSkinnyTiddler,
-  parseTiddlerFile,
-  processFields,
-  shouldSaveFullTiddler,
-} from '../../../services/WikiStorageService/tiddlerFileParser';
+import { getTitleFromFilename, makeSkinnyTiddler, parseTiddlerFile, processFields, shouldSaveFullTiddler } from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
 
 export interface IFileSystemTiddlersReadStreamOptions {
@@ -56,27 +50,41 @@ export class FileSystemTiddlersReadStream extends Readable {
     try {
       const tiddlerFolderPath = getWikiTiddlerFolderPath(this.workspace);
 
-      // Check if tiddlers folder exists
       const folder = new Directory(tiddlerFolderPath);
-      const folderExists = folder.exists;
-      if (!folderExists) {
+      if (!folder.exists) {
         console.warn(`Tiddlers folder does not exist: ${tiddlerFolderPath}`);
         return;
       }
 
-      // Read all files in tiddlers folder
-      const entries = await folder.list();
-
-      // Filter for .tid files only (skip .meta as they're paired with binary files)
-      this.tiddlerFiles = entries
-        .filter(entry => entry.name.endsWith('.tid'))
-        .map(entry => entry.uri);
+      // Recursively collect all .tid files from tiddlers/ and subdirectories
+      this.tiddlerFiles = this.collectTidFiles(folder);
 
       console.log(`Found ${this.tiddlerFiles.length} tiddler files in ${tiddlerFolderPath}`);
     } catch (error) {
       console.error(`FileSystemTiddlersReadStream init error: ${(error as Error).message}`);
       this.emit('error', error);
     }
+  }
+
+  /**
+   * Recursively collect all .tid file URIs from a directory tree
+   */
+  private collectTidFiles(directory: Directory): string[] {
+    const result: string[] = [];
+    try {
+      const entries = directory.list();
+      for (const entry of entries) {
+        if (entry instanceof Directory) {
+          // Recurse into subdirectories
+          result.push(...this.collectTidFiles(entry));
+        } else if (entry instanceof File && entry.name.endsWith('.tid')) {
+          result.push(entry.uri);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to list directory ${directory.uri}: ${(error as Error).message}`);
+    }
+    return result;
   }
 
   async _read(): Promise<void> {
@@ -153,7 +161,8 @@ export class FileSystemTiddlersReadStream extends Readable {
   }
 
   /**
-   * Read and parse a single tiddler from a .tid file
+   * Read and parse a single tiddler from a .tid file.
+   * Title comes from the parsed header fields; filename is only a fallback.
    */
   private async readTiddlerFromFile(filePath: string): Promise<ITiddlerFields | null> {
     try {
@@ -161,13 +170,13 @@ export class FileSystemTiddlersReadStream extends Readable {
       const content = await file.text();
       const filename = filePath.split('/').pop() ?? '';
 
-      // Derive title from filename
-      const title = getTitleFromFilename(filename);
+      // Fallback title from filename (only used if file header has no title)
+      const fallbackTitle = getTitleFromFilename(filename);
 
       // Parse the .tid file (header fields + text body)
-      const fields = parseTiddlerFile(content, { title });
+      const fields = parseTiddlerFile(content, { title: fallbackTitle });
 
-      // Process and return fields
+      // Process and return fields — header title wins over filename-derived title
       return processFields(fields) as ITiddlerFields;
     } catch (error) {
       console.error(`Error reading tiddler file ${filePath}: ${(error as Error).message}`);

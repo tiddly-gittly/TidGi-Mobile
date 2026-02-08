@@ -13,7 +13,7 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCommit, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, IGitRemote } from '../GitService';
-import { ITiddlerChange } from '../WikiStorageService/types';
+import type { ITiddlerChange } from '../WikiStorageService/types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 
@@ -188,30 +188,20 @@ export class GitBackgroundSyncService {
       // Mark sync as active
       this.setServerActive(workspace.id, server.id, true);
 
-      // 1. Pull latest changes
-      try {
-        await gitPull(workspace, remote);
-        haveUpdate = true;
-      } catch (error) {
-        console.error('Git pull failed:', error);
-        // Continue to try push even if pull fails
-      }
+      // 1. Pull latest changes — abort if pull fails (network issue, merge conflict)
+      await gitPull(workspace, remote);
+      // gitPull succeeds means remote changes were fetched (possibly a no-op)
+      haveUpdate = true;
 
       // 2. Check if there are local changes
       const hasChanges = await gitHasChanges(workspace);
       if (!hasChanges) {
-        // No local changes, just update lastSync
         this.updateLastSync(workspace.id, server.id);
         return haveUpdate;
       }
 
       // 3. Commit local changes
-      try {
-        await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
-      } catch (error) {
-        console.error('Git commit failed:', error);
-        throw error;
-      }
+      await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
 
       // 4. Try to push
       try {
@@ -220,7 +210,6 @@ export class GitBackgroundSyncService {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (error) {
         if ((error as Error).message === 'PUSH_CONFLICT') {
-          // Push to conflict branch
           await this.handlePushConflict(workspace, remote, server);
         } else {
           throw error;

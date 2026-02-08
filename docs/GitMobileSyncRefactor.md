@@ -248,14 +248,13 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 2. ✅ TidGi-Desktop: 在 workspace service 添加 token API（getWorkspaceToken, validateWorkspaceToken）
 3. ✅ TidGi-Desktop: 在 git service 添加 Git Smart HTTP 处理方法
    - ✅ getWorkspaceRepoPath(workspaceId)
-   - ✅ getGitExecutablePath()
-   - ✅ handleInfoRefs(workspaceId, service, req, res)
-   - ✅ handleUploadPack(workspaceId, req, res)
-   - ✅ handleReceivePack(workspaceId, req, res)
-4. ✅ tw-mobile-sync: Git Smart HTTP 端点改为调用 Desktop service（不再 spawn）
-   - ✅ git-info-refs-endpoint.ts（调用 Desktop 的 validateWorkspaceToken + handleInfoRefs）
-   - ✅ git-upload-pack-endpoint.ts（调用 Desktop 的 handleUploadPack）
-   - ✅ git-receive-pack-endpoint.ts（调用 Desktop 的 validateWorkspaceToken + handleReceivePack）
+   - ✅ gitSmartHTTPInfoRefs$(workspaceId, service) — 返回 Observable\<GitHTTPResponseChunk\>
+   - ✅ gitSmartHTTPUploadPack$(workspaceId, requestBody) — 返回 Observable\<GitHTTPResponseChunk\>
+   - ✅ gitSmartHTTPReceivePack$(workspaceId, requestBody) — 返回 Observable\<GitHTTPResponseChunk\>
+4. ✅ tw-mobile-sync: Git Smart HTTP 端点收集 POST body 后通过 IPC Observable 调用 Desktop
+   - ✅ git-info-refs-endpoint.ts（鉴权 + subscribe gitSmartHTTPInfoRefs$）
+   - ✅ git-upload-pack-endpoint.ts（收集body + subscribe gitSmartHTTPUploadPack$）
+   - ✅ git-receive-pack-endpoint.ts（鉴权 + 收集body + subscribe gitSmartHTTPReceivePack$）
 5. ✅ tw-mobile-sync: 清理 utils.ts 移除不再需要的函数（validateToken, getRepoPath, getGitPath）
 6. ✅ tw-mobile-sync: 移除"服务缺失就放行"的 TODO 逻辑（确保安全）
 
@@ -304,11 +303,11 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 
 **tw-mobile-sync（插件端）- 完全重构为调用 Desktop service**
 
-- ✅ Git Smart HTTP 端点改为"鉴权 + 调用 Desktop service"模式（不再 spawn git）
+- ✅ Git Smart HTTP 端点：收集 POST body → 通过 IPC Observable 调用 Desktop service
 - ✅ Basic Auth 鉴权机制（调用 Desktop workspace.validateWorkspaceToken）
-- ✅ git-info-refs-endpoint.ts - 调用 Desktop git.handleInfoRefs
-- ✅ git-upload-pack-endpoint.ts - 调用 Desktop git.handleUploadPack
-- ✅ git-receive-pack-endpoint.ts - 调用 Desktop git.handleReceivePack
+- ✅ git-info-refs-endpoint.ts - subscribe gitSmartHTTPInfoRefs$
+- ✅ git-upload-pack-endpoint.ts - subscribe gitSmartHTTPUploadPack$
+- ✅ git-receive-pack-endpoint.ts - subscribe gitSmartHTTPReceivePack$
 - ✅ utils.ts 清理：移除 validateToken/getRepoPath/getGitPath（已由 Desktop 托管）
 - ✅ 移除"服务缺失就放行"的 TODO 逻辑（确保安全）
 - ✅ **已删除所有旧的 SQLite API 端点：**
@@ -330,15 +329,14 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
   - ✅ src/services/workspaces/interface.ts - 添加 getWorkspaceToken/validateWorkspaceToken 方法签名
   - ✅ src/services/workspaces/index.ts - 实现 token 读取与校验（基于 workspace.authToken）
 - ✅ Git service 扩展
-  - ✅ src/services/git/interface.ts - 添加 repoPath、gitPath、handle* 方法签名
+  - ✅ src/services/git/interface.ts - 添加 repoPath、gitSmartHTTP*$ 方法签名（Observable 返回值）
   - ✅ src/services/git/index.ts - 完整实现：
     - ✅ getWorkspaceRepoPath(workspaceId) - 返回 workspace.wikiFolderLocation
-    - ✅ getGitExecutablePath() - 返回 dugite bundled git 路径（LOCAL_GIT_DIRECTORY + '/cmd/git'）
-    - ✅ handleInfoRefs(workspaceId, service, req, res) - spawn git 处理 info/refs（流式）
-    - ✅ handleUploadPack(workspaceId, req, res) - spawn git-upload-pack（流式 pipe）
-    - ✅ handleReceivePack(workspaceId, req, res) - spawn git-receive-pack（流式 pipe）
+    - ✅ gitSmartHTTPInfoRefs$(workspaceId, service) - spawn git，通过 Observable 流式返回
+    - ✅ gitSmartHTTPUploadPack$(workspaceId, requestBody) - 接收 Uint8Array body，spawn git-upload-pack
+    - ✅ gitSmartHTTPReceivePack$(workspaceId, requestBody) - 接收 Uint8Array body，spawn git-receive-pack
 - ✅ **CSRF 策略**：不需要 csrf-disable=yes，移动端客户端加 X-Requested-With header
-- ✅ IPC 代理：所有新增方法已注册到 WorkspaceServiceIPCDescriptor 和 GitServiceIPCDescriptor
+- ✅ IPC 代理：新增方法用 ProxyPropertyType.Function$ 注册（Observable 通过 IPC 传输）
 
 **TidGi-Mobile（移动端）- CSRF 绕过**
 

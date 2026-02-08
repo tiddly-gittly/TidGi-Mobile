@@ -10,8 +10,8 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
   const fetchJSON = useCallback(async (sourceUrl: string) => {
     setLoading(true);
     try {
-      const destFile = new File(temporaryFileLocation);
-      const file = await File.downloadFileAsync(sourceUrl, destFile, {
+      const destinationFile = new File(temporaryFileLocation);
+      const file = await File.downloadFileAsync(sourceUrl, destinationFile, {
         headers: {
           'Content-Type': 'application/json',
         },

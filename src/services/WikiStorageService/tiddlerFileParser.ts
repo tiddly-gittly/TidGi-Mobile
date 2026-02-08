@@ -17,26 +17,30 @@ import { ITiddlerFields } from 'tiddlywiki';
  * Text of the tiddler
  */
 export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>): ITiddlerFields {
-  const split = text.split(/\r?\n\r?\n/mg);
-  if (split.length >= 1) {
-    const headers = split[0];
-    // Parse the header lines
-    const headerLines = headers.split(/\r?\n/mg);
+  // Find the first blank line (separating headers from body)
+  const blankLineMatch = /\r?\n\r?\n/.exec(text);
+  if (blankLineMatch !== null) {
+    const headerText = text.substring(0, blankLineMatch.index);
+    const bodyText = text.substring(blankLineMatch.index + blankLineMatch[0].length);
+
+    // Parse header lines
+    const headerLines = headerText.split(/\r?\n/);
     for (const line of headerLines) {
       const colonIndex = line.indexOf(':');
       if (colonIndex !== -1) {
         const name = line.substring(0, colonIndex).trim();
         const value = line.substring(colonIndex + 1).trim();
         if (name) {
-          fields = fields || {};
+          fields = fields ?? {};
           (fields as any)[name] = value;
         }
       }
     }
-    // The text is everything after the first blank line
-    if (split.length >= 2) {
-      fields = fields || {};
-      (fields as any).text = split.slice(1).join('\n\n');
+
+    // Preserve body text exactly as-is (no re-joining)
+    if (bodyText) {
+      fields = fields ?? {};
+      (fields as any).text = bodyText;
     }
   }
   return fields as ITiddlerFields;
