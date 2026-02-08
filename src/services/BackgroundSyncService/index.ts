@@ -66,20 +66,20 @@ export class GitBackgroundSyncService {
     }, syncInterval);
 
     // Subscribe to config changes so interval restarts when syncInterval changes
-    this.#configUnsubscribe = this.#configStore.subscribe(
-      (state) => state.syncInterval,
-      (newInterval: number) => {
-        if (this.#syncIntervalId !== undefined) {
-          // Restart with new interval
-          this.stopBackgroundSync();
-          this.#syncIntervalId = setInterval(() => {
-            if (!this.#isSyncing) {
-              void this.sync();
-            }
-          }, newInterval);
-        }
-      },
-    );
+    let previousInterval = syncInterval;
+    this.#configUnsubscribe = this.#configStore.subscribe((state) => {
+      const newInterval = state.syncInterval;
+      if (newInterval !== previousInterval && this.#syncIntervalId !== undefined) {
+        previousInterval = newInterval;
+        // Restart with new interval
+        this.stopBackgroundSync();
+        this.#syncIntervalId = setInterval(() => {
+          if (!this.#isSyncing) {
+            void this.sync();
+          }
+        }, newInterval);
+      }
+    });
   }
 
   #configUnsubscribe?: () => void;

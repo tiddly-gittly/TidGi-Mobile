@@ -11,7 +11,8 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 export interface IGitImportQRCode {
   baseUrl: string;
-  token: string;
+  /** Token is optional - empty/undefined means anonymous access (insecure) */
+  token?: string;
   workspaceId: string;
 }
 
@@ -118,11 +119,29 @@ export function useGitImport() {
       workspaceFolderLocation = newWorkspace.wikiFolderLocation;
       setCreatedWorkspace(newWorkspace);
 
-      // Clean up any existing folder
+      // Ensure parent wikis folder exists
+      const parentDirectory = new Directory(WIKI_FOLDER_PATH);
+      if (!parentDirectory.exists) {
+        console.log('Creating parent wikis directory:', WIKI_FOLDER_PATH);
+        parentDirectory.create();
+      }
+
+      // Clean up target directory completely
+      // Git clone requires the directory to either not exist or be empty
       const directory = new Directory(newWorkspace.wikiFolderLocation);
       if (directory.exists) {
-        directory.delete();
+        console.log('Removing existing directory before clone:', newWorkspace.wikiFolderLocation);
+        try {
+          directory.delete();
+        } catch (error) {
+          console.error('Failed to delete existing directory:', error);
+          throw new Error(`Cannot clean up existing directory: ${(error as Error).message}`);
+        }
       }
+
+      // Create an empty directory for git clone to use
+      // isomorphic-git with expo-file-system requires the directory to exist
+      console.log('Creating empty directory for git clone:', newWorkspace.wikiFolderLocation);
       directory.create();
 
       // 2. Clone repository

@@ -15,7 +15,7 @@ export function useAutoOpenDefaultWiki(preventOpen?: boolean) {
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
   const route = useRoute<StackScreenProps<RootStackParameterList, 'MainMenu'>['route']>();
   /** If we are just go back from a wiki, don't immediately goto default wiki. */
-  const { fromWikiID } = route.params;
+  const fromWikiID = route.params?.fromWikiID;
 
   // once model opened, we need to prevent closing model trigger the auto open
   const [hadPreventOpen, setHadPreventOpen] = useState(preventOpen);

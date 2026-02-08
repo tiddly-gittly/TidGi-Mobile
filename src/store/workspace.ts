@@ -24,6 +24,10 @@ export interface IWikiWorkspace {
    */
   name: string;
   /**
+   * Display order for workspace list (lower number = higher priority)
+   */
+  order?: number;
+  /**
    * TiddlyWiki filter that used to decide a tiddler title should be synced or not.
    * If empty, all tiddlers will be synced.
    */

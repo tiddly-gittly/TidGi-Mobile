@@ -48,6 +48,17 @@ export interface ITidgiConfigKnownFields {
    * Tag-based routing rules
    */
   tagNames?: string[];
+  /**
+   * Sub-wiki configurations (stored but not fully implemented yet)
+   */
+  subWikis?: Array<{
+    customFilters?: string;
+    id: string;
+    includeTagTree: boolean;
+    name: string;
+    path: string;
+    tagNames: string[];
+  }>;
 }
 
 /**

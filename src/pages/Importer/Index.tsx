@@ -2,19 +2,20 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Alert } from 'react-native';
 import Collapsible from 'react-native-collapsible';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
-import { ServerList } from '../../components/ServerList';
-import { gitBackgroundSyncService as backgroundSyncService } from '../../services/BackgroundSyncService';
 import { useGitImport } from '../../services/GitService/useGitImport';
 import { useServerStore } from '../../store/server';
 
 interface GitQRData {
   baseUrl: string;
-  token: string;
+  /** Token is optional - empty means anonymous access (insecure) */
+  token?: string;
   workspaceId: string;
+  workspaceName?: string;
 }
 
 const Container = styled.View`
@@ -58,6 +59,19 @@ const ImportStatusText = styled.Text`
   display: flex;
   flex-direction: row;
 `;
+const QRScannedTitle = styled(Text)`
+  margin-top: 10px;
+`;
+const QRDetailText = styled(Text)`
+  color: #666;
+`;
+const ManualConfigHint = styled(Text)`
+  margin-top: 10px;
+  color: #999;
+`;
+const WorkspaceNameInput = styled(TextInput)`
+  margin-top: 10px;
+`;
 
 export interface ImporterProps {
   /**
@@ -78,11 +92,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const { t } = useTranslation();
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [expandServerList, setExpandServerList] = useState(false);
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
-  const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
-  const [wikiName, setWikiName] = useState('wiki');
+  const [wikiName, setWikiName] = useState('');
   const [qrData, setQrData] = useState<GitQRData | undefined>();
+  const [manualEdit, setManualEdit] = useState(false);
   const addServer = useServerStore(state => state.add);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
@@ -97,47 +110,47 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
     const { data, type } = scanningResult;
     if (type === 'qr') {
+      console.log('QR code scanned, raw data:', data);
       try {
         setQrScannerOpen(false);
         // Try to parse as JSON (Git QR format)
-        try {
-          const parsed = JSON.parse(data) as unknown;
-          if (
-            parsed !== null &&
-            typeof parsed === 'object' &&
-            'baseUrl' in parsed &&
-            'workspaceId' in parsed &&
-            'token' in parsed &&
-            typeof parsed.baseUrl === 'string' &&
-            typeof parsed.workspaceId === 'string' &&
-            typeof parsed.token === 'string'
-          ) {
-            // Valid Git QR code
-            setServerUriToUseString(parsed.baseUrl);
-            setQrData(parsed as GitQRData);
-            return;
-          }
-        } catch {
-          // Not JSON, treat as plain URL
+        const parsed = JSON.parse(data) as unknown;
+        console.log('Parsed QR code data:', parsed);
+
+        if (
+          parsed !== null &&
+          typeof parsed === 'object' &&
+          'baseUrl' in parsed &&
+          'workspaceId' in parsed &&
+          typeof parsed.baseUrl === 'string' &&
+          typeof parsed.workspaceId === 'string'
+          // token is optional
+        ) {
+          // Valid Git QR code
+          const qr = parsed as GitQRData;
+          console.log('Valid Git QR code:', qr);
+          setQrData(qr);
+          setWikiUrl(new URL(qr.baseUrl));
+          // Use workspaceName from QR code, or fallback to a generated name
+          setWikiName(qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`);
+          return;
+        } else {
+          console.error('Invalid QR code format:', parsed);
+          Alert.alert(
+            t('Import.QRCodeInvalidFormat'),
+            JSON.stringify(parsed, null, 2),
+          );
         }
-        // Fallback: plain URL
-        setServerUriToUseString(data);
       } catch (error) {
-        console.warn('Failed to parse QR code', error);
+        console.error('Failed to parse QR code:', error);
+        console.error('Raw QR code data:', data);
+        Alert.alert(
+          t('Import.QRCodeParseError'),
+          `Error: ${(error as Error).message}\n\nRaw data: ${data}`,
+        );
       }
     }
-  }, []);
-  useEffect(() => {
-    if (serverUriToUseString !== '') {
-      try {
-        const url = new URL(serverUriToUseString);
-        setExpandServerList(false);
-        setWikiUrl(new URL(url.origin));
-      } catch (error) {
-        console.warn('Not a valid URL', error);
-      }
-    }
-  }, [serverUriToUseString]);
+  }, [t]);
 
   const {
     importWiki,
@@ -159,18 +172,18 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         // Git import with QR code data
         await importWiki(qrData, wikiName, newServer.id);
       } else {
-        // No valid QR data - show error
-        alert('Please scan a QR code from TidGi Desktop to import via Git.');
+        // No valid QR data - cannot use Git sync
+        Alert.alert(t('Import.GitSyncRequiresQRCode'));
         return;
       }
     } else {
-      alert('Server must be added for Git synchronization.');
+      Alert.alert(t('Import.ServerRequired'));
       return;
     }
 
     setWikiUrl(undefined);
     setQrData(undefined);
-  }, [addAsServer, addServer, importWiki, wikiName, wikiUrl?.origin, qrData]);
+  }, [addAsServer, addServer, importWiki, wikiName, wikiUrl?.origin, qrData, t]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;
@@ -199,33 +212,60 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       >
         <ButtonText>{t('AddWorkspace.ToggleQRCodeScanner')}</ButtonText>
       </ScanQRButton>
-      <Button
-        mode='text'
-        disabled={importStatus !== 'idle'}
-        onPress={() => {
-          void backgroundSyncService.updateServerOnlineStatus();
-          setExpandServerList(!expandServerList);
-        }}
-      >
-        <Text>{t('AddWorkspace.ToggleServerList')}</Text>
-      </Button>
-      <Collapsible collapsed={!expandServerList}>
-        <ServerList
-          onlineOnly
-          onPress={(server) => {
-            setServerUriToUseString(server.uri);
+      {qrData && (
+        <>
+          <QRScannedTitle variant='titleMedium'>
+            {t('Import.QRCodeScanned')}
+          </QRScannedTitle>
+          <QRDetailText variant='bodySmall'>
+            {t('Import.Server')}: {qrData.baseUrl}
+          </QRDetailText>
+          <QRDetailText variant='bodySmall'>
+            {t('Import.WorkspaceID')}: {qrData.workspaceId}
+          </QRDetailText>
+        </>
+      )}
+      {!qrData && (
+        <Button
+          mode='text'
+          disabled={importStatus !== 'idle'}
+          onPress={() => {
+            setManualEdit(!manualEdit);
+          }}
+        >
+          <Text>{t('Import.ManualConfiguration')}</Text>
+        </Button>
+      )}
+      <Collapsible collapsed={!manualEdit}>
+        <ManualConfigHint variant='bodySmall'>
+          {t('Import.ManualConfigurationHint')}
+        </ManualConfigHint>
+        <TextInput
+          label={t('Import.QRCodeJSON')}
+          multiline
+          numberOfLines={4}
+          placeholder='{"baseUrl":"http://...","workspaceId":"...","workspaceName":"...","token":"..."}'
+          onChangeText={(text: string) => {
+            try {
+              const parsed = JSON.parse(text) as unknown;
+              if (
+                parsed !== null &&
+                typeof parsed === 'object' &&
+                'baseUrl' in parsed &&
+                'workspaceId' in parsed
+                // token is optional
+              ) {
+                const qr = parsed as GitQRData;
+                setQrData(qr);
+                setWikiUrl(new URL(qr.baseUrl));
+                setWikiName(qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`);
+              }
+            } catch {
+              // Invalid JSON, ignore
+            }
           }}
         />
       </Collapsible>
-      <TextInput
-        label={t('EditWorkspace.ServerURI')}
-        inputMode='url'
-        keyboardType='url'
-        value={serverUriToUseString}
-        onChangeText={(newText: string) => {
-          setServerUriToUseString(newText);
-        }}
-      />
     </>
   );
 
@@ -234,9 +274,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     <Container>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
       {autoStartImport !== true && serverConfigs}
-      {importStatus === 'idle' && !qrScannerOpen && wikiUrl !== undefined && (
+      {importStatus === 'idle' && !qrScannerOpen && qrData && (
         <>
-          <TextInput
+          <WorkspaceNameInput
             label={t('EditWorkspace.Name')}
             value={wikiName}
             onChangeText={(newText: string) => {

@@ -13,7 +13,8 @@ import { IWikiWorkspace } from '../../store/workspace';
  */
 export interface IGitRemote {
   baseUrl: string;
-  token: string;
+  /** Token is optional - empty/undefined means anonymous access (insecure) */
+  token?: string;
   workspaceId: string;
 }
 
@@ -213,13 +214,19 @@ const fs = {
 /**
  * Create auth header for git operations
  * Includes CSRF header to bypass TiddlyWiki's CSRF protection
+ * If token is empty/undefined, still includes CSRF header but no Authorization
  */
-function createAuthHeader(token: string): { Authorization: string; 'X-Requested-With': string } {
-  const credentials = Buffer.from(`:${token}`).toString('base64');
-  return {
-    Authorization: `Basic ${credentials}`,
+function createAuthHeader(token?: string): { Authorization?: string; 'X-Requested-With': string } {
+  const headers: { Authorization?: string; 'X-Requested-With': string } = {
     'X-Requested-With': 'TiddlyWiki-TidGi-Mobile',
   };
+
+  if (token !== undefined && token !== '') {
+    const credentials = Buffer.from(`:${token}`).toString('base64');
+    headers.Authorization = `Basic ${credentials}`;
+  }
+
+  return headers;
 }
 
 /**
@@ -230,8 +237,14 @@ export async function gitClone(
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  const url = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+  // Remove trailing slash from baseUrl to avoid double slashes
+  const baseUrl = remote.baseUrl.replace(/\/$/, '');
+  const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
   const directory = workspace.wikiFolderLocation;
+
+  console.log('Git clone URL:', url);
+  console.log('Git clone directory:', directory);
+  console.log('Git clone remote:', JSON.stringify(remote, null, 2));
 
   try {
     await git.clone({

@@ -536,7 +536,17 @@
   "Open": "Open",
   "Close": "Close",
   "Import": {
-    "ImportWiki": "Import Wiki"
+    "ImportWiki": "Import Wiki",
+    "GitSyncRequiresQRCode": "Git synchronization requires QR code data. Please scan the QR code from TidGi Desktop.",
+    "ServerRequired": "Server must be added for Git synchronization.",
+    "QRCodeScanned": "✓ QR Code Scanned",
+    "Server": "Server",
+    "WorkspaceID": "Workspace ID",
+    "ManualConfiguration": "Manual Configuration (Advanced)",
+    "ManualConfigurationHint": "Paste the complete QR code JSON data below. This is only needed if QR scanning doesn't work.",
+    "QRCodeJSON": "QR Code JSON Data",
+    "QRCodeParseError": "Failed to parse QR code",
+    "QRCodeInvalidFormat": "Invalid QR code format"
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",

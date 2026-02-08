@@ -517,7 +517,17 @@
     "SaveMediaAsAttachmentDescription": "启用后，媒体和文件将保存到文件系统，在wiki中只保存 _canonical_uri，而不是嵌入完整内容。"
   },
   "Import": {
-    "ImportWiki": "导入Wiki"
+    "ImportWiki": "导入Wiki",
+    "GitSyncRequiresQRCode": "Git 同步需要二维码数据。请扫描太记桌面版的二维码。",
+    "ServerRequired": "Git 同步必须添加服务器。",
+    "QRCodeScanned": "✓ 已扫描二维码",
+    "Server": "服务器",
+    "WorkspaceID": "工作区 ID",
+    "ManualConfiguration": "手动配置（高级）",
+    "ManualConfigurationHint": "在下方粘贴完整的二维码 JSON 数据。仅在二维码扫描无法使用时需要。",
+    "QRCodeJSON": "二维码 JSON 数据",
+    "QRCodeParseError": "无法解析二维码",
+    "QRCodeInvalidFormat": "无效的二维码格式"
   },
   "ConfirmDelete": "是否删除？",
   "ConfirmDeleteDescription": "此操作无法撤销。",

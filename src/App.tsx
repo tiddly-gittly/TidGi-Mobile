@@ -30,7 +30,7 @@ export type RootStackParameterList = {
   Config: undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
-  MainMenu: MainMenuProps;
+  MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
   WikiWebView: WikiWebViewProps;
 };

@@ -5,7 +5,7 @@
 
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
 import { Button, Card, Chip, Dialog, IconButton, List, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { readTidgiConfig, writeTidgiConfig } from '../services/WikiStorageService/tidgiConfigManager';
@@ -151,7 +151,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
 
   const handleSaveSubWiki = useCallback(() => {
     if (!newName.trim() || !newPath.trim()) {
-      alert(t('SubWiki.NameAndPathRequired'));
+      Alert.alert(t('SubWiki.NameAndPathRequired'));
       return;
     }
 
