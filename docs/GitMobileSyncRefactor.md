@@ -5,7 +5,6 @@
 相关 Issue：
 
 - <https://github.com/tiddly-gittly/TidGi-Mobile/issues/88>
-- <https://github.com/tiddly-gittly/TidGi-Mobile/issues/37>
 
 ## 核心目标
 

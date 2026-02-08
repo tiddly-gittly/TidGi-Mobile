@@ -27,6 +27,7 @@
         try {
           const data = JSON.parse(event.data);
           if (data.messageId === messageId) {
+            window.removeEventListener('message', handleMessage);
             document.removeEventListener('message', handleMessage);
             workspaceConfigs.set(workspaceId, data.config);
             resolve(data.config);
@@ -36,6 +37,7 @@
         }
       };
 
+      window.addEventListener('message', handleMessage);
       document.addEventListener('message', handleMessage);
 
       window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -46,6 +48,7 @@
 
       // Timeout
       setTimeout(() => {
+        window.removeEventListener('message', handleMessage);
         document.removeEventListener('message', handleMessage);
         resolve({});
       }, 3000);
@@ -119,8 +122,9 @@
 
   /**
    * Listen for messages from native layer
+   * Listen on both window and document for cross-platform React Native WebView compatibility
    */
-  document.addEventListener('message', (event) => {
+  function onMessage(event) {
     try {
       const message = JSON.parse(event.data);
       
@@ -131,11 +135,22 @@
         case 'getTiddlerFilePath':
           handleGetFilePathMessage(message);
           break;
+        case 'invalidateConfigCache':
+          // Allow native layer to invalidate cached configs when they change
+          if (message.payload && message.payload.workspaceId) {
+            workspaceConfigs.delete(message.payload.workspaceId);
+          } else {
+            workspaceConfigs.clear();
+          }
+          break;
       }
     } catch (error) {
       console.error('Error handling message:', error);
     }
-  });
+  }
+
+  window.addEventListener('message', onMessage);
+  document.addEventListener('message', onMessage);
 
   // Signal that routing handler is ready
   if (window.ReactNativeWebView) {

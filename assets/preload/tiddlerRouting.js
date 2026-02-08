@@ -39,6 +39,7 @@
 
   /**
    * Check if a tiddler matches tag tree (recursive tag hierarchy)
+   * Uses TW variable reference to prevent filter injection when tagName contains special chars
    */
   function matchesTagTree(
     tiddlerTitle,
@@ -51,10 +52,16 @@
 
     for (const tagName of workspaceTagNames) {
       try {
-        // Use TW's in-tagtree-of filter operator
-        const result = wiki.filterTiddlers(
-          `[in-tagtree-of:inclusive[${tagName}]]`,
-          null,
+        // Use variable reference <tagName> with makeFakeWidgetWithVariables
+        // instead of direct string interpolation [in-tagtree-of:inclusive[${tagName}]]
+        // to avoid filter syntax breakage if tagName contains ]
+        var fakeWidget = $tw.rootWidget && $tw.rootWidget.makeFakeWidgetWithVariables
+          ? $tw.rootWidget.makeFakeWidgetWithVariables({ tagName: tagName })
+          : null;
+
+        var result = wiki.filterTiddlers(
+          '[in-tagtree-of:inclusive<tagName>]',
+          fakeWidget,
           wiki.makeTiddlerIterator([tiddlerTitle])
         );
         
@@ -62,7 +69,7 @@
           return true;
         }
       } catch (error) {
-        console.error(`Error checking tag tree for ${tagName}:`, error);
+        console.error('Error checking tag tree for ' + tagName + ':', error);
       }
     }
 
@@ -82,7 +89,8 @@
     }
 
     // Split by newlines and try each filter
-    const filters = filterExpression.split('\\n')
+    // Fix H7: Use actual newline character, not literal '\\n'
+    const filters = filterExpression.split('\n')
       .map(f => f.trim())
       .filter(f => f.length > 0);
 

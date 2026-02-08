@@ -38,10 +38,3 @@ export const TEMPLATE_LIST_NAME = 'templateList.json';
 export const HELP_PAGE_LIST_NAME = 'helpPageList.json';
 export const templateListCachePath = `${APP_CACHE_FOLDER_PATH}${TEMPLATE_LIST_NAME}`;
 export const helpPageListCachePath = `${APP_CACHE_FOLDER_PATH}${HELP_PAGE_LIST_NAME}`;
-export const WIKI_MAIN_SQLITE_NAME = 'sqlite.db';
-/**
- * Will be store to `${Paths.document.uri}/SQLite/${name}`
- * @url https://docs.expo.dev/versions/latest/sdk/sqlite/#sqliteopendatabasename-version-description-size-callback
- */
-export const getWikiMainSqliteName = (workspace: IWikiWorkspace) => `${workspace.id}-${WIKI_MAIN_SQLITE_NAME}`;
-export const getWikiMainSqlitePath = (workspace: IWikiWorkspace) => `${Paths.document.uri}/SQLite/${getWikiMainSqliteName(workspace)}`;

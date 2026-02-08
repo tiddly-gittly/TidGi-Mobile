@@ -538,5 +538,33 @@
     "ReadList": "读取文件列表",
     "FetchAndWrite": "拉取和写入"
   },
-  "WarningMessage": "警告信息"
+  "WarningMessage": "警告信息",
+  "Sync": {
+    "SyncFailed": "同步失败",
+    "ConflictDetected": "检测到冲突",
+    "ConflictMessage": "你的更改已推送到分支 {{branch}}。请在桌面端解决冲突后重新拉取。",
+    "SyncActive": "同步中",
+    "SyncSuccess": "同步成功"
+  },
+  "SubWiki": {
+    "SubWikis": "子维基",
+    "AddSubWiki": "添加子维基",
+    "EditSubWiki": "编辑子维基",
+    "ManageSubWikis": "管理子维基",
+    "Name": "名称",
+    "Path": "路径",
+    "NameAndPathRequired": "名称和路径不能为空",
+    "RoutingRules": "路由规则",
+    "Tags": "标签",
+    "AddTag": "添加标签",
+    "IncludeTagTree": "包含标签树",
+    "IncludeTagTreeDescription": "递归匹配标签层级关系",
+    "CustomFilters": "自定义过滤器",
+    "CustomFiltersDescription": "使用 TiddlyWiki 过滤器语法定义路由规则"
+  },
+  "Common": {
+    "OK": "确定",
+    "Cancel": "取消",
+    "Save": "保存"
+  }
 }

@@ -17,6 +17,9 @@ import type { ITiddlerFields } from 'tw5-typed';
  * Text of the tiddler
  */
 export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>): ITiddlerFields {
+  // Initialize fields to empty object if undefined
+  const result: Partial<ITiddlerFields> = fields ?? {};
+
   // Find the first blank line (separating headers from body)
   const blankLineMatch = /\r?\n\r?\n/.exec(text);
   if (blankLineMatch !== null) {
@@ -31,19 +34,23 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
         const name = line.substring(0, colonIndex).trim();
         const value = line.substring(colonIndex + 1).trim();
         if (name) {
-          fields = fields ?? {};
-          (fields as Record<string, string | string[]>)[name] = value;
+          (result as Record<string, string | string[]>)[name] = value;
         }
       }
     }
 
     // Preserve body text exactly as-is (no re-joining)
     if (bodyText) {
-      fields = fields ?? {};
-      (fields as Partial<ITiddlerFields> & { text: string }).text = bodyText;
+      (result as Partial<ITiddlerFields> & { text: string }).text = bodyText;
     }
   }
-  return fields as ITiddlerFields;
+
+  // Ensure title exists (required field)
+  if (!result.title) {
+    throw new Error('Tiddler file must contain a title field');
+  }
+
+  return result as ITiddlerFields;
 }
 
 /**
@@ -127,8 +134,52 @@ export function getFileType(filename: string): 'tid' | 'meta' | 'json' | 'binary
   if (lowerName.endsWith('.meta')) return 'meta';
   if (lowerName.endsWith('.json')) return 'json';
 
-  // Check for binary file extensions
-  const binaryExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.zip', '.mp4', '.mp3'];
+  // Comprehensive binary file extensions list
+  const binaryExtensions = [
+    // Images (note: .svg is text/xml in TiddlyWiki, not binary)
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.bmp',
+    '.ico',
+    '.webp',
+    '.tiff',
+    '.tif',
+    // Documents
+    '.pdf',
+    '.doc',
+    '.docx',
+    '.xls',
+    '.xlsx',
+    '.ppt',
+    '.pptx',
+    // Archives
+    '.zip',
+    '.tar',
+    '.gz',
+    '.7z',
+    '.rar',
+    // Audio
+    '.mp3',
+    '.wav',
+    '.ogg',
+    '.m4a',
+    '.flac',
+    // Video
+    '.mp4',
+    '.avi',
+    '.mkv',
+    '.mov',
+    '.webm',
+    // Fonts
+    '.woff',
+    '.woff2',
+    '.ttf',
+    '.otf',
+    '.eot',
+  ];
+
   for (const extension of binaryExtensions) {
     if (lowerName.endsWith(extension)) return 'binary';
   }

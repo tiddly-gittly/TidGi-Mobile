@@ -5,7 +5,7 @@
 
 import { Directory, File } from 'expo-file-system';
 import { useState } from 'react';
-import { getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
+import { APP_CACHE_FOLDER_PATH, getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
 import { gitClone, IGitRemote } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
@@ -16,6 +16,62 @@ export interface IGitImportQRCode {
 }
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'downloading-html' | 'success' | 'error';
+
+/**
+ * Fetch skinny HTML with version-based caching.
+ * Caches HTML by TidGi version (from response headers or server status) to avoid re-downloading.
+ */
+async function fetchSkinnyHtmlWithCache(baseUrl: string): Promise<string> {
+  const skinnyHtmlUrl = new URL('/tw-mobile-sync/get-skinny-html', baseUrl);
+
+  // Try to get server version for cache key
+  let serverVersion = 'unknown';
+  try {
+    const statusResponse = await fetch(new URL('/status', baseUrl).toString());
+    if (statusResponse.ok) {
+      const statusData = await statusResponse.json() as { tiddlywiki_version?: string };
+      if (statusData.tiddlywiki_version) {
+        serverVersion = statusData.tiddlywiki_version;
+      }
+    }
+  } catch {
+    // If status fetch fails, proceed without caching
+  }
+
+  const cacheKey = `skinny-html-${serverVersion}`;
+  const cachePath = `${APP_CACHE_FOLDER_PATH}${cacheKey}.html`;
+  const cacheFile = new File(cachePath);
+
+  // Check cache first
+  if (cacheFile.exists) {
+    try {
+      return await cacheFile.text();
+    } catch {
+      // Cache read failed, re-download
+    }
+  }
+
+  // Download fresh
+  const response = await fetch(skinnyHtmlUrl.toString());
+  if (!response.ok) {
+    throw new Error(`Failed to download HTML: ${response.statusText}`);
+  }
+
+  const htmlContent = await response.text();
+
+  // Cache for future use (best-effort)
+  try {
+    const cacheDirectory = new Directory(APP_CACHE_FOLDER_PATH);
+    if (!cacheDirectory.exists) {
+      cacheDirectory.create();
+    }
+    cacheFile.write(htmlContent);
+  } catch {
+    // Cache write failure is non-fatal
+  }
+
+  return htmlContent;
+}
 
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
@@ -38,6 +94,7 @@ export function useGitImport() {
 
     setStatus('creating');
     let workspaceId: string | undefined;
+    let workspaceFolderLocation: string | undefined;
 
     try {
       // 1. Create workspace
@@ -58,6 +115,7 @@ export function useGitImport() {
       }
 
       workspaceId = newWorkspace.id;
+      workspaceFolderLocation = newWorkspace.wikiFolderLocation;
       setCreatedWorkspace(newWorkspace);
 
       // Clean up any existing folder
@@ -79,17 +137,9 @@ export function useGitImport() {
         setCloneProgress({ phase, loaded, total });
       });
 
-      // 3. Download skinny HTML (no auth required for this endpoint)
+      // 3. Download skinny HTML with version-based caching
       setStatus('downloading-html');
-      const skinnyHtmlUrl = new URL('/tw-mobile-sync/get-skinny-html', qrData.baseUrl);
-
-      const response = await fetch(skinnyHtmlUrl.toString());
-
-      if (!response.ok) {
-        throw new Error(`Failed to download HTML: ${response.statusText}`);
-      }
-
-      const htmlContent = await response.text();
+      const htmlContent = await fetchSkinnyHtmlWithCache(qrData.baseUrl);
       const htmlFile = new File(getWikiFilePath(newWorkspace));
       htmlFile.write(htmlContent);
       setHtmlDownloadProgress(1);
@@ -101,9 +151,21 @@ export function useGitImport() {
       setError((error_ as Error).message);
       setStatus('error');
 
-      // Clean up on error
+      // Clean up on error: remove both workspace entry and created folder
       if (workspaceId !== undefined) {
         removeWiki(workspaceId);
+
+        // Use local variable (not React state which may be stale in this closure)
+        if (workspaceFolderLocation !== undefined) {
+          try {
+            const directory = new Directory(workspaceFolderLocation);
+            if (directory.exists) {
+              directory.delete();
+            }
+          } catch (cleanupError) {
+            console.error('Failed to cleanup folder:', cleanupError);
+          }
+        }
       }
 
       throw error_;

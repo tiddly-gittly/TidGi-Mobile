@@ -557,5 +557,33 @@
     "ReadList": "Read File List",
     "FetchAndWrite": "Fetch And Write"
   },
-  "WarningMessage": "Warning Message"
+  "WarningMessage": "Warning Message",
+  "Sync": {
+    "SyncFailed": "Sync Failed",
+    "ConflictDetected": "Conflict Detected",
+    "ConflictMessage": "Your changes have been pushed to branch {{branch}}. Please resolve the conflict on the Desktop and then pull again.",
+    "SyncActive": "Sync Active",
+    "SyncSuccess": "Sync Succeeded"
+  },
+  "SubWiki": {
+    "SubWikis": "Sub Wikis",
+    "AddSubWiki": "Add Sub Wiki",
+    "EditSubWiki": "Edit Sub Wiki",
+    "ManageSubWikis": "Manage Sub Wikis",
+    "Name": "Name",
+    "Path": "Path",
+    "NameAndPathRequired": "Name and path are required",
+    "RoutingRules": "Routing Rules",
+    "Tags": "Tags",
+    "AddTag": "Add Tag",
+    "IncludeTagTree": "Include Tag Tree",
+    "IncludeTagTreeDescription": "Recursively match tag hierarchy",
+    "CustomFilters": "Custom Filters",
+    "CustomFiltersDescription": "Define routing rules using TiddlyWiki filter syntax"
+  },
+  "Common": {
+    "OK": "OK",
+    "Cancel": "Cancel",
+    "Save": "Save"
+  }
 }

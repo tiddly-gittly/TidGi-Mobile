@@ -38,37 +38,36 @@ const fs = {
         // For binary, return Buffer
         const arrayBuffer = await file.arrayBuffer();
         return Buffer.from(arrayBuffer);
-      } catch {
-        const error = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
-        error.code = 'ENOENT';
-        error.errno = -2;
-        error.path = filepath;
+      } catch (error) {
+        // Only throw ENOENT if file doesn't exist; preserve permission errors, encoding errors, etc.
+        if (!new File(filepath).exists) {
+          const enoentError = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          enoentError.errno = -2;
+          enoentError.path = filepath;
+          throw enoentError;
+        }
+        // Re-throw permission errors, encoding errors, etc.
         throw error;
       }
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
-      try {
-        const file = new File(filepath);
-        const directory = file.parentDirectory;
-        const directoryExists = directory.exists;
+      const file = new File(filepath);
+      const directory = file.parentDirectory;
+      const directoryExists = directory.exists;
 
-        if (!directoryExists) {
-          directory.create();
-        }
+      if (!directoryExists) {
+        directory.create();
+      }
 
-        if (typeof data === 'string') {
-          file.write(data);
-        } else if (Buffer.isBuffer(data)) {
-          // Convert Buffer to Uint8Array
-          file.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-        } else {
-          file.write(data);
-        }
-      } catch {
-        const error = new Error(`ENOENT: failed to write file '${filepath}'`) as NodeJS.ErrnoException;
-        error.code = 'ENOENT';
-        throw error;
+      if (typeof data === 'string') {
+        file.write(data);
+      } else if (Buffer.isBuffer(data)) {
+        // Convert Buffer to Uint8Array
+        file.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+      } else {
+        file.write(data);
       }
     },
 
@@ -80,9 +79,13 @@ const fs = {
         if (fileExists) {
           file.delete();
         }
-      } catch {
-        const error = new Error(`ENOENT: no such file or directory, unlink '${filepath}'`) as NodeJS.ErrnoException;
-        error.code = 'ENOENT';
+      } catch (error) {
+        // Only throw ENOENT if file doesn't exist
+        if (!new File(filepath).exists) {
+          const enoentError = new Error(`ENOENT: no such file or directory, unlink '${filepath}'`) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          throw enoentError;
+        }
         throw error;
       }
     },
@@ -93,9 +96,13 @@ const fs = {
         const entries = directory.list();
         // isomorphic-git expects plain filenames without trailing slashes
         return entries.map(entry => entry.name.replace(/\/$/, ''));
-      } catch {
-        const error = new Error(`ENOENT: no such file or directory, scandir '${filepath}'`) as NodeJS.ErrnoException;
-        error.code = 'ENOENT';
+      } catch (error) {
+        // Only throw ENOENT if directory doesn't exist
+        if (!new Directory(filepath).exists) {
+          const enoentError = new Error(`ENOENT: no such file or directory, scandir '${filepath}'`) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          throw enoentError;
+        }
         throw error;
       }
     },
@@ -119,9 +126,13 @@ const fs = {
         if (directoryExists) {
           directory.delete();
         }
-      } catch {
-        const error = new Error(`ENOENT: no such file or directory, rmdir '${filepath}'`) as NodeJS.ErrnoException;
-        error.code = 'ENOENT';
+      } catch (error) {
+        // Only throw ENOENT if directory doesn't exist
+        if (!new Directory(filepath).exists) {
+          const enoentError = new Error(`ENOENT: no such file or directory, rmdir '${filepath}'`) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          throw enoentError;
+        }
         throw error;
       }
     },
@@ -144,7 +155,7 @@ const fs = {
             isDirectory: () => true,
             isSymbolicLink: () => false,
             size: 0,
-            mode: 0o777,
+            mode: 0o755,
             mtimeMs: directoryInfo.modificationTime ?? Date.now(),
           };
         }
@@ -161,20 +172,27 @@ const fs = {
           isDirectory: () => false,
           isSymbolicLink: () => false,
           size: file.size,
-          mode: 0o666,
+          mode: 0o644,
           mtimeMs: file.modificationTime ?? Date.now(),
         };
       } catch (error) {
+        // Re-throw ENOENT as-is; for other errors check if path actually exists
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
           throw error;
         }
-        const error_ = new Error(`stat failed: ${(error as Error).message}`) as NodeJS.ErrnoException;
-        error_.code = 'ENOENT';
-        throw error_;
+        // If neither file nor directory exists, produce ENOENT; otherwise preserve real error
+        if (!new File(filepath).exists && !new Directory(filepath).exists) {
+          const enoentError = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
+          enoentError.code = 'ENOENT';
+          throw enoentError;
+        }
+        throw error;
       }
     },
 
     async lstat(filepath: string) {
+      // Expo FS doesn't support symlinks, so lstat behaves the same as stat.
+      // isSymbolicLink always returns false since mobile FS doesn't have symlinks.
       return fs.promises.stat(filepath);
     },
 
@@ -281,17 +299,20 @@ export async function gitCommit(
   const directory = workspace.wikiFolderLocation;
 
   try {
-    // Stage all changes
+    // Stage all changes using statusMatrix
     const status = await git.statusMatrix({ fs, dir: directory });
-    for (const [filepath, _headStatus, workdirStatus, stageStatus] of status) {
-      // workdirStatus 0 = absent, 2 = present
-      // stageStatus 0 = absent, 2 = present, 3 = added
-      if (workdirStatus !== stageStatus) {
+    for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
+      // headStatus: 0 = absent in HEAD, 1 = present in HEAD
+      // workdirStatus: 0 = absent in workdir, 2 = present in workdir
+      // stageStatus: 0 = absent in stage, 2 = present in stage, 3 = modified-and-staged
+
+      // Stage changes when workdir differs from HEAD or stage differs from HEAD
+      if (headStatus !== workdirStatus || headStatus !== stageStatus) {
         if (workdirStatus === 0) {
-          // File deleted
+          // File deleted in workdir, stage deletion
           await git.remove({ fs, dir: directory, filepath });
         } else {
-          // File added or modified
+          // File added or modified in workdir, stage addition/modification
           await git.add({ fs, dir: directory, filepath });
         }
       }
@@ -394,6 +415,10 @@ export async function gitPushToConflictBranch(
     // isomorphic-git checkout with force discards local changes.
     await git.checkout({ fs, dir: directory, ref: 'main', force: true });
 
+    // Clean untracked files that checkout --force doesn't remove.
+    // Without this, new local tiddler files get re-committed next cycle.
+    await cleanUntrackedFiles(directory);
+
     // Delete the local conflict branch (it already lives on remote)
     await git.deleteBranch({ fs, dir: directory, ref: branchName });
 
@@ -410,6 +435,71 @@ export async function gitPushToConflictBranch(
 }
 
 /**
+ * Resolve a git ref (e.g., 'HEAD') to its SHA, used for detecting pull changes
+ */
+export async function gitResolveReference(workspace: IWikiWorkspace, reference: string): Promise<string> {
+  try {
+    return await git.resolveRef({ fs, dir: workspace.wikiFolderLocation, ref: reference });
+  } catch (error) {
+    console.error(`Failed to resolve ${reference}: ${String(error)}`);
+    return '';
+  }
+}
+
+/**
+ * Get list of changed files via git status, with change type.
+ * Returns files that differ between HEAD and working directory.
+ */
+export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+  const directory = workspace.wikiFolderLocation;
+  try {
+    const status = await git.statusMatrix({ fs, dir: directory });
+    const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+    for (const [filepath, headStatus, workdirStatus] of status) {
+      if (headStatus !== workdirStatus) {
+        if (workdirStatus === 0) {
+          changes.push({ path: filepath, type: 'delete' });
+        } else if (headStatus === 0) {
+          changes.push({ path: filepath, type: 'add' });
+        } else {
+          changes.push({ path: filepath, type: 'modify' });
+        }
+      }
+    }
+    return changes;
+  } catch (error) {
+    console.error(`Failed to diff: ${(error as Error).message}`);
+    return [];
+  }
+}
+
+/**
+ * Remove untracked files from working directory (equivalent to git clean -fd).
+ * Needed after force-checkout to prevent untracked files from being re-committed.
+ */
+async function cleanUntrackedFiles(directory: string): Promise<void> {
+  try {
+    const status = await git.statusMatrix({ fs, dir: directory });
+    for (const [filepath, headStatus, workdirStatus] of status) {
+      // headStatus=0, workdirStatus=2 means file exists in workdir but not in HEAD → untracked
+      if (headStatus === 0 && workdirStatus === 2) {
+        const fullPath = `${directory}/${filepath}`;
+        try {
+          const file = new File(fullPath);
+          if (file.exists) {
+            file.delete();
+          }
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`cleanUntrackedFiles failed: ${(error as Error).message}`);
+  }
+}
+
+/**
  * Check if repository has uncommitted changes
  */
 export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean> {
@@ -420,7 +510,8 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
     return status.some(([_filepath, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
   } catch (error) {
     console.error(`Failed to check git status: ${(error as Error).message}`);
-    return false;
+    // Throw error to caller instead of silently returning false to prevent potential data loss
+    throw new Error(`Cannot determine git status: ${(error as Error).message}`);
   }
 }
 

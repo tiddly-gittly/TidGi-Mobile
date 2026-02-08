@@ -10,24 +10,28 @@ import { IWikiWorkspace } from '../../store/workspace';
 
 /**
  * Known mobile-relevant fields from tidgi.config.json
- * These are the fields that TidGi-Mobile understands and can modify
+ * Field names MUST match Desktop's schema to ensure interoperability.
+ * Desktop uses additionalProperties:false so unknown fields get dropped.
  */
 export interface ITidgiConfigKnownFields {
   /**
-   * Custom filter expressions for routing tiddlers to subwikis
+   * Allow reading file attachments
    */
-  customFilters?: Array<{
-    filter: string;
-    path: string;
-  }>;
+  allowReadFileAttachment?: boolean;
   /**
    * Enable quick load feature
    */
   enableQuickLoad?: boolean;
   /**
-   * File system path filters
+   * File system path filter expression (one TW filter per line).
+   * Desktop field name: fileSystemPathFilter (string | null)
    */
-  fileSystemPathFilters?: string[];
+  fileSystemPathFilter?: string | null;
+  /**
+   * Whether fileSystemPathFilter is active.
+   * Desktop field name: fileSystemPathFilterEnable
+   */
+  fileSystemPathFilterEnable?: boolean;
   /**
    * Include tag tree recursively in routing
    */
@@ -44,10 +48,6 @@ export interface ITidgiConfigKnownFields {
    * Tag-based routing rules
    */
   tagNames?: string[];
-  /**
-   * Allow reading file attachments
-   */
-  allowReadFileAttachment?: boolean;
 }
 
 /**
@@ -62,6 +62,8 @@ const DEFAULT_CONFIG: ITidgiConfigKnownFields = {
   enableQuickLoad: false,
   includeTagTree: false,
   allowReadFileAttachment: true,
+  fileSystemPathFilterEnable: false,
+  fileSystemPathFilter: null,
 };
 
 /**
@@ -91,10 +93,13 @@ export async function readTidgiConfig(workspace: IWikiWorkspace): Promise<ITidgi
     // Merge with defaults for known fields only
     const config: ITidgiConfig = {
       ...parsedConfig,
-      // Apply defaults only if not present, with proper type checking
       enableQuickLoad: typeof parsedConfig.enableQuickLoad === 'boolean' ? parsedConfig.enableQuickLoad : DEFAULT_CONFIG.enableQuickLoad,
       includeTagTree: typeof parsedConfig.includeTagTree === 'boolean' ? parsedConfig.includeTagTree : DEFAULT_CONFIG.includeTagTree,
       allowReadFileAttachment: typeof parsedConfig.allowReadFileAttachment === 'boolean' ? parsedConfig.allowReadFileAttachment : DEFAULT_CONFIG.allowReadFileAttachment,
+      fileSystemPathFilterEnable: typeof parsedConfig.fileSystemPathFilterEnable === 'boolean'
+        ? parsedConfig.fileSystemPathFilterEnable
+        : DEFAULT_CONFIG.fileSystemPathFilterEnable,
+      fileSystemPathFilter: typeof parsedConfig.fileSystemPathFilter === 'string' ? parsedConfig.fileSystemPathFilter : DEFAULT_CONFIG.fileSystemPathFilter,
     };
 
     return config;

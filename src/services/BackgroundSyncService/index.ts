@@ -7,13 +7,13 @@ import * as BackgroundTask from 'expo-background-task';
 import * as Device from 'expo-device';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
-import { Alert } from 'react-native';
+import { AppState } from 'react-native';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, IGitRemote } from '../GitService';
-import type { ITiddlerChange } from '../WikiStorageService/types';
+import { gitCommit, gitDiffChangedFiles, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, gitResolveReference, IGitRemote } from '../GitService';
+import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 
@@ -50,38 +50,95 @@ export class GitBackgroundSyncService {
   readonly #serverStore = useServerStore;
   readonly #workspaceStore = useWorkspaceStore;
   readonly #configStore = useConfigStore;
+  #syncIntervalId?: ReturnType<typeof setInterval>;
+  #isSyncing = false;
 
   public startBackgroundSync() {
+    // Stop existing interval if any
+    this.stopBackgroundSync();
+
     const syncInterval = this.#configStore.getState().syncInterval;
-    setInterval(this.sync.bind(this), syncInterval);
+    this.#syncIntervalId = setInterval(() => {
+      // Skip if already syncing
+      if (!this.#isSyncing) {
+        void this.sync();
+      }
+    }, syncInterval);
+
+    // Subscribe to config changes so interval restarts when syncInterval changes
+    this.#configUnsubscribe = this.#configStore.subscribe(
+      (state) => state.syncInterval,
+      (newInterval: number) => {
+        if (this.#syncIntervalId !== undefined) {
+          // Restart with new interval
+          this.stopBackgroundSync();
+          this.#syncIntervalId = setInterval(() => {
+            if (!this.#isSyncing) {
+              void this.sync();
+            }
+          }, newInterval);
+        }
+      },
+    );
+  }
+
+  #configUnsubscribe?: () => void;
+
+  public stopBackgroundSync() {
+    if (this.#syncIntervalId !== undefined) {
+      clearInterval(this.#syncIntervalId);
+      this.#syncIntervalId = undefined;
+    }
+    if (this.#configUnsubscribe) {
+      this.#configUnsubscribe();
+      this.#configUnsubscribe = undefined;
+    }
   }
 
   /**
    * Sync all workspaces with their configured servers
+   * Syncs with ALL online servers for each workspace (not just the first one)
    */
   public async sync(): Promise<{ haveUpdate: boolean; haveConnectedServer: boolean }> {
-    const workspaces = this.#workspaceStore.getState().workspaces;
-    let haveUpdate = false;
-    let haveConnectedServer = false;
+    // Prevent concurrent syncs
+    if (this.#isSyncing) {
+      console.log('Sync already in progress, skipping...');
+      return { haveUpdate: false, haveConnectedServer: false };
+    }
 
-    await this.updateServerOnlineStatus();
+    this.#isSyncing = true;
+    try {
+      const workspaces = this.#workspaceStore.getState().workspaces;
+      let haveUpdate = false;
+      let haveConnectedServer = false;
 
-    for (const workspace of workspaces) {
-      if (workspace.type === 'wiki') {
-        const server = this.getOnlineServerForWorkspace(workspace);
-        if (server !== undefined) {
-          haveConnectedServer = true;
-          try {
-            const updated = await this.syncWorkspaceWithServer(workspace, server);
-            haveUpdate = haveUpdate || updated;
-          } catch (error) {
-            console.error(`Failed to sync workspace ${workspace.name}:`, error);
+      await this.updateServerOnlineStatus();
+
+      for (const workspace of workspaces) {
+        if (workspace.type === 'wiki') {
+          // Sync with ALL online servers, not just the first one
+          const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
+
+          if (onlineServers.length > 0) {
+            haveConnectedServer = true;
+
+            for (const server of onlineServers) {
+              try {
+                const updated = await this.syncWorkspaceWithServer(workspace, server);
+                haveUpdate = haveUpdate || updated;
+              } catch (error) {
+                console.error(`Failed to sync workspace ${workspace.name} with server ${server.id}:`, error);
+                // Continue syncing with other servers even if one fails
+              }
+            }
           }
         }
       }
-    }
 
-    return { haveUpdate, haveConnectedServer };
+      return { haveUpdate, haveConnectedServer };
+    } finally {
+      this.#isSyncing = false;
+    }
   }
 
   /**
@@ -130,6 +187,7 @@ export class GitBackgroundSyncService {
 
   /**
    * Get online server for workspace (public method for UI)
+   * Returns first online server for compatibility
    */
   public getOnlineServerForWiki(workspace: IWikiWorkspace): IServerInfo | undefined {
     return this.getOnlineServerForWorkspace(workspace);
@@ -143,18 +201,29 @@ export class GitBackgroundSyncService {
   }
 
   /**
-   * Get change logs since last sync (for UI display)
-   * Returns empty array for now - git log parsing is deferred to when we have
-   * a working isomorphic-git integration with proper FS adapter
+   * Get change logs since last sync by parsing recent git commits
    */
-  public getChangeLogsSinceLastSync(_workspace: IWikiWorkspace): Promise<ITiddlerChange[]> {
-    // TODO: implement git log parsing once isomorphic-git is properly integrated
-    // The FS adapter used by GitService needs to be shared here
-    return Promise.resolve([]);
+  public async getChangeLogsSinceLastSync(workspace: IWikiWorkspace): Promise<ITiddlerChange[]> {
+    try {
+      const changes = await gitDiffChangedFiles(workspace);
+      return changes.map((change, index) => ({
+        id: index,
+        title: change.path.split('/').pop()?.replace(/\.(tid|meta)$/, '') ?? change.path,
+        operation: change.type === 'delete'
+          ? TiddlersLogOperation.DELETE
+          : change.type === 'add'
+          ? TiddlersLogOperation.INSERT
+          : TiddlersLogOperation.UPDATE,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch (error) {
+      console.error('Failed to get change logs:', error);
+      return [];
+    }
   }
 
   /**
-   * Get online server for workspace
+   * Get first online server for workspace (for backward compatibility)
    */
   private getOnlineServerForWorkspace(workspace: IWikiWorkspace): IServerInfo | undefined {
     const servers = this.#serverStore.getState().servers;
@@ -167,6 +236,24 @@ export class GitBackgroundSyncService {
     }
 
     return undefined;
+  }
+
+  /**
+   * Get all online servers for workspace
+   * Used for syncing with multiple remotes (e.g., home and office computers)
+   */
+  private getAllOnlineServersForWorkspace(workspace: IWikiWorkspace): IServerInfo[] {
+    const servers = this.#serverStore.getState().servers;
+    const onlineServers: IServerInfo[] = [];
+
+    for (const syncedServer of workspace.syncedServers) {
+      const server = servers[syncedServer.serverID] as IServerInfo | undefined;
+      if (server !== undefined && server.status === ServerStatus.online) {
+        onlineServers.push(server);
+      }
+    }
+
+    return onlineServers;
   }
 
   /**
@@ -188,12 +275,15 @@ export class GitBackgroundSyncService {
       // Mark sync as active
       this.setServerActive(workspace.id, server.id, true);
 
-      // 1. Pull latest changes — abort if pull fails (network issue, merge conflict)
+      // Record HEAD SHA before pull to detect if new commits arrived
+      const headBefore = await gitResolveReference(workspace, 'HEAD');
       await gitPull(workspace, remote);
-      // gitPull succeeds means remote changes were fetched (possibly a no-op)
-      haveUpdate = true;
+      const headAfter = await gitResolveReference(workspace, 'HEAD');
+      if (headBefore !== headAfter) {
+        haveUpdate = true;
+      }
 
-      // 2. Check if there are local changes
+      // Check if there are local changes
       const hasChanges = await gitHasChanges(workspace);
       if (!hasChanges) {
         this.updateLastSync(workspace.id, server.id);
@@ -219,13 +309,51 @@ export class GitBackgroundSyncService {
       return true;
     } catch (error) {
       console.error(`Sync failed for workspace ${workspace.name}:`, error);
-      Alert.alert(
-        i18n.t('Sync.SyncFailed'),
-        `${workspace.name}: ${(error as Error).message}`,
-      );
+      // Use safe notification instead of Alert.alert which crashes in background mode
+      this.#notifySyncError(workspace.name, (error as Error).message);
       return false;
     } finally {
       this.setServerActive(workspace.id, server.id, false);
+    }
+  }
+
+  /**
+   * Safe notification that works both in foreground and background
+   * Alert.alert crashes in iOS background task mode, so we check AppState first
+   */
+  #notifySyncError(workspaceName: string, errorMessage: string): void {
+    // Check if we're in active state before showing Alert (which crashes in background)
+    try {
+      if (AppState.currentState === 'active') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Alert = (require('react-native') as typeof import('react-native')).Alert;
+        Alert.alert(
+          i18n.t('Sync.SyncFailed'),
+          `${workspaceName}: ${errorMessage}`,
+        );
+      } else {
+        console.warn(`[BackgroundSync] ${workspaceName}: ${errorMessage}`);
+      }
+    } catch {
+      console.warn(`[BackgroundSync] ${workspaceName}: ${errorMessage}`);
+    }
+  }
+
+  #notifyConflict(branchName: string): void {
+    try {
+      if (AppState.currentState === 'active') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Alert = (require('react-native') as typeof import('react-native')).Alert;
+        Alert.alert(
+          i18n.t('Sync.ConflictDetected'),
+          i18n.t('Sync.ConflictMessage', { branch: branchName }),
+          [{ text: i18n.t('Common.OK'), style: 'default' }],
+        );
+      } else {
+        console.warn(`[BackgroundSync] Conflict pushed to branch: ${branchName}`);
+      }
+    } catch {
+      console.warn(`[BackgroundSync] Conflict pushed to branch: ${branchName}`);
     }
   }
 
@@ -241,18 +369,7 @@ export class GitBackgroundSyncService {
 
     try {
       const branchName = await gitPushToConflictBranch(workspace, remote, deviceId);
-
-      Alert.alert(
-        i18n.t('Sync.ConflictDetected'),
-        i18n.t('Sync.ConflictMessage', { branch: branchName }),
-        [
-          {
-            text: i18n.t('Common.OK'),
-            style: 'default',
-          },
-        ],
-      );
-
+      this.#notifyConflict(branchName);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (error) {
       console.error('Failed to push to conflict branch:', error);

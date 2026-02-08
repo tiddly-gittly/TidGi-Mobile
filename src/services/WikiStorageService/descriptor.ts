@@ -8,11 +8,9 @@ export const WikiStorageServiceIPCDescriptor: ProxyDescriptor = {
   channel: WikiStorageServiceChannel.name,
   properties: {
     deleteTiddler: ProxyPropertyType.Function,
-    getSkinnyTiddlers: ProxyPropertyType.Function,
     getStatus: ProxyPropertyType.Function,
     getWikiChangeObserver$: ProxyPropertyType.Function$,
     loadTiddlerText: ProxyPropertyType.Function,
-    loadTiddlersAsFileFromServer: ProxyPropertyType.Function,
     saveTiddler: ProxyPropertyType.Function,
   },
 };

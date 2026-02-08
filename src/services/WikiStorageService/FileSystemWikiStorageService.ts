@@ -11,7 +11,7 @@ import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParam } from 'tidd
 import { getWikiFilesPathByTitle, getWikiTiddlerFolderPath, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
-import { gitHasChanges } from '../GitService';
+import { gitDiffChangedFiles } from '../GitService';
 import { processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { IWikiServerStatusObject } from './types';
@@ -99,10 +99,10 @@ export class FileSystemWikiStorageService {
    * Save text tiddler as .tid file
    */
   #saveTextTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): void {
-    // Build header lines
+    // Build header lines (exclude text, title, and bag fields)
     const headerLines: string[] = [];
     for (const key of Object.keys(fields)) {
-      if (key !== 'text' && key !== 'title') {
+      if (key !== 'text' && key !== 'title' && key !== 'bag') {
         const value = fields[key];
         // Convert arrays to TW format
         if (Array.isArray(value)) {
@@ -121,9 +121,9 @@ export class FileSystemWikiStorageService {
     // Add title field
     headerLines.unshift(`title: ${title}`);
 
-    // Combine header and text
-    const content = headerLines.join('\n') + '\n\n' + text;
-
+    // Combine header and text with blank line separator
+    // Note: Consider atomic write (write-to-temp-then-rename) for crash safety
+    const content = text ? headerLines.join('\n') + '\n\n' + text : headerLines.join('\n');
     new File(filePath).write(content);
   }
 
@@ -133,10 +133,10 @@ export class FileSystemWikiStorageService {
   #saveBinaryTiddlerMetadata(title: string, fields: Record<string, unknown>, binaryPath: string): void {
     const metaPath = `${binaryPath}.meta`;
 
-    // Build meta content
+    // Build meta content (exclude text, title, canonical_uri, and bag)
     const metaLines: string[] = [`title: ${title}`];
     for (const key of Object.keys(fields)) {
-      if (key !== 'text' && key !== 'title' && key !== '_canonical_uri') {
+      if (key !== 'text' && key !== 'title' && key !== '_canonical_uri' && key !== 'bag') {
         const value = fields[key];
         if (Array.isArray(value)) {
           const formatted = (value as string[]).map(v => v.includes(' ') ? `[[${v}]]` : v).join(' ');
@@ -218,7 +218,8 @@ export class FileSystemWikiStorageService {
    */
   #findTiddlerFileRecursively(title: string): string | undefined {
     const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
-    const sanitizedTitle = title.replaceAll(/[/\\:*?"<>|]/g, '_');
+    // Use unified sanitize regex (matches paths.ts INVALID_CHARACTERS_REGEX)
+    const sanitizedTitle = title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_');
 
     const search = (directory: Directory): string | undefined => {
       try {
@@ -269,25 +270,20 @@ export class FileSystemWikiStorageService {
       // Try files folder
       return await new File(getWikiFilesPathByTitle(this.#workspace, title)).text();
     } catch {
-      // Try canonical_uri path
+      // Try canonical_uri path — search recursively for matching .meta file
       try {
-        const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
-        const directory = new Directory(tiddlerFolderPath);
-        const files = directory.list();
-
-        // Find corresponding .meta file
-        for (const entry of files) {
-          if (entry.name.endsWith('.meta')) {
-            const metaFile = new File(entry.uri);
-            const metaContent = await metaFile.text();
-
-            // Check if this meta file is for our title
-            if (metaContent.includes(`title: ${title}`)) {
-              // Load the actual binary file
-              const binaryPath = entry.uri.replace('.meta', '');
-              return await new File(binaryPath).text();
+        const found = this.#findTiddlerFileRecursively(title);
+        if (found) {
+          const content = await new File(found).text();
+          // If it's a .tid file, extract text part
+          if (found.endsWith('.tid')) {
+            const blankLineMatch = /\r?\n\r?\n/.exec(content);
+            if (blankLineMatch !== null) {
+              return content.substring(blankLineMatch.index + blankLineMatch[0].length);
             }
           }
+          // If it's a binary file with .meta, return the binary content
+          return content;
         }
       } catch {
         // Ignore
@@ -326,10 +322,24 @@ export class FileSystemWikiStorageService {
         if (!isWatching) return;
 
         try {
-          const hasChanges = await gitHasChanges(this.#workspace);
-
-          if (hasChanges) {
-            observer.next({} as IChangedTiddlers);
+          const changedFiles = await gitDiffChangedFiles(this.#workspace);
+          if (changedFiles.length > 0) {
+            // Convert changed file paths to tiddler titles
+            const changes: IChangedTiddlers = {};
+            for (const changedFile of changedFiles) {
+              // Derive tiddler title from file path
+              const title = this.#titleFromFilePath(changedFile.path);
+              if (title) {
+                if (changedFile.type === 'delete') {
+                  changes[title] = { deleted: true };
+                } else {
+                  changes[title] = { modified: true };
+                }
+              }
+            }
+            if (Object.keys(changes).length > 0) {
+              observer.next(changes);
+            }
           }
         } catch (error) {
           console.error('Error checking for changes:', error);
@@ -347,6 +357,19 @@ export class FileSystemWikiStorageService {
         }
       };
     });
+  }
+
+  /**
+   * Derive a tiddler title from a relative file path.
+   * Reverses the sanitization applied during save.
+   */
+  #titleFromFilePath(relativePath: string): string | undefined {
+    // Strip directory prefix (tiddlers/, files/, etc.)
+    const filename = relativePath.split('/').pop();
+    if (!filename) return undefined;
+    // Strip .tid or .meta extension
+    const title = filename.replace(/\.(tid|meta)$/, '');
+    return title || undefined;
   }
 }
 

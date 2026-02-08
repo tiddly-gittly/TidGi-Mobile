@@ -184,7 +184,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             state.workspaces.forEach(workspace => {
               if (workspace.type === 'wiki' && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
                 workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
-                state.update(workspace.id, workspace);
+                // No need to call state.update() - immer already tracks mutations
               }
             });
           });

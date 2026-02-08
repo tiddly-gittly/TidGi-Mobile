@@ -3,11 +3,12 @@
  * Allows users to create and manage sub-wikis with routing rules
  */
 
-import React, { FC, useCallback, useState } from 'react';
+import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView } from 'react-native';
 import { Button, Card, Chip, Dialog, IconButton, List, Portal, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { readTidgiConfig, writeTidgiConfig } from '../services/WikiStorageService/tidgiConfigManager';
 import { IWikiWorkspace } from '../store/workspace';
 
 const Container = styled(ScrollView)`
@@ -91,11 +92,25 @@ export interface ISubWikiManagerProps {
   workspace: IWikiWorkspace;
 }
 
-export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace: _workspace }) => {
+export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace }) => {
   const { t } = useTranslation();
   const [subWikis, setSubWikis] = useState<ISubWikiConfig[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingSubWiki, setEditingSubWiki] = useState<ISubWikiConfig | null>(null);
+
+  // Load sub-wiki config from tidgi.config.json on mount
+  useEffect(() => {
+    void (async () => {
+      try {
+        const config = await readTidgiConfig(workspace);
+        if (config.subWikis && Array.isArray(config.subWikis)) {
+          setSubWikis(config.subWikis as ISubWikiConfig[]);
+        }
+      } catch (error) {
+        console.error('Failed to load sub-wiki config:', error);
+      }
+    })();
+  }, [workspace]);
 
   // Form state
   const [newName, setNewName] = useState('');
@@ -126,6 +141,14 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace: _workspace
     setNewTagNames(newTagNames.filter(t => t !== tag));
   }, [newTagNames]);
 
+  const persistSubWikis = useCallback(async (updatedSubWikis: ISubWikiConfig[]) => {
+    try {
+      await writeTidgiConfig(workspace, { subWikis: updatedSubWikis });
+    } catch (error) {
+      console.error('Failed to persist sub-wiki config:', error);
+    }
+  }, [workspace]);
+
   const handleSaveSubWiki = useCallback(() => {
     if (!newName.trim() || !newPath.trim()) {
       alert(t('SubWiki.NameAndPathRequired'));
@@ -141,17 +164,18 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace: _workspace
       customFilters: newCustomFilters.trim() || undefined,
     };
 
+    let updatedSubWikis: ISubWikiConfig[];
     if (editingSubWiki) {
-      // Update existing
-      setSubWikis(subWikis.map(sw => sw.id === editingSubWiki.id ? subWiki : sw));
+      updatedSubWikis = subWikis.map(sw => sw.id === editingSubWiki.id ? subWiki : sw);
     } else {
-      // Add new
-      setSubWikis([...subWikis, subWiki]);
+      updatedSubWikis = [...subWikis, subWiki];
     }
+    setSubWikis(updatedSubWikis);
+    void persistSubWikis(updatedSubWikis);
 
     setShowAddDialog(false);
     resetForm();
-  }, [newName, newPath, newTagNames, newIncludeTagTree, newCustomFilters, editingSubWiki, subWikis, resetForm, t]);
+  }, [newName, newPath, newTagNames, newIncludeTagTree, newCustomFilters, editingSubWiki, subWikis, resetForm, t, persistSubWikis]);
 
   const handleEditSubWiki = useCallback((subWiki: ISubWikiConfig) => {
     setEditingSubWiki(subWiki);
@@ -164,8 +188,10 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace: _workspace
   }, []);
 
   const handleDeleteSubWiki = useCallback((id: string) => {
-    setSubWikis(subWikis.filter(sw => sw.id !== id));
-  }, [subWikis]);
+    const updatedSubWikis = subWikis.filter(sw => sw.id !== id);
+    setSubWikis(updatedSubWikis);
+    void persistSubWikis(updatedSubWikis);
+  }, [subWikis, persistSubWikis]);
 
   return (
     <Container>
