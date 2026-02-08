@@ -73,6 +73,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
   const [serverUriToUseString, setServerUriToUseString] = useState(wikiUrl?.toString() ?? '');
   const [wikiName, setWikiName] = useState('wiki');
+  const [qrData, setQrData] = useState<{ baseUrl: string; workspaceId: string; token: string } | undefined>();
   const addServer = useServerStore(state => state.add);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
@@ -91,12 +92,11 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         setQrScannerOpen(false);
         // Try to parse as JSON (Git QR format)
         try {
-          const qrData = JSON.parse(data);
-          if (qrData.baseUrl && qrData.workspaceId && qrData.token) {
+          const parsed = JSON.parse(data);
+          if (parsed.baseUrl && parsed.workspaceId && parsed.token) {
             // Valid Git QR code
-            setServerUriToUseString(qrData.baseUrl);
-            // Store for later use
-            (window as any).__tidgiQrData = qrData;
+            setServerUriToUseString(parsed.baseUrl);
+            setQrData(parsed);
             return;
           }
         } catch {
@@ -134,9 +134,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
 
-    // Get QR data if available (from QR scan)
-    const qrData = (window as any).__tidgiQrData;
-
     if (addAsServer) {
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
 
@@ -154,9 +151,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     }
 
     setWikiUrl(undefined);
-    // Clean up QR data
-    delete (window as any).__tidgiQrData;
-  }, [addAsServer, addServer, importWiki, wikiName, wikiUrl?.origin]);
+    setQrData(undefined);
+  }, [addAsServer, addServer, importWiki, wikiName, wikiUrl?.origin, qrData]);
 
   if (hasPermission === undefined) {
     return <Text>Requesting for camera permission</Text>;

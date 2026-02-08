@@ -126,7 +126,7 @@ export async function writeTidgiConfig(
 
     // Write back to file
     const content = JSON.stringify(newConfig, null, 2);
-    await new File(configPath).write(content);
+    new File(configPath).write(content);
   } catch (error) {
     console.error(`Failed to write tidgi.config.json: ${(error as Error).message}`);
     throw error;
@@ -177,7 +177,23 @@ export async function syncWorkspaceToConfig(workspace: IWikiWorkspace): Promise<
 // Alias exports for compatibility with UI components
 export { readTidgiConfig as getTidgiConfig };
 export async function saveTidgiConfig(wikiFolderPath: string, config: ITidgiConfig): Promise<void> {
-  // Create temporary workspace object for writeTidgiConfig
-  const temporaryWorkspace = { wikiFolderLocation: wikiFolderPath } as IWikiWorkspace;
-  await writeTidgiConfig(temporaryWorkspace, config);
+  try {
+    const configPath = `${wikiFolderPath}/tidgi.config.json`;
+    const file = new File(configPath);
+
+    // Read existing config to preserve unknown fields
+    let existingConfig: Record<string, unknown> = {};
+    if (file.exists) {
+      const existingContent = await file.text();
+      existingConfig = JSON.parse(existingContent) as Record<string, unknown>;
+    }
+
+    // Merge new config with existing, preserving unknown fields
+    const mergedConfig = { ...existingConfig, ...config };
+    const content = JSON.stringify(mergedConfig, null, 2);
+    file.write(content);
+  } catch (error) {
+    console.error(`Failed to save tidgi.config.json: ${(error as Error).message}`);
+    throw error;
+  }
 }

@@ -12,7 +12,6 @@ import { getWikiTiddlerFolderPath } from '../../../constants/paths';
 import {
   getTitleFromFilename,
   makeSkinnyTiddler,
-  parseMetadataFile,
   parseTiddlerFile,
   processFields,
   shouldSaveFullTiddler,
@@ -165,33 +164,8 @@ export class FileSystemTiddlersReadStream extends Readable {
       // Derive title from filename
       const title = getTitleFromFilename(filename);
 
-      // Parse the .tid file
+      // Parse the .tid file (header fields + text body)
       const fields = parseTiddlerFile(content, { title });
-
-      // Check if there's a corresponding binary file with .meta
-      // For binary files, the pattern is: file.ext + file.ext.meta
-      const metaPath = filePath.replace(/\.tid$/, '.meta');
-      const binaryPath = filePath.replace(/\.tid$/, '');
-
-      const metaFile = new File(metaPath);
-      const metaExists = metaFile.exists;
-      if (metaExists) {
-        // This is metadata for a binary file
-        const metaContent = await metaFile.text();
-        const metaFields = parseMetadataFile(metaContent);
-
-        // Merge fields
-        Object.assign(fields, metaFields);
-
-        // Check if binary file exists
-        const binaryFile = new File(binaryPath);
-        const binaryExists = binaryFile.exists;
-        if (binaryExists) {
-          // Set canonical_uri to point to files/ folder
-          const relativeUri = `files/${filename.replace(/\.tid$/, '')}`;
-          (fields as any)._canonical_uri = relativeUri;
-        }
-      }
 
       // Process and return fields
       return processFields(fields) as ITiddlerFields;

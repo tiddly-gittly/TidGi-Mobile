@@ -91,7 +91,8 @@ const fs = {
       try {
         const directory = new Directory(filepath);
         const entries = directory.list();
-        return entries.map(entry => entry.name);
+        // isomorphic-git expects plain filenames without trailing slashes
+        return entries.map(entry => entry.name.replace(/\/$/, ''));
       } catch {
         const error = new Error(`ENOENT: no such file or directory, scandir '${filepath}'`) as NodeJS.ErrnoException;
         error.code = 'ENOENT';
@@ -134,26 +135,34 @@ const fs = {
       mtimeMs: number;
     }> {
       try {
-        const file = new File(filepath);
-        const exists = file.exists;
+        // Check directory first since File class is for files only
+        const directory = new Directory(filepath);
+        if (directory.exists) {
+          return {
+            isFile: () => false,
+            isDirectory: () => true,
+            isSymbolicLink: () => false,
+            size: 0,
+            mode: 0o777,
+            mtimeMs: Date.now(),
+          };
+        }
 
-        if (!exists) {
+        const file = new File(filepath);
+        if (!file.exists) {
           const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
           error.code = 'ENOENT';
           throw error;
         }
 
         const info = file.info();
-        const infoWithType = info as { size?: number; modificationTime?: number; type?: string };
-        const isDirectory = infoWithType.type === 'directory';
-
         return {
-          isFile: () => !isDirectory,
-          isDirectory: () => isDirectory,
+          isFile: () => true,
+          isDirectory: () => false,
           isSymbolicLink: () => false,
           size: info.size ?? 0,
           mode: 0o666,
-          mtimeMs: info.modificationTime ?? Date.now(),
+          mtimeMs: Date.now(),
         };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -166,8 +175,7 @@ const fs = {
     },
 
     async lstat(filepath: string) {
-      // Expo FileSystem doesn't support symlinks, so lstat is same as stat
-      return this.stat(filepath);
+      return fs.promises.stat(filepath);
     },
 
     async readlink(_filepath: string): Promise<string> {

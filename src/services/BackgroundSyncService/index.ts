@@ -13,7 +13,7 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCommit, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, IGitRemote } from '../GitService';
-import { ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
+import { ITiddlerChange } from '../WikiStorageService/types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
 
@@ -144,74 +144,13 @@ export class GitBackgroundSyncService {
 
   /**
    * Get change logs since last sync (for UI display)
-   * Parses git log to extract tiddler file changes
+   * Returns empty array for now - git log parsing is deferred to when we have
+   * a working isomorphic-git integration with proper FS adapter
    */
-  public async getChangeLogsSinceLastSync(workspace: IWikiWorkspace): Promise<ITiddlerChange[]> {
-    try {
-      const syncedServer = workspace.syncedServers[0];
-      if (!syncedServer) return [];
-
-      // Get git log since last sync
-      const git = await import('isomorphic-git');
-      const fs = await import('expo-file-system');
-
-      const lastSyncTime = syncedServer.lastSync || 0;
-      const lastSyncDate = new Date(lastSyncTime);
-
-      // Get commits since last sync
-      const commits = await git.log({
-        fs: fs as any,
-        dir: workspace.wikiFolderLocation,
-        ref: 'HEAD',
-        since: lastSyncDate,
-      });
-
-      const changes: ITiddlerChange[] = [];
-
-      // Parse each commit to extract tiddler changes
-      for (const commit of commits) {
-        // Get changed files in this commit
-        const changedFiles = await git.walk({
-          fs: fs as any,
-          dir: workspace.wikiFolderLocation,
-          trees: [git.TREE({ ref: commit.oid }), git.TREE({ ref: `${commit.oid}^` })],
-          map: async (filepath, [newTree, oldTree]) => {
-            // Skip if not a tiddler file
-            if (!filepath.endsWith('.tid') && !filepath.endsWith('.meta')) {
-              return null;
-            }
-
-            // Determine operation type
-            let operation: TiddlersLogOperation;
-            if (!await oldTree?.type()) {
-              operation = TiddlersLogOperation.INSERT;
-            } else if (!await newTree?.type()) {
-              operation = TiddlersLogOperation.DELETE;
-            } else {
-              operation = TiddlersLogOperation.UPDATE;
-            }
-
-            // Extract tiddler title from filename
-            const filename = filepath.split('/').pop() || '';
-            const title = filename.replace(/\.(tid|meta)$/, '').replace(/_/g, ' ');
-
-            return {
-              title,
-              operation,
-              timestamp: commit.commit.committer.timestamp * 1000,
-              fields: {}, // Could parse file content if needed
-            };
-          },
-        });
-
-        changes.push(...changedFiles.filter(Boolean) as ITiddlerChange[]);
-      }
-
-      return changes;
-    } catch (error) {
-      console.error('Failed to get change logs:', error);
-      return [];
-    }
+  public getChangeLogsSinceLastSync(_workspace: IWikiWorkspace): Promise<ITiddlerChange[]> {
+    // TODO: implement git log parsing once isomorphic-git is properly integrated
+    // The FS adapter used by GitService needs to be shared here
+    return Promise.resolve([]);
   }
 
   /**
@@ -221,8 +160,8 @@ export class GitBackgroundSyncService {
     const servers = this.#serverStore.getState().servers;
 
     for (const syncedServer of workspace.syncedServers) {
-      const server = servers[syncedServer.serverID];
-      if (server?.status === ServerStatus.online) {
+      const server = servers[syncedServer.serverID] as IServerInfo | undefined;
+      if (server !== undefined && server.status === ServerStatus.online) {
         return server;
       }
     }
@@ -278,7 +217,7 @@ export class GitBackgroundSyncService {
       try {
         await gitPush(workspace, remote);
         this.updateLastSync(workspace.id, server.id);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (error) {
         if ((error as Error).message === 'PUSH_CONFLICT') {
           // Push to conflict branch
@@ -307,7 +246,7 @@ export class GitBackgroundSyncService {
   private async handlePushConflict(
     workspace: IWikiWorkspace,
     remote: IGitRemote,
-    server: IServerInfo,
+    _server: IServerInfo,
   ): Promise<void> {
     const deviceId = Device.modelName ?? 'unknown';
 
@@ -325,7 +264,7 @@ export class GitBackgroundSyncService {
         ],
       );
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (error) {
       console.error('Failed to push to conflict branch:', error);
       throw error;
@@ -369,15 +308,12 @@ export class GitBackgroundSyncService {
    * Update last sync time
    */
   private updateLastSync(workspaceId: string, serverId: string): void {
-    const workspaces = this.#workspaceStore.getState().workspaces;
-    const workspace = workspaces.find(w => w.id === workspaceId);
+    const update = this.#workspaceStore.getState().update;
+    const workspace = this.#workspaceStore.getState().workspaces.find(w => w.id === workspaceId);
 
     if (workspace?.type === 'wiki') {
-      const syncedServer = workspace.syncedServers.find(s => s.serverID === serverId);
-      if (syncedServer !== undefined) {
-        syncedServer.lastSync = Date.now();
-        this.#workspaceStore.setState({ workspaces });
-      }
+      const newSyncedServers = workspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
+      update(workspaceId, { syncedServers: newSyncedServers });
     }
   }
 }

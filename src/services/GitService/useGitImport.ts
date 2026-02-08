@@ -62,11 +62,10 @@ export function useGitImport() {
 
       // Clean up any existing folder
       const dir = new Directory(newWorkspace.wikiFolderLocation);
-      const dirExists = dir.exists;
-      if (dirExists) {
-        await dir.delete();
+      if (dir.exists) {
+        dir.delete();
       }
-      await dir.create();
+      dir.create();
 
       // 2. Clone repository
       setStatus('cloning');
@@ -80,15 +79,11 @@ export function useGitImport() {
         setCloneProgress({ phase, loaded, total });
       });
 
-      // 3. Download skinny HTML
+      // 3. Download skinny HTML (no auth required for this endpoint)
       setStatus('downloading-html');
       const skinnyHtmlUrl = new URL('/tw-mobile-sync/get-skinny-html', qrData.baseUrl);
 
-      const response = await fetch(skinnyHtmlUrl.toString(), {
-        headers: {
-          Authorization: `Bearer ${qrData.token}`,
-        },
-      });
+      const response = await fetch(skinnyHtmlUrl.toString());
 
       if (!response.ok) {
         throw new Error(`Failed to download HTML: ${response.statusText}`);
@@ -96,7 +91,7 @@ export function useGitImport() {
 
       const htmlContent = await response.text();
       const htmlFile = new File(getWikiFilePath(newWorkspace));
-      await htmlFile.write(htmlContent);
+      htmlFile.write(htmlContent);
       setHtmlDownloadProgress(1);
 
       setStatus('success');

@@ -47,8 +47,6 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
   const [loading, setLoading] = useState(true);
   const [newTagName, setNewTagName] = useState('');
 
-  const workspaceStore = useWorkspaceStore();
-
   // Load config
   useEffect(() => {
     const loadConfig = async () => {

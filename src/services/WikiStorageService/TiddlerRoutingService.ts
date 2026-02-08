@@ -33,112 +33,32 @@ export interface IRoutingResult {
  * Delegates to WebView for complex filter evaluation
  */
 export class TiddlerRoutingService {
-  #webViewRef?: any; // Reference to WebView for message passing
-
-  /**
-   * Set WebView reference for communication
-   */
-  public setWebViewRef(webViewReference: any) {
-    this.#webViewRef = webViewReference;
-  }
-
   /**
    * Route a tiddler to appropriate workspace using tidgi.config.json rules
-   * For complete routing, delegates to WebView's TiddlyWiki filter engine
+   * Currently only supports native-side tag matching (without WebView filter engine)
    */
   public async routeTiddler(
     title: string,
     fields: ITiddlerFields,
     workspace: IWikiWorkspace,
-    workspaces: IWikiWorkspace[],
+    _workspaces: IWikiWorkspace[],
   ): Promise<IRoutingResult> {
-    // Try WebView routing first (for full filter support)
-    if (this.#webViewRef) {
-      try {
-        const result = await this.#routeViaWebView(title, fields, workspace, workspaces);
-        if (result) {
-          return result;
-        }
-      } catch (error) {
-        console.warn('WebView routing failed, falling back to native:', error);
-      }
-    }
-
-    // Fallback: Native routing with limited filter support
+    // Native routing with tag-based matching
     const config = await readTidgiConfig(workspace);
 
     // Check if tiddler matches workspace rules
     if (this.#shouldRouteToWorkspace(title, fields, config)) {
       return {
         workspaceId: workspace.id,
-        workspaceName: workspace.name,
+        workspaceName: config.name ?? workspace.name,
       };
     }
 
-    // Default: route to main workspace
+    // No match: return main workspace (caller decides default)
     return {
       workspaceId: workspace.id,
       workspaceName: workspace.name,
     };
-  }
-
-  /**
-   * Route tiddler via WebView (full TiddlyWiki filter support)
-   */
-  async #routeViaWebView(
-    title: string,
-    fields: ITiddlerFields,
-    workspace: IWikiWorkspace,
-    workspaces: IWikiWorkspace[],
-  ): Promise<IRoutingResult | null> {
-    return new Promise((resolve, reject) => {
-      const messageId = `route-${Date.now()}`;
-
-      // Listen for response
-      const handleMessage = (event: any) => {
-        try {
-          const data = JSON.parse(event.nativeEvent.data);
-          if (data.messageId === messageId) {
-            window.removeEventListener('message', handleMessage);
-
-            if (data.error) {
-              reject(new Error(data.error));
-            } else {
-              resolve(data.result || null);
-            }
-          }
-        } catch (error) {
-          // Ignore parse errors
-        }
-      };
-
-      window.addEventListener('message', handleMessage);
-
-      // Prepare workspace configs for WebView
-      const workspaceConfigs = workspaces.map(ws => ({
-        id: ws.id,
-        name: ws.name,
-        // Config will be loaded from tidgi.config.json in WebView
-      }));
-
-      // Send message to WebView
-      this.#webViewRef.postMessage(JSON.stringify({
-        type: 'routeTiddler',
-        messageId,
-        payload: {
-          title,
-          fields,
-          workspaceId: workspace.id,
-          workspaces: workspaceConfigs,
-        },
-      }));
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        window.removeEventListener('message', handleMessage);
-        reject(new Error('Routing timeout'));
-      }, 5000);
-    });
   }
 
   /**
@@ -151,7 +71,11 @@ export class TiddlerRoutingService {
   ): boolean {
     // Check tag-based routing
     if (config.tagNames && config.tagNames.length > 0) {
-      const tiddlerTags = (fields.tags) || [];
+      // tags may be a string[] or a space-separated string from .tid files
+      const rawTags = (fields as Record<string, unknown>).tags;
+      const tiddlerTags: string[] = Array.isArray(rawTags)
+        ? rawTags as string[]
+        : (typeof rawTags === 'string' ? rawTags.split(' ').filter(Boolean) : []);
 
       // Check direct tag match
       const hasMatchingTag = config.tagNames.some(tag => tiddlerTags.includes(tag));
@@ -161,11 +85,7 @@ export class TiddlerRoutingService {
       if (config.tagNames.includes(title)) return true;
 
       // Note: includeTagTree requires WebView filter evaluation
-      // Will be fully implemented when sub-wiki UI is added
     }
-
-    // Note: customFilters requires WebView filter evaluation
-    // Will be fully implemented when sub-wiki UI is added
 
     return false;
   }
