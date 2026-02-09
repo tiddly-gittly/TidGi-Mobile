@@ -22,6 +22,7 @@ module.exports = {
     sourceExts: [...sourceExts, 'mjs', 'sql'],
     extraNodeModules: new Proxy(
       {
+        buffer: require.resolve('buffer'),
         stream: require.resolve('readable-stream'),
         // crypto: require.resolve('react-native-crypto-js'),
       },

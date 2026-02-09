@@ -165,9 +165,9 @@ export function useGitImport() {
 
       setStatus('success');
       return newWorkspace;
-    } catch (error_) {
-      console.error('Git import failed:', error_);
-      setError((error_ as Error).message);
+    } catch (error) {
+      console.error('Git import failed:', (error as Error).stack);
+      setError((error as Error).message);
       setStatus('error');
 
       // Clean up on error: remove both workspace entry and created folder

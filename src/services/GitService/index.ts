@@ -3,10 +3,16 @@
  * Handles clone, pull, push with Basic Auth
  */
 
+import { Buffer } from 'buffer';
 import { Directory, File } from 'expo-file-system';
 import git from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import { IWikiWorkspace } from '../../store/workspace';
+
+// Polyfill Buffer globally for isomorphic-git
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
 
 /**
  * Git remote configuration with authentication

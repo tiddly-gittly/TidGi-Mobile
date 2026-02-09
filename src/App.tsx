@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import i18n from 'i18next';
@@ -18,6 +19,11 @@ import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspac
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
+
+// Polyfill Buffer globally for isomorphic-git and other Node.js modules
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
 
 const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
