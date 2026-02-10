@@ -4,6 +4,7 @@
 // import { escape } from 'html-escaper';
 
 $.cwd = 'plugins';
+await $`pnpm install`;
 await $`npm run build`;
 $.cwd = undefined;
 fs.mkdirpSync('assets/plugins');
