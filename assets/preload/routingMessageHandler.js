@@ -60,7 +60,7 @@
    */
   async function handleRouteTiddlerMessage(message) {
     const { messageId, payload } = message;
-    const { title, fields, workspaceId, workspaces } = payload;
+    const { title, fields, workspaces } = payload;
 
     try {
       // Load configs for all workspaces

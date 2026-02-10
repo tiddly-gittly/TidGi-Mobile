@@ -182,7 +182,7 @@
     }
 
     // Default: use sanitized title as filename
-    const sanitized = tiddlerTitle.replace(/["#%&'*/:<=>?\\\\{}]/g, '_');
+    const sanitized = tiddlerTitle.replace(/["#%&'*/:<=>?\\{}]/g, '_');
     return `tiddlers/${sanitized}.tid`;
   }
 

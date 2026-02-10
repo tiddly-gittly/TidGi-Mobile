@@ -10,7 +10,7 @@ import React from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
-import { styled, ThemeProvider } from 'styled-components';
+import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
