@@ -4,8 +4,7 @@
 // import { escape } from 'html-escaper';
 
 $.cwd = 'plugins';
-await $`pnpm install`;
-await $`npm run build`;
+await $`pnpm run build`;
 $.cwd = undefined;
 fs.mkdirpSync('assets/plugins');
 // use .html to prevent include its content directly in the bundle. Only .html will be recognized as asset, .txt will say "not exist"
