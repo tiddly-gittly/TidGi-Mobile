@@ -60,7 +60,6 @@ export function useStreamChunksToWebView(
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
          */
         sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
-        tiddlersStream.init();
         /**
          * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
          */

@@ -67,6 +67,11 @@ export interface IWikiServerSync {
  */
 const LAST_SYNC_TO_SYNC_ALL = 1;
 export interface WikiState {
+  /**
+   * User-selected custom wiki storage directory. When set, new wikis will be
+   * created here instead of the default internal document directory.
+   */
+  customWikiFolderPath: string | null;
   workspaces: IWorkspace[];
 }
 interface WikiActions {
@@ -78,6 +83,7 @@ interface WikiActions {
   remove: (id: string) => void;
   removeAll: () => void;
   removeSyncedServersFromWorkspace: (serverIDToRemove: string) => void;
+  setCustomWikiFolderPath: (path: string | null) => void;
   setServerActive: (id: string, serverIDToActive: string, isActive?: boolean) => void;
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
@@ -91,19 +97,26 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
   immer(devtools(
     persist(
       (set) => ({
+        customWikiFolderPath: null,
         workspaces: defaultWorkspaces,
         add(newWorkspace) {
           let result: IWorkspace | undefined;
           set((state) => {
             switch (newWorkspace.type) {
               case 'wiki': {
-                if (!WIKI_FOLDER_PATH) return;
+                // When customWikiFolderPath is set (file:// path from MANAGE_EXTERNAL_STORAGE),
+                // use it as the base. Otherwise fall back to internal WIKI_FOLDER_PATH.
+                const customPath = state.customWikiFolderPath;
+                const wikiFolderBasePath = customPath
+                  ? (customPath.endsWith('/') ? customPath : `${customPath}/`)
+                  : WIKI_FOLDER_PATH;
+                if (!wikiFolderBasePath) return;
                 // name can't be empty
                 newWorkspace.name = newWorkspace.name || 'wiki';
                 // can have same name, but not same id
                 const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name || workspace.id === newWorkspace.name);
                 const id = sameNameWorkspace ? `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}` : newWorkspace.name;
-                const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
+                const wikiFolderLocation = `${wikiFolderBasePath}${id}`;
                 const newWikiWorkspaceWithID = {
                   ...(newWorkspace as IWikiWorkspace),
                   id,
@@ -126,6 +139,11 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             }
           });
           return result;
+        },
+        setCustomWikiFolderPath(path) {
+          set((state) => {
+            state.customWikiFolderPath = path;
+          });
         },
         update(id, newWikiWorkspace) {
           set((state) => {

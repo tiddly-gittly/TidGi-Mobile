@@ -151,12 +151,14 @@ export class FileSystemTiddlersReadStream extends Readable {
 
         for (let index = this.currentIndex; index < limitedEndIndex; index++) {
           const filePath = this.tiddlerFiles[index];
-          const tiddler = await this.readTiddlerFromFile(filePath);
-          if (tiddler) {
-            // Create skinny tiddler unless it should save full
-            const tiddlerToSave = shouldSaveFullTiddler(tiddler) ? tiddler : makeSkinnyTiddler(tiddler);
-            chunk.push(tiddlerToSave as Record<string, string | string[]>);
-            this.tiddlerCount++;
+          const result = await this.readTiddlerFromFile(filePath);
+          if (result) {
+            const tiddlers = Array.isArray(result) ? result : [result];
+            for (const tiddler of tiddlers) {
+              const tiddlerToSave = shouldSaveFullTiddler(tiddler) ? tiddler : makeSkinnyTiddler(tiddler);
+              chunk.push(tiddlerToSave as Record<string, string | string[]>);
+              this.tiddlerCount++;
+            }
           }
         }
 
@@ -191,7 +193,7 @@ export class FileSystemTiddlersReadStream extends Readable {
    * Read and parse a single tiddler file.
    * Supports .tid (header+body), .json (tiddler JSON), and .meta (binary companion).
    */
-  private async readTiddlerFromFile(filePath: string): Promise<ITiddlerFields | null> {
+  private async readTiddlerFromFile(filePath: string): Promise<ITiddlerFields | ITiddlerFields[] | null> {
     try {
       const file = new File(filePath);
       const filename = filePath.split('/').pop() ?? '';
@@ -203,8 +205,10 @@ export class FileSystemTiddlersReadStream extends Readable {
           const parsed = JSON.parse(content) as Record<string, unknown>;
           // JSON may be a single tiddler or an array of tiddlers
           if (Array.isArray(parsed)) {
-            // Array of tiddlers — only return first, stream handles one-at-a-time
-            return parsed.length > 0 ? processFields(parsed[0] as Partial<ITiddlerFields>) as ITiddlerFields : null;
+            const results = parsed
+              .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object' && 'title' in item)
+              .map(item => processFields(item as Partial<ITiddlerFields>) as ITiddlerFields);
+            return results.length > 0 ? results : null;
           }
           if (parsed.title) {
             return processFields(parsed as Partial<ITiddlerFields>) as ITiddlerFields;

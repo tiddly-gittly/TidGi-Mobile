@@ -6,7 +6,9 @@
 import { Directory, File } from 'expo-file-system';
 import { useState } from 'react';
 import { APP_CACHE_FOLDER_PATH, getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
+import { recursiveDeleteDirectory } from '../../pages/Config/Developer/useClearAllWikiData';
 import { gitClone, IGitRemote } from '../../services/GitService';
+import { ensureDirectoryExists } from '../../services/StoragePermissionService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 export interface IGitImportQRCode {
@@ -64,7 +66,7 @@ async function fetchSkinnyHtmlWithCache(baseUrl: string): Promise<string> {
   try {
     const cacheDirectory = new Directory(APP_CACHE_FOLDER_PATH);
     if (!cacheDirectory.exists) {
-      cacheDirectory.create();
+      ensureDirectoryExists(cacheDirectory);
     }
     cacheFile.write(htmlContent);
   } catch {
@@ -119,30 +121,16 @@ export function useGitImport() {
       workspaceFolderLocation = newWorkspace.wikiFolderLocation;
       setCreatedWorkspace(newWorkspace);
 
-      // Ensure parent wikis folder exists
-      const parentDirectory = new Directory(WIKI_FOLDER_PATH);
-      if (!parentDirectory.exists) {
-        console.log('Creating parent wikis directory:', WIKI_FOLDER_PATH);
-        parentDirectory.create();
-      }
+      console.log('[import] wikiFolderLocation:', workspaceFolderLocation);
 
-      // Clean up target directory completely
-      // Git clone requires the directory to either not exist or be empty
+      // Prepare directory for git clone
       const directory = new Directory(newWorkspace.wikiFolderLocation);
       if (directory.exists) {
-        console.log('Removing existing directory before clone:', newWorkspace.wikiFolderLocation);
-        try {
-          directory.delete();
-        } catch (error) {
-          console.error('Failed to delete existing directory:', error);
-          throw new Error(`Cannot clean up existing directory: ${(error as Error).message}`);
-        }
+        console.log('[import] Removing existing directory before clone:', newWorkspace.wikiFolderLocation);
+        recursiveDeleteDirectory(directory);
       }
-
-      // Create an empty directory for git clone to use
-      // isomorphic-git with expo-file-system requires the directory to exist
-      console.log('Creating empty directory for git clone:', newWorkspace.wikiFolderLocation);
-      directory.create();
+      console.log('[import] Creating empty directory for git clone:', newWorkspace.wikiFolderLocation);
+      ensureDirectoryExists(directory);
 
       // 2. Clone repository
       setStatus('cloning');
@@ -152,9 +140,11 @@ export function useGitImport() {
         token: qrData.token,
       };
 
+      console.log('[import] Starting git clone...');
       await gitClone(newWorkspace, remote, (phase, loaded, total) => {
         setCloneProgress({ phase, loaded, total });
       });
+      console.log('[import] Git clone completed');
 
       // 3. Download skinny HTML with version-based caching
       setStatus('downloading-html');
@@ -166,28 +156,30 @@ export function useGitImport() {
       setStatus('success');
       return newWorkspace;
     } catch (error) {
-      console.error('Git import failed:', (error as Error).stack);
+      console.error('Git import failed:', (error as Error).message, (error as Error).stack);
       setError((error as Error).message);
       setStatus('error');
 
-      // Clean up on error: remove both workspace entry and created folder
+      // Clean up on error: remove workspace entry and created folder
       if (workspaceId !== undefined) {
         removeWiki(workspaceId);
 
-        // Use local variable (not React state which may be stale in this closure)
+        // Only clean up if workspaceFolderLocation was set to a real URI
+        // (for SAF, it's only set after createDirectory succeeds)
         if (workspaceFolderLocation !== undefined) {
           try {
             const directory = new Directory(workspaceFolderLocation);
             if (directory.exists) {
-              directory.delete();
+              console.log('Cleaning up created directory:', workspaceFolderLocation);
+              recursiveDeleteDirectory(directory);
             }
           } catch (cleanupError) {
-            console.error('Failed to cleanup folder:', cleanupError);
+            console.warn('Failed to cleanup folder (non-fatal):', cleanupError);
           }
         }
       }
 
-      throw error_;
+      throw error;
     }
   };
 

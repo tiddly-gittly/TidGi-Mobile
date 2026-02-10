@@ -6,7 +6,7 @@
 import { Buffer } from 'buffer';
 import { Directory, File } from 'expo-file-system';
 import git from 'isomorphic-git';
-import http from 'isomorphic-git/http/web';
+import pTimeout from 'p-timeout';
 import { IWikiWorkspace } from '../../store/workspace';
 
 // Polyfill Buffer globally for isomorphic-git
@@ -65,7 +65,7 @@ const fs = {
       const directoryExists = directory.exists;
 
       if (!directoryExists) {
-        directory.create();
+        directory.create({ intermediates: true, idempotent: true });
       }
 
       if (typeof data === 'string') {
@@ -117,7 +117,9 @@ const fs = {
     async mkdir(filepath: string, options?: { recursive?: boolean }): Promise<void> {
       try {
         const directory = new Directory(filepath);
-        directory.create();
+        if (!directory.exists) {
+          directory.create({ intermediates: true, idempotent: true });
+        }
       } catch (error) {
         if (!options?.recursive) {
           throw error;
@@ -126,21 +128,28 @@ const fs = {
     },
 
     async rmdir(filepath: string): Promise<void> {
+      const directory = new Directory(filepath);
+      if (!directory.exists) {
+        return;
+      }
       try {
-        const directory = new Directory(filepath);
-        const directoryExists = directory.exists;
-
-        if (directoryExists) {
+        directory.delete();
+      } catch {
+        // On Android, delete() may fail on dirs with locked files (e.g. .git/objects/pack).
+        // Recursively delete contents first, then retry.
+        const entries = directory.list();
+        for (const entry of entries) {
+          if (entry instanceof File) {
+            try {
+              entry.delete();
+            } catch { /* best effort */ }
+          } else if (entry instanceof Directory) {
+            await fs.promises.rmdir(entry.uri);
+          }
+        }
+        try {
           directory.delete();
-        }
-      } catch (error) {
-        // Only throw ENOENT if directory doesn't exist
-        if (!new Directory(filepath).exists) {
-          const enoentError = new Error(`ENOENT: no such file or directory, rmdir '${filepath}'`) as NodeJS.ErrnoException;
-          enoentError.code = 'ENOENT';
-          throw enoentError;
-        }
-        throw error;
+        } catch { /* best effort */ }
       }
     },
 
@@ -217,6 +226,156 @@ const fs = {
   },
 };
 
+type GitHttpRequest = {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: AsyncIterableIterator<Uint8Array> | Iterable<Uint8Array> | Uint8Array;
+};
+
+type GitHttpResponse = {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: AsyncIterableIterator<Uint8Array>;
+  statusCode: number;
+  statusMessage: string;
+};
+
+function fromValue<T>(value: T) {
+  let queue = [value];
+  return {
+    next() {
+      return Promise.resolve({ done: queue.length === 0, value: queue.pop() });
+    },
+    return() {
+      queue = [];
+      return {};
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+}
+
+function getIterator<T>(iterable: AsyncIterableIterator<T> | Iterable<T> | Iterator<T>) {
+  if ((iterable as AsyncIterableIterator<T>)[Symbol.asyncIterator]) {
+    return (iterable as AsyncIterableIterator<T>)[Symbol.asyncIterator]();
+  }
+  if ((iterable as Iterable<T>)[Symbol.iterator]) {
+    return (iterable as Iterable<T>)[Symbol.iterator]();
+  }
+  return iterable as Iterator<T>;
+}
+
+async function forAwait<T>(iterable: AsyncIterableIterator<T> | Iterable<T> | Iterator<T>, callback: (value: T) => void | Promise<void>) {
+  const iterator = getIterator(iterable);
+
+  while (true) {
+    const { value, done } = await iterator.next();
+    if (value !== undefined) await callback(value);
+    if (done) break;
+  }
+  if ('return' in iterator && typeof iterator.return === 'function') {
+    iterator.return();
+  }
+}
+
+async function collect(iterable: AsyncIterableIterator<Uint8Array> | Iterable<Uint8Array> | Iterator<Uint8Array>) {
+  let size = 0;
+  const buffers: Uint8Array[] = [];
+  await forAwait(iterable, (value) => {
+    buffers.push(value);
+    size += value.byteLength;
+  });
+  const result = new Uint8Array(size);
+  let offset = 0;
+  for (const buffer of buffers) {
+    result.set(buffer, offset);
+    offset += buffer.byteLength;
+  }
+  return result;
+}
+
+function fromStream(stream: ReadableStream<Uint8Array>) {
+  if ((stream as unknown as AsyncIterableIterator<Uint8Array>)[Symbol.asyncIterator]) {
+    return stream as unknown as AsyncIterableIterator<Uint8Array>;
+  }
+  const reader = stream.getReader();
+  return {
+    next() {
+      return reader.read();
+    },
+    return() {
+      reader.releaseLock();
+      return {};
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+}
+
+function toArrayBuffer(data: Uint8Array) {
+  const { buffer, byteOffset, byteLength } = data;
+  if (byteOffset === 0 && byteLength === buffer.byteLength) return buffer;
+  return buffer.slice(byteOffset, byteOffset + byteLength);
+}
+
+// Keep HTTP diagnostics centralized to debug mobile sync connectivity issues.
+const httpWithLogging = {
+  async request(request: GitHttpRequest): Promise<GitHttpResponse> {
+    const { url, method = 'GET', headers = {}, body } = request;
+    console.log('Git HTTP request:', { url, method, headers });
+
+    try {
+      const timeoutMs = method === 'POST' ? 120_000 : 30_000;
+      let payload: ArrayBuffer | undefined;
+
+      if (body !== undefined) {
+        const bytes = body instanceof Uint8Array ? body : await collect(body);
+        payload = toArrayBuffer(bytes);
+      }
+
+      const response = await pTimeout(fetch(url, { method, headers, body: payload }), {
+        milliseconds: timeoutMs,
+        message: new Error(`Git HTTP request timeout: ${method} ${url}`),
+      });
+
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+
+      const responseBody = response.body && 'getReader' in response.body
+        ? fromStream(response.body as ReadableStream<Uint8Array>)
+        : fromValue(new Uint8Array(await response.arrayBuffer()));
+
+      console.log('Git HTTP response:', {
+        url: response.url,
+        statusCode: response.status,
+        statusMessage: response.statusText,
+      });
+
+      return {
+        url: response.url,
+        method: response.type === 'opaque' ? undefined : method,
+        statusCode: response.status,
+        statusMessage: response.statusText,
+        body: responseBody,
+        headers: responseHeaders,
+      };
+    } catch (error) {
+      console.error('Git HTTP request failed:', {
+        url,
+        method,
+        message: (error as Error).message,
+      });
+      throw error;
+    }
+  },
+};
+
 /**
  * Create auth header for git operations
  * Includes CSRF header to bypass TiddlyWiki's CSRF protection
@@ -224,7 +383,8 @@ const fs = {
  */
 function createAuthHeader(token?: string): { Authorization?: string; 'X-Requested-With': string } {
   const headers: { Authorization?: string; 'X-Requested-With': string } = {
-    'X-Requested-With': 'TiddlyWiki-TidGi-Mobile',
+    // TiddlyWiki expects a non-empty X-Requested-With to bypass CSRF for POST
+    'X-Requested-With': 'TiddlyWiki',
   };
 
   if (token !== undefined && token !== '') {
@@ -233,6 +393,39 @@ function createAuthHeader(token?: string): { Authorization?: string; 'X-Requeste
   }
 
   return headers;
+}
+
+// Avoid undefined header values when passing to fetch.
+function normalizeHeaders(headers: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined)) as Record<string, string>;
+}
+
+// Keep auth handling consistent across git operations to simplify retries.
+function createAuthCallbacks(token?: string): { onAuth?: () => { username: string; password: string }; onAuthFailure?: () => void } {
+  if (token === undefined || token === '') return {};
+
+  return {
+    onAuth: () => ({
+      username: 'tidgi',
+      password: token,
+    }),
+    onAuthFailure: () => {
+      console.warn('Git auth failed, token may be invalid or expired');
+    },
+  };
+}
+
+// Fail fast on unreachable endpoints to avoid silent hangs during clone.
+async function preflightInfoReferences(url: string, headers: Record<string, string>): Promise<void> {
+  const infoReferencesUrl = `${url.replace(/\/$/, '')}/info/refs?service=git-upload-pack`;
+  const response = await pTimeout(fetch(infoReferencesUrl, { headers }), {
+    milliseconds: 15_000,
+    message: new Error(`Git info/refs timeout: ${infoReferencesUrl}`),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Git info/refs failed: ${response.status} ${response.statusText}`);
+  }
 }
 
 /**
@@ -253,15 +446,16 @@ export async function gitClone(
   console.log('Git clone remote:', JSON.stringify(remote, null, 2));
 
   try {
+    await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote.token)));
     await git.clone({
       fs,
-      http,
+      http: httpWithLogging,
       dir: directory,
       url,
-      ref: 'main',
       singleBranch: true,
       depth: 1,
       headers: createAuthHeader(remote.token),
+      ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
         onProgress?.(progress.phase, progress.loaded, progress.total);
       },
@@ -269,8 +463,9 @@ export async function gitClone(
 
     console.log(`Successfully cloned repository to ${directory}`);
   } catch (error) {
-    console.error(`Git clone failed: ${(error as Error).message}`);
-    throw new Error(`Failed to clone repository: ${(error as Error).message}`);
+    const message = (error as Error).message;
+    console.error(`Git clone failed: ${message}`);
+    throw new Error(`Failed to clone repository: ${message}`);
   }
 }
 
@@ -283,15 +478,17 @@ export async function gitPull(
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const directory = workspace.wikiFolderLocation;
+  const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
 
   try {
     await git.pull({
       fs,
-      http,
+      http: httpWithLogging,
       dir: directory,
-      ref: 'main',
+      ref: branch,
       singleBranch: true,
       headers: createAuthHeader(remote.token),
+      ...createAuthCallbacks(remote.token),
       author: {
         name: 'TidGi Mobile',
         email: 'mobile@tidgi.fun',
@@ -365,15 +562,17 @@ export async function gitPush(
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const directory = workspace.wikiFolderLocation;
+  const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
 
   try {
     await git.push({
       fs,
-      http,
+      http: httpWithLogging,
       dir: directory,
       remote: 'origin',
-      ref: 'main',
+      ref: branch,
       headers: createAuthHeader(remote.token),
+      ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
         onProgress?.(progress.phase, progress.loaded, progress.total);
       },
@@ -402,6 +601,7 @@ export async function gitPushToConflictBranch(
   deviceId: string,
 ): Promise<string> {
   const directory = workspace.wikiFolderLocation;
+  const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
   const timestamp = Date.now();
   const branchName = `client/${deviceId}/${timestamp}`;
 
@@ -412,27 +612,29 @@ export async function gitPushToConflictBranch(
     // Push the conflict branch to remote
     await git.push({
       fs,
-      http,
+      http: httpWithLogging,
       dir: directory,
       remote: 'origin',
       ref: branchName,
       headers: createAuthHeader(remote.token),
+      ...createAuthCallbacks(remote.token),
     });
 
     // Fetch latest remote main so we have up-to-date origin/main
     await git.fetch({
       fs,
-      http,
+      http: httpWithLogging,
       dir: directory,
       remote: 'origin',
-      ref: 'main',
+      ref: branch,
       singleBranch: true,
       headers: createAuthHeader(remote.token),
+      ...createAuthCallbacks(remote.token),
     });
 
     // Hard-reset main to origin/main by checking out with force.
     // isomorphic-git checkout with force discards local changes.
-    await git.checkout({ fs, dir: directory, ref: 'main', force: true });
+    await git.checkout({ fs, dir: directory, ref: branch, force: true });
 
     // Clean untracked files that checkout --force doesn't remove.
     // Without this, new local tiddler files get re-committed next cycle.
@@ -446,7 +648,7 @@ export async function gitPushToConflictBranch(
   } catch (error) {
     // Best-effort: try to get back to main
     try {
-      await git.checkout({ fs, dir: directory, ref: 'main', force: true });
+      await git.checkout({ fs, dir: directory, ref: branch, force: true });
     } catch { /* ignore */ }
     console.error(`Failed to push to conflict branch: ${(error as Error).message}`);
     throw error;

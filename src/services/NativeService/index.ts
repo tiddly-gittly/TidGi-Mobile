@@ -193,28 +193,21 @@ export class NativeService {
     }
   }
 
-  saveFileToFs(_filename: string, _text: string, _mimeType?: string): Promise<string | false> {
-    // TODO: StorageAccessFramework not available in expo-file-system 19.x
-    // Need to implement alternative file saving mechanism
-    console.warn('saveFileToFs not implemented for expo-file-system 19.x');
-    return Promise.resolve(false);
-    /*
-    const configs = useConfigStore.getState();
-    const result = await fs.StorageAccessFramework.requestDirectoryPermissionsAsync(configs.defaultDownloadLocation);
-    if (!result.granted) {
-      return false;
-    }
+  async saveFileToFs(filename: string, text: string, _mimeType?: string): Promise<string | false> {
     try {
-      const fileUri = await fs.StorageAccessFramework.createFileAsync(result.directoryUri, filename, mimeType || '');
-      console.log(`File mimeType: ${mimeType} write to ${fileUri} content: ${text.length > 100 ? text.substring(0, 100) + '...' : text}`);
-      await fs.writeAsStringAsync(fileUri, text, { encoding: fs.EncodingType.UTF8 });
-      configs.set({ defaultDownloadLocation: result.directoryUri });
-      return fileUri;
+      // Save to /sdcard/Documents/TidGi/exports/ (requires MANAGE_EXTERNAL_STORAGE)
+      const exportDirectory = new Directory('file:///sdcard/Documents/TidGi/exports/');
+      if (!exportDirectory.exists) {
+        exportDirectory.create({ intermediates: true, idempotent: true });
+      }
+      const file = new File(exportDirectory, filename);
+      file.write(text);
+      console.log(`File saved to ${file.uri}`);
+      return file.uri;
     } catch (error) {
       console.error('Error saving file:', error);
       return false;
     }
-    */
   }
 }
 

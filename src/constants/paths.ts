@@ -1,7 +1,29 @@
 import { Paths } from 'expo-file-system';
 import type { IWikiWorkspace } from '../store/workspace';
 
+/**
+ * Wiki storage base path. Uses app-internal document directory which is always
+ * writable without extra permissions. Users can migrate to a user-accessible
+ * location via the Storage Location settings.
+ */
 export const WIKI_FOLDER_PATH = `${Paths.document.uri}wikis/`;
+
+/**
+ * Get the effective wiki folder path, considering user's custom selection.
+ * Must be called at runtime (not module init) to access store state.
+ */
+export function getEffectiveWikiFolderPath(): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  const { useWorkspaceStore } = require('../store/workspace');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+  const customPath = useWorkspaceStore.getState().customWikiFolderPath;
+  if (customPath) {
+    // Ensure the custom path ends with '/' for proper directory handling
+    return customPath.endsWith('/') ? customPath : `${customPath}/`;
+  }
+  return WIKI_FOLDER_PATH;
+}
+
 export const APP_CACHE_FOLDER_PATH = `${Paths.cache.uri}/`;
 export const WIKI_FILE_NAME = 'index.html';
 export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;

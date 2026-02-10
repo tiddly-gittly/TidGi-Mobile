@@ -52,6 +52,7 @@
         }
       ],
       "./expo-plugins/trustHTTPRequests/trust-local-certs.js",
+      "./expo-plugins/withManageExternalStorage/withManageExternalStorage.js",
       [
         "expo-share-intent",
         {

@@ -22,27 +22,26 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
 
   // Find the first blank line (separating headers from body)
   const blankLineMatch = /\r?\n\r?\n/.exec(text);
-  if (blankLineMatch !== null) {
-    const headerText = text.substring(0, blankLineMatch.index);
-    const bodyText = text.substring(blankLineMatch.index + blankLineMatch[0].length);
+  // When no blank line exists, the entire file is headers with no text body.
+  const headerText = blankLineMatch !== null ? text.substring(0, blankLineMatch.index) : text;
+  const bodyText = blankLineMatch !== null ? text.substring(blankLineMatch.index + blankLineMatch[0].length) : undefined;
 
-    // Parse header lines
-    const headerLines = headerText.split(/\r?\n/);
-    for (const line of headerLines) {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex !== -1) {
-        const name = line.substring(0, colonIndex).trim();
-        const value = line.substring(colonIndex + 1).trim();
-        if (name) {
-          (result as Record<string, string | string[]>)[name] = value;
-        }
+  // Parse header lines
+  const headerLines = headerText.split(/\r?\n/);
+  for (const line of headerLines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex !== -1) {
+      const name = line.substring(0, colonIndex).trim();
+      const value = line.substring(colonIndex + 1).trim();
+      if (name) {
+        (result as Record<string, string | string[]>)[name] = value;
       }
     }
+  }
 
-    // Preserve body text exactly as-is (no re-joining)
-    if (bodyText) {
-      (result as Partial<ITiddlerFields> & { text: string }).text = bodyText;
-    }
+  // Preserve body text exactly as-is
+  if (bodyText !== undefined && bodyText !== '') {
+    (result as Partial<ITiddlerFields> & { text: string }).text = bodyText;
   }
 
   // Ensure title exists (required field)

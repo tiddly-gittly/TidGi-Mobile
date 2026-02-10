@@ -1,6 +1,6 @@
-import { Buffer } from 'buffer';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { Buffer } from 'buffer';
 import i18n from 'i18next';
 import './i18n/index';
 import Ionicons from '@expo/vector-icons/Ionicons';
