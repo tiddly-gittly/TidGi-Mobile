@@ -80,7 +80,6 @@ jobs:
 
       - name: Build tw plugins & scripts
         run: |
-          cd plugins && pnpm i && cd ..
           pnpm run build:plugin
           pnpm run build:preload
 
