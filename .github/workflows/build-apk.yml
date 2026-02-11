@@ -121,6 +121,17 @@ jobs:
       # Optionally create an development build
       - name: Install expo-dev-client
         run: pnpm install expo-dev-client -w
+      # Modify app.json for dev-client to use different package name and app name
+      - name: Modify app.json for dev-client
+        run: |
+          node -e "
+          const fs = require('fs');
+          const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          appJson.expo.name = 'TidGi Test';
+          appJson.expo.android.package = 'ren.onetwo.tidgi.mobile.test';
+          appJson.expo.ios.bundleIdentifier = 'ren.onetwo.tidgi.mobile.test';
+          fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+          "
       # Same step as above
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean
