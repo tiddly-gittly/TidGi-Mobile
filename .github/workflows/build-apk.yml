@@ -108,6 +108,11 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
+      - name: Save release APK before android dir gets cleaned
+        run: |
+          mkdir -p /tmp/apk-artifacts
+          cp android/app/build/outputs/apk/release/app-release-signed.apk /tmp/apk-artifacts/app-release-signed.apk || true
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
@@ -152,14 +157,18 @@ jobs:
       - name: Rename Development Build APK
         run: mv android/app/build/outputs/apk/release/app-release-signed.apk android/app/build/outputs/apk/release/app-release-dev-client.apk
 
+      - name: Collect all APKs for upload
+        run: |
+          mkdir -p /tmp/apk-upload
+          cp /tmp/apk-artifacts/app-release-signed.apk /tmp/apk-upload/app-release-signed.apk || true
+          cp android/app/build/outputs/apk/release/app-release-dev-client.apk /tmp/apk-upload/app-release-dev-client.apk || true
+
       - name: Upload APK artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: apks-${{ github.run_number }}-${{ github.sha }}
-          path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/apk/release/app-release-dev-client.apk
+          path: /tmp/apk-upload/*.apk
           if-no-files-found: ignore
       - name: Create Release
         uses: softprops/action-gh-release@v1
