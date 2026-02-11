@@ -120,7 +120,7 @@ jobs:
 
       # Optionally create an development build
       - name: Install expo-dev-client
-        run: pnpm install expo-dev-client
+        run: pnpm install expo-dev-client -w
       # Same step as above
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean
