@@ -9,6 +9,10 @@ import git from 'isomorphic-git';
 import pTimeout from 'p-timeout';
 import { IWikiWorkspace } from '../../store/workspace';
 
+function toSafeNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 // Polyfill Buffer globally for isomorphic-git
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
@@ -157,22 +161,45 @@ const fs = {
       isFile: () => boolean;
       isDirectory: () => boolean;
       isSymbolicLink: () => boolean;
-      size: number;
+      dev: number;
+      ino: number;
       mode: number;
+      nlink: number;
+      uid: number;
+      gid: number;
+      rdev: number;
+      size: number;
+      blksize: number;
+      blocks: number;
+      atimeMs: number;
       mtimeMs: number;
+      ctimeMs: number;
+      birthtimeMs: number;
     }> {
       try {
         // Check directory first since File class is for files only
         const directory = new Directory(filepath);
         if (directory.exists) {
           const directoryInfo = directory.info();
+          const modifiedTime = toSafeNumber(directoryInfo.modificationTime, Date.now());
           return {
             isFile: () => false,
             isDirectory: () => true,
             isSymbolicLink: () => false,
-            size: 0,
+            dev: 0,
+            ino: 0,
             mode: 0o755,
-            mtimeMs: directoryInfo.modificationTime ?? Date.now(),
+            nlink: 1,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            size: 0,
+            blksize: 4096,
+            blocks: 0,
+            atimeMs: modifiedTime,
+            mtimeMs: modifiedTime,
+            ctimeMs: modifiedTime,
+            birthtimeMs: modifiedTime,
           };
         }
 
@@ -183,13 +210,26 @@ const fs = {
           throw error;
         }
 
+        const modifiedTime = toSafeNumber(file.modificationTime, Date.now());
+        const fileSize = toSafeNumber(file.size, 0);
         return {
           isFile: () => true,
           isDirectory: () => false,
           isSymbolicLink: () => false,
-          size: file.size,
+          dev: 0,
+          ino: 0,
           mode: 0o644,
-          mtimeMs: file.modificationTime ?? Date.now(),
+          nlink: 1,
+          uid: 0,
+          gid: 0,
+          rdev: 0,
+          size: fileSize,
+          blksize: 4096,
+          blocks: Math.ceil(fileSize / 512),
+          atimeMs: modifiedTime,
+          mtimeMs: modifiedTime,
+          ctimeMs: modifiedTime,
+          birthtimeMs: modifiedTime,
         };
       } catch (error) {
         // Re-throw ENOENT as-is; for other errors check if path actually exists
@@ -457,7 +497,11 @@ export async function gitClone(
       headers: createAuthHeader(remote.token),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
-        onProgress?.(progress.phase, progress.loaded, progress.total);
+        onProgress?.(
+          typeof progress.phase === 'string' ? progress.phase : '',
+          toSafeNumber(progress.loaded, 0),
+          toSafeNumber(progress.total, 0),
+        );
       },
     });
 
@@ -494,7 +538,11 @@ export async function gitPull(
         email: 'mobile@tidgi.fun',
       },
       onProgress: (progress) => {
-        onProgress?.(progress.phase, progress.loaded, progress.total);
+        onProgress?.(
+          typeof progress.phase === 'string' ? progress.phase : '',
+          toSafeNumber(progress.loaded, 0),
+          toSafeNumber(progress.total, 0),
+        );
       },
     });
 
@@ -574,7 +622,11 @@ export async function gitPush(
       headers: createAuthHeader(remote.token),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
-        onProgress?.(progress.phase, progress.loaded, progress.total);
+        onProgress?.(
+          typeof progress.phase === 'string' ? progress.phase : '',
+          toSafeNumber(progress.loaded, 0),
+          toSafeNumber(progress.total, 0),
+        );
       },
     });
 

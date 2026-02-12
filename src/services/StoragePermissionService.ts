@@ -10,11 +10,69 @@
 
 import * as Application from 'expo-application';
 import { Directory, File } from 'expo-file-system';
-import { ActivityAction, startActivityAsync } from 'expo-intent-launcher';
+import { startActivityAsync } from 'expo-intent-launcher';
 import { Platform } from 'react-native';
 
+const MANAGE_APP_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION';
+const MANAGE_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION';
+
+const EXTERNAL_WIKI_PATH_CANDIDATES = [
+  'file:///storage/emulated/0/Documents/TidGi/',
+  'file:///sdcard/Documents/TidGi/',
+  `file:///storage/emulated/0/Android/media/${Application.applicationId}/TidGi/`,
+] as const;
+
 /** Default external storage path for TidGi wikis */
-export const EXTERNAL_WIKI_PATH = 'file:///sdcard/Documents/TidGi/';
+export const EXTERNAL_WIKI_PATH = EXTERNAL_WIKI_PATH_CANDIDATES[0];
+
+let resolvedExternalWikiPath: string = EXTERNAL_WIKI_PATH;
+let lastStorageAccessErrorMessage = '';
+
+function canWriteToDirectoryUri(uri: string, createDirectoryWhenMissing: boolean): boolean {
+  try {
+    const directory = new Directory(uri);
+    if (!directory.exists) {
+      if (!createDirectoryWhenMissing) {
+        return false;
+      }
+      directory.create({ intermediates: true, idempotent: true });
+    }
+    const probeName = `.probe_${Date.now()}`;
+    const probe = new File(directory, probeName);
+    probe.write('test');
+    probe.delete();
+    return true;
+  } catch (error) {
+    lastStorageAccessErrorMessage = `${uri} -> ${(error as Error).message}`;
+    return false;
+  }
+}
+
+function detectWritableExternalPath(): string | undefined {
+  const failureMessages: string[] = [];
+
+  for (const candidate of EXTERNAL_WIKI_PATH_CANDIDATES) {
+    if (canWriteToDirectoryUri(candidate, true)) {
+      resolvedExternalWikiPath = candidate;
+      lastStorageAccessErrorMessage = '';
+      return candidate;
+    }
+    if (lastStorageAccessErrorMessage) {
+      failureMessages.push(lastStorageAccessErrorMessage);
+    }
+  }
+
+  lastStorageAccessErrorMessage = failureMessages.join('\n');
+  return undefined;
+}
+
+export function getPreferredExternalWikiPath(): string {
+  return resolvedExternalWikiPath;
+}
+
+export function getStorageAccessErrorMessage(): string {
+  return lastStorageAccessErrorMessage;
+}
 
 /**
  * Check whether MANAGE_EXTERNAL_STORAGE permission has been granted.
@@ -22,20 +80,14 @@ export const EXTERNAL_WIKI_PATH = 'file:///sdcard/Documents/TidGi/';
  */
 export function isAllFilesAccessGranted(): boolean {
   if (Platform.OS !== 'android') return false;
-  try {
-    const tidgiDirectory = new Directory(EXTERNAL_WIKI_PATH);
-    if (!tidgiDirectory.exists) {
-      tidgiDirectory.create({ intermediates: true, idempotent: true });
-    }
-    const probeName = `.probe_${Date.now()}`;
-    const probe = new File(tidgiDirectory, probeName);
-    probe.write('test');
-    probe.delete();
+
+  const writablePath = detectWritableExternalPath();
+  if (writablePath !== undefined) {
     return true;
-  } catch (error) {
-    console.log('[storage] All-files-access check failed:', error);
-    return false;
   }
+
+  console.log('[storage] All-files-access check failed: no writable external path found', lastStorageAccessErrorMessage);
+  return false;
 }
 
 /**
@@ -53,22 +105,21 @@ export async function requestAllFilesAccess(): Promise<boolean> {
     try {
       // Try app-specific settings page first
       await startActivityAsync(
-        // @ts-expect-error expo-intent-launcher types may not resolve until TS server restart
-        ActivityAction.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+        MANAGE_APP_ALL_FILES_ACCESS_ACTION,
         { data: `package:${applicationId}` },
       );
     } catch {
       // Fall back to generic all-files-access settings list
       await startActivityAsync(
-        // @ts-expect-error expo-intent-launcher types may not resolve until TS server restart
-        ActivityAction.MANAGE_ALL_FILES_ACCESS_PERMISSION,
+        MANAGE_ALL_FILES_ACCESS_ACTION,
       );
     }
   } catch (error) {
     console.error('[storage] Failed to open settings:', error);
   }
 
-  // Check again after user returns from settings
+  // Wait briefly for system to update permission state, then check
+  await new Promise(resolve => setTimeout(resolve, 500));
   return isAllFilesAccessGranted();
 }
 
@@ -108,13 +159,7 @@ export function formatStorageUri(uri: string): string {
  */
 export function checkStorageWriteAccess(uri: string): boolean {
   try {
-    const directory = new Directory(uri);
-    if (!directory.exists) return false;
-    const probeName = `.tidgi_probe_${Date.now()}`;
-    const probe = new File(directory, probeName);
-    probe.write('test');
-    probe.delete();
-    return true;
+    return canWriteToDirectoryUri(uri, true);
   } catch (error) {
     console.warn('[storage] Write check failed:', error);
     return false;

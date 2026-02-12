@@ -572,6 +572,20 @@
     "CustomFilters": "自定义过滤器",
     "CustomFiltersDescription": "使用 TiddlyWiki 过滤器语法定义路由规则"
   },
+  "StorageLocation": {
+    "PermissionDenied": "需要权限",
+    "PermissionDeniedMessage": "请在设置页面授予“所有文件访问权限”，以便将 wiki 存储到外部可访问位置。",
+    "ResetConfirm": "重置为默认位置？",
+    "ResetMessage": "新建 wiki 将使用默认内部存储位置。现有 wiki 不会被移动。",
+    "Reset": "重置",
+    "Current": "Wiki 存储位置",
+    "Writable": "✓ 可写",
+    "NotWritable": "✗ 不可写",
+    "ExternalHint": "Wiki 可在 /sdcard/Documents/TidGi/ 中访问",
+    "EnableExternal": "使用设备存储",
+    "GrantPermission": "授予文件访问权限",
+    "ResetToDefault": "重置为默认（内部存储）"
+  },
   "Common": {
     "OK": "确定",
     "Cancel": "取消",

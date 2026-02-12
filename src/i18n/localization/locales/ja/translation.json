@@ -560,5 +560,19 @@
     "ReadList": "ファイル一覧を読み込む",
     "FetchAndWrite": "取得して書き込む"
   },
+  "StorageLocation": {
+    "PermissionDenied": "権限が必要です",
+    "PermissionDeniedMessage": "Wiki を外部からアクセス可能な場所に保存するには、設定ページで「すべてのファイルへのアクセス」権限を許可してください。",
+    "ResetConfirm": "デフォルトにリセットしますか？",
+    "ResetMessage": "新しい Wiki はデフォルトの内部ストレージに作成されます。既存の Wiki は移動されません。",
+    "Reset": "リセット",
+    "Current": "Wiki の保存場所",
+    "Writable": "✓ 書き込み可能",
+    "NotWritable": "✗ 書き込み不可",
+    "ExternalHint": "Wiki は /sdcard/Documents/TidGi/ に表示されます",
+    "EnableExternal": "デバイスストレージを使う",
+    "GrantPermission": "ファイルアクセス権限を許可",
+    "ResetToDefault": "デフォルト（内部ストレージ）に戻す"
+  },
   "WarningMessage": "警告メッセージ"
 }

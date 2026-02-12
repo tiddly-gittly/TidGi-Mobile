@@ -591,6 +591,20 @@
     "CustomFilters": "Custom Filters",
     "CustomFiltersDescription": "Define routing rules using TiddlyWiki filter syntax"
   },
+  "StorageLocation": {
+    "PermissionDenied": "Permission Required",
+    "PermissionDeniedMessage": "Please grant \"All files access\" permission in the settings page to store wikis in an externally accessible location.",
+    "ResetConfirm": "Reset to Default?",
+    "ResetMessage": "New wikis will be created in the default internal storage location. Existing wikis are not moved.",
+    "Reset": "Reset",
+    "Current": "Wiki Storage Location",
+    "Writable": "✓ Writable",
+    "NotWritable": "✗ Not writable",
+    "ExternalHint": "Wikis are visible in /sdcard/Documents/TidGi/",
+    "EnableExternal": "Use Device Storage",
+    "GrantPermission": "Grant File Access Permission",
+    "ResetToDefault": "Reset to Default (Internal Storage)"
+  },
   "Common": {
     "OK": "OK",
     "Cancel": "Cancel",

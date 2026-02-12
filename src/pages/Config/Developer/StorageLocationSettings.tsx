@@ -4,69 +4,111 @@
  * so wikis are stored in /sdcard/Documents/TidGi/ and visible to other apps.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Alert, AppState, type AppStateStatus, Platform, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, useTheme } from 'react-native-paper';
 import { WIKI_FOLDER_PATH } from '../../../constants/paths';
-import { checkStorageWriteAccess, EXTERNAL_WIKI_PATH, formatStorageUri, isAllFilesAccessGranted, requestAllFilesAccess } from '../../../services/StoragePermissionService';
+import {
+  checkStorageWriteAccess,
+  formatStorageUri,
+  getPreferredExternalWikiPath,
+  getStorageAccessErrorMessage,
+  isAllFilesAccessGranted,
+  requestAllFilesAccess,
+} from '../../../services/StoragePermissionService';
 import { useWorkspaceStore } from '../../../store/workspace';
+import { useOpenDirectory } from './useOpenDirectory';
 
 export function StorageLocationSettings() {
   const { t } = useTranslation();
   const theme = useTheme();
   const customWikiFolderPath = useWorkspaceStore((state) => state.customWikiFolderPath);
   const setCustomWikiFolderPath = useWorkspaceStore((state) => state.setCustomWikiFolderPath);
+  const { openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
   const effectivePath = customWikiFolderPath ?? WIKI_FOLDER_PATH;
   const isUsingExternal = customWikiFolderPath !== null;
   const [writable, setWritable] = useState<boolean | null>(null);
   const [hasAllFilesAccess, setHasAllFilesAccess] = useState<boolean>(false);
+  const [storageAccessError, setStorageAccessError] = useState<string>('');
   const statusStyle = useMemo(() => ({ ...styles.status, color: writable ? theme.colors.primary : theme.colors.error }), [writable, theme]);
+  const appState = useRef(AppState.currentState);
+  const isRequestingPermission = useRef(false);
 
   const refreshPermission = useCallback(() => {
     if (Platform.OS === 'android') {
-      setHasAllFilesAccess(isAllFilesAccessGranted());
+      const granted = isAllFilesAccessGranted();
+      setHasAllFilesAccess(granted);
+      setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
     }
     setWritable(checkStorageWriteAccess(effectivePath));
   }, [effectivePath]);
 
   useEffect(() => {
     refreshPermission();
-  }, [refreshPermission]);
+
+    // Listen for app state changes to detect when user returns from settings
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      // When app comes back to foreground after being in background
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // If we were requesting permission, check again after a short delay
+        if (isRequestingPermission.current) {
+          setTimeout(() => {
+            const granted = isAllFilesAccessGranted();
+            setHasAllFilesAccess(granted);
+            setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
+
+            if (granted) {
+              // Permission was granted, set the external path
+              const externalWikiPath = getPreferredExternalWikiPath();
+              setCustomWikiFolderPath(externalWikiPath);
+              setWritable(checkStorageWriteAccess(externalWikiPath));
+            } else {
+              // Permission still not granted, update writable status for current path
+              setWritable(checkStorageWriteAccess(effectivePath));
+            }
+
+            isRequestingPermission.current = false;
+          }, 300);
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshPermission, effectivePath, setCustomWikiFolderPath]);
 
   const handleEnableExternalStorage = async () => {
     if (Platform.OS !== 'android') return;
 
-    // First ensure the permission is granted
+    isRequestingPermission.current = true;
+
+    // Request permission - this will open system settings
     const granted = await requestAllFilesAccess();
+
+    // Update state based on current permission status
     setHasAllFilesAccess(granted);
+    setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
 
     if (granted) {
-      // Set the custom path to external storage
-      setCustomWikiFolderPath(EXTERNAL_WIKI_PATH);
-      setWritable(checkStorageWriteAccess(EXTERNAL_WIKI_PATH));
-    } else {
-      Alert.alert(
-        t('StorageLocation.PermissionDenied', 'Permission Required'),
-        t(
-          'StorageLocation.PermissionDeniedMessage',
-          'Please grant "All files access" permission in the settings page to store wikis in an externally accessible location.',
-        ),
-      );
+      // Permission granted, set the custom path to external storage
+      const externalWikiPath = getPreferredExternalWikiPath();
+      setCustomWikiFolderPath(externalWikiPath);
+      setWritable(checkStorageWriteAccess(externalWikiPath));
+      isRequestingPermission.current = false;
     }
   };
 
   const handleReset = () => {
     Alert.alert(
-      t('StorageLocation.ResetConfirm', 'Reset to Default?'),
-      t(
-        'StorageLocation.ResetMessage',
-        'New wikis will be created in the default internal storage location. Existing wikis are not moved.',
-      ),
+      t('StorageLocation.ResetConfirm'),
+      t('StorageLocation.ResetMessage'),
       [
         { text: t('Cancel'), style: 'cancel' },
         {
-          text: t('StorageLocation.Reset', 'Reset'),
+          text: t('StorageLocation.Reset'),
           onPress: () => {
             setCustomWikiFolderPath(null);
             refreshPermission();
@@ -78,45 +120,56 @@ export function StorageLocationSettings() {
 
   return (
     <View>
-      <Card style={styles.card}>
-        <Card.Title title={t('StorageLocation.Current', 'Wiki Storage Location')} />
+      <Card
+        style={styles.card}
+        onPress={() => {
+          void openDocumentDirectory(effectivePath);
+        }}
+      >
+        <Card.Title title={t('StorageLocation.Current')} />
         <Card.Content>
           <Text variant='bodySmall' style={styles.mono}>{formatStorageUri(effectivePath)}</Text>
           {writable !== null && (
             <Text variant='bodySmall' style={statusStyle}>
               {writable
-                ? t('StorageLocation.Writable', '✓ Writable')
-                : t('StorageLocation.NotWritable', '✗ Not writable')}
+                ? t('StorageLocation.Writable')
+                : t('StorageLocation.NotWritable')}
             </Text>
           )}
           {isUsingExternal && (
             <Text variant='bodySmall' style={styles.hint}>
-              {t('StorageLocation.ExternalHint', 'Wikis are visible in /sdcard/Documents/TidGi/')}
+              {t('StorageLocation.ExternalHint')}
             </Text>
           )}
         </Card.Content>
       </Card>
 
       {Platform.OS === 'android' && !isUsingExternal && (
-        <Button
-          mode='outlined'
-          onPress={handleEnableExternalStorage}
-          style={styles.button}
-          icon='folder-open'
-        >
-          {t('StorageLocation.EnableExternal', 'Use Device Storage')}
-        </Button>
+        <>
+          <Button
+            mode='outlined'
+            onPress={handleEnableExternalStorage}
+            style={styles.button}
+            icon='folder-open'
+          >
+            {t('StorageLocation.EnableExternal')}
+          </Button>
+          {storageAccessError ? <Text variant='bodySmall' style={styles.errorDetail}>{storageAccessError}</Text> : null}
+        </>
       )}
 
       {Platform.OS === 'android' && isUsingExternal && !hasAllFilesAccess && (
-        <Button
-          mode='outlined'
-          onPress={handleEnableExternalStorage}
-          style={styles.button}
-          icon='shield-key'
-        >
-          {t('StorageLocation.GrantPermission', 'Grant File Access Permission')}
-        </Button>
+        <>
+          <Button
+            mode='outlined'
+            onPress={handleEnableExternalStorage}
+            style={styles.button}
+            icon='shield-key'
+          >
+            {t('StorageLocation.GrantPermission')}
+          </Button>
+          {storageAccessError ? <Text variant='bodySmall' style={styles.errorDetail}>{storageAccessError}</Text> : null}
+        </>
       )}
 
       {isUsingExternal && (
@@ -125,9 +178,10 @@ export function StorageLocationSettings() {
           onPress={handleReset}
           style={styles.button}
         >
-          {t('StorageLocation.ResetToDefault', 'Reset to Default (Internal Storage)')}
+          {t('StorageLocation.ResetToDefault')}
         </Button>
       )}
+      {OpenDirectoryResultSnackBar}
     </View>
   );
 }
@@ -149,5 +203,9 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
+  },
+  errorDetail: {
+    marginTop: 6,
+    opacity: 0.85,
   },
 });
