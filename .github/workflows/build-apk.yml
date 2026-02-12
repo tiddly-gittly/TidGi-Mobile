@@ -111,15 +111,16 @@ jobs:
       - name: Save release APK before android dir gets cleaned
         run: |
           mkdir -p /tmp/apk-artifacts
-          cp android/app/build/outputs/apk/release/app-release-signed.apk /tmp/apk-artifacts/app-release-signed.apk || true
+          cp android/app/build/outputs/apk/release/app-release-signed.apk /tmp/apk-artifacts/app-release-signed.apk 2>/dev/null || \
+          cp android/app/build/outputs/apk/release/app-release.apk /tmp/apk-artifacts/app-release-signed.apk 2>/dev/null || true
 
-      - name: Create Release
+      - name: Create Release (release APK)
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
           generate_release_notes: true
-          files: android/app/build/outputs/apk/release/app-release-signed.apk
+          files: /tmp/apk-artifacts/app-release-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -140,28 +141,20 @@ jobs:
       # Same step as above
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean
-      - name: Build APK
+      - name: Build dev-client APK (debug variant)
         run: |
           cd android
           ./gradlew clean
-          ./gradlew assembleRelease --no-daemon --warning-mode all
+          ./gradlew assembleDebug --no-daemon --warning-mode all
 
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-          alias: ${{ secrets.ANDROID_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - name: Rename Development Build APK
-        run: mv android/app/build/outputs/apk/release/app-release-signed.apk android/app/build/outputs/apk/release/app-release-dev-client.apk
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/app-release-dev-client.apk
 
       - name: Collect all APKs for upload
         run: |
           mkdir -p /tmp/apk-upload
           cp /tmp/apk-artifacts/app-release-signed.apk /tmp/apk-upload/app-release-signed.apk || true
-          cp android/app/build/outputs/apk/release/app-release-dev-client.apk /tmp/apk-upload/app-release-dev-client.apk || true
+          cp android/app/build/outputs/apk/debug/app-release-dev-client.apk /tmp/apk-upload/app-release-dev-client.apk || true
 
       - name: Upload APK artifact
         if: github.event_name == 'pull_request'
@@ -177,6 +170,6 @@ jobs:
           draft: true
           generate_release_notes: false
           files: |
-            android/app/build/outputs/apk/release/app-release-dev-client.apk
+            android/app/build/outputs/apk/debug/app-release-dev-client.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
