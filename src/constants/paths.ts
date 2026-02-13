@@ -25,8 +25,6 @@ export function getEffectiveWikiFolderPath(): string {
 }
 
 export const APP_CACHE_FOLDER_PATH = `${Paths.cache.uri}/`;
-export const WIKI_FILE_NAME = 'index.html';
-export const getWikiFilePath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/${WIKI_FILE_NAME}`;
 export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/tiddlers/`;
 export const getWikiFilesFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/files/`;
 /**

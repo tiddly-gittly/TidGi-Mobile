@@ -158,7 +158,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     status: importStatus,
     error: importError,
     cloneProgress,
-    htmlDownloadProgress,
     createdWorkspace: createdWikiWorkspace,
   } = useGitImport();
 
@@ -325,13 +324,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
             color={MD3Colors.primary40}
           />
-        </>
-      )}
-      {importStatus === 'downloading-html' && (
-        <>
-          <Text variant='titleLarge'>{t('Loading')}</Text>
-          <Text>{t('Downloading.HTML')}</Text>
-          <ProgressBar animatedValue={htmlDownloadProgress} color={MD3Colors.neutral30} />
         </>
       )}
       {importStatus === 'success' && createdWikiWorkspace !== undefined && (

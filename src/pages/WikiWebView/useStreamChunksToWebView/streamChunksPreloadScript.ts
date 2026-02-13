@@ -100,10 +100,11 @@ export enum OnStreamChunksToWebViewEventTypes {
   function executeScriptsAfterInjectHTML() {
     console.log('executeScriptsAfterInjectHTML');
     try {
-      // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
-      tiddlersStoreContents.forEach((storeJSONString, index) => {
-        appendStoreScript(storeJSONString, `tidgi-tiddlers-store-${index}`);
-      });
+      // All chunks are fragments of a single JSON array — join them into one valid JSON string.
+      // TiddlyWiki boot expects each <script type="application/json"> to contain a complete parseable JSON array.
+      const fullStoreJSON = tiddlersStoreContents.join('');
+      console.log(`executeScriptsAfterInjectHTML: joined ${tiddlersStoreContents.length} chunks into ${fullStoreJSON.length} chars, starts='${fullStoreJSON.slice(0, 20)}', ends='${fullStoreJSON.slice(-20)}'`);
+      appendStoreScript(fullStoreJSON, 'tidgi-tiddlers-store');
 
       // load other scripts
       const scriptElements = Array.from(document.querySelectorAll('script'));

@@ -160,19 +160,12 @@ export class TiddlerRoutingService {
       sanitized = sanitized.substring(0, 200);
     }
 
-    // Check if it's a binary tiddler with canonical_uri
-    if (fields._canonical_uri) {
-      // Already has a path, use it
-      return fields._canonical_uri as string;
-    }
-
     // Check tiddler type
     const type = fields.type as string | undefined;
 
-    // Binary tiddlers go to files/
-    if (type && this.isBinaryType(type)) {
-      return `files/${sanitized}`;
-    }
+    // Attachment tiddlers with _canonical_uri: binary file is already in files/, save .tid metadata to tiddlers/
+    // Embedded binary tiddlers (base64 text): also save as .tid in tiddlers/
+    // Both cases go to tiddlers/ — the _canonical_uri field in the .tid points to the binary in files/
 
     // Apply fileSystemPathFilter if configured and enabled (Desktop-compatible field names)
     if (config.fileSystemPathFilterEnable && typeof config.fileSystemPathFilter === 'string' && config.fileSystemPathFilter.length > 0) {

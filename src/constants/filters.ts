@@ -9,7 +9,7 @@ export const defaultNonBinaryFilter = ' -[is[binary]]';
 export const defaultBinaryFilter = defaultNonBinaryFilter.replaceAll(' -', '');
 /**
  * [!prefix[$:/core]]: user tiddlers and updated plugins and configs for plugins, like TidMe's `$:/Deck/`
- * -[type[application/javascript]]: javascript tiddlers must be preload, so is already being synced by `/tw-mobile-sync/get-skinny-tiddlywiki-tiddler-store-script`
+ * -[type[application/javascript]]: javascript tiddlers are preloaded with the boot HTML (via $:/core/save/empty)
  */
 export const defaultNonPreloadedTiddlerFilter = '[!prefix[$:/core]] -[type[application/javascript]]';
 export const defaultTextBasedTiddlerFilter = `${defaultNonPreloadedTiddlerFilter}${defaultNonBinaryFilter}`;

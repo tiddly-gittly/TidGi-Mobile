@@ -74,13 +74,13 @@ export class FileSystemWikiStorageService {
       const parentDirectory = fullPath.substring(0, fullPath.lastIndexOf('/'));
       await ensureDirectory(parentDirectory);
 
-      // For binary tiddlers with canonical_uri, save metadata separately
+      // All tiddlers (including attachments with _canonical_uri) saved as .tid in tiddlers/
+      // For attachments, the _canonical_uri field in the .tid points to the binary file in files/
+      const allFields = { ...fieldsToSave } as Record<string, unknown>;
       if (processedFields._canonical_uri) {
-        await this.#saveBinaryTiddlerMetadata(title, processedFields, fullPath);
-      } else {
-        // Save as .tid file
-        await this.#saveTextTiddler(title, text ?? '', fieldsToSave as Record<string, unknown>, fullPath);
+        allFields._canonical_uri = processedFields._canonical_uri;
       }
+      await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
 
       return Etag;
     } catch (error) {
@@ -119,33 +119,6 @@ export class FileSystemWikiStorageService {
     // Note: Consider atomic write (write-to-temp-then-rename) for crash safety
     const content = text ? headerLines.join('\n') + '\n\n' + text : headerLines.join('\n');
     await writeTextFile(filePath, content);
-  }
-
-  /**
-   * Save binary tiddler metadata as .meta file
-   */
-  async #saveBinaryTiddlerMetadata(title: string, fields: Record<string, unknown>, binaryPath: string): Promise<void> {
-    const metaPath = `${binaryPath}.meta`;
-
-    // Build meta content (exclude text, title, canonical_uri, and bag)
-    const metaLines: string[] = [`title: ${title}`];
-    for (const key of Object.keys(fields)) {
-      if (key !== 'text' && key !== 'title' && key !== '_canonical_uri' && key !== 'bag') {
-        const value = fields[key];
-        if (Array.isArray(value)) {
-          const formatted = (value as string[]).map(v => v.includes(' ') ? `[[${v}]]` : v).join(' ');
-          metaLines.push(`${key}: ${formatted}`);
-        } else if (typeof value === 'string') {
-          metaLines.push(`${key}: ${value}`);
-        } else if (typeof value === 'number' || typeof value === 'boolean') {
-          metaLines.push(`${key}: ${String(value)}`);
-        } else if (value !== undefined && value !== null) {
-          metaLines.push(`${key}: ${JSON.stringify(value)}`);
-        }
-      }
-    }
-
-    await writeTextFile(metaPath, metaLines.join('\n'));
   }
 
   /**

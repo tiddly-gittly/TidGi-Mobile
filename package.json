@@ -2,10 +2,11 @@
   "name": "tidgi-mobile",
   "main": "index.js",
   "scripts": {
-    "android": "cross-env NODE_ENV=development expo start --go --android",
+    "android": "cross-env NODE_ENV=development expo start --android",
     "simulate-production": "cross-env NODE_ENV=production expo start --go --android --no-dev --minify",
     "build:plugin": "zx scripts/buildPlugins.mjs",
     "build:preload": "zx scripts/buildPreload.mjs",
+    "build:tw-assets": "zx scripts/buildTiddlyWikiAssets.mjs",
     "build:sqlite-migration": "drizzle-kit generate",
     "build:android-apk": "eas build --profile preview --platform android --non-interactive",
     "build:ios-ipa": "eas build --profile preview --platform ios",
@@ -106,6 +107,7 @@
     "eslint-plugin-react-native": "^5.0.0",
     "expo-dev-client": "^6.0.20",
     "rimraf": "^6.1.2",
+    "tiddlywiki": "^5.3.8",
     "tw5-typed": "^0.5.14",
     "typescript": "~5.9.3",
     "zx": "^8.4.1"

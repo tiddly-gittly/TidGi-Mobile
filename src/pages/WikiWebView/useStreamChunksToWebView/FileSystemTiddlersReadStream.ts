@@ -9,13 +9,12 @@ import { Directory, File } from 'expo-file-system';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
 import { ExternalStorage, toPlainPath } from '../../../../modules/external-storage';
-import { getWikiTiddlerFolderPath } from '../../../constants/paths';
+import { getWikiFilesFolderPath, getWikiTiddlerFolderPath } from '../../../constants/paths';
 import {
   getTitleFromFilename,
   makeSkinnyTiddler,
   parseMetadataFile,
-  parseTiddlerFile,
-  processFields,
+  parseTiddlerFileHeaderOnly,
   shouldSaveFullTiddler,
 } from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
@@ -72,32 +71,42 @@ export class FileSystemTiddlersReadStream extends Readable {
   private async initAsync(): Promise<void> {
     try {
       const tiddlerFolderPath = getWikiTiddlerFolderPath(this.workspace);
-      console.log(`[FileSystemTiddlersReadStream] init: tiddlerFolderPath=${tiddlerFolderPath}, wikiFolderLocation=${this.workspace.wikiFolderLocation}`);
+      const filesFolderPath = getWikiFilesFolderPath(this.workspace);
+      console.log(`[FileSystemTiddlersReadStream] init: tiddlerFolderPath=${tiddlerFolderPath}, filesFolderPath=${filesFolderPath}`);
 
       if (isExternalPath(tiddlerFolderPath)) {
-        // Use ExternalStorage native module — expo-file-system may not have permission
         const plainPath = toPlainPath(tiddlerFolderPath);
         const info = await ExternalStorage.getInfo(plainPath);
         console.log(`[FileSystemTiddlersReadStream] (external) folder exists=${String(info.exists)}, isDirectory=${String(info.isDirectory)}, path=${plainPath}`);
-        if (!info.exists || !info.isDirectory) {
-          console.warn(`[FileSystemTiddlersReadStream] Tiddlers folder does not exist: ${plainPath}`);
-          this.initDone = true;
-          return;
+        if (info.exists && info.isDirectory) {
+          const relativePaths = await ExternalStorage.readDirRecursive(plainPath);
+          this.tiddlerFiles = relativePaths
+            .filter(p => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'))
+            .map(p => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${p}`);
         }
-        const relativePaths = await ExternalStorage.readDirRecursive(plainPath);
-        // Filter to only tiddler files and build absolute paths
-        this.tiddlerFiles = relativePaths
-          .filter(p => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'))
-          .map(p => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${p}`);
+        // Also scan files/ folder for .meta companion files (backward compat with old attachment format)
+        const plainFilesPath = toPlainPath(filesFolderPath);
+        const filesInfo = await ExternalStorage.getInfo(plainFilesPath);
+        if (filesInfo.exists && filesInfo.isDirectory) {
+          const filesRelativePaths = await ExternalStorage.readDirRecursive(plainFilesPath);
+          const metaFiles = filesRelativePaths
+            .filter(p => p.endsWith('.meta'))
+            .map(p => `${plainFilesPath}${plainFilesPath.endsWith('/') ? '' : '/'}${p}`);
+          this.tiddlerFiles.push(...metaFiles);
+        }
       } else {
         const folder = new Directory(tiddlerFolderPath);
         console.log(`[FileSystemTiddlersReadStream] (internal) folder.exists=${String(folder.exists)}, folder.uri=${folder.uri}`);
-        if (!folder.exists) {
-          console.warn(`[FileSystemTiddlersReadStream] Tiddlers folder does not exist: ${tiddlerFolderPath}`);
-          this.initDone = true;
-          return;
+        if (folder.exists) {
+          this.tiddlerFiles = this.collectTiddlerFiles(folder);
         }
-        this.tiddlerFiles = this.collectTiddlerFiles(folder);
+        // Also scan files/ folder for .meta companion files (backward compat with old attachment format)
+        const filesFolder = new Directory(filesFolderPath);
+        if (filesFolder.exists) {
+          const filesMetaFiles = this.collectTiddlerFiles(filesFolder);
+          // Only add .meta files from files/ — the binary files themselves are loaded by _canonical_uri
+          this.tiddlerFiles.push(...filesMetaFiles.filter(f => f.endsWith('.meta')));
+        }
       }
 
       console.log(`[FileSystemTiddlersReadStream] Found ${this.tiddlerFiles.length} tiddler files`);
@@ -279,11 +288,11 @@ export class FileSystemTiddlersReadStream extends Readable {
           if (Array.isArray(parsed)) {
             const results = parsed
               .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object' && 'title' in item)
-              .map(item => processFields(item as Partial<ITiddlerFields>) as ITiddlerFields);
+              .map(item => item as unknown as ITiddlerFields);
             return results.length > 0 ? results : null;
           }
           if (parsed.title) {
-            return processFields(parsed as Partial<ITiddlerFields>) as ITiddlerFields;
+            return parsed as unknown as ITiddlerFields;
           }
           return null;
         } catch {
@@ -302,13 +311,27 @@ export class FileSystemTiddlersReadStream extends Readable {
           const workspaceBase = this.workspace.wikiFolderLocation;
           metaFields._canonical_uri = binaryPath.replace(workspaceBase + '/', '');
         }
-        return processFields(metaFields as Partial<ITiddlerFields>) as ITiddlerFields;
+        if (!metaFields.title) {
+          throw new Error('.meta file must have a title');
+        }
+        return metaFields as unknown as ITiddlerFields;
       } else {
-        // .tid file (header fields + text body)
+        // .tid file — parse headers first to check if full text is needed.
+        // This avoids creating the (potentially large) text substring for skinny tiddlers.
         const content = await readText(filePath);
         const fallbackTitle = getTitleFromFilename(filename);
-        const fields = parseTiddlerFile(content, { title: fallbackTitle });
-        return processFields(fields) as ITiddlerFields;
+        const { fields: headerFields, bodyOffset, estimatedBodyLength } = parseTiddlerFileHeaderOnly(content, { title: fallbackTitle });
+
+        if (shouldSaveFullTiddler(headerFields, estimatedBodyLength)) {
+          // Need full text — parse the body
+          if (bodyOffset >= 0 && estimatedBodyLength > 0) {
+            (headerFields as Record<string, string>).text = content.substring(bodyOffset);
+          }
+          return headerFields;
+        }
+        // Skinny: return header-only with _is_skinny marker.
+        // The text body is intentionally NOT loaded — it will be lazy-loaded by the syncadaptor.
+        return makeSkinnyTiddler(headerFields);
       }
     } catch (error) {
       console.error(`Error reading tiddler file ${filePath}: ${(error as Error).message}`);

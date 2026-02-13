@@ -94,10 +94,11 @@ var OnStreamChunksToWebViewEventTypes;
     function executeScriptsAfterInjectHTML() {
         console.log('executeScriptsAfterInjectHTML');
         try {
-            // load tiddlers store, place it after <div id="styleArea"> where it used to belong to.
-            tiddlersStoreContents.forEach(function (storeJSONString, index) {
-                appendStoreScript(storeJSONString, "tidgi-tiddlers-store-".concat(index));
-            });
+            // All chunks are fragments of a single JSON array — join them into one valid JSON string.
+            // TiddlyWiki boot expects each <script type="application/json"> to contain a complete parseable JSON array.
+            var fullStoreJSON = tiddlersStoreContents.join('');
+            console.log("executeScriptsAfterInjectHTML: joined ".concat(tiddlersStoreContents.length, " chunks into ").concat(fullStoreJSON.length, " chars, starts='").concat(fullStoreJSON.slice(0, 20), "', ends='").concat(fullStoreJSON.slice(-20), "'"));
+            appendStoreScript(fullStoreJSON, 'tidgi-tiddlers-store');
             // load other scripts
             var scriptElements = Array.from(document.querySelectorAll('script'));
             for (var _i = 0, scriptElements_1 = scriptElements; _i < scriptElements_1.length; _i++) {

@@ -6,7 +6,7 @@
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { useState } from 'react';
 import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
-import { APP_CACHE_FOLDER_PATH, getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
+import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { gitClone, IGitRemote } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
@@ -22,69 +22,12 @@ export interface IGitImportQRCode {
   workspaceId: string;
 }
 
-type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'downloading-html' | 'success' | 'error';
-
-/**
- * Fetch skinny HTML with version-based caching.
- * Caches HTML by TidGi version (from response headers or server status) to avoid re-downloading.
- */
-async function fetchSkinnyHtmlWithCache(baseUrl: string): Promise<string> {
-  const skinnyHtmlUrl = new URL('/tw-mobile-sync/get-skinny-html', baseUrl);
-
-  // Try to get server version for cache key
-  let serverVersion = 'unknown';
-  try {
-    const statusResponse = await fetch(new URL('/status', baseUrl).toString());
-    if (statusResponse.ok) {
-      const statusData = await statusResponse.json() as { tiddlywiki_version?: string };
-      if (statusData.tiddlywiki_version) {
-        serverVersion = statusData.tiddlywiki_version;
-      }
-    }
-  } catch {
-    // If status fetch fails, proceed without caching
-  }
-
-  const cacheKey = `skinny-html-${serverVersion}`;
-  const cachePath = `${APP_CACHE_FOLDER_PATH}${cacheKey}.html`;
-
-  // Check cache first
-  const cacheInfo = await FileSystemLegacy.getInfoAsync(cachePath);
-  if (cacheInfo.exists) {
-    try {
-      return await FileSystemLegacy.readAsStringAsync(cachePath, { encoding: FileSystemLegacy.EncodingType.UTF8 });
-    } catch {
-      // Cache read failed, re-download
-    }
-  }
-
-  // Download fresh
-  const response = await fetch(skinnyHtmlUrl.toString());
-  if (!response.ok) {
-    throw new Error(`Failed to download HTML: ${response.statusText}`);
-  }
-
-  const htmlContent = await response.text();
-
-  // Cache for future use (best-effort)
-  try {
-    const cacheDirectoryInfo = await FileSystemLegacy.getInfoAsync(APP_CACHE_FOLDER_PATH);
-    if (!cacheDirectoryInfo.exists) {
-      await FileSystemLegacy.makeDirectoryAsync(APP_CACHE_FOLDER_PATH, { intermediates: true });
-    }
-    await FileSystemLegacy.writeAsStringAsync(cachePath, htmlContent, { encoding: FileSystemLegacy.EncodingType.UTF8 });
-  } catch {
-    // Cache write failure is non-fatal
-  }
-
-  return htmlContent;
-}
+type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
 
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
   const [error, setError] = useState<string | undefined>();
   const [cloneProgress, setCloneProgress] = useState({ phase: '', loaded: 0, total: 0 });
-  const [htmlDownloadProgress, setHtmlDownloadProgress] = useState(0);
 
   const addWiki = useWorkspaceStore(state => state.add);
   const removeWiki = useWorkspaceStore(state => state.remove);
@@ -162,17 +105,6 @@ export function useGitImport() {
       });
       console.log('[import] Git clone completed');
 
-      // 3. Download skinny HTML with version-based caching
-      setStatus('downloading-html');
-      const htmlContent = await fetchSkinnyHtmlWithCache(qrData.baseUrl);
-      const htmlFilePath = getWikiFilePath(newWorkspace);
-      if (isExternalPath(htmlFilePath)) {
-        await ExternalStorage.writeFileUtf8(toPlainPath(htmlFilePath), htmlContent);
-      } else {
-        await FileSystemLegacy.writeAsStringAsync(htmlFilePath, htmlContent, { encoding: FileSystemLegacy.EncodingType.UTF8 });
-      }
-      setHtmlDownloadProgress(1);
-
       setStatus('success');
       return newWorkspace;
     } catch (error) {
@@ -216,7 +148,6 @@ export function useGitImport() {
     setStatus('idle');
     setError(undefined);
     setCloneProgress({ phase: '', loaded: 0, total: 0 });
-    setHtmlDownloadProgress(0);
     setCreatedWorkspace(undefined);
   };
 
@@ -226,7 +157,6 @@ export function useGitImport() {
     status,
     error,
     cloneProgress,
-    htmlDownloadProgress,
     createdWorkspace,
   };
 }

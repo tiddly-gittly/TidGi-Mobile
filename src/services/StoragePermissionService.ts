@@ -69,7 +69,9 @@ async function detectWritableExternalPathAsync(): Promise<string | undefined> {
     const isManager = await ExternalStorage.isExternalStorageManager();
     console.log('[storage] Native storage check:', { isWritable, externalStorageDirectory, isManager });
     if (!isManager) {
-      console.warn('[storage] MANAGE_EXTERNAL_STORAGE is NOT granted — external paths will fail');
+      // On many devices/ROMs apps can write to shared storage (e.g. Documents/) even
+      // without MANAGE_EXTERNAL_STORAGE.  The actual probe below is authoritative.
+      console.log('[storage] MANAGE_EXTERNAL_STORAGE not formally granted — will probe actual write access');
     }
   } catch (error) {
     console.log('[storage] Native storage check failed (module not available?):', (error as Error).message);

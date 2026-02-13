@@ -2,35 +2,14 @@ import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import { Dispatch, RefObject, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { WebView } from 'react-native-webview';
+import tiddlywikiEmptyHtmlAssetID from '../../../assets/tiddlywiki/tiddlywiki-empty.html';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
-import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
-import { getWikiFilePath } from '../../constants/paths';
 import { WikiHookService } from '../../services/WikiHookService';
 import { FileSystemWikiStorageService } from '../../services/WikiStorageService/FileSystemWikiStorageService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { FileSystemTiddlersReadStream } from './useStreamChunksToWebView/FileSystemTiddlersReadStream';
-
-/**
- * Whether a path points to external/shared storage (needs ExternalStorage native module).
- */
-function isExternalPath(filepath: string): boolean {
-  const plain = toPlainPath(filepath);
-  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
-}
-
-/**
- * Read text file content — uses ExternalStorage for external paths,
- * expo-file-system for internal paths.
- */
-async function readTextFile(uri: string): Promise<string> {
-  if (isExternalPath(uri)) {
-    return ExternalStorage.readFileUtf8(toPlainPath(uri));
-  }
-  const file = new File(uri);
-  return file.text();
-}
 
 export interface IHtmlContent {
   html: string;
@@ -61,83 +40,57 @@ export function useTiddlyWiki(
     if (!webviewLoaded) return;
     void (async () => {
       try {
-        /**
-         * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
-         */
-        const wikiFilePath = getWikiFilePath(workspace);
-        console.log(`[useTiddlyWiki] reading wiki HTML from: ${wikiFilePath}`);
-        const htmlText = await readTextFile(wikiFilePath);
-        console.log(`[useTiddlyWiki] wiki HTML loaded, length=${htmlText.length}`);
-        const html = `<!doctype html>${htmlText}`;
-        console.log(`[useTiddlyWiki] loading TidGi mobile plugins...`);
-        const pluginJSONStrings = await getTidGiMobilePlugins();
-        console.log(`[useTiddlyWiki] plugins loaded, syncadaptor length=${pluginJSONStrings.expoFileSystemSyncadaptor.length}`);
+        const { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi } = await loadBundledAssets();
+        console.log(`[useTiddlyWiki] assets loaded: html=${emptyHtml.length}, syncadaptor=${expoFileSystemSyncadaptor.length}`);
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
 
+        // The HTML already contains $:/core + themes in its store area (rendered by $:/core/save/empty).
+        // We only stream syncadaptor plugins and user tiddlers from the filesystem.
         const tiddlersStream = new FileSystemTiddlersReadStream(workspace, {
-          additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
+          additionalContent: [expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi],
           quickLoad,
         });
-        console.log(`[useTiddlyWiki] calling tiddlersStream.init()...`);
         tiddlersStream.init();
-        console.log(`[useTiddlyWiki] tiddlersStream.init() done, calling injectHtmlAndTiddlersStore...`);
 
         tiddlersStreamReference.current = tiddlersStream;
-        await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
-        console.log(`[useTiddlyWiki] injectHtmlAndTiddlersStore completed`);
+        await injectHtmlAndTiddlersStore({ html: emptyHtml, tiddlersStream, setLoadHtmlError });
       } catch (error) {
         console.error(`[useTiddlyWiki] FATAL error:`, error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);
       }
     })();
-    // React Hook useMemo has a missing dependency: 'injectHtmlAndTiddlersStore', 'quickLoad', and 'workspace'. Either include it or remove the dependency array.
-    // but workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
+    // workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
   }, [workspace.id, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError, loading, streamChunksToWebViewPercentage };
 }
 
-export interface ITidGiMobilePlugins {
+export interface IBundledAssets {
+  emptyHtml: string;
   expoFileSystemSyncadaptor: string;
   expoFileSystemSyncadaptorUi: string;
 }
-async function getTidGiMobilePlugins(): Promise<ITidGiMobilePlugins> {
-  const assets = await Asset.loadAsync([expoFileSystemSyncadaptorAssetID, expoFileSystemSyncadaptorUiAssetID]);
-  const expoFileSystemSyncadaptorFileUri = assets[0].localUri;
-  const expoFileSystemSyncadaptorUiFileUri = assets[1].localUri;
-  if (!expoFileSystemSyncadaptorFileUri) {
-    throw new Error(`expoFileSystemSyncadaptor plugin failed to load, ID: ${expoFileSystemSyncadaptorAssetID}`);
-  }
-  if (!expoFileSystemSyncadaptorUiFileUri) {
-    throw new Error(`expoFileSystemSyncadaptorUiAsset plugin failed to load, ID: ${expoFileSystemSyncadaptorUiAssetID}`);
-  }
-  const syncadaptorFile = new File(expoFileSystemSyncadaptorFileUri);
-  const syncadaptorUiFile = new File(expoFileSystemSyncadaptorUiFileUri);
-  const [expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all([
-    syncadaptorFile.text(),
-    syncadaptorUiFile.text(),
+
+/**
+ * Load bundled TiddlyWiki assets from the app bundle.
+ * The empty HTML (rendered from $:/core/save/empty) already contains $:/core + themes.
+ */
+async function loadBundledAssets(): Promise<IBundledAssets> {
+  const assets = await Asset.loadAsync([
+    tiddlywikiEmptyHtmlAssetID,
+    expoFileSystemSyncadaptorAssetID,
+    expoFileSystemSyncadaptorUiAssetID,
   ]);
-  return ({
-    expoFileSystemSyncadaptor,
-    expoFileSystemSyncadaptorUi,
-  });
+  const uris = assets.map(a => a.localUri);
+  for (let index = 0; index < uris.length; index++) {
+    if (!uris[index]) throw new Error(`Asset ${index} failed to load (localUri is null)`);
+  }
+  const [emptyHtmlFull, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all(
+    uris.map(uri => new File(uri!).text()),
+  );
+  // Extract <body> content only — document.body.innerHTML needs inner content, not the full document
+  const bodyMatch = /<body[^>]*>([\s\S]*)<\/body>/i.exec(emptyHtmlFull);
+  const emptyHtml = bodyMatch?.[1] ?? emptyHtmlFull;
+  return { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi };
 }
-
-// export function useEmptyTiddlyWiki() {
-//   const [htmlContent, setHtmlContent] = useState('');
-
-//   const [assets, error] = useAssets([emptyWikiAssetID]);
-//   useEffect(() => {
-//     const emptyWikiFileUri = assets?.[0]?.localUri;
-//     if (emptyWikiFileUri === undefined || emptyWikiFileUri === null) return;
-//     const fetchHTML = async () => {
-//       const content = await fs.readAsStringAsync(emptyWikiFileUri);
-//       const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
-//       setHtmlContent(modifiedContent);
-//     };
-
-//     void fetchHTML();
-//   }, [assets]);
-//   return htmlContent;
-// }

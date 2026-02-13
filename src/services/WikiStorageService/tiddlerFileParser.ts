@@ -53,6 +53,42 @@ export function parseTiddlerFile(text: string, fields?: Partial<ITiddlerFields>)
 }
 
 /**
+ * Parse only the header portion of a .tid file, skipping the text body.
+ * Useful for determining whether `shouldSaveFullTiddler` before committing to
+ * loading the (potentially large) text body into memory.
+ *
+ * Returns the parsed header fields and the byte offset where the body starts
+ * (or -1 if no body exists), so the caller can read the body on demand.
+ */
+export function parseTiddlerFileHeaderOnly(
+  text: string,
+  fields?: Partial<ITiddlerFields>,
+): { fields: ITiddlerFields; bodyOffset: number; estimatedBodyLength: number } {
+  const result: Partial<ITiddlerFields> = fields ?? {};
+
+  const blankLineMatch = /\r?\n\r?\n/.exec(text);
+  const headerText = blankLineMatch !== null ? text.substring(0, blankLineMatch.index) : text;
+  const bodyOffset = blankLineMatch !== null ? blankLineMatch.index + blankLineMatch[0].length : -1;
+  const estimatedBodyLength = bodyOffset >= 0 ? text.length - bodyOffset : 0;
+
+  const headerLines = headerText.split(/\r?\n/);
+  for (const line of headerLines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex !== -1) {
+      const name = line.substring(0, colonIndex).trim();
+      const value = line.substring(colonIndex + 1).trim();
+      if (name) {
+        (result as Record<string, string | string[]>)[name] = value;
+      }
+    }
+  }
+  if (!result.title) {
+    throw new Error('Tiddler file must contain a title field');
+  }
+  return { fields: result as ITiddlerFields, bodyOffset, estimatedBodyLength };
+}
+
+/**
  * Parse JSON safely without throwing
  */
 export function parseJSONSafe<T = unknown>(text: string, fallbackValue?: T): T | undefined {
@@ -202,18 +238,21 @@ export function getTitleFromFilename(filename: string): string {
 }
 
 /**
- * Create skinny tiddler (without text field) for faster loading
+ * Create skinny tiddler (without text field) for faster initial loading.
+ * Sets _is_skinny so TiddlyWiki's syncer triggers lazyLoad events.
  */
-export function makeSkinnyTiddler(fields: ITiddlerFields): Omit<ITiddlerFields, 'text'> {
+export function makeSkinnyTiddler(fields: ITiddlerFields): Omit<ITiddlerFields, 'text'> & { _is_skinny: string } {
   const { text: _text, ...skinny } = fields;
-  return skinny;
+  return { ...skinny, _is_skinny: 'yes' };
 }
 
 /**
- * Check if tiddler should be saved with full text in fields
- * System tiddlers, plugins, and small tiddlers should include text
+ * Check if tiddler should be saved with full text in the initial boot store.
+ * System tiddlers, plugins, and small tiddlers should include text.
+ * `estimatedTextLength` can be provided from header-only parsing to avoid
+ * reading the full body just to measure its size.
  */
-export function shouldSaveFullTiddler(fields: ITiddlerFields): boolean {
+export function shouldSaveFullTiddler(fields: ITiddlerFields, estimatedTextLength?: number): boolean {
   const title = fields.title;
   const type = fields.type;
 
@@ -228,7 +267,7 @@ export function shouldSaveFullTiddler(fields: ITiddlerFields): boolean {
   }
 
   // Small tiddlers (less than 10KB)
-  const textLength = (fields.text || '').length;
+  const textLength = estimatedTextLength ?? (fields.text || '').length;
   if (textLength < 10000) {
     return true;
   }
