@@ -9,9 +9,9 @@
  */
 
 import * as Application from 'expo-application';
-import { Directory, File } from 'expo-file-system';
 import { startActivityAsync } from 'expo-intent-launcher';
 import { Platform } from 'react-native';
+import { ExternalStorage, toPlainPath } from '../../modules/external-storage';
 
 const MANAGE_APP_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION';
 const MANAGE_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION';
@@ -19,6 +19,7 @@ const MANAGE_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_ALL_FILES_ACCESS
 const EXTERNAL_WIKI_PATH_CANDIDATES = [
   'file:///storage/emulated/0/Documents/TidGi/',
   'file:///sdcard/Documents/TidGi/',
+  `file:///storage/emulated/0/Android/data/${Application.applicationId}/files/TidGi/`,
   `file:///storage/emulated/0/Android/media/${Application.applicationId}/TidGi/`,
 ] as const;
 
@@ -28,38 +29,65 @@ export const EXTERNAL_WIKI_PATH = EXTERNAL_WIKI_PATH_CANDIDATES[0];
 let resolvedExternalWikiPath: string = EXTERNAL_WIKI_PATH;
 let lastStorageAccessErrorMessage = '';
 
-function canWriteToDirectoryUri(uri: string, createDirectoryWhenMissing: boolean): boolean {
+/**
+ * Probe external directory using the raw native module (bypasses Expo FS whitelist).
+ */
+async function tryWriteToExternalDirectoryAsync(
+  uri: string,
+  createDirectoryWhenMissing: boolean,
+): Promise<{ ok: boolean; exists: boolean; errorMessage?: string }> {
   try {
-    const directory = new Directory(uri);
-    if (!directory.exists) {
+    const plainPath = toPlainPath(uri.endsWith('/') ? uri : `${uri}/`);
+    const info = await ExternalStorage.getInfo(plainPath);
+    const existedBefore = info.exists;
+
+    if (!existedBefore) {
       if (!createDirectoryWhenMissing) {
-        return false;
+        return { ok: false, exists: false, errorMessage: 'Directory does not exist' };
       }
-      directory.create({ intermediates: true, idempotent: true });
+      await ExternalStorage.mkdir(plainPath);
     }
-    const probeName = `.probe_${Date.now()}`;
-    const probe = new File(directory, probeName);
-    probe.write('test');
-    probe.delete();
-    return true;
+
+    // Write + delete a probe file
+    const probePath = `${plainPath}.probe_${Date.now()}`;
+    await ExternalStorage.writeFileUtf8(probePath, 'test');
+    await ExternalStorage.deleteFile(probePath);
+
+    return { ok: true, exists: true };
   } catch (error) {
-    lastStorageAccessErrorMessage = `${uri} -> ${(error as Error).message}`;
-    return false;
+    return { ok: false, exists: false, errorMessage: (error as Error).message };
   }
 }
 
-function detectWritableExternalPath(): string | undefined {
+async function detectWritableExternalPathAsync(): Promise<string | undefined> {
   const failureMessages: string[] = [];
 
+  // Extra diagnostics
+  try {
+    const isWritable = await ExternalStorage.isExternalStorageWritable();
+    const externalStorageDirectory = await ExternalStorage.getExternalStorageDirectory();
+    const isManager = await ExternalStorage.isExternalStorageManager();
+    console.log('[storage] Native storage check:', { isWritable, externalStorageDirectory, isManager });
+    if (!isManager) {
+      console.warn('[storage] MANAGE_EXTERNAL_STORAGE is NOT granted — external paths will fail');
+    }
+  } catch (error) {
+    console.log('[storage] Native storage check failed (module not available?):', (error as Error).message);
+  }
+
   for (const candidate of EXTERNAL_WIKI_PATH_CANDIDATES) {
-    if (canWriteToDirectoryUri(candidate, true)) {
+    const probeResult = await tryWriteToExternalDirectoryAsync(candidate, true);
+
+    if (probeResult.ok) {
       resolvedExternalWikiPath = candidate;
       lastStorageAccessErrorMessage = '';
+      console.log('[storage] Selected writable external path:', candidate);
       return candidate;
     }
-    if (lastStorageAccessErrorMessage) {
-      failureMessages.push(lastStorageAccessErrorMessage);
-    }
+
+    const failureMessage = `${candidate} -> ${probeResult.errorMessage ?? 'Unknown error'}`;
+    failureMessages.push(failureMessage);
+    console.log('[storage] External path probe failed:', failureMessage);
   }
 
   lastStorageAccessErrorMessage = failureMessages.join('\n');
@@ -75,13 +103,13 @@ export function getStorageAccessErrorMessage(): string {
 }
 
 /**
- * Check whether MANAGE_EXTERNAL_STORAGE permission has been granted.
- * We probe by attempting to create and delete a temp file in /sdcard/Documents/.
+ * Async check whether MANAGE_EXTERNAL_STORAGE is effectively usable.
+ * Uses legacy FS API to probe writable external paths.
  */
-export function isAllFilesAccessGranted(): boolean {
+export async function isAllFilesAccessGrantedAsync(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
 
-  const writablePath = detectWritableExternalPath();
+  const writablePath = await detectWritableExternalPathAsync();
   if (writablePath !== undefined) {
     return true;
   }
@@ -97,7 +125,9 @@ export function isAllFilesAccessGranted(): boolean {
  */
 export async function requestAllFilesAccess(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
-  if (isAllFilesAccessGranted()) return true;
+
+  console.log('[storage] requestAllFilesAccess: checking current state…');
+  if (await isAllFilesAccessGrantedAsync()) return true;
 
   try {
     const applicationId = Application.applicationId;
@@ -120,7 +150,7 @@ export async function requestAllFilesAccess(): Promise<boolean> {
 
   // Wait briefly for system to update permission state, then check
   await new Promise(resolve => setTimeout(resolve, 500));
-  return isAllFilesAccessGranted();
+  return isAllFilesAccessGrantedAsync();
 }
 
 /**
@@ -128,14 +158,6 @@ export async function requestAllFilesAccess(): Promise<boolean> {
  */
 export function normalizeDirectoryUri(uri: string): string {
   return uri.endsWith('/') ? uri : `${uri}/`;
-}
-
-/**
- * Safely ensure a directory exists (file:// URIs only).
- */
-export function ensureDirectoryExists(directory: Directory): void {
-  if (directory.exists) return;
-  directory.create({ intermediates: true, idempotent: true });
 }
 
 /**
@@ -155,13 +177,9 @@ export function formatStorageUri(uri: string): string {
 }
 
 /**
- * Check whether a directory URI is writable by creating/deleting a probe file.
+ * Async check whether a directory URI is writable (uses native module for external paths).
  */
-export function checkStorageWriteAccess(uri: string): boolean {
-  try {
-    return canWriteToDirectoryUri(uri, true);
-  } catch (error) {
-    console.warn('[storage] Write check failed:', error);
-    return false;
-  }
+export async function checkStorageWriteAccessAsync(uri: string): Promise<boolean> {
+  const result = await tryWriteToExternalDirectoryAsync(uri, true);
+  return result.ok;
 }

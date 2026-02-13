@@ -85,6 +85,11 @@ jobs:
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean
 
+      - name: Save AndroidManifest (release prebuild)
+        run: |
+          mkdir -p /tmp/apk-artifacts
+          cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-release.xml
+
       # Don't need this, because we already remove expo-application that blocks f-droid https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
       # - name: Remove prorietary bits (for fix f-droid)
       #   run: npx zx scripts/fit-f-droid.mjs
@@ -141,6 +146,11 @@ jobs:
       # Same step as above
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean
+
+      - name: Save AndroidManifest (dev-client prebuild)
+        run: |
+          mkdir -p /tmp/apk-artifacts
+          cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-dev-client.xml
       - name: Build dev-client APK (debug variant)
         run: |
           cd android
@@ -155,6 +165,8 @@ jobs:
           mkdir -p /tmp/apk-upload
           cp /tmp/apk-artifacts/app-release-signed.apk /tmp/apk-upload/app-release-signed.apk || true
           cp android/app/build/outputs/apk/debug/app-release-dev-client.apk /tmp/apk-upload/app-release-dev-client.apk || true
+          cp /tmp/apk-artifacts/AndroidManifest-release.xml /tmp/apk-upload/AndroidManifest-release.xml || true
+          cp /tmp/apk-artifacts/AndroidManifest-dev-client.xml /tmp/apk-upload/AndroidManifest-dev-client.xml || true
 
       - name: Upload APK artifact
         if: github.event_name == 'pull_request'

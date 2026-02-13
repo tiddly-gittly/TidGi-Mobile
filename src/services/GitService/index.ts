@@ -4,8 +4,9 @@
  */
 
 import { Buffer } from 'buffer';
-import { Directory, File } from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 import git from 'isomorphic-git';
+import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
 import pTimeout from 'p-timeout';
 import { IWikiWorkspace } from '../../store/workspace';
 
@@ -19,6 +20,15 @@ if (typeof global.Buffer === 'undefined') {
 }
 
 /**
+ * Whether a file:// URI (or plain path) points to external/shared storage
+ * and needs to go through the raw native module instead of Expo FS.
+ */
+function isExternalPath(filepath: string): boolean {
+  const plain = toPlainPath(filepath);
+  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
+}
+
+/**
  * Git remote configuration with authentication
  */
 export interface IGitRemote {
@@ -29,132 +39,144 @@ export interface IGitRemote {
 }
 
 /**
- * Get the FS adapter for isomorphic-git
- * Maps Expo FileSystem to isomorphic-git's FS interface
- * Follows Node.js fs.promises API structure
- * Note: Many Expo FileSystem operations are synchronous but wrapped in async for API compatibility
+ * FS adapter for isomorphic-git.
+ *
+ * For paths on external/shared storage (/storage/emulated/0/…) we use a local
+ * native module (`ExternalStorage`) that uses raw `java.io.File` — Expo's own
+ * FileSystem rejects writes to those paths.
+ *
+ * For internal paths we keep using the legacy Expo FS API which works fine.
  */
-/* eslint-disable @typescript-eslint/require-await */
 const fs = {
   promises: {
     async readFile(filepath: string, options?: { encoding?: 'utf8' } | 'utf8'): Promise<string | Buffer> {
-      try {
-        const file = new File(filepath);
-        const encoding = typeof options === 'string' ? options : options?.encoding;
+      const encoding = typeof options === 'string' ? options : options?.encoding;
 
+      if (isExternalPath(filepath)) {
+        const plain = toPlainPath(filepath);
         if (encoding === 'utf8') {
-          return await file.text();
+          return ExternalStorage.readFileUtf8(plain);
         }
+        const base64 = await ExternalStorage.readFileBase64(plain);
+        return Buffer.from(base64, 'base64');
+      }
 
-        // For binary, return Buffer
-        const arrayBuffer = await file.arrayBuffer();
-        return Buffer.from(arrayBuffer);
-      } catch (error) {
-        // Only throw ENOENT if file doesn't exist; preserve permission errors, encoding errors, etc.
-        if (!new File(filepath).exists) {
+      // Internal path — use legacy Expo FS
+      try {
+        if (encoding === 'utf8') {
+          return await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+        }
+        const base64 = await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.Base64 });
+        return Buffer.from(base64, 'base64');
+      } catch {
+        const info = await FileSystemLegacy.getInfoAsync(filepath).catch(() => ({ exists: false }));
+        if (!info.exists) {
           const enoentError = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
           enoentError.code = 'ENOENT';
           enoentError.errno = -2;
           enoentError.path = filepath;
           throw enoentError;
         }
-        // Re-throw permission errors, encoding errors, etc.
-        throw error;
+        if (encoding === 'utf8') {
+          return await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+        }
+        const base64 = await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.Base64 });
+        return Buffer.from(base64, 'base64');
       }
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
-      const file = new File(filepath);
-      const directory = file.parentDirectory;
-      const directoryExists = directory.exists;
-
-      if (!directoryExists) {
-        directory.create({ intermediates: true, idempotent: true });
+      if (isExternalPath(filepath)) {
+        const plain = toPlainPath(filepath);
+        if (typeof data === 'string') {
+          return ExternalStorage.writeFileUtf8(plain, data);
+        }
+        const base64 = Buffer.isBuffer(data)
+          ? data.toString('base64')
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+        return ExternalStorage.writeFileBase64(plain, base64);
       }
 
+      // Internal path
+      const lastSlash = filepath.lastIndexOf('/');
+      if (lastSlash > 0) {
+        const parentDirectory = filepath.substring(0, lastSlash);
+        const parentInfo = await FileSystemLegacy.getInfoAsync(parentDirectory);
+        if (!parentInfo.exists) {
+          await FileSystemLegacy.makeDirectoryAsync(parentDirectory, { intermediates: true });
+        }
+      }
       if (typeof data === 'string') {
-        file.write(data);
-      } else if (Buffer.isBuffer(data)) {
-        // Convert Buffer to Uint8Array
-        file.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+        await FileSystemLegacy.writeAsStringAsync(filepath, data, { encoding: FileSystemLegacy.EncodingType.UTF8 });
       } else {
-        file.write(data);
+        const base64 = Buffer.isBuffer(data)
+          ? data.toString('base64')
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+        await FileSystemLegacy.writeAsStringAsync(filepath, base64, { encoding: FileSystemLegacy.EncodingType.Base64 });
       }
     },
 
     async unlink(filepath: string): Promise<void> {
-      try {
-        const file = new File(filepath);
-        const fileExists = file.exists;
-
-        if (fileExists) {
-          file.delete();
-        }
-      } catch (error) {
-        // Only throw ENOENT if file doesn't exist
-        if (!new File(filepath).exists) {
+      if (isExternalPath(filepath)) {
+        const plain = toPlainPath(filepath);
+        const exists = await ExternalStorage.exists(plain);
+        if (!exists) {
           const enoentError = new Error(`ENOENT: no such file or directory, unlink '${filepath}'`) as NodeJS.ErrnoException;
           enoentError.code = 'ENOENT';
           throw enoentError;
         }
-        throw error;
+        return ExternalStorage.deleteFile(plain);
       }
+
+      const info = await FileSystemLegacy.getInfoAsync(filepath);
+      if (!info.exists) {
+        const enoentError = new Error(`ENOENT: no such file or directory, unlink '${filepath}'`) as NodeJS.ErrnoException;
+        enoentError.code = 'ENOENT';
+        throw enoentError;
+      }
+      await FileSystemLegacy.deleteAsync(filepath, { idempotent: true });
     },
 
     async readdir(filepath: string): Promise<string[]> {
+      if (isExternalPath(filepath)) {
+        return ExternalStorage.readDir(toPlainPath(filepath));
+      }
+
       try {
-        const directory = new Directory(filepath);
-        const entries = directory.list();
-        // isomorphic-git expects plain filenames without trailing slashes
-        return entries.map(entry => entry.name.replace(/\/$/, ''));
-      } catch (error) {
-        // Only throw ENOENT if directory doesn't exist
-        if (!new Directory(filepath).exists) {
+        return await FileSystemLegacy.readDirectoryAsync(filepath);
+      } catch {
+        const info = await FileSystemLegacy.getInfoAsync(filepath).catch(() => ({ exists: false }));
+        if (!info.exists) {
           const enoentError = new Error(`ENOENT: no such file or directory, scandir '${filepath}'`) as NodeJS.ErrnoException;
           enoentError.code = 'ENOENT';
           throw enoentError;
         }
-        throw error;
+        return await FileSystemLegacy.readDirectoryAsync(filepath);
       }
     },
 
     async mkdir(filepath: string, options?: { recursive?: boolean }): Promise<void> {
+      if (isExternalPath(filepath)) {
+        return ExternalStorage.mkdir(toPlainPath(filepath));
+      }
+
       try {
-        const directory = new Directory(filepath);
-        if (!directory.exists) {
-          directory.create({ intermediates: true, idempotent: true });
-        }
+        const info = await FileSystemLegacy.getInfoAsync(filepath);
+        if (info.exists) return;
+        await FileSystemLegacy.makeDirectoryAsync(filepath, { intermediates: options?.recursive ?? true });
       } catch (error) {
-        if (!options?.recursive) {
-          throw error;
-        }
+        if (!options?.recursive) throw error;
       }
     },
 
     async rmdir(filepath: string): Promise<void> {
-      const directory = new Directory(filepath);
-      if (!directory.exists) {
-        return;
+      if (isExternalPath(filepath)) {
+        return ExternalStorage.rmdir(toPlainPath(filepath));
       }
-      try {
-        directory.delete();
-      } catch {
-        // On Android, delete() may fail on dirs with locked files (e.g. .git/objects/pack).
-        // Recursively delete contents first, then retry.
-        const entries = directory.list();
-        for (const entry of entries) {
-          if (entry instanceof File) {
-            try {
-              entry.delete();
-            } catch { /* best effort */ }
-          } else if (entry instanceof Directory) {
-            await fs.promises.rmdir(entry.uri);
-          }
-        }
-        try {
-          directory.delete();
-        } catch { /* best effort */ }
-      }
+
+      const info = await FileSystemLegacy.getInfoAsync(filepath);
+      if (!info.exists) return;
+      await FileSystemLegacy.deleteAsync(filepath, { idempotent: true });
     },
 
     async stat(filepath: string): Promise<{
@@ -176,79 +198,49 @@ const fs = {
       ctimeMs: number;
       birthtimeMs: number;
     }> {
-      try {
-        // Check directory first since File class is for files only
-        const directory = new Directory(filepath);
-        if (directory.exists) {
-          const directoryInfo = directory.info();
-          const modifiedTime = toSafeNumber(directoryInfo.modificationTime, Date.now());
-          return {
-            isFile: () => false,
-            isDirectory: () => true,
-            isSymbolicLink: () => false,
-            dev: 0,
-            ino: 0,
-            mode: 0o755,
-            nlink: 1,
-            uid: 0,
-            gid: 0,
-            rdev: 0,
-            size: 0,
-            blksize: 4096,
-            blocks: 0,
-            atimeMs: modifiedTime,
-            mtimeMs: modifiedTime,
-            ctimeMs: modifiedTime,
-            birthtimeMs: modifiedTime,
-          };
-        }
-
-        const file = new File(filepath);
-        if (!file.exists) {
+      if (isExternalPath(filepath)) {
+        const info = await ExternalStorage.getInfo(toPlainPath(filepath));
+        if (!info.exists) {
           const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
           error.code = 'ENOENT';
           throw error;
         }
+        const isDir = info.isDirectory;
+        const fileSize = toSafeNumber(info.size, 0);
+        const modifiedTimeMs = toSafeNumber(info.modificationTime, Date.now());
 
-        const modifiedTime = toSafeNumber(file.modificationTime, Date.now());
-        const fileSize = toSafeNumber(file.size, 0);
         return {
-          isFile: () => true,
-          isDirectory: () => false,
+          isFile: () => !isDir,
+          isDirectory: () => isDir,
           isSymbolicLink: () => false,
-          dev: 0,
-          ino: 0,
-          mode: 0o644,
-          nlink: 1,
-          uid: 0,
-          gid: 0,
-          rdev: 0,
-          size: fileSize,
-          blksize: 4096,
-          blocks: Math.ceil(fileSize / 512),
-          atimeMs: modifiedTime,
-          mtimeMs: modifiedTime,
-          ctimeMs: modifiedTime,
-          birthtimeMs: modifiedTime,
+          dev: 0, ino: 0, mode: isDir ? 0o755 : 0o644, nlink: 1, uid: 0, gid: 0, rdev: 0,
+          size: fileSize, blksize: 4096, blocks: Math.ceil(fileSize / 512),
+          atimeMs: modifiedTimeMs, mtimeMs: modifiedTimeMs, ctimeMs: modifiedTimeMs, birthtimeMs: modifiedTimeMs,
         };
-      } catch (error) {
-        // Re-throw ENOENT as-is; for other errors check if path actually exists
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          throw error;
-        }
-        // If neither file nor directory exists, produce ENOENT; otherwise preserve real error
-        if (!new File(filepath).exists && !new Directory(filepath).exists) {
-          const enoentError = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
-          enoentError.code = 'ENOENT';
-          throw enoentError;
-        }
+      }
+
+      // Internal path
+      const info = await FileSystemLegacy.getInfoAsync(filepath, { size: true });
+      if (!info.exists) {
+        const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
         throw error;
       }
+      const isDir = info.isDirectory;
+      const fileSize = toSafeNumber(info.size, 0);
+      const modifiedTimeMs = toSafeNumber(info.modificationTime, Date.now() / 1000) * 1000;
+
+      return {
+        isFile: () => !isDir,
+        isDirectory: () => isDir,
+        isSymbolicLink: () => false,
+        dev: 0, ino: 0, mode: isDir ? 0o755 : 0o644, nlink: 1, uid: 0, gid: 0, rdev: 0,
+        size: fileSize, blksize: 4096, blocks: Math.ceil(fileSize / 512),
+        atimeMs: modifiedTimeMs, mtimeMs: modifiedTimeMs, ctimeMs: modifiedTimeMs, birthtimeMs: modifiedTimeMs,
+      };
     },
 
     async lstat(filepath: string) {
-      // Expo FS doesn't support symlinks, so lstat behaves the same as stat.
-      // isSymbolicLink always returns false since mobile FS doesn't have symlinks.
       return fs.promises.stat(filepath);
     },
 
@@ -261,7 +253,7 @@ const fs = {
     },
 
     async chmod(_filepath: string, _mode: number): Promise<void> {
-      // No-op on mobile - Expo FileSystem doesn't support chmod
+      // No-op on mobile
     },
   },
 };

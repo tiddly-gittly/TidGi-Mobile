@@ -3,13 +3,17 @@
  * Replaces HTML download with git clone
  */
 
-import { Directory, File } from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { useState } from 'react';
+import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
 import { APP_CACHE_FOLDER_PATH, getWikiFilePath, WIKI_FOLDER_PATH } from '../../constants/paths';
-import { recursiveDeleteDirectory } from '../../pages/Config/Developer/useClearAllWikiData';
 import { gitClone, IGitRemote } from '../../services/GitService';
-import { ensureDirectoryExists } from '../../services/StoragePermissionService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+
+function isExternalPath(filepath: string): boolean {
+  const plain = toPlainPath(filepath);
+  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
+}
 
 export interface IGitImportQRCode {
   baseUrl: string;
@@ -43,12 +47,12 @@ async function fetchSkinnyHtmlWithCache(baseUrl: string): Promise<string> {
 
   const cacheKey = `skinny-html-${serverVersion}`;
   const cachePath = `${APP_CACHE_FOLDER_PATH}${cacheKey}.html`;
-  const cacheFile = new File(cachePath);
 
   // Check cache first
-  if (cacheFile.exists) {
+  const cacheInfo = await FileSystemLegacy.getInfoAsync(cachePath);
+  if (cacheInfo.exists) {
     try {
-      return await cacheFile.text();
+      return await FileSystemLegacy.readAsStringAsync(cachePath, { encoding: FileSystemLegacy.EncodingType.UTF8 });
     } catch {
       // Cache read failed, re-download
     }
@@ -64,11 +68,11 @@ async function fetchSkinnyHtmlWithCache(baseUrl: string): Promise<string> {
 
   // Cache for future use (best-effort)
   try {
-    const cacheDirectory = new Directory(APP_CACHE_FOLDER_PATH);
-    if (!cacheDirectory.exists) {
-      ensureDirectoryExists(cacheDirectory);
+    const cacheDirectoryInfo = await FileSystemLegacy.getInfoAsync(APP_CACHE_FOLDER_PATH);
+    if (!cacheDirectoryInfo.exists) {
+      await FileSystemLegacy.makeDirectoryAsync(APP_CACHE_FOLDER_PATH, { intermediates: true });
     }
-    cacheFile.write(htmlContent);
+    await FileSystemLegacy.writeAsStringAsync(cachePath, htmlContent, { encoding: FileSystemLegacy.EncodingType.UTF8 });
   } catch {
     // Cache write failure is non-fatal
   }
@@ -124,13 +128,25 @@ export function useGitImport() {
       console.log('[import] wikiFolderLocation:', workspaceFolderLocation);
 
       // Prepare directory for git clone
-      const directory = new Directory(newWorkspace.wikiFolderLocation);
-      if (directory.exists) {
-        console.log('[import] Removing existing directory before clone:', newWorkspace.wikiFolderLocation);
-        recursiveDeleteDirectory(directory);
+      const wikiFolder = newWorkspace.wikiFolderLocation;
+      if (isExternalPath(wikiFolder)) {
+        const plainPath = toPlainPath(wikiFolder);
+        const info = await ExternalStorage.getInfo(plainPath);
+        if (info.exists) {
+          console.log('[import] Removing existing directory before clone:', wikiFolder);
+          await ExternalStorage.rmdir(plainPath);
+        }
+        console.log('[import] Creating empty directory for git clone:', wikiFolder);
+        await ExternalStorage.mkdir(plainPath);
+      } else {
+        const directoryInfo = await FileSystemLegacy.getInfoAsync(wikiFolder);
+        if (directoryInfo.exists) {
+          console.log('[import] Removing existing directory before clone:', wikiFolder);
+          await FileSystemLegacy.deleteAsync(wikiFolder, { idempotent: true });
+        }
+        console.log('[import] Creating empty directory for git clone:', wikiFolder);
+        await FileSystemLegacy.makeDirectoryAsync(wikiFolder, { intermediates: true });
       }
-      console.log('[import] Creating empty directory for git clone:', newWorkspace.wikiFolderLocation);
-      ensureDirectoryExists(directory);
 
       // 2. Clone repository
       setStatus('cloning');
@@ -149,8 +165,12 @@ export function useGitImport() {
       // 3. Download skinny HTML with version-based caching
       setStatus('downloading-html');
       const htmlContent = await fetchSkinnyHtmlWithCache(qrData.baseUrl);
-      const htmlFile = new File(getWikiFilePath(newWorkspace));
-      htmlFile.write(htmlContent);
+      const htmlFilePath = getWikiFilePath(newWorkspace);
+      if (isExternalPath(htmlFilePath)) {
+        await ExternalStorage.writeFileUtf8(toPlainPath(htmlFilePath), htmlContent);
+      } else {
+        await FileSystemLegacy.writeAsStringAsync(htmlFilePath, htmlContent, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+      }
       setHtmlDownloadProgress(1);
 
       setStatus('success');
@@ -168,10 +188,19 @@ export function useGitImport() {
         // (for SAF, it's only set after createDirectory succeeds)
         if (workspaceFolderLocation !== undefined) {
           try {
-            const directory = new Directory(workspaceFolderLocation);
-            if (directory.exists) {
-              console.log('Cleaning up created directory:', workspaceFolderLocation);
-              recursiveDeleteDirectory(directory);
+            if (isExternalPath(workspaceFolderLocation)) {
+              const plainPath = toPlainPath(workspaceFolderLocation);
+              const info = await ExternalStorage.getInfo(plainPath);
+              if (info.exists) {
+                console.log('Cleaning up created directory:', workspaceFolderLocation);
+                await ExternalStorage.rmdir(plainPath);
+              }
+            } else {
+              const cleanupInfo = await FileSystemLegacy.getInfoAsync(workspaceFolderLocation);
+              if (cleanupInfo.exists) {
+                console.log('Cleaning up created directory:', workspaceFolderLocation);
+                await FileSystemLegacy.deleteAsync(workspaceFolderLocation, { idempotent: true });
+              }
             }
           } catch (cleanupError) {
             console.warn('Failed to cleanup folder (non-fatal):', cleanupError);

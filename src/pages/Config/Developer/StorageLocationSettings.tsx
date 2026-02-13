@@ -10,11 +10,11 @@ import { Alert, AppState, type AppStateStatus, Platform, StyleSheet, View } from
 import { Button, Card, Text, useTheme } from 'react-native-paper';
 import { WIKI_FOLDER_PATH } from '../../../constants/paths';
 import {
-  checkStorageWriteAccess,
+  checkStorageWriteAccessAsync,
   formatStorageUri,
   getPreferredExternalWikiPath,
   getStorageAccessErrorMessage,
-  isAllFilesAccessGranted,
+  isAllFilesAccessGrantedAsync,
   requestAllFilesAccess,
 } from '../../../services/StoragePermissionService';
 import { useWorkspaceStore } from '../../../store/workspace';
@@ -35,17 +35,23 @@ export function StorageLocationSettings() {
   const appState = useRef(AppState.currentState);
   const isRequestingPermission = useRef(false);
 
-  const refreshPermission = useCallback(() => {
+  const refreshPermission = useCallback(async () => {
     if (Platform.OS === 'android') {
-      const granted = isAllFilesAccessGranted();
-      setHasAllFilesAccess(granted);
-      setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
+      if (isUsingExternal) {
+        const granted = await isAllFilesAccessGrantedAsync();
+        setHasAllFilesAccess(granted);
+        setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
+      } else {
+        setHasAllFilesAccess(false);
+        setStorageAccessError('');
+      }
     }
-    setWritable(checkStorageWriteAccess(effectivePath));
-  }, [effectivePath]);
+    const writable = await checkStorageWriteAccessAsync(effectivePath);
+    setWritable(writable);
+  }, [effectivePath, isUsingExternal]);
 
   useEffect(() => {
-    refreshPermission();
+    void refreshPermission();
 
     // Listen for app state changes to detect when user returns from settings
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
@@ -54,21 +60,25 @@ export function StorageLocationSettings() {
         // If we were requesting permission, check again after a short delay
         if (isRequestingPermission.current) {
           setTimeout(() => {
-            const granted = isAllFilesAccessGranted();
-            setHasAllFilesAccess(granted);
-            setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
+            void (async () => {
+              const granted = await isAllFilesAccessGrantedAsync();
+              setHasAllFilesAccess(granted);
+              setStorageAccessError(granted ? '' : getStorageAccessErrorMessage());
 
-            if (granted) {
-              // Permission was granted, set the external path
-              const externalWikiPath = getPreferredExternalWikiPath();
-              setCustomWikiFolderPath(externalWikiPath);
-              setWritable(checkStorageWriteAccess(externalWikiPath));
-            } else {
-              // Permission still not granted, update writable status for current path
-              setWritable(checkStorageWriteAccess(effectivePath));
-            }
+              if (granted) {
+                // Permission was granted, set the external path
+                const externalWikiPath = getPreferredExternalWikiPath();
+                setCustomWikiFolderPath(externalWikiPath);
+                const writable = await checkStorageWriteAccessAsync(externalWikiPath);
+                setWritable(writable);
+              } else {
+                // Permission still not granted, update writable status for current path
+                const writable = await checkStorageWriteAccessAsync(effectivePath);
+                setWritable(writable);
+              }
 
-            isRequestingPermission.current = false;
+              isRequestingPermission.current = false;
+            })();
           }, 300);
         }
       }
@@ -96,7 +106,8 @@ export function StorageLocationSettings() {
       // Permission granted, set the custom path to external storage
       const externalWikiPath = getPreferredExternalWikiPath();
       setCustomWikiFolderPath(externalWikiPath);
-      setWritable(checkStorageWriteAccess(externalWikiPath));
+      const writable = await checkStorageWriteAccessAsync(externalWikiPath);
+      setWritable(writable);
       isRequestingPermission.current = false;
     }
   };
@@ -111,7 +122,7 @@ export function StorageLocationSettings() {
           text: t('StorageLocation.Reset'),
           onPress: () => {
             setCustomWikiFolderPath(null);
-            refreshPermission();
+            void refreshPermission();
           },
         },
       ],
