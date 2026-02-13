@@ -45,4 +45,4 @@ scripts/fetchHTML/
 
 build/
 # prebuild
-android/
+/android/

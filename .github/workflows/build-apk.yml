@@ -173,7 +173,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: apks-${{ github.run_number }}-${{ github.sha }}
-          path: /tmp/apk-upload/*.apk
+          path: /tmp/apk-upload/*.*
           if-no-files-found: ignore
       - name: Create Release
         uses: softprops/action-gh-release@v1

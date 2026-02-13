@@ -8,8 +8,25 @@
  * All path arguments are plain filesystem paths (e.g. "/storage/emulated/0/Documents/TidGi/").
  * Do NOT pass file:// URIs — strip the scheme before calling.
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { requireNativeModule } = require('expo-modules-core') as { requireNativeModule: (name: string) => IExternalStorageModule };
+import { Platform } from 'react-native';
+
+let _module: IExternalStorageModule | undefined;
+
+/**
+ * Lazily load the native module. Wrapped in a function so that the app does NOT
+ * crash at import time if the native module is missing (e.g. on iOS or when the
+ * binary was built without it).
+ */
+function getNativeModule(): IExternalStorageModule {
+  if (_module) return _module;
+  if (Platform.OS !== 'android') {
+    throw new Error('ExternalStorage native module is only available on Android');
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { requireNativeModule } = require('expo-modules-core') as { requireNativeModule: (name: string) => IExternalStorageModule };
+  _module = requireNativeModule('ExternalStorage');
+  return _module;
+}
 
 interface FileInfo {
   exists: boolean;
@@ -39,7 +56,12 @@ interface IExternalStorageModule {
   isExternalStorageManager(): Promise<boolean>;
 }
 
-export const ExternalStorage: IExternalStorageModule = requireNativeModule('ExternalStorage');
+export const ExternalStorage: IExternalStorageModule = new Proxy({} as IExternalStorageModule, {
+  get(_target, property) {
+    const mod = getNativeModule();
+    return (mod as unknown as Record<string | symbol, unknown>)[property];
+  },
+});
 
 /**
  * Strip file:// prefix from a URI to produce a plain filesystem path.
