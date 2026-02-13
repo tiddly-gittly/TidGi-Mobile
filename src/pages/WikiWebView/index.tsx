@@ -28,7 +28,9 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
   const activeWorkspace = useWorkspaceStore(useShallow(state => state.workspaces.find(wiki => wiki.id === id)));
   const [webviewSideReceiver, webviewSideReceiverSetter] = useState<string | undefined>(undefined);
   useEffect(() => {
-    void getWebviewSideReceiver().then(webviewSideReceiverSetter);
+    void getWebviewSideReceiver().then(webviewSideReceiverSetter).catch((error: Error) => {
+      console.error(`[WikiWebView] Failed to load webviewSideReceiver:`, error.message, error.stack);
+    });
   }, []);
   if (webviewSideReceiver === undefined) {
     return (

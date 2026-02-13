@@ -59,6 +59,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
 
   const [loaded, setLoaded] = useState(false);
   const onLoadEnd = useCallback(() => {
+    console.log(`[WikiViewer] onLoadEnd fired, setting loaded=true`);
     setLoaded(true);
   }, []);
   const [rememberLastVisitState, preferredLanguage, androidHardwareAcceleration] = useConfigStore(

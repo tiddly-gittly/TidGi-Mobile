@@ -24,7 +24,9 @@ if (typeof global.Buffer === 'undefined') {
  * and needs to go through the raw native module instead of Expo FS.
  */
 function isExternalPath(filepath: string): boolean {
-  const plain = toPlainPath(filepath);
+  // path.join('file:///storage/...', 'x') collapses the triple slash to 'file:/storage/...'
+  // so we also strip that single-slash variant.
+  const plain = toPlainPath(filepath.replace(/^file:\/(?!\/\/)/, 'file:///').replace(/^file:\/\/\//, '/'));
   return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
 }
 
@@ -471,7 +473,9 @@ export async function gitClone(
   // Remove trailing slash from baseUrl to avoid double slashes
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
-  const directory = workspace.wikiFolderLocation;
+  // isomorphic-git uses path.join(dir, ...) internally which mangles file:// URIs,
+  // so always pass a plain filesystem path.
+  const directory = toPlainPath(workspace.wikiFolderLocation);
 
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
@@ -513,7 +517,7 @@ export async function gitPull(
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
   const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
 
   try {
@@ -552,7 +556,7 @@ export async function gitCommit(
   workspace: IWikiWorkspace,
   message: string,
 ): Promise<string> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
     // Stage all changes using statusMatrix
@@ -601,7 +605,7 @@ export async function gitPush(
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
   const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
 
   try {
@@ -644,7 +648,7 @@ export async function gitPushToConflictBranch(
   remote: IGitRemote,
   deviceId: string,
 ): Promise<string> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
   const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
   const timestamp = Date.now();
   const branchName = `client/${deviceId}/${timestamp}`;
@@ -704,7 +708,7 @@ export async function gitPushToConflictBranch(
  */
 export async function gitResolveReference(workspace: IWikiWorkspace, reference: string): Promise<string> {
   try {
-    return await git.resolveRef({ fs, dir: workspace.wikiFolderLocation, ref: reference });
+    return await git.resolveRef({ fs, dir: toPlainPath(workspace.wikiFolderLocation), ref: reference });
   } catch (error) {
     console.error(`Failed to resolve ${reference}: ${String(error)}`);
     return '';
@@ -716,7 +720,7 @@ export async function gitResolveReference(workspace: IWikiWorkspace, reference: 
  * Returns files that differ between HEAD and working directory.
  */
 export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
     const status = await git.statusMatrix({ fs, dir: directory });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
@@ -768,7 +772,7 @@ async function cleanUntrackedFiles(directory: string): Promise<void> {
  * Check if repository has uncommitted changes
  */
 export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
     const status = await git.statusMatrix({ fs, dir: directory });
@@ -784,7 +788,7 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
  * Initialize a new git repository
  */
 export async function gitInit(workspace: IWikiWorkspace): Promise<void> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
     await git.init({ fs, dir: directory, defaultBranch: 'main' });
@@ -802,7 +806,7 @@ export async function gitAddRemote(
   workspace: IWikiWorkspace,
   remote: IGitRemote,
 ): Promise<void> {
-  const directory = workspace.wikiFolderLocation;
+  const directory = toPlainPath(workspace.wikiFolderLocation);
   const url = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
 
   try {

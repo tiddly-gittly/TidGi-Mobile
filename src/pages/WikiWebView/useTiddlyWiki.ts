@@ -4,12 +4,33 @@ import { Dispatch, RefObject, SetStateAction, useEffect, useRef, useState } from
 import type { WebView } from 'react-native-webview';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
+import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
 import { getWikiFilePath } from '../../constants/paths';
 import { WikiHookService } from '../../services/WikiHookService';
 import { FileSystemWikiStorageService } from '../../services/WikiStorageService/FileSystemWikiStorageService';
 import { IWikiWorkspace } from '../../store/workspace';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { FileSystemTiddlersReadStream } from './useStreamChunksToWebView/FileSystemTiddlersReadStream';
+
+/**
+ * Whether a path points to external/shared storage (needs ExternalStorage native module).
+ */
+function isExternalPath(filepath: string): boolean {
+  const plain = toPlainPath(filepath);
+  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
+}
+
+/**
+ * Read text file content — uses ExternalStorage for external paths,
+ * expo-file-system for internal paths.
+ */
+async function readTextFile(uri: string): Promise<string> {
+  if (isExternalPath(uri)) {
+    return ExternalStorage.readFileUtf8(toPlainPath(uri));
+  }
+  const file = new File(uri);
+  return file.text();
+}
 
 export interface IHtmlContent {
   html: string;
@@ -36,15 +57,21 @@ export function useTiddlyWiki(
 
   const webviewLoaded = loaded && webViewReference.current !== null;
   useEffect(() => {
+    console.log(`[useTiddlyWiki] effect fired: loaded=${String(loaded)}, webViewRef=${webViewReference.current !== null}, webviewLoaded=${String(webviewLoaded)}, workspaceId=${workspace.id}, wikiFolderLocation=${workspace.wikiFolderLocation}`);
     if (!webviewLoaded) return;
     void (async () => {
       try {
         /**
          * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
          */
-        const wikiFile = new File(getWikiFilePath(workspace));
-        const html = `<!doctype html>${await wikiFile.text()}`;
+        const wikiFilePath = getWikiFilePath(workspace);
+        console.log(`[useTiddlyWiki] reading wiki HTML from: ${wikiFilePath}`);
+        const htmlText = await readTextFile(wikiFilePath);
+        console.log(`[useTiddlyWiki] wiki HTML loaded, length=${htmlText.length}`);
+        const html = `<!doctype html>${htmlText}`;
+        console.log(`[useTiddlyWiki] loading TidGi mobile plugins...`);
         const pluginJSONStrings = await getTidGiMobilePlugins();
+        console.log(`[useTiddlyWiki] plugins loaded, syncadaptor length=${pluginJSONStrings.expoFileSystemSyncadaptor.length}`);
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
@@ -53,12 +80,15 @@ export function useTiddlyWiki(
           additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
           quickLoad,
         });
+        console.log(`[useTiddlyWiki] calling tiddlersStream.init()...`);
         tiddlersStream.init();
+        console.log(`[useTiddlyWiki] tiddlersStream.init() done, calling injectHtmlAndTiddlersStore...`);
 
         tiddlersStreamReference.current = tiddlersStream;
         await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
+        console.log(`[useTiddlyWiki] injectHtmlAndTiddlersStore completed`);
       } catch (error) {
-        console.error(error, (error as Error).stack);
+        console.error(`[useTiddlyWiki] FATAL error:`, error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);
       }
     })();

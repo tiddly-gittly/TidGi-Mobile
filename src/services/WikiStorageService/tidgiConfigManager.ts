@@ -5,8 +5,8 @@
  * Purpose: Parse workspace configuration from git repo, preserving Desktop-specific fields
  */
 
-import { File } from 'expo-file-system';
 import { IWikiWorkspace } from '../../store/workspace';
+import { fileExists, readTextFile, writeTextFile } from './fileOperations';
 
 /**
  * Known mobile-relevant fields from tidgi.config.json
@@ -91,14 +91,13 @@ export function getTidgiConfigPath(workspace: IWikiWorkspace): string {
 export async function readTidgiConfig(workspace: IWikiWorkspace): Promise<ITidgiConfig> {
   try {
     const configPath = getTidgiConfigPath(workspace);
-    const file = new File(configPath);
 
-    if (!file.exists) {
+    if (!(await fileExists(configPath))) {
       // Return defaults if file doesn't exist
       return { ...DEFAULT_CONFIG };
     }
 
-    const content = await file.text();
+    const content = await readTextFile(configPath);
     const parsedConfig = JSON.parse(content) as Record<string, unknown>;
 
     // Merge with defaults for known fields only
@@ -142,7 +141,7 @@ export async function writeTidgiConfig(
 
     // Write back to file
     const content = JSON.stringify(newConfig, null, 2);
-    new File(configPath).write(content);
+    await writeTextFile(configPath, content);
   } catch (error) {
     console.error(`Failed to write tidgi.config.json: ${(error as Error).message}`);
     throw error;
@@ -195,19 +194,18 @@ export { readTidgiConfig as getTidgiConfig };
 export async function saveTidgiConfig(wikiFolderPath: string, config: ITidgiConfig): Promise<void> {
   try {
     const configPath = `${wikiFolderPath}/tidgi.config.json`;
-    const file = new File(configPath);
 
     // Read existing config to preserve unknown fields
     let existingConfig: Record<string, unknown> = {};
-    if (file.exists) {
-      const existingContent = await file.text();
+    if (await fileExists(configPath)) {
+      const existingContent = await readTextFile(configPath);
       existingConfig = JSON.parse(existingContent) as Record<string, unknown>;
     }
 
     // Merge new config with existing, preserving unknown fields
     const mergedConfig = { ...existingConfig, ...config };
     const content = JSON.stringify(mergedConfig, null, 2);
-    file.write(content);
+    await writeTextFile(configPath, content);
   } catch (error) {
     console.error(`Failed to save tidgi.config.json: ${(error as Error).message}`);
     throw error;

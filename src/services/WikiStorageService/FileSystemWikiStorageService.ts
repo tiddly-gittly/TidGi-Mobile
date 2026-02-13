@@ -5,13 +5,13 @@
  * Purpose: Save/load tiddlers as .tid/.meta files in workspace git repository
  */
 
-import { Directory, File } from 'expo-file-system';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiFilesPathByTitle, getWikiTiddlerFolderPath, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace } from '../../store/workspace';
 import { gitDiffChangedFiles } from '../GitService';
+import { deleteFileOrDirectory, ensureDirectory, fileExists, findFileRecursively, readTextFile, writeTextFile } from './fileOperations';
 import { processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { IWikiServerStatusObject } from './types';
@@ -64,10 +64,7 @@ export class FileSystemWikiStorageService {
 
       // Ensure tiddlers folder exists
       const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
-      const folder = new Directory(tiddlerFolderPath);
-      if (!folder.exists) {
-        folder.create();
-      }
+      await ensureDirectory(tiddlerFolderPath);
 
       // Use routing service to determine file path
       const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, this.#workspace);
@@ -75,17 +72,14 @@ export class FileSystemWikiStorageService {
 
       // Ensure parent directory exists
       const parentDirectory = fullPath.substring(0, fullPath.lastIndexOf('/'));
-      const directory = new Directory(parentDirectory);
-      if (!directory.exists) {
-        directory.create();
-      }
+      await ensureDirectory(parentDirectory);
 
       // For binary tiddlers with canonical_uri, save metadata separately
       if (processedFields._canonical_uri) {
-        this.#saveBinaryTiddlerMetadata(title, processedFields, fullPath);
+        await this.#saveBinaryTiddlerMetadata(title, processedFields, fullPath);
       } else {
         // Save as .tid file
-        this.#saveTextTiddler(title, text ?? '', fieldsToSave as Record<string, unknown>, fullPath);
+        await this.#saveTextTiddler(title, text ?? '', fieldsToSave as Record<string, unknown>, fullPath);
       }
 
       return Etag;
@@ -98,7 +92,7 @@ export class FileSystemWikiStorageService {
   /**
    * Save text tiddler as .tid file
    */
-  #saveTextTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): void {
+  async #saveTextTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
     // Build header lines (exclude text, title, and bag fields)
     const headerLines: string[] = [];
     for (const key of Object.keys(fields)) {
@@ -124,13 +118,13 @@ export class FileSystemWikiStorageService {
     // Combine header and text with blank line separator
     // Note: Consider atomic write (write-to-temp-then-rename) for crash safety
     const content = text ? headerLines.join('\n') + '\n\n' + text : headerLines.join('\n');
-    new File(filePath).write(content);
+    await writeTextFile(filePath, content);
   }
 
   /**
    * Save binary tiddler metadata as .meta file
    */
-  #saveBinaryTiddlerMetadata(title: string, fields: Record<string, unknown>, binaryPath: string): void {
+  async #saveBinaryTiddlerMetadata(title: string, fields: Record<string, unknown>, binaryPath: string): Promise<void> {
     const metaPath = `${binaryPath}.meta`;
 
     // Build meta content (exclude text, title, canonical_uri, and bag)
@@ -151,7 +145,7 @@ export class FileSystemWikiStorageService {
       }
     }
 
-    new File(metaPath).write(metaLines.join('\n'));
+    await writeTextFile(metaPath, metaLines.join('\n'));
   }
 
   /**
@@ -159,7 +153,7 @@ export class FileSystemWikiStorageService {
    * First tries the routed path, then falls back to default locations,
    * and finally does a recursive search in the tiddlers directory.
    */
-  deleteTiddler(title: string): boolean {
+  async deleteTiddler(title: string): Promise<boolean> {
     try {
       if (!title) {
         console.warn(`Failed to delete tiddler with no title`);
@@ -170,38 +164,32 @@ export class FileSystemWikiStorageService {
       const routedRelativePath = this.#routingService.getTiddlerFilePathSync(title, {} as ITiddlerFields, this.#workspace);
       if (routedRelativePath) {
         const routedFull = `${this.#workspace.wikiFolderLocation}/${routedRelativePath}`;
-        const routedFile = new File(routedFull);
-        if (routedFile.exists) {
-          routedFile.delete();
+        if (await fileExists(routedFull)) {
+          await deleteFileOrDirectory(routedFull);
           return true;
         }
       }
 
       // 2. Default .tid path
       const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
-      const tidFile = new File(tidPath);
-      if (tidFile.exists) {
-        tidFile.delete();
+      if (await fileExists(tidPath)) {
+        await deleteFileOrDirectory(tidPath);
         return true;
       }
 
       // 3. Default files path + .meta
       const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
-      const filesFile = new File(filesPath);
-      if (filesFile.exists) {
-        filesFile.delete();
-        const metaFile = new File(`${filesPath}.meta`);
-        if (metaFile.exists) metaFile.delete();
+      if (await fileExists(filesPath)) {
+        await deleteFileOrDirectory(filesPath);
+        await deleteFileOrDirectory(`${filesPath}.meta`);
         return true;
       }
 
       // 4. Recursive search in tiddlers/ as last resort
-      const found = this.#findTiddlerFileRecursively(title);
+      const found = await this.#findTiddlerFileRecursively(title);
       if (found) {
-        new File(found).delete();
-        // Also delete .meta if paired
-        const metaFile = new File(`${found}.meta`);
-        if (metaFile.exists) metaFile.delete();
+        await deleteFileOrDirectory(found);
+        await deleteFileOrDirectory(`${found}.meta`);
         return true;
       }
 
@@ -216,30 +204,15 @@ export class FileSystemWikiStorageService {
   /**
    * Search tiddlers directory recursively for a file matching the given title.
    */
-  #findTiddlerFileRecursively(title: string): string | undefined {
+  async #findTiddlerFileRecursively(title: string): Promise<string | undefined> {
     const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
     // Use unified sanitize regex (matches paths.ts INVALID_CHARACTERS_REGEX)
     const sanitizedTitle = title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_');
 
-    const search = (directory: Directory): string | undefined => {
-      try {
-        for (const entry of directory.list()) {
-          if (entry instanceof Directory) {
-            const found = search(entry);
-            if (found) return found;
-          } else if (entry instanceof File) {
-            // Match by sanitized title in filename
-            const name = entry.name.replace(/\.(tid|meta)$/, '');
-            if (name === sanitizedTitle && entry.name.endsWith('.tid')) {
-              return entry.uri;
-            }
-          }
-        }
-      } catch { /* ignore unreadable dirs */ }
-      return undefined;
-    };
-
-    return search(new Directory(tiddlerFolderPath));
+    return findFileRecursively(tiddlerFolderPath, (fileName: string) => {
+      const name = fileName.replace(/\.(tid|meta)$/, '');
+      return name === sanitizedTitle && fileName.endsWith('.tid');
+    });
   }
 
   /**
@@ -257,9 +230,8 @@ export class FileSystemWikiStorageService {
     try {
       // Try .tid file first
       const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
-      const tidFile = new File(tidPath);
-      if (tidFile.exists) {
-        const content = await tidFile.text();
+      if (await fileExists(tidPath)) {
+        const content = await readTextFile(tidPath);
         // Extract text part (everything after first blank line)
         const blankLineMatch = /\r?\n\r?\n/.exec(content);
         if (blankLineMatch !== null) {
@@ -268,13 +240,16 @@ export class FileSystemWikiStorageService {
       }
 
       // Try files folder
-      return await new File(getWikiFilesPathByTitle(this.#workspace, title)).text();
+      const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
+      if (await fileExists(filesPath)) {
+        return await readTextFile(filesPath);
+      }
     } catch {
       // Try canonical_uri path — search recursively for matching .meta file
       try {
-        const found = this.#findTiddlerFileRecursively(title);
+        const found = await this.#findTiddlerFileRecursively(title);
         if (found) {
-          const content = await new File(found).text();
+          const content = await readTextFile(found);
           // If it's a .tid file, extract text part
           if (found.endsWith('.tid')) {
             const blankLineMatch = /\r?\n\r?\n/.exec(content);

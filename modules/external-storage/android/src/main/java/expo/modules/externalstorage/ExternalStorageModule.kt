@@ -64,6 +64,32 @@ class ExternalStorageModule : Module() {
       dir.list()?.toList() ?: emptyList<String>()
     }
 
+    // Recursively list all files under a directory, returning paths relative to `path`.
+    // Skips .git, node_modules, .DS_Store, output directories.
+    AsyncFunction("readDirRecursive") { path: String ->
+      val root = File(path)
+      if (!root.exists() || !root.isDirectory) {
+        throw Exception("ENOENT: no such directory: $path")
+      }
+      val skipNames = setOf(".git", "node_modules", ".DS_Store", "output")
+      val result = mutableListOf<String>()
+      fun walk(dir: File, prefix: String) {
+        val children = dir.listFiles() ?: return
+        for (child in children) {
+          val relativePath = if (prefix.isEmpty()) child.name else "$prefix/${child.name}"
+          if (child.isDirectory) {
+            if (child.name !in skipNames) {
+              walk(child, relativePath)
+            }
+          } else {
+            result.add(relativePath)
+          }
+        }
+      }
+      walk(root, "")
+      result
+    }
+
     AsyncFunction("rmdir") { path: String ->
       val dir = File(path)
       if (dir.exists()) {

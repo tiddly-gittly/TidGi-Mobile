@@ -42,6 +42,8 @@ interface IExternalStorageModule {
 
   mkdir(path: string): Promise<void>;
   readDir(path: string): Promise<string[]>;
+  /** Recursively list all files under a directory, returning relative paths. Skips .git etc. */
+  readDirRecursive(path: string): Promise<string[]>;
   rmdir(path: string): Promise<void>;
 
   readFileUtf8(path: string): Promise<string>;

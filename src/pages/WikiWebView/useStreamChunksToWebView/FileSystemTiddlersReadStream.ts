@@ -8,6 +8,7 @@
 import { Directory, File } from 'expo-file-system';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
+import { ExternalStorage, toPlainPath } from '../../../../modules/external-storage';
 import { getWikiTiddlerFolderPath } from '../../../constants/paths';
 import {
   getTitleFromFilename,
@@ -18,6 +19,14 @@ import {
   shouldSaveFullTiddler,
 } from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
+
+/**
+ * Whether a path points to external/shared storage.
+ */
+function isExternalPath(filepath: string): boolean {
+  const plain = toPlainPath(filepath);
+  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
+}
 
 export interface IFileSystemTiddlersReadStreamOptions {
   additionalContent?: string[];
@@ -44,6 +53,7 @@ export class FileSystemTiddlersReadStream extends Readable {
   private currentIndex = 0;
   private hasStarted = false;
   private tiddlerCount = 0;
+  private initDone = false;
 
   constructor(workspace: IWikiWorkspace, options?: IFileSystemTiddlersReadStreamOptions) {
     super({ encoding: 'utf8' });
@@ -54,21 +64,50 @@ export class FileSystemTiddlersReadStream extends Readable {
   }
 
   init(): void {
+    // init is sync but we need async for external paths — fire and forget,
+    // stream won't start reading until _read() is called which waits on this.
+    void this.initAsync();
+  }
+
+  private async initAsync(): Promise<void> {
     try {
       const tiddlerFolderPath = getWikiTiddlerFolderPath(this.workspace);
+      console.log(`[FileSystemTiddlersReadStream] init: tiddlerFolderPath=${tiddlerFolderPath}, wikiFolderLocation=${this.workspace.wikiFolderLocation}`);
 
-      const folder = new Directory(tiddlerFolderPath);
-      if (!folder.exists) {
-        console.warn(`Tiddlers folder does not exist: ${tiddlerFolderPath}`);
-        return;
+      if (isExternalPath(tiddlerFolderPath)) {
+        // Use ExternalStorage native module — expo-file-system may not have permission
+        const plainPath = toPlainPath(tiddlerFolderPath);
+        const info = await ExternalStorage.getInfo(plainPath);
+        console.log(`[FileSystemTiddlersReadStream] (external) folder exists=${String(info.exists)}, isDirectory=${String(info.isDirectory)}, path=${plainPath}`);
+        if (!info.exists || !info.isDirectory) {
+          console.warn(`[FileSystemTiddlersReadStream] Tiddlers folder does not exist: ${plainPath}`);
+          this.initDone = true;
+          return;
+        }
+        const relativePaths = await ExternalStorage.readDirRecursive(plainPath);
+        // Filter to only tiddler files and build absolute paths
+        this.tiddlerFiles = relativePaths
+          .filter(p => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'))
+          .map(p => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${p}`);
+      } else {
+        const folder = new Directory(tiddlerFolderPath);
+        console.log(`[FileSystemTiddlersReadStream] (internal) folder.exists=${String(folder.exists)}, folder.uri=${folder.uri}`);
+        if (!folder.exists) {
+          console.warn(`[FileSystemTiddlersReadStream] Tiddlers folder does not exist: ${tiddlerFolderPath}`);
+          this.initDone = true;
+          return;
+        }
+        this.tiddlerFiles = this.collectTiddlerFiles(folder);
       }
 
-      // Recursively collect all tiddler files (.tid, .json, .meta) from tiddlers/ and subdirectories
-      this.tiddlerFiles = this.collectTiddlerFiles(folder);
-
-      console.log(`Found ${this.tiddlerFiles.length} tiddler files in ${tiddlerFolderPath}`);
+      console.log(`[FileSystemTiddlersReadStream] Found ${this.tiddlerFiles.length} tiddler files`);
+      if (this.tiddlerFiles.length > 0) {
+        console.log(`[FileSystemTiddlersReadStream] First few files: ${this.tiddlerFiles.slice(0, 5).join(', ')}`);
+      }
+      this.initDone = true;
     } catch (error) {
-      console.error(`FileSystemTiddlersReadStream init error: ${(error as Error).message}`);
+      console.error(`[FileSystemTiddlersReadStream] init error: ${(error as Error).message}`, (error as Error).stack);
+      this.initDone = true;
       this.emit('error', error);
     }
   }
@@ -110,9 +149,23 @@ export class FileSystemTiddlersReadStream extends Readable {
     // Use promise internally but don't return it (Readable spec)
     void (async () => {
       try {
+        // Wait for async init to finish
+        if (!this.initDone) {
+          const waitStart = Date.now();
+          while (!this.initDone && Date.now() - waitStart < 30_000) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          if (!this.initDone) {
+            console.error('[FileSystemTiddlersReadStream] init timed out after 30s');
+            this.push(null);
+            return;
+          }
+        }
+
         // First chunk: output array opening bracket
         if (!this.hasStarted) {
           this.hasStarted = true;
+          console.log(`[FileSystemTiddlersReadStream] _read: starting stream, totalFiles=${this.tiddlerFiles.length}`);
           this.push('[');
 
           // Add additional content if provided
@@ -130,6 +183,7 @@ export class FileSystemTiddlersReadStream extends Readable {
 
         // Check if we've reached the end
         if (this.currentIndex >= this.tiddlerFiles.length) {
+          console.log(`[FileSystemTiddlersReadStream] _read: end of files (index=${this.currentIndex}, total=${this.tiddlerFiles.length})`);
           this.push(']'); // Close the JSON array
           this.push(null); // Signal end of stream
           return;
@@ -137,6 +191,7 @@ export class FileSystemTiddlersReadStream extends Readable {
 
         // Check quick load limit
         if (this.quickLoadLimit > 0 && this.tiddlerCount >= this.quickLoadLimit) {
+          console.log(`[FileSystemTiddlersReadStream] _read: quick load limit reached (${this.tiddlerCount}/${this.quickLoadLimit})`);
           this.push(']');
           this.push(null);
           return;
@@ -183,7 +238,7 @@ export class FileSystemTiddlersReadStream extends Readable {
           }
         }
       } catch (error) {
-        console.error(`FileSystemTiddlersReadStream _read error: ${(error as Error).message}`);
+        console.error(`[FileSystemTiddlersReadStream] _read error at index ${this.currentIndex}: ${(error as Error).message}`, (error as Error).stack);
         this.emit('error', error);
       }
     })();
@@ -192,15 +247,32 @@ export class FileSystemTiddlersReadStream extends Readable {
   /**
    * Read and parse a single tiddler file.
    * Supports .tid (header+body), .json (tiddler JSON), and .meta (binary companion).
+   * Uses ExternalStorage for external paths, expo-file-system File for internal paths.
    */
   private async readTiddlerFromFile(filePath: string): Promise<ITiddlerFields | ITiddlerFields[] | null> {
     try {
-      const file = new File(filePath);
       const filename = filePath.split('/').pop() ?? '';
+      const external = isExternalPath(filePath);
+
+      const readText = async (path: string): Promise<string> => {
+        if (external) {
+          return ExternalStorage.readFileUtf8(toPlainPath(path));
+        }
+        const file = new File(path);
+        return file.text();
+      };
+
+      const fileExists = async (path: string): Promise<boolean> => {
+        if (external) {
+          return ExternalStorage.exists(toPlainPath(path));
+        }
+        const file = new File(path);
+        return file.exists;
+      };
 
       if (filename.endsWith('.json')) {
         // JSON tiddler file (e.g., plugin.info, or tiddler-as-json)
-        const content = await file.text();
+        const content = await readText(filePath);
         try {
           const parsed = JSON.parse(content) as Record<string, unknown>;
           // JSON may be a single tiddler or an array of tiddlers
@@ -219,14 +291,13 @@ export class FileSystemTiddlersReadStream extends Readable {
         }
       } else if (filename.endsWith('.meta')) {
         // .meta file accompanies a binary file; load metadata and set _canonical_uri
-        const metaContent = await file.text();
+        const metaContent = await readText(filePath);
         const metaFields = parseMetadataFile(metaContent);
         const binaryPath = filePath.replace(/\.meta$/, '');
-        const binaryFile = new File(binaryPath);
         if (!metaFields.title) {
           metaFields.title = getTitleFromFilename(filename.replace(/\.meta$/, ''));
         }
-        if (binaryFile.exists) {
+        if (await fileExists(binaryPath)) {
           // Set canonical URI so WebView knows where to find the binary
           const workspaceBase = this.workspace.wikiFolderLocation;
           metaFields._canonical_uri = binaryPath.replace(workspaceBase + '/', '');
@@ -234,7 +305,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         return processFields(metaFields as Partial<ITiddlerFields>) as ITiddlerFields;
       } else {
         // .tid file (header fields + text body)
-        const content = await file.text();
+        const content = await readText(filePath);
         const fallbackTitle = getTitleFromFilename(filename);
         const fields = parseTiddlerFile(content, { title: fallbackTitle });
         return processFields(fields) as ITiddlerFields;

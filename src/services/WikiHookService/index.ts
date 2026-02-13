@@ -74,7 +74,7 @@ export class WikiHookService {
           throw new Error('Webview receiver not ready');
         }
       },
-      { numOfAttempts: 100, jitter: 'full' },
+      { numOfAttempts: 100, jitter: 'full', maxDelay: 5000 },
     );
   }
 }
