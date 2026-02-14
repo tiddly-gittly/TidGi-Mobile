@@ -11,7 +11,7 @@
 import * as Application from 'expo-application';
 import { startActivityAsync } from 'expo-intent-launcher';
 import { Platform } from 'react-native';
-import { ExternalStorage, toPlainPath } from '../../modules/external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 
 const MANAGE_APP_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION';
 const MANAGE_ALL_FILES_ACCESS_ACTION = 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION';

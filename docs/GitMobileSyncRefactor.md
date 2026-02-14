@@ -351,7 +351,6 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
   - ✅ writeTidgiConfig / saveTidgiConfig
   - ✅ 字段保留机制
 - ✅ Git 操作封装（clone, pull, push, conflict handling）
-  - ⚠️ 需要安装 `isomorphic-git` 依赖
 - ✅ GitBackgroundSyncService（完全替代旧的 BackgroundSyncService）
   - ✅ sync() 主同步方法
   - ✅ getOnlineServerForWiki()
