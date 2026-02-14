@@ -5,7 +5,7 @@
 
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { useState } from 'react';
-import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { gitClone, IGitRemote } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';

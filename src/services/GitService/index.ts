@@ -6,7 +6,7 @@
 import { Buffer } from 'buffer';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import git from 'isomorphic-git';
-import { ExternalStorage, toPlainPath } from '../../../modules/external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import pTimeout from 'p-timeout';
 import { IWikiWorkspace } from '../../store/workspace';
 

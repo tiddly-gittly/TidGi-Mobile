@@ -8,7 +8,7 @@
 import { Directory, File } from 'expo-file-system';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
-import { ExternalStorage, toPlainPath } from '../../../../modules/external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { getWikiFilesFolderPath, getWikiTiddlerFolderPath } from '../../../constants/paths';
 import {
   getTitleFromFilename,

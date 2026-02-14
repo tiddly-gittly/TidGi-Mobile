@@ -5,7 +5,7 @@ import { Linking, Platform } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { WIKI_FOLDER_PATH } from '../../../constants/paths';
 import { normalizeDirectoryUri } from '../../../services/StoragePermissionService';
-import { toPlainPath } from '../../../../modules/external-storage';
+import { toPlainPath } from 'expo-filesystem-android-external-storage';
 
 const FLAG_ACTIVITY_NEW_TASK = 0x10000000;
 
