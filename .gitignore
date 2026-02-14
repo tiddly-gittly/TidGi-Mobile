@@ -46,3 +46,4 @@ scripts/fetchHTML/
 build/
 # prebuild
 /android/
+/ios
