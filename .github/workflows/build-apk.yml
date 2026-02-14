@@ -80,7 +80,7 @@ jobs:
       - name: Build tw plugins & scripts
         run: |
           pnpm run build:plugin
-          pnpm run build:preload
+          pnpm run build:tw-assets
 
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean

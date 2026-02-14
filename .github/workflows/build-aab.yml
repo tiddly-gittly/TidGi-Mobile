@@ -82,7 +82,7 @@ jobs:
         run: |
           cd plugins && pnpm i && cd ..
           pnpm run build:plugin
-          pnpm run build:preload
+          pnpm run build:tw-assets
 
       - name: Build by eject eas and remove debug signing key for aab
         run: |
