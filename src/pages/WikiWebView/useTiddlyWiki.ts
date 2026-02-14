@@ -86,11 +86,8 @@ async function loadBundledAssets(): Promise<IBundledAssets> {
   for (let index = 0; index < uris.length; index++) {
     if (!uris[index]) throw new Error(`Asset ${index} failed to load (localUri is null)`);
   }
-  const [emptyHtmlFull, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all(
+  const [emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all(
     uris.map(uri => new File(uri!).text()),
   );
-  // Extract <body> content only — document.body.innerHTML needs inner content, not the full document
-  const bodyMatch = /<body[^>]*>([\s\S]*)<\/body>/i.exec(emptyHtmlFull);
-  const emptyHtml = bodyMatch?.[1] ?? emptyHtmlFull;
   return { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi };
 }
