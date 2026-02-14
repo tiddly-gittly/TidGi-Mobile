@@ -1,8 +1,10 @@
 packages:
-  - '.'
-  - 'plugins'
+  - .
+  - plugins
 
 onlyBuiltDependencies:
+  - '@parcel/watcher'
   - dprint
   - esbuild
+  - less
   - unrs-resolver
