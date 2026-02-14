@@ -1,20 +1,7 @@
-import { Asset } from 'expo-asset';
-import { File } from 'expo-file-system';
-import streamChunksPreloadScriptAssetID from '../../../../assets/preload/streamChunksPreloadScript.js.html';
-import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
-
-type OnStreamChunksToWebViewEvents = {
-  data: string;
-  type:
-    | OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY
-    | OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML
-    | OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK;
-} | {
-  type: OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END;
-};
+import { createWebViewStreamChunksPreloadScript, type WebViewStreamReceiverEvent } from 'react-native-webview-stream-chunks';
 declare global {
   interface Window {
-    onStreamChunksToWebView: (event: OnStreamChunksToWebViewEvents) => void;
+    onStreamChunksToWebView: (event: WebViewStreamReceiverEvent) => void;
     /**
      * Prevent send side call methods provided by preload script too soon.
      * Need to wait this to be true, then send data.
@@ -23,13 +10,8 @@ declare global {
   }
 }
 
-export const getWebviewSideReceiver = async () => {
-  const [asset] = await Asset.loadAsync([streamChunksPreloadScriptAssetID]);
-  const streamChunksPreloadScriptFileUri = asset.localUri;
-  if (!streamChunksPreloadScriptFileUri) {
-    throw new Error(`streamChunksPreloadScript failed to load, ID: ${streamChunksPreloadScriptAssetID}`);
-  }
-  const file = new File(streamChunksPreloadScriptFileUri);
-  const webviewSideReceiver = await file.text();
-  return webviewSideReceiver;
+export const getWebviewSideReceiver = () => {
+  return createWebViewStreamChunksPreloadScript({
+    receiverReadyCallbackPath: 'service.wikiHookService.setWebviewReceiverReady',
+  });
 };

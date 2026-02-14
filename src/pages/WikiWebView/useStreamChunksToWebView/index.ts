@@ -1,11 +1,11 @@
-import { Dispatch, RefObject, SetStateAction, useCallback, useState } from 'react';
+import { Dispatch, RefObject, SetStateAction, useCallback, useMemo, useState } from 'react';
 import { WebView } from 'react-native-webview';
+import { WebViewStreamSender } from 'react-native-webview-stream-chunks';
 import { Writable } from 'readable-stream';
 import type { WikiHookService } from '../../../services/WikiHookService';
 import type { FileSystemWikiStorageService } from '../../../services/WikiStorageService/FileSystemWikiStorageService';
 import { IHtmlContent } from '../useTiddlyWiki';
 import { FileSystemTiddlersReadStream } from './FileSystemTiddlersReadStream';
-import { OnStreamChunksToWebViewEventTypes } from './streamChunksPreloadScript';
 
 export interface IUseStreamChunksToWebViewParameters {
   html: string;
@@ -23,14 +23,13 @@ export function useStreamChunksToWebView(
   servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
-  const sendDataToWebView = useCallback((messageType: OnStreamChunksToWebViewEventTypes, data?: string) => {
-    console.log(`sendDataToWebView ${messageType}`);
-    if (webViewReference.current === null) throw new Error('WebView is not ready when sendDataToWebView');
-    const stringifiedData = JSON.stringify({
-      type: messageType,
-      data,
-    });
-    webViewReference.current.injectJavaScript(`
+
+  const sender = useMemo(() =>
+    new WebViewStreamSender((messageType, data) => {
+      console.log(`sendDataToWebView ${messageType}`);
+      if (webViewReference.current === null) throw new Error('WebView is not ready when sendDataToWebView');
+      const stringifiedData = JSON.stringify({ type: messageType, data });
+      webViewReference.current.injectJavaScript(`
       var receiveData = () => {
         console.log(\`TidGi calling receiveData() with ${messageType}, window.preloadScriptLoaded \${window.preloadScriptLoaded ? '√' : 'x'}, window.onStreamChunksToWebView \${window.onStreamChunksToWebView ? '√' : 'x'}, window.service.wikiStorageService \${window.service?.wikiStorageService ? '√' : 'x'}\`);
         if (window.preloadScriptLoaded !== true || !window.onStreamChunksToWebView) {
@@ -41,7 +40,7 @@ export function useStreamChunksToWebView(
       }
       receiveData();
     `);
-  }, [webViewReference]);
+    }), [webViewReference]);
 
   /**
    * Inject HTML and tiddlers store
@@ -56,13 +55,13 @@ export function useStreamChunksToWebView(
         // This is also required when app bring from background after a while, the webview will be recycled, and need to wait for it to resume before sending large data, otherwise first few data will be lost.
         console.log(`[injectHtmlAndTiddlersStore] waiting for webview receiver ready...`);
         await servicesOfWorkspace.current.wikiHookService.waitForWebviewReceiverReady(() => {
-          sendDataToWebView(OnStreamChunksToWebViewEventTypes.CHECK_RECEIVER_READY);
+          sender.checkReceiverReady();
         });
         console.log(`[injectHtmlAndTiddlersStore] webview receiver ready, sending HTML (length=${html.length})...`);
         /**
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
          */
-        sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLYWIKI_HTML, html);
+        sender.setContent(html);
         console.log(`[injectHtmlAndTiddlersStore] HTML sent, starting tiddler stream pipe...`);
         /**
          * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
@@ -74,7 +73,7 @@ export function useStreamChunksToWebView(
           objectMode: true,
           write: (tiddlersJSONArrayString: string, _encoding, next) => {
             try {
-              sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK, tiddlersJSONArrayString);
+              sender.appendChunk(tiddlersJSONArrayString);
               next();
             } catch (error) {
               // if have any error, end the batch, not calling `next()`, to prevent dirty data
@@ -91,7 +90,13 @@ export function useStreamChunksToWebView(
           let writeEnded = false;
           tiddlersStream.on('end', () => {
             console.log(`[injectHtmlAndTiddlersStore] tiddlersStream ended`);
-            sendDataToWebView(OnStreamChunksToWebViewEventTypes.TIDDLER_STORE_SCRIPT_CHUNK_END);
+            sender.finalizePayload({
+              scriptType: 'application/json',
+              scriptClassName: 'tiddlywiki-tiddler-store',
+              scriptTagName: 'tidgi-tiddlers-store',
+              anchorSelector: '#styleArea',
+            });
+            sender.reexecuteScripts();
             setStreamChunksToWebViewPercentage(1);
             readEnded = true;
             if (writeEnded) resolve();
@@ -119,10 +124,14 @@ export function useStreamChunksToWebView(
         throw error;
       }
     } else {
-      console.error(`[injectHtmlAndTiddlersStore] BUG: skipped because guard condition failed! webViewRef=${webViewReference.current !== null}, servicesReady=${servicesOfWorkspace.current !== undefined}`);
+      console.error(
+        `[injectHtmlAndTiddlersStore] BUG: skipped because guard condition failed! webViewRef=${webViewReference.current !== null}, servicesReady=${
+          servicesOfWorkspace.current !== undefined
+        }`,
+      );
       setLoadHtmlError('injectHtmlAndTiddlersStore: WebView or services not ready');
     }
-  }, [webViewReference, servicesOfWorkspace, sendDataToWebView]);
+  }, [webViewReference, servicesOfWorkspace, sender]);
 
   return { injectHtmlAndTiddlersStore, streamChunksToWebViewPercentage };
 }
