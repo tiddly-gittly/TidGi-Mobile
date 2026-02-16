@@ -4,7 +4,6 @@
  */
 
 import * as BackgroundTask from 'expo-background-task';
-import * as Device from 'expo-device';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
@@ -12,7 +11,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, gitResolveReference, IGitRemote } from '../GitService';
+import { gitCommit, gitDiffChangedFiles, gitHasChanges, gitPull, gitPush, gitResolveConflictAndPush, gitResolveReference, IGitRemote } from '../GitService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
 
@@ -339,7 +338,12 @@ export class GitBackgroundSyncService {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (error) {
         if ((error as Error).message === 'PUSH_CONFLICT') {
-          await this.handlePushConflict(workspace, remote, server);
+          // Auto-resolve: merge remote changes and push again (like desktop git-sync-js)
+          console.log('Push conflict detected, auto-resolving...');
+          await gitResolveConflictAndPush(workspace, remote);
+          this.updateLastSync(workspace.id, server.id);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          console.log('Conflict resolved automatically');
         } else {
           throw error;
         }
@@ -380,44 +384,6 @@ export class GitBackgroundSyncService {
       }
     } catch {
       console.warn(`[BackgroundSync] ${workspaceName}: ${errorMessage}`);
-    }
-  }
-
-  #notifyConflict(branchName: string): void {
-    try {
-      if (AppState.currentState === 'active') {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const Alert = (require('react-native') as typeof import('react-native')).Alert;
-        Alert.alert(
-          i18n.t('Sync.ConflictDetected'),
-          i18n.t('Sync.ConflictMessage', { branch: branchName }),
-          [{ text: i18n.t('Common.OK'), style: 'default' }],
-        );
-      } else {
-        console.warn(`[BackgroundSync] Conflict pushed to branch: ${branchName}`);
-      }
-    } catch {
-      console.warn(`[BackgroundSync] Conflict pushed to branch: ${branchName}`);
-    }
-  }
-
-  /**
-   * Handle push conflict by pushing to temporary branch
-   */
-  private async handlePushConflict(
-    workspace: IWikiWorkspace,
-    remote: IGitRemote,
-    _server: IServerInfo,
-  ): Promise<void> {
-    const deviceId = Device.modelName ?? 'unknown';
-
-    try {
-      const branchName = await gitPushToConflictBranch(workspace, remote, deviceId);
-      this.#notifyConflict(branchName);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    } catch (error) {
-      console.error('Failed to push to conflict branch:', error);
-      throw error;
     }
   }
 

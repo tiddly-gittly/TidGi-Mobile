@@ -19,6 +19,7 @@ interface WorkspaceListProps {
   isFocused?: boolean;
   onLongPress?: (workspace: IWorkspace) => void;
   onPress?: (workspace: IWorkspace) => void;
+  onPressSettings?: (workspace: IWorkspace) => void;
   onPressQuickLoad?: (workspace: IWorkspace) => void;
   onReorderEnd?: (workspaces: IWorkspace[]) => void;
   reorderable?: boolean;
@@ -30,6 +31,7 @@ interface WorkspaceListItemProps {
   pendingChangesCount: number;
   onLongPress?: (workspace: IWorkspace) => void;
   onPress?: (workspace: IWorkspace) => void;
+  onPressSettings?: (workspace: IWorkspace) => void;
   onPressQuickLoad?: (workspace: IWorkspace) => void;
   onReorderPress?: () => void;
 }
@@ -38,6 +40,7 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
   item,
   pendingChangesCount,
   onPress,
+  onPressSettings,
   onLongPress,
   onPressQuickLoad,
   onReorderPress,
@@ -72,6 +75,9 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
               {...props}
               name='reorder-three-sharp'
               color={theme.colors.onSecondaryContainer}
+              onPress={() => {
+                onPressSettings?.(item);
+              }}
               onLongPress={() => {
                 onReorderPress?.();
               }}
@@ -103,6 +109,7 @@ const PlainWorkspaceListItem: React.FC<Omit<WorkspaceListItemProps, 'onReorderPr
 export const WorkspaceList: React.FC<WorkspaceListProps> = ({
   onPress,
   onLongPress,
+  onPressSettings,
   onReorderEnd,
   onPressQuickLoad,
   includeSubWikis = false,
@@ -179,6 +186,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
                 item={item}
                 pendingChangesCount={pendingChangesCountMap[item.id] ?? 0}
                 onPress={onPress}
+                onPressSettings={onPressSettings}
                 onLongPress={onLongPress}
                 onPressQuickLoad={onPressQuickLoad}
               />
@@ -199,6 +207,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
                 item={item}
                 pendingChangesCount={pendingChangesCountMap[item.id] ?? 0}
                 onPress={onPress}
+                onPressSettings={onPressSettings}
                 onLongPress={onLongPress}
                 onPressQuickLoad={onPressQuickLoad}
               />

@@ -16,9 +16,10 @@ type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean,
 // type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
 type ISyncAdaptorPutTiddlersCallback = (error: Error | null | string, etag?: {
   bag: string;
+  filepath?: string;
 }, version?: string) => void;
 type ISyncAdaptorLoadTiddlerCallback = (error: Error | null, tiddler?: ITiddlerFields) => void;
-type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { bag?: string } | null) => void;
+type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { bag?: string; filepath?: string } | null) => void;
 
 interface IRelatedWorkspaceRoutingConfig {
   fileSystemPathFilter: string | null;
@@ -177,8 +178,10 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 
   getTiddlerInfo(tiddler: Tiddler) {
+    const trackedFilePath = this.wikiStorageService.getTrackedTiddlerFilePath(tiddler.fields.title);
     return {
       bag: tiddler.fields.bag,
+      filepath: trackedFilePath,
     };
   }
 
@@ -277,9 +280,11 @@ class TidGiMobileFileSystemSyncAdaptor {
         if (etagInfo === undefined) {
           callback(new Error(`Response from server etag header failed to parsed from ${etag}`));
         } else {
+          const trackedFilePath = this.wikiStorageService.getTrackedTiddlerFilePath(title);
           // Invoke the callback
           callback(null, {
             bag: etagInfo.bag,
+            filepath: trackedFilePath,
           }, etagInfo.revision);
         }
       }
@@ -322,12 +327,20 @@ class TidGiMobileFileSystemSyncAdaptor {
     }
   }
 
-  /*
-  Delete a tiddler and invoke the callback with (err)
-  options include:
-  tiddlerInfo: the syncer's tiddlerInfo for this tiddler
-  */
-  async deleteTiddler(title: string, callback: ISyncAdaptorDeleteTiddlerCallback, _options: { tiddlerInfo: { adaptorInfo: { bag?: string } } }) {
+  /**
+   * Delete a tiddler and invoke the callback with (err)
+   *
+   * Desktop logic (FileSystemAdaptor.ts):
+   *   const fileInfo = this.boot.files[title];
+   *   if (!fileInfo) { callback(null, null); return; }  // nothing to delete
+   *   $tw.utils.deleteTiddlerFile(fileInfo, ...);
+   *
+   * We mirror that: pass whatever filepath we have to the storage service,
+   * which will try to find and delete the file.  If the file doesn't exist
+   * (e.g. a draft that was only in memory) the storage service returns
+   * success, and we do the same.
+   */
+  async deleteTiddler(title: string, callback: ISyncAdaptorDeleteTiddlerCallback, options?: { tiddlerInfo?: { adaptorInfo?: { bag?: string; filepath?: string } } }) {
     if (this.isReadOnly) {
       callback(null);
       return;
@@ -335,7 +348,10 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logger.log('deleteTiddler', title);
     try {
       this.addRecentUpdatedTiddlersFromClient('deletions', title);
-      await this.wikiStorageService.deleteTiddler(title);
+      const filePath = options?.tiddlerInfo?.adaptorInfo?.filepath;
+      // Always call storage service — it handles the "file not found" case
+      // gracefully (returns true without throwing), matching desktop semantics.
+      await this.wikiStorageService.deleteTiddler(title, filePath);
       callback(null, null);
     } catch (error) {
       // eslint-disable-next-line n/no-callback-literal

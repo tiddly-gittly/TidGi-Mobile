@@ -1,21 +1,38 @@
 /**
  * FileSystem-based Wiki Storage Service
- * Replaces SQLite-based storage with git repository filesystem storage
  *
- * Purpose: Save/load tiddlers as .tid/.meta files in workspace git repository
+ * Architecture mirrors desktop's FileSystemAdaptor + boot.files pattern:
+ *
+ *   Desktop `boot.files[title]` → Mobile `#tiddlerFilePathByTitle`
+ *
+ * This registry is the SINGLE source of truth for file locations.
+ * - Populated at init by `buildFileIndex()` (≈ desktop boot loading)
+ * - Updated by `saveTiddler()` after each write
+ * - Consulted by `deleteTiddler()` and `loadTiddlerText()` for direct lookup
+ *
+ * `deleteTiddler` follows desktop semantics exactly:
+ *   - Registry has path → delete that file
+ *   - Registry empty → tiddler was never on disk → succeed silently
  */
 
+import { Directory, File } from 'expo-file-system';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParam } from 'tiddlywiki';
-import { getWikiFilesPathByTitle, getWikiTiddlerFolderPath, getWikiTiddlerPathByTitle } from '../../constants/paths';
+import { getWikiTiddlerFolderPath } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitDiffChangedFiles } from '../GitService';
-import { deleteFileOrDirectory, ensureDirectory, fileExists, findFileRecursively, readTextFile, writeTextFile } from './fileOperations';
+import { deleteFileOrDirectory, ensureDirectory, fileExists, readTextFile, writeTextFile } from './fileOperations';
 import { processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
+
+function isExternalPath(filepath: string): boolean {
+  const plain = toPlainPath(filepath);
+  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
+}
 
 /**
  * Service for reading/writing tiddlers to filesystem as .tid/.meta files
@@ -25,11 +42,100 @@ export class FileSystemWikiStorageService {
   readonly #workspace: IWikiWorkspace;
   readonly #configStore = useConfigStore;
   readonly #routingService: TiddlerRoutingService;
+  /**
+   * Central file path registry — equivalent to desktop's `boot.files`.
+   * Maps tiddler title → absolute file path on disk.
+   * Populated once by `buildFileIndex()`, then kept in sync by save/delete.
+   */
   readonly #tiddlerFilePathByTitle = new Map<string, string>();
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
     this.#routingService = new TiddlerRoutingService();
+  }
+
+  // ─── File Index (≈ desktop boot.files population) ──────────────────────
+
+  /**
+   * Scan ALL workspace folders (main + sub-wikis) and build the title→path
+   * registry.  Equivalent to desktop's boot loading that populates
+   * `boot.files` via `$tw.loadTiddlersFromPath`.
+   *
+   * Must be called once after construction, before any save/delete.
+   */
+  async buildFileIndex(): Promise<void> {
+    const workspaces = this.#getRelatedWorkspaces();
+    for (const workspace of workspaces) {
+      const folderPath = getWikiTiddlerFolderPath(workspace);
+      await this.#indexDirectory(folderPath);
+    }
+  }
+
+  /**
+   * Recursively scan a directory for .tid files and register their titles.
+   * Reads only the header of each file to extract the `title:` field.
+   */
+  async #indexDirectory(directoryPath: string): Promise<void> {
+    try {
+      if (isExternalPath(directoryPath)) {
+        const plain = toPlainPath(directoryPath);
+        const info = await ExternalStorage.getInfo(plain);
+        if (!info.exists || !info.isDirectory) return;
+        const relativePaths = await ExternalStorage.readDirRecursive(plain);
+        for (const relative of relativePaths) {
+          if (!relative.endsWith('.tid')) continue;
+          const fullPath = `${plain}${plain.endsWith('/') ? '' : '/'}${relative}`;
+          await this.#indexTidFile(fullPath);
+        }
+      } else {
+        const directory = new Directory(directoryPath);
+        if (!directory.exists) return;
+        await this.#indexDirectoryInternal(directory);
+      }
+    } catch (error) {
+      console.warn(`buildFileIndex: failed to scan ${directoryPath}: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Internal (non-external-storage) recursive directory scan.
+   */
+  async #indexDirectoryInternal(directory: Directory): Promise<void> {
+    try {
+      for (const entry of directory.list()) {
+        if (entry instanceof Directory) {
+          const name = entry.name.replace(/\/$/, '');
+          if (name === '.git' || name === 'node_modules' || name === '.DS_Store' || name === 'output') continue;
+          await this.#indexDirectoryInternal(entry);
+        } else if (entry instanceof File && entry.name.endsWith('.tid')) {
+          await this.#indexTidFile(entry.uri);
+        }
+      }
+    } catch { /* directory might not be readable */ }
+  }
+
+  /**
+   * Read the `title:` header from a .tid file and register it.
+   */
+  async #indexTidFile(filePath: string): Promise<void> {
+    try {
+      const content = await readTextFile(filePath);
+      const title = this.#extractTitleFromHeader(content);
+      if (title) {
+        this.#tiddlerFilePathByTitle.set(title, filePath);
+      }
+    } catch { /* skip unreadable files */ }
+  }
+
+  /**
+   * Extract the `title:` field value from a .tid file header.
+   * Only reads up to the first blank line (header section).
+   */
+  #extractTitleFromHeader(content: string): string | undefined {
+    const blankLineIndex = content.indexOf('\n\n');
+    const header = blankLineIndex >= 0 ? content.substring(0, blankLineIndex) : content;
+    const match = /^title:\s*(.+)$/m.exec(header);
+    return match?.[1]?.trim();
   }
 
   getStatus(): Promise<IWikiServerStatusObject> {
@@ -41,6 +147,10 @@ export class FileSystemWikiStorageService {
       },
       username: this.#configStore.getState().userName,
     });
+  }
+
+  getTrackedTiddlerFilePath(title: string): string | undefined {
+    return this.#tiddlerFilePathByTitle.get(title);
   }
 
   async getRelatedWorkspacesRoutingConfig(): Promise<
@@ -95,7 +205,7 @@ export class FileSystemWikiStorageService {
       const changeCount = '0';
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
-      const targetWorkspace = await this.#resolveTargetWorkspace(title, processedFields as ITiddlerFields, targetWorkspaceId);
+      const targetWorkspace = this.#resolveTargetWorkspace(targetWorkspaceId);
 
       // Ensure tiddlers folder exists
       const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
@@ -116,6 +226,14 @@ export class FileSystemWikiStorageService {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
       await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
+
+      // On desktop, file cleanup (old path → new path) is done by
+      // $tw.utils.cleanupTiddlerFiles which compares the DIRECTORY.
+      // On mobile, the syncadaptor's saveTiddler callback receives the
+      // new filepath and can call deleteTiddler on the old one if needed.
+      // We must NOT delete old files here — when TW saves "MyTiddler"
+      // after accepting a draft, oldPath is still the draft's path;
+      // deleting it here would delete the wrong file.
       this.#tiddlerFilePathByTitle.set(title, fullPath);
 
       return Etag;
@@ -125,62 +243,29 @@ export class FileSystemWikiStorageService {
     }
   }
 
-  async #resolveTargetWorkspace(title: string, fields: ITiddlerFields, targetWorkspaceId?: string): Promise<IWikiWorkspace> {
-    const mainWorkspace = this.#workspace;
-    if (mainWorkspace.isSubWiki === true) {
-      return mainWorkspace;
+  /**
+   * Resolve which workspace to save the tiddler into.
+   *
+   * Routing logic lives in the syncadaptor (WebView side) which has full
+   * $tw.wiki access for tag-tree / filter matching.  The syncadaptor passes
+   * the resolved `targetWorkspaceId` to us — we just look it up.
+   *
+   * This mirrors desktop's pattern where getTiddlerFileInfo (which has
+   * access to the wiki) determines the target directory, and the storage
+   * layer just writes to it.
+   */
+  #resolveTargetWorkspace(targetWorkspaceId?: string): IWikiWorkspace {
+    if (this.#workspace.isSubWiki === true) {
+      return this.#workspace;
     }
-
-    const relatedWorkspaces = this.#getRelatedWorkspaces();
 
     if (typeof targetWorkspaceId === 'string' && targetWorkspaceId !== '') {
-      const requestedWorkspace = relatedWorkspaces.find(workspace => workspace.id === targetWorkspaceId);
-      if (requestedWorkspace) {
-        return requestedWorkspace;
-      }
+      const relatedWorkspaces = this.#getRelatedWorkspaces();
+      const found = relatedWorkspaces.find(workspace => workspace.id === targetWorkspaceId);
+      if (found) return found;
     }
 
-    if (relatedWorkspaces.length <= 1) {
-      return mainWorkspace;
-    }
-
-    const routeResult = await this.#routingService.routeTiddler(title, fields, mainWorkspace, relatedWorkspaces);
-    const routedWorkspace = relatedWorkspaces.find(workspace => workspace.id === routeResult.workspaceId);
-    if (routedWorkspace) {
-      return routedWorkspace;
-    }
-
-    const mainConfig = await readTidgiConfig(mainWorkspace);
-    const subWikis = Array.isArray(mainConfig.subWikis) ? mainConfig.subWikis : [];
-    if (subWikis.length === 0) {
-      return mainWorkspace;
-    }
-
-    const rawTags = (fields as Record<string, unknown>).tags;
-    const tiddlerTags = Array.isArray(rawTags)
-      ? rawTags.filter((tag): tag is string => typeof tag === 'string')
-      : [];
-
-    const matchedSubWiki = subWikis.find((subWiki) => {
-      const hasTagRule = Array.isArray(subWiki.tagNames) && subWiki.tagNames.length > 0;
-      if (!hasTagRule) return false;
-      const isTagTiddler = subWiki.tagNames.includes(title);
-      const hasMatchingTag = subWiki.tagNames.some(tag => tiddlerTags.includes(tag));
-      return isTagTiddler || hasMatchingTag;
-    });
-
-    if (!matchedSubWiki) {
-      return mainWorkspace;
-    }
-
-    const localSubWorkspace = relatedWorkspaces.find(workspace =>
-      workspace.id !== mainWorkspace.id && (
-        workspace.id === matchedSubWiki.id ||
-        workspace.name === matchedSubWiki.name
-      )
-    );
-
-    return localSubWorkspace ?? mainWorkspace;
+    return this.#workspace;
   }
 
   #getRelatedWorkspaces(): IWikiWorkspace[] {
@@ -226,148 +311,73 @@ export class FileSystemWikiStorageService {
     await writeTextFile(filePath, content);
   }
 
+  // ─── Delete (≈ desktop FileSystemAdaptor.deleteTiddler) ─────────────
+
   /**
-   * Delete tiddler from filesystem.
-   * First tries the routed path, then falls back to default locations,
-   * and finally does a recursive search in the tiddlers directory.
+   * Delete a tiddler's file from disk.
+   *
+   * Mirrors desktop logic exactly:
+   *   const fileInfo = boot.files[title];
+   *   if (!fileInfo) { callback(null, null); return; }
+   *   deleteTiddlerFile(fileInfo);
+   *
+   * The file path registry (`#tiddlerFilePathByTitle`) is our `boot.files`.
+   * If the registry has no entry, the tiddler was never persisted — succeed
+   * silently, exactly like desktop.
    */
-  async deleteTiddler(title: string): Promise<boolean> {
-    try {
-      if (!title) {
-        console.warn(`Failed to delete tiddler with no title`);
-        return true;
-      }
+  async deleteTiddler(title: string, exactFilePath?: string): Promise<boolean> {
+    // Resolve the file path: prefer caller-supplied path, then registry
+    const filePath = (typeof exactFilePath === 'string' && exactFilePath.length > 0)
+      ? exactFilePath
+      : this.#tiddlerFilePathByTitle.get(title);
 
-      const trackedFilePath = this.#tiddlerFilePathByTitle.get(title);
-      if (trackedFilePath && await fileExists(trackedFilePath)) {
-        await deleteFileOrDirectory(trackedFilePath);
-        await deleteFileOrDirectory(`${trackedFilePath}.meta`);
-        this.#tiddlerFilePathByTitle.delete(title);
-        return true;
-      }
-
-      const routedRelativePath = this.#routingService.getTiddlerFilePathSync(title, {} as ITiddlerFields, this.#workspace);
-      if (routedRelativePath) {
-        const routedFull = `${this.#workspace.wikiFolderLocation}/${routedRelativePath}`;
-        if (await fileExists(routedFull)) {
-          await deleteFileOrDirectory(routedFull);
-          await deleteFileOrDirectory(`${routedFull}.meta`);
-          this.#tiddlerFilePathByTitle.delete(title);
-          return true;
-        }
-      }
-
-      const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
-      if (await fileExists(tidPath)) {
-        await deleteFileOrDirectory(tidPath);
-        await deleteFileOrDirectory(`${tidPath}.meta`);
-        this.#tiddlerFilePathByTitle.delete(title);
-        return true;
-      }
-
-      const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
-      if (await fileExists(filesPath)) {
-        await deleteFileOrDirectory(filesPath);
-        await deleteFileOrDirectory(`${filesPath}.meta`);
-        this.#tiddlerFilePathByTitle.delete(title);
-        return true;
-      }
-
-      const found = await this.#findTiddlerFileRecursively(title);
-      if (found) {
-        await deleteFileOrDirectory(found);
-        await deleteFileOrDirectory(`${found}.meta`);
-        this.#tiddlerFilePathByTitle.delete(title);
-        return true;
-      }
-
-      console.warn(`Tiddler file not found for deletion: ${title}`);
+    if (!filePath) {
+      // Not in registry — tiddler was never on disk (e.g. in-memory draft).
+      // Desktop: callback(null, null);  Mobile: return true.
       return true;
-    } catch (error) {
-      console.error(`Failed to delete tiddler ${title}: ${(error as Error).message}`);
-      throw error;
     }
+
+    try {
+      if (await fileExists(filePath)) {
+        await deleteFileOrDirectory(filePath);
+      }
+      // Best-effort .meta companion cleanup
+      const metaPath = `${filePath}.meta`;
+      if (await fileExists(metaPath)) {
+        await deleteFileOrDirectory(metaPath);
+      }
+    } catch (error) {
+      console.warn(`deleteTiddler "${title}": failed to remove ${filePath}: ${(error as Error).message}`);
+    }
+
+    this.#tiddlerFilePathByTitle.delete(title);
+    return true;
   }
 
-  /**
-   * Search tiddlers directory recursively for a file matching the given title.
-   */
-  async #findTiddlerFileRecursively(title: string): Promise<string | undefined> {
-    const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
-    // Use unified sanitize regex (matches paths.ts INVALID_CHARACTERS_REGEX)
-    const sanitizedTitle = title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_');
-
-    return findFileRecursively(tiddlerFolderPath, (fileName: string) => {
-      const name = fileName.replace(/\.(tid|meta)$/, '');
-      return name === sanitizedTitle && fileName.endsWith('.tid');
-    });
-  }
+  // ─── Load ──────────────────────────────────────────────────────────────
 
   /**
-   * Load tiddler text from filesystem
+   * Load the text body of a tiddler from its .tid file.
+   * Uses the registry for direct path lookup — no searching needed.
    */
   async loadTiddlerText(title: string): Promise<string | undefined> {
-    const tiddlerText = (await this.#loadFromFS(title)) ?? this.#loadFromServerAndSaveToFS(title);
-    return tiddlerText;
-  }
-
-  /**
-   * Load tiddler from filesystem
-   */
-  async #loadFromFS(title: string): Promise<string | undefined> {
-    try {
-      // Try .tid file first
-      const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
-      if (await fileExists(tidPath)) {
-        this.#tiddlerFilePathByTitle.set(title, tidPath);
-        const content = await readTextFile(tidPath);
-        // Extract text part (everything after first blank line)
-        const blankLineMatch = /\r?\n\r?\n/.exec(content);
-        if (blankLineMatch !== null) {
-          return content.substring(blankLineMatch.index + blankLineMatch[0].length);
-        }
-      }
-
-      // Try files folder
-      const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
-      if (await fileExists(filesPath)) {
-        this.#tiddlerFilePathByTitle.set(title, filesPath);
-        return await readTextFile(filesPath);
-      }
-    } catch {
-      // Try canonical_uri path — search recursively for matching .meta file
-      try {
-        const found = await this.#findTiddlerFileRecursively(title);
-        if (found) {
-          this.#tiddlerFilePathByTitle.set(title, found);
-          const content = await readTextFile(found);
-          // If it's a .tid file, extract text part
-          if (found.endsWith('.tid')) {
-            const blankLineMatch = /\r?\n\r?\n/.exec(content);
-            if (blankLineMatch !== null) {
-              return content.substring(blankLineMatch.index + blankLineMatch[0].length);
-            }
-          }
-          // If it's a binary file with .meta, return the binary content
-          return content;
-        }
-      } catch {
-        // Ignore
-      }
-
+    const filePath = this.#tiddlerFilePathByTitle.get(title);
+    if (!filePath) {
       return undefined;
     }
-  }
-
-  /**
-   * Load from server and save to FS
-   * Git sync model: updates come via git pull, not individual tiddler fetches
-   */
-  #loadFromServerAndSaveToFS(title: string): string | undefined {
-    // In Git-based sync, we don't fetch individual tiddlers
-    console.log(`Individual tiddler fetch not supported in Git mode: ${title}`);
-    console.log('Use git pull to sync all changes from server');
-    return undefined;
+    try {
+      const content = await readTextFile(filePath);
+      // .tid format: header fields separated by blank line from body
+      const blankLineMatch = /\r?\n\r?\n/.exec(content);
+      if (blankLineMatch !== null) {
+        return content.substring(blankLineMatch.index + blankLineMatch[0].length);
+      }
+      // No blank line — file has only headers, no body text
+      return '';
+    } catch (error) {
+      console.warn(`loadTiddlerText "${title}": failed to read ${filePath}: ${(error as Error).message}`);
+      return undefined;
+    }
   }
 
   /**

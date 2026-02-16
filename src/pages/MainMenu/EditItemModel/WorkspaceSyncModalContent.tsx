@@ -1,19 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Checkbox, Modal, Portal, Text } from 'react-native-paper';
+import { Button, Checkbox, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
-import { WikiChangesModelContent } from './WikiChangesModelContent';
 
 interface IWorkspaceSyncModalContentProps {
+  onOpenChanges?: () => void;
   workspace: IWikiWorkspace;
+  showCloseButton?: boolean;
   onClose: () => void;
 }
 
-export function WorkspaceSyncModalContent({ workspace, onClose }: IWorkspaceSyncModalContentProps): React.JSX.Element {
+export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton = true, onOpenChanges }: IWorkspaceSyncModalContentProps): React.JSX.Element {
   const { t } = useTranslation();
   const update = useWorkspaceStore(state => state.update);
-  const [changesModalVisible, setChangesModalVisible] = useState(false);
 
   const lastSyncTimestamp = useMemo(() => {
     const syncedServers = workspace.syncedServers;
@@ -41,29 +41,13 @@ export function WorkspaceSyncModalContent({ workspace, onClose }: IWorkspaceSync
       <Button
         mode='outlined'
         onPress={() => {
-          setChangesModalVisible(true);
+          onOpenChanges?.();
         }}
       >
         {t('AddWorkspace.OpenChangeLogList')}
       </Button>
 
-      <Button mode='text' onPress={onClose}>{t('Close')}</Button>
-
-      <Portal>
-        <Modal
-          visible={changesModalVisible}
-          onDismiss={() => {
-            setChangesModalVisible(false);
-          }}
-        >
-          <WikiChangesModelContent
-            id={workspace.id}
-            onClose={() => {
-              setChangesModalVisible(false);
-            }}
-          />
-        </Modal>
-      </Portal>
+      {showCloseButton && <Button mode='text' onPress={onClose}>{t('Close')}</Button>}
     </Container>
   );
 }
