@@ -6,8 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { RootStackParameterList } from '../../App';
 import { CreateFromTemplateTab } from './tabs/CreateFromTemplateTab';
 import { CreateWebpageShortcutTab } from './tabs/CreateWebpageShortcutTab';
+import { ScanQRCodeTab } from './tabs/ScanQRCodeTab';
 
 type CreateWorkspaceTabParameterList = {
+  ScanQRCode: undefined;
   CreateFromTemplate: undefined;
   CreateWebpageShortcut: undefined;
 };
@@ -20,6 +22,11 @@ export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'Creat
 
   return (
     <Tab.Navigator>
+      <Tab.Screen
+        name='ScanQRCode'
+        component={ScanQRCodeTab}
+        options={{ title: t('AddWorkspace.ScanFromWiki'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='qr-code' color={color} size={26} /> }}
+      />
       <Tab.Screen
         name='CreateFromTemplate'
         component={CreateFromTemplateTab}

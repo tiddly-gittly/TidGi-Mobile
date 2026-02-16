@@ -6,10 +6,10 @@
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import { ActivityIndicator, Button, Card, Dialog, Portal, Snackbar, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, Checkbox, Dialog, Portal, Snackbar, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
-import { IWikiWorkspace } from '../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 
 const Container = styled(View)`
   padding: 8px;
@@ -60,6 +60,8 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
   const [conflictBranch, setConflictBranch] = useState<string | null>(null);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const updateWorkspace = useWorkspaceStore(state => state.update);
+  const includeSubWikis = workspace.syncIncludeSubWikis === true;
 
   // Get last sync time from workspace
   useEffect(() => {
@@ -75,12 +77,20 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
     setSyncError(null);
 
     try {
-      const { haveUpdate, haveConnectedServer } = await gitBackgroundSyncService.sync();
-
-      if (!haveConnectedServer) {
+      await gitBackgroundSyncService.updateServerOnlineStatus();
+      const server = gitBackgroundSyncService.getOnlineServerForWiki(workspace);
+      if (server === undefined) {
         setSnackbarMessage(t('Sync.NoServerConnected'));
         setSnackbarVisible(true);
-      } else if (haveUpdate) {
+        return;
+      }
+
+      const haveUpdate = await gitBackgroundSyncService.syncWikiWithServer({
+        ...workspace,
+        syncIncludeSubWikis: includeSubWikis,
+      }, server);
+
+      if (haveUpdate) {
         setSnackbarMessage(t('Sync.UpdateReceived'));
         setSnackbarVisible(true);
       } else {
@@ -109,7 +119,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
     } finally {
       setSyncing(false);
     }
-  }, [workspace, t]);
+  }, [workspace, t, includeSubWikis]);
 
   const formatLastSyncTime = useCallback((timestamp: number) => {
     const now = Date.now();
@@ -165,6 +175,18 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
             {syncing ? t('Sync.Syncing') : t('Sync.SyncNow')}
           </SyncButton>
         </StatusRow>
+
+        {!workspace.isSubWiki && gitBackgroundSyncService.getSubWikisForMainWorkspace(workspace).length > 0 && (
+          <StatusRow>
+            <Checkbox.Item
+              label={t('Sync.IncludeSubWikis')}
+              status={includeSubWikis ? 'checked' : 'unchecked'}
+              onPress={() => {
+                updateWorkspace(workspace.id, { syncIncludeSubWikis: !includeSubWikis });
+              }}
+            />
+          </StatusRow>
+        )}
       </StatusCard>
 
       {/* Conflict Dialog */}

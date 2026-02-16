@@ -123,7 +123,7 @@ export class TiddlerRoutingService {
   ): Promise<string> {
     // Load config to check for fileSystemPathFilters
     const config = await readTidgiConfig(workspace);
-    return this.computeFilePath(title, fields, config);
+    return this.computeFilePath(title, fields, workspace, config);
   }
 
   /**
@@ -133,12 +133,15 @@ export class TiddlerRoutingService {
   public getTiddlerFilePathSync(
     title: string,
     _fields: ITiddlerFields,
-    _workspace: IWikiWorkspace,
+    workspace: IWikiWorkspace,
   ): string {
     // Sanitize and truncate filename
     let sanitized = title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_');
     if (sanitized.length > 200) {
       sanitized = sanitized.substring(0, 200);
+    }
+    if (workspace.isSubWiki === true) {
+      return `${sanitized}.tid`;
     }
     return `tiddlers/${sanitized}.tid`;
   }
@@ -148,7 +151,8 @@ export class TiddlerRoutingService {
    */
   private computeFilePath(
     title: string,
-    fields: ITiddlerFields,
+    _fields: ITiddlerFields,
+    workspace: IWikiWorkspace,
     config: Awaited<ReturnType<typeof readTidgiConfig>>,
   ): string {
     // Sanitize title for filesystem using unified regex
@@ -159,9 +163,6 @@ export class TiddlerRoutingService {
     if (sanitized.length > 200) {
       sanitized = sanitized.substring(0, 200);
     }
-
-    // Check tiddler type
-    const type = fields.type as string | undefined;
 
     // Attachment tiddlers with _canonical_uri: binary file is already in files/, save .tid metadata to tiddlers/
     // Embedded binary tiddlers (base64 text): also save as .tid in tiddlers/
@@ -178,7 +179,10 @@ export class TiddlerRoutingService {
       }
     }
 
-    // Default: text tiddlers go to tiddlers/
+    if (workspace.isSubWiki === true) {
+      return `${sanitized}.tid`;
+    }
+
     return `tiddlers/${sanitized}.tid`;
   }
 

@@ -2,12 +2,12 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert } from 'react-native';
+import { Alert, View } from 'react-native';
 import Collapsible from 'react-native-collapsible';
-import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
+import { Button, Checkbox, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
-import { useGitImport } from '../../services/GitService/useGitImport';
+import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
 import { useServerStore } from '../../store/server';
 
 interface GitQRData {
@@ -16,6 +16,7 @@ interface GitQRData {
   token?: string;
   workspaceId: string;
   workspaceName?: string;
+  subWorkspaces?: { id: string; name: string; mainWikiID?: string }[];
 }
 
 const Container = styled.View`
@@ -51,9 +52,6 @@ const OpenWikiButton = styled(Button)`
 const DoneImportActionsTitleText = styled(Text)`
   margin-top: 30px;
 `;
-const ImportCompleteText = styled(Text)`
-  margin-top: 8px;
-`;
 const ImportStatusText = styled.Text`
   width: 100%;
   display: flex;
@@ -64,6 +62,12 @@ const QRScannedTitle = styled(Text)`
 `;
 const QRDetailText = styled(Text)`
   color: #666;
+`;
+const SubWorkspaceSelectionContainer = styled(View)`
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: ${MD3Colors.neutralVariant95};
 `;
 const ManualConfigHint = styled(Text)`
   margin-top: 10px;
@@ -96,6 +100,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiName, setWikiName] = useState('');
   const [qrData, setQrData] = useState<GitQRData | undefined>();
   const [manualEdit, setManualEdit] = useState(false);
+  const [selectedSubWikiIds, setSelectedSubWikiIds] = useState<string[]>([]);
+
   const addServer = useServerStore(state => state.add);
   const addAsServer = route.params.addAsServer ?? true;
   useEffect(() => {
@@ -133,6 +139,11 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           setWikiUrl(new URL(qr.baseUrl));
           // Use workspaceName from QR code, or fallback to a generated name
           setWikiName(qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`);
+
+          // Select all sub-workspaces by default
+          if (Array.isArray(qr.subWorkspaces)) {
+            setSelectedSubWikiIds(qr.subWorkspaces.map(ws => ws.id));
+          }
           return;
         } else {
           console.error('Invalid QR code format:', parsed);
@@ -154,11 +165,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   const {
     importWiki,
+    batchImportWikis,
     resetState,
     status: importStatus,
     error: importError,
     cloneProgress,
     createdWorkspace: createdWikiWorkspace,
+    batchProgress,
+    isBatchImporting,
+    batchCreatedWorkspaces,
   } = useGitImport();
 
   const addServerAndImport = useCallback(async () => {
@@ -168,8 +183,41 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
 
       if (qrData) {
-        // Git import with QR code data
-        await importWiki(qrData, wikiName, newServer.id);
+        // Collect batch items
+        const batchItems: IBatchImportItem[] = [];
+
+        // 1. Add main wiki
+        batchItems.push({
+          qrData: qrData,
+          wikiName: wikiName,
+          serverID: newServer.id,
+        });
+
+        // 2. Add selected sub-wikis
+        if (qrData.subWorkspaces && selectedSubWikiIds.length > 0) {
+          qrData.subWorkspaces.forEach(sub => {
+            if (selectedSubWikiIds.includes(sub.id)) {
+              batchItems.push({
+                qrData: {
+                  ...qrData,
+                  workspaceId: sub.id,
+                  workspaceName: sub.name,
+                  isSubWiki: true,
+                  mainWikiID: sub.mainWikiID ?? qrData.workspaceId,
+                },
+                wikiName: sub.name,
+                serverID: newServer.id,
+              });
+            }
+          });
+        }
+
+        if (batchItems.length > 1) {
+          await batchImportWikis(batchItems);
+        } else {
+          // Single import (fallback to original behavior for better UX if used alone)
+          await importWiki(qrData, wikiName, newServer.id);
+        }
       } else {
         // No valid QR data - cannot use Git sync
         Alert.alert(t('Import.GitSyncRequiresQRCode'));
@@ -182,13 +230,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
     setWikiUrl(undefined);
     setQrData(undefined);
-  }, [addAsServer, addServer, importWiki, wikiName, wikiUrl?.origin, qrData, t]);
+  }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, t]);
 
   if (hasPermission === undefined) {
-    return <Text>Requesting for camera permission</Text>;
+    return <Text>{t('Import.RequestingCameraPermission')}</Text>;
   }
   if (!hasPermission) {
-    return <Text>No access to camera</Text>;
+    return <Text>{t('Import.NoCameraAccess')}</Text>;
   }
 
   const serverConfigs = (
@@ -222,6 +270,27 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <QRDetailText variant='bodySmall'>
             {t('Import.WorkspaceID')}: {qrData.workspaceId}
           </QRDetailText>
+
+          {qrData.subWorkspaces && qrData.subWorkspaces.length > 0 && (
+            <SubWorkspaceSelectionContainer>
+              <Text variant='titleSmall'>{t('Import.SelectSubWorkspaces')}</Text>
+              {qrData.subWorkspaces.map(sub => (
+                <Checkbox.Item
+                  key={sub.id}
+                  label={sub.name}
+                  status={selectedSubWikiIds.includes(sub.id) ? 'checked' : 'unchecked'}
+                  onPress={() => {
+                    setSelectedSubWikiIds(previous =>
+                      previous.includes(sub.id)
+                        ? previous.filter(id => id !== sub.id)
+                        : [...previous, sub.id]
+                    );
+                  }}
+                  mode='android'
+                />
+              ))}
+            </SubWorkspaceSelectionContainer>
+          )}
         </>
       )}
       {!qrData && (
@@ -258,6 +327,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 setQrData(qr);
                 setWikiUrl(new URL(qr.baseUrl));
                 setWikiName(qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`);
+                // Basic support for manual paste too
+                if (Array.isArray(qr.subWorkspaces)) {
+                  setSelectedSubWikiIds(qr.subWorkspaces.map(ws => ws.id));
+                }
               }
             } catch {
               // Invalid JSON, ignore
@@ -288,7 +361,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             labelStyle={{ padding: ButtonLabelPadding }}
           >
             <ButtonText>
-              {t('Import.ImportWiki')}
+              {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
             </ButtonText>
           </ImportWikiButton>
         </>
@@ -297,7 +370,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         <>
           <ImportStatusText>
             <Text>{t('Loading')}{' '}</Text>
-            {importStatus}
+            {isBatchImporting
+              ? `${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`
+              : importStatus}
           </ImportStatusText>
         </>
       )}
@@ -326,23 +401,25 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           />
         </>
       )}
-      {importStatus === 'success' && createdWikiWorkspace !== undefined && (
+      {importStatus === 'success' && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
         <>
           <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
-          <OpenWikiButton
-            mode='elevated'
-            onPress={() => {
-              navigation.navigate('MainMenu', { fromWikiID: createdWikiWorkspace.id });
-              navigation.navigate('WikiWebView', { id: createdWikiWorkspace.id });
-            }}
-            labelStyle={{ padding: ButtonLabelPadding }}
-          >
-            <Text>{`${t('Open')} ${createdWikiWorkspace.name}`}</Text>
-          </OpenWikiButton>
-          <DoneImportActionsTitleText variant='titleLarge'>{t('OptionalActions')}</DoneImportActionsTitleText>
-          <ImportCompleteText variant='bodyMedium'>
-            {t('Import.GitImportComplete')}
-          </ImportCompleteText>
+
+          {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : [createdWikiWorkspace!])
+            .filter(ws => ws.isSubWiki !== true)
+            .map((ws) => (
+              <OpenWikiButton
+                key={ws.id}
+                mode='elevated'
+                onPress={() => {
+                  navigation.navigate('MainMenu', { fromWikiID: ws.id });
+                  navigation.navigate('WikiWebView', { id: ws.id });
+                }}
+                labelStyle={{ padding: ButtonLabelPadding }}
+              >
+                <Text>{`${t('Open')} ${ws.name}`}</Text>
+              </OpenWikiButton>
+            ))}
         </>
       )}
     </Container>

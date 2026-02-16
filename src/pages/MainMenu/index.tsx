@@ -1,10 +1,11 @@
+import { useIsFocused } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import * as Haptics from 'expo-haptics';
 import { FC, useState } from 'react';
 import { Modal, Portal, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
-import { CreateWorkspaceButton, ImporterButton } from '../../components/NavigationButtons';
+import { CreateWorkspaceButton } from '../../components/NavigationButtons';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
@@ -30,6 +31,7 @@ export interface MainMenuProps {
 
 export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
   const theme = useTheme();
+  const isFocused = useIsFocused();
 
   // State variables for the modal
   const [wikiModalVisible, setWikiModalVisible] = useState(false);
@@ -41,10 +43,20 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   return (
     <Container>
       <WorkspaceList
+        includeSubWikis={false}
+        isFocused={isFocused}
         onPress={(wiki) => {
+          if (wiki.type === 'wiki' && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
+            navigation.navigate('WikiWebView', { id: wiki.mainWikiID });
+            return;
+          }
           navigation.navigate('WikiWebView', { id: wiki.id });
         }}
         onPressQuickLoad={(wiki) => {
+          if (wiki.type === 'wiki' && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
+            navigation.navigate('WikiWebView', { id: wiki.mainWikiID, quickLoad: true });
+            return;
+          }
           navigation.navigate('WikiWebView', { id: wiki.id, quickLoad: true });
         }}
         onLongPress={(wiki) => {
@@ -75,7 +87,6 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         </ThemeProvider>
       </Portal>
       <ButtonButtonsContainer>
-        <ImporterButton />
         <CreateWorkspaceButton />
       </ButtonButtonsContainer>
     </Container>

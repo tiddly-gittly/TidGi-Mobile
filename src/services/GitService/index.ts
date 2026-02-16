@@ -5,8 +5,8 @@
 
 import { Buffer } from 'buffer';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import git from 'isomorphic-git';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import git from 'isomorphic-git';
 import pTimeout from 'p-timeout';
 import { IWikiWorkspace } from '../../store/workspace';
 
@@ -38,6 +38,21 @@ export interface IGitRemote {
   /** Token is optional - empty/undefined means anonymous access (insecure) */
   token?: string;
   workspaceId: string;
+}
+
+export interface IGitCommitInfo {
+  authorEmail: string;
+  authorName: string;
+  message: string;
+  oid: string;
+  parentOids: string[];
+  timestamp: number;
+}
+
+export interface IGitFileContent {
+  dataUri?: string;
+  kind: 'binary' | 'image' | 'missing' | 'text';
+  text?: string;
 }
 
 /**
@@ -215,14 +230,25 @@ const fs = {
           isFile: () => !isDir,
           isDirectory: () => isDir,
           isSymbolicLink: () => false,
-          dev: 0, ino: 0, mode: isDir ? 0o755 : 0o644, nlink: 1, uid: 0, gid: 0, rdev: 0,
-          size: fileSize, blksize: 4096, blocks: Math.ceil(fileSize / 512),
-          atimeMs: modifiedTimeMs, mtimeMs: modifiedTimeMs, ctimeMs: modifiedTimeMs, birthtimeMs: modifiedTimeMs,
+          dev: 0,
+          ino: 0,
+          mode: isDir ? 0o755 : 0o644,
+          nlink: 1,
+          uid: 0,
+          gid: 0,
+          rdev: 0,
+          size: fileSize,
+          blksize: 4096,
+          blocks: Math.ceil(fileSize / 512),
+          atimeMs: modifiedTimeMs,
+          mtimeMs: modifiedTimeMs,
+          ctimeMs: modifiedTimeMs,
+          birthtimeMs: modifiedTimeMs,
         };
       }
 
       // Internal path
-      const info = await FileSystemLegacy.getInfoAsync(filepath, { size: true });
+      const info = await FileSystemLegacy.getInfoAsync(filepath);
       if (!info.exists) {
         const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
         error.code = 'ENOENT';
@@ -236,9 +262,20 @@ const fs = {
         isFile: () => !isDir,
         isDirectory: () => isDir,
         isSymbolicLink: () => false,
-        dev: 0, ino: 0, mode: isDir ? 0o755 : 0o644, nlink: 1, uid: 0, gid: 0, rdev: 0,
-        size: fileSize, blksize: 4096, blocks: Math.ceil(fileSize / 512),
-        atimeMs: modifiedTimeMs, mtimeMs: modifiedTimeMs, ctimeMs: modifiedTimeMs, birthtimeMs: modifiedTimeMs,
+        dev: 0,
+        ino: 0,
+        mode: isDir ? 0o755 : 0o644,
+        nlink: 1,
+        uid: 0,
+        gid: 0,
+        rdev: 0,
+        size: fileSize,
+        blksize: 4096,
+        blocks: Math.ceil(fileSize / 512),
+        atimeMs: modifiedTimeMs,
+        mtimeMs: modifiedTimeMs,
+        ctimeMs: modifiedTimeMs,
+        birthtimeMs: modifiedTimeMs,
       };
     },
 
@@ -284,7 +321,7 @@ function fromValue<T>(value: T) {
     },
     return() {
       queue = [];
-      return {};
+      return Promise.resolve({ done: true, value: undefined as T | undefined });
     },
     [Symbol.asyncIterator]() {
       return this;
@@ -342,7 +379,7 @@ function fromStream(stream: ReadableStream<Uint8Array>) {
     },
     return() {
       reader.releaseLock();
-      return {};
+      return Promise.resolve({ done: true, value: undefined as Uint8Array | undefined });
     },
     [Symbol.asyncIterator]() {
       return this;
@@ -352,8 +389,8 @@ function fromStream(stream: ReadableStream<Uint8Array>) {
 
 function toArrayBuffer(data: Uint8Array) {
   const { buffer, byteOffset, byteLength } = data;
-  if (byteOffset === 0 && byteLength === buffer.byteLength) return buffer;
-  return buffer.slice(byteOffset, byteOffset + byteLength);
+  if (byteOffset === 0 && byteLength === buffer.byteLength) return buffer as ArrayBuffer;
+  return buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer;
 }
 
 // Keep HTTP diagnostics centralized to debug mobile sync connectivity issues.
@@ -381,9 +418,9 @@ const httpWithLogging = {
         responseHeaders[key] = value;
       });
 
-      const responseBody = response.body && 'getReader' in response.body
+      const responseBody = (response.body && 'getReader' in response.body
         ? fromStream(response.body as ReadableStream<Uint8Array>)
-        : fromValue(new Uint8Array(await response.arrayBuffer()));
+        : fromValue(new Uint8Array(await response.arrayBuffer()))) as AsyncIterableIterator<Uint8Array>;
 
       console.log('Git HTTP response:', {
         url: response.url,
@@ -742,6 +779,165 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
   }
 }
 
+export async function gitGetCommitHistory(workspace: IWikiWorkspace, depth = 100): Promise<IGitCommitInfo[]> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  try {
+    const commits = await git.log({ fs, dir: directory, depth });
+    return commits.map((entry) => {
+      const commit = entry.commit;
+      return {
+        oid: entry.oid,
+        message: commit.message,
+        authorName: commit.author.name,
+        authorEmail: commit.author.email,
+        timestamp: commit.author.timestamp * 1000,
+        parentOids: [...commit.parent],
+      };
+    });
+  } catch (error) {
+    console.error(`Failed to read git history: ${(error as Error).message}`);
+    return [];
+  }
+}
+
+export async function gitGetChangedFilesForCommit(
+  workspace: IWikiWorkspace,
+  commitOid: string,
+  parentOid?: string,
+): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  try {
+    const currentFiles = new Set(await git.listFiles({ fs, dir: directory, ref: commitOid }));
+    let previousFiles = new Set<string>();
+    if (parentOid) {
+      try {
+        previousFiles = new Set(await git.listFiles({ fs, dir: directory, ref: parentOid }));
+      } catch (error) {
+        const message = (error as Error).message;
+        if (message.includes('Could not find')) {
+          previousFiles = new Set<string>();
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    const allPaths = new Set<string>([...currentFiles, ...previousFiles]);
+    const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+    for (const path of allPaths) {
+      const inCurrent = currentFiles.has(path);
+      const inPrevious = previousFiles.has(path);
+      if (inCurrent && !inPrevious) {
+        result.push({ path, type: 'add' });
+      } else if (!inCurrent && inPrevious) {
+        result.push({ path, type: 'delete' });
+      } else if (inCurrent && inPrevious) {
+        result.push({ path, type: 'modify' });
+      }
+    }
+    return result.sort((left, right) => left.path.localeCompare(right.path));
+  } catch (error) {
+    console.warn(`Failed to read changed files for commit ${commitOid}: ${(error as Error).message}`);
+    return [];
+  }
+}
+
+const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
+const TEXT_FILE_EXTENSIONS = new Set(['.tid', '.js', '.ts', '.tsx', '.json', '.md', '.txt', '.css', '.html', '.xml', '.yml', '.yaml', '.meta']);
+
+function getFileExtension(filePath: string): string {
+  const dotIndex = filePath.lastIndexOf('.');
+  if (dotIndex < 0) return '';
+  return filePath.slice(dotIndex).toLowerCase();
+}
+
+function getImageMimeType(filePath: string): string {
+  const extension = getFileExtension(filePath);
+  switch (extension) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.bmp':
+      return 'image/bmp';
+    case '.svg':
+      return 'image/svg+xml';
+    default:
+      return 'image/png';
+  }
+}
+
+function isTextFile(filePath: string): boolean {
+  const extension = getFileExtension(filePath);
+  return TEXT_FILE_EXTENSIONS.has(extension);
+}
+
+function isImageFile(filePath: string): boolean {
+  const extension = getFileExtension(filePath);
+  return IMAGE_FILE_EXTENSIONS.has(extension);
+}
+
+function decodeUtf8(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+async function readFileBytesAtReference(directory: string, filePath: string, reference?: string): Promise<Uint8Array | undefined> {
+  try {
+    if (reference) {
+      const { blob } = await git.readBlob({ fs, dir: directory, oid: reference, filepath: filePath });
+      return blob;
+    }
+    const fileContent = await fs.promises.readFile(`${directory}/${filePath}`);
+    if (typeof fileContent === 'string') {
+      return new TextEncoder().encode(fileContent);
+    }
+    return Uint8Array.from(fileContent);
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.includes('Could not find') || message.includes('ENOENT') || message.includes('Not Found')) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+export async function gitGetFileContentAtRef(
+  workspace: IWikiWorkspace,
+  filePath: string,
+  reference?: string,
+): Promise<IGitFileContent> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  try {
+    const bytes = await readFileBytesAtReference(directory, filePath, reference);
+    if (!bytes) {
+      return { kind: 'missing' };
+    }
+
+    if (isImageFile(filePath)) {
+      const base64 = Buffer.from(bytes).toString('base64');
+      return {
+        kind: 'image',
+        dataUri: `data:${getImageMimeType(filePath)};base64,${base64}`,
+      };
+    }
+
+    if (isTextFile(filePath)) {
+      return {
+        kind: 'text',
+        text: decodeUtf8(bytes),
+      };
+    }
+
+    return { kind: 'binary' };
+  } catch (error) {
+    console.warn(`Failed to read file content for ${filePath} at ${reference ?? 'working-tree'}: ${(error as Error).message}`);
+    return { kind: 'missing' };
+  }
+}
+
 /**
  * Remove untracked files from working directory (equivalent to git clean -fd).
  * Needed after force-checkout to prevent untracked files from being re-committed.
@@ -754,10 +950,7 @@ async function cleanUntrackedFiles(directory: string): Promise<void> {
       if (headStatus === 0 && workdirStatus === 2) {
         const fullPath = `${directory}/${filepath}`;
         try {
-          const file = new File(fullPath);
-          if (file.exists) {
-            file.delete();
-          }
+          await fs.promises.unlink(fullPath);
         } catch {
           // Best-effort cleanup
         }
@@ -781,6 +974,41 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
     console.error(`Failed to check git status: ${(error as Error).message}`);
     // Throw error to caller instead of silently returning false to prevent potential data loss
     throw new Error(`Cannot determine git status: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Count unsynced local commits against the tracked remote branch.
+ * Adds 1 when working tree has uncommitted changes.
+ */
+export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Promise<number> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+
+  try {
+    const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
+    const localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+
+    let remoteCommits: Array<{ oid: string }> = [];
+    try {
+      remoteCommits = await git.log({ fs, dir: directory, ref: `origin/${branch}`, depth: 300 });
+    } catch {
+      remoteCommits = [];
+    }
+
+    const remoteCommitOids = new Set(remoteCommits.map(commit => commit.oid));
+    let aheadCount = 0;
+    for (const commit of localCommits) {
+      if (remoteCommitOids.has(commit.oid)) {
+        break;
+      }
+      aheadCount += 1;
+    }
+
+    const hasUncommittedChanges = await gitHasChanges(workspace).catch(() => false);
+    return aheadCount + (hasUncommittedChanges ? 1 : 0);
+  } catch (error) {
+    console.error(`Failed to get unsynced commit count: ${(error as Error).message}`);
+    return 0;
   }
 }
 

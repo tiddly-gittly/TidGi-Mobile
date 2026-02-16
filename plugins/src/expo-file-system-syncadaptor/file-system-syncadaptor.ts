@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable unicorn/no-null */
 import debounce from 'lodash/debounce';
 import type { IChangedTiddlers, ITiddlerFields, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import type { AppDataService } from '../../../src/services/AppDataService/index.js';
@@ -10,7 +8,7 @@ import type { FileSystemWikiStorageService as WikiStorageService } from '../../.
 
 interface Logger {
   alert: (message: string) => void;
-  log: (...args: any[]) => void;
+  log: (...arguments_: any[]) => void;
   setSaveBuffer?: (logger: Logger) => void;
 }
 
@@ -21,6 +19,18 @@ type ISyncAdaptorPutTiddlersCallback = (error: Error | null | string, etag?: {
 }, version?: string) => void;
 type ISyncAdaptorLoadTiddlerCallback = (error: Error | null, tiddler?: ITiddlerFields) => void;
 type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { bag?: string } | null) => void;
+
+interface IRelatedWorkspaceRoutingConfig {
+  fileSystemPathFilter: string | null;
+  fileSystemPathFilterEnable: boolean;
+  id: string;
+  includeTagTree: boolean;
+  isSubWiki: boolean;
+  mainWikiID: string | null;
+  name: string;
+  order: number;
+  tagNames: string[];
+}
 
 declare global {
   interface Window {
@@ -49,6 +59,10 @@ class TidGiMobileFileSystemSyncAdaptor {
   workspaceID: string;
   recipe?: string;
   tiddlersToNotSave: string[];
+  routingConfigCache?: {
+    fetchedAt: number;
+    items: IRelatedWorkspaceRoutingConfig[];
+  };
 
   constructor(options: { wiki: Wiki }) {
     if (window.service?.wikiStorageService === undefined) {
@@ -254,7 +268,8 @@ class TidGiMobileFileSystemSyncAdaptor {
       }
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
-      const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings());
+      const targetWorkspaceId = await this.routeTiddlerToWorkspace(tiddler);
+      const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings(), targetWorkspaceId);
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
       } else {
@@ -296,7 +311,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       };
 
       // only add revision if it > 0 or exists
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+
       // if (this.wiki.getChangeCount(title)) {
       //   tiddlerFields.revision = String(this.wiki.getChangeCount(title));
       // }
@@ -320,13 +335,8 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logger.log('deleteTiddler', title);
     try {
       this.addRecentUpdatedTiddlersFromClient('deletions', title);
-      const deleted = await this.wikiStorageService.deleteTiddler(title);
-      if (deleted) {
-        // Invoke the callback & return null adaptorInfo
-        callback(null, null);
-      } else {
-        callback(new Error('getTiddler returned undefined from callWikiIpcServerRoute getTiddler in loadTiddler'));
-      }
+      await this.wikiStorageService.deleteTiddler(title);
+      callback(null, null);
     } catch (error) {
       // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
@@ -360,9 +370,109 @@ class TidGiMobileFileSystemSyncAdaptor {
       };
     }
   }
+
+  async getRoutingConfigs(): Promise<IRelatedWorkspaceRoutingConfig[]> {
+    const cacheTTL = 2000;
+    if (this.routingConfigCache && Date.now() - this.routingConfigCache.fetchedAt < cacheTTL) {
+      return this.routingConfigCache.items;
+    }
+
+    if (typeof this.wikiStorageService.getRelatedWorkspacesRoutingConfig !== 'function') {
+      return [];
+    }
+
+    const configs = await this.wikiStorageService.getRelatedWorkspacesRoutingConfig() as IRelatedWorkspaceRoutingConfig[];
+    this.routingConfigCache = {
+      fetchedAt: Date.now(),
+      items: Array.isArray(configs) ? configs : [],
+    };
+    return this.routingConfigCache.items;
+  }
+
+  getTiddlerTags(tiddler: Tiddler): string[] {
+    const rawTags = tiddler.fields.tags;
+    if (Array.isArray(rawTags)) {
+      return rawTags.filter((tag): tag is string => typeof tag === 'string');
+    }
+    if (typeof rawTags === 'string') {
+      return $tw.utils.parseStringArray(rawTags);
+    }
+    return [];
+  }
+
+  matchesDirectTag(tiddlerTitle: string, tiddlerTags: string[], workspaceTagNames: string[]): boolean {
+    if (workspaceTagNames.length === 0) {
+      return false;
+    }
+    const hasMatchingTag = workspaceTagNames.some(tagName => tiddlerTags.includes(tagName));
+    const isTitleATagName = workspaceTagNames.includes(tiddlerTitle);
+    return hasMatchingTag || isTitleATagName;
+  }
+
+  matchesTagTree(tiddlerTitle: string, workspaceTagNames: string[]): boolean {
+    if (!$tw.rootWidget?.makeFakeWidgetWithVariables) {
+      return false;
+    }
+    for (const tagName of workspaceTagNames) {
+      const result = this.wiki.filterTiddlers(
+        '[in-tagtree-of:inclusive<tagName>]',
+        $tw.rootWidget.makeFakeWidgetWithVariables({ tagName }),
+        this.wiki.makeTiddlerIterator([tiddlerTitle]),
+      );
+      if (result.length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  matchesCustomFilter(tiddlerTitle: string, filterExpression: string): boolean {
+    const filters = filterExpression
+      .split('\n')
+      .map(filter => filter.trim())
+      .filter(filter => filter.length > 0);
+
+    for (const filter of filters) {
+      const result = this.wiki.filterTiddlers(filter, undefined, this.wiki.makeTiddlerIterator([tiddlerTitle]));
+      if (result.length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async routeTiddlerToWorkspace(tiddler: Tiddler): Promise<string | undefined> {
+    const routingConfigs = await this.getRoutingConfigs();
+    if (routingConfigs.length === 0) {
+      return undefined;
+    }
+
+    const sortedConfigs = [...routingConfigs].sort((workspaceA, workspaceB) => workspaceA.order - workspaceB.order);
+    const tiddlerTitle = tiddler.fields.title;
+    const tiddlerTags = this.getTiddlerTags(tiddler);
+
+    for (const workspaceConfig of sortedConfigs) {
+      if (this.matchesDirectTag(tiddlerTitle, tiddlerTags, workspaceConfig.tagNames)) {
+        return workspaceConfig.id;
+      }
+
+      if (workspaceConfig.includeTagTree && workspaceConfig.tagNames.length > 0) {
+        if (this.matchesTagTree(tiddlerTitle, workspaceConfig.tagNames)) {
+          return workspaceConfig.id;
+        }
+      }
+
+      if (workspaceConfig.fileSystemPathFilterEnable && typeof workspaceConfig.fileSystemPathFilter === 'string' && workspaceConfig.fileSystemPathFilter.length > 0) {
+        if (this.matchesCustomFilter(tiddlerTitle, workspaceConfig.fileSystemPathFilter)) {
+          return workspaceConfig.id;
+        }
+      }
+    }
+
+    return sortedConfigs.find(workspaceConfig => !workspaceConfig.isSubWiki)?.id;
+  }
 }
 
-// eslint-disable-next-line no-var
 declare var exports: {
   adaptorClass: typeof TidGiMobileFileSystemSyncAdaptor;
 };

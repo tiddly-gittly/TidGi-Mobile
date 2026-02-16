@@ -9,6 +9,7 @@ import { ServerList } from '../../../components/ServerList';
 import { SyncAllTextButton } from '../../../components/SyncButton';
 import { IServerInfo, useServerStore } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { StorageLocationSettings } from '../Developer/StorageLocationSettings';
 import { ServerEditModalContent } from './ServerEditModal';
 
 export function ServerAndSync(): JSX.Element {
@@ -52,6 +53,8 @@ export function ServerAndSync(): JSX.Element {
       <SyncAllTextButton />
       <Text>{t('Preference.SyncNowDescription')}</Text>
       <BackgroundSyncStatus />
+      <Text variant='titleLarge'>{t('Preference.StorageLocation')}</Text>
+      <StorageLocationSettings />
       <Text variant='titleLarge'>{t('AddWorkspace.ServerList')}</Text>
       <ServerList
         onLongPress={onEditServer}

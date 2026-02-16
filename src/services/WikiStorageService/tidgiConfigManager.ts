@@ -15,6 +15,10 @@ import { fileExists, readTextFile, writeTextFile } from './fileOperations';
  */
 export interface ITidgiConfigKnownFields {
   /**
+   * Canonical workspace ID shared across devices.
+   */
+  id?: string;
+  /**
    * Allow reading file attachments
    */
   allowReadFileAttachment?: boolean;
@@ -136,6 +140,7 @@ export async function writeTidgiConfig(
     // Merge updates with existing config
     const newConfig: ITidgiConfig = {
       ...existingConfig,
+      version: 1,
       ...updates,
     };
 
@@ -168,8 +173,8 @@ export async function syncConfigToWorkspace(workspace: IWikiWorkspace): Promise<
 
   return {
     name: config.name ?? workspace.name,
+    id: typeof config.id === 'string' && config.id.length > 0 ? config.id : workspace.id,
     enableQuickLoad: config.enableQuickLoad,
-    selectiveSyncFilter: config.selectiveSyncFilter,
     allowReadFileAttachment: config.allowReadFileAttachment,
   };
 }
@@ -180,9 +185,9 @@ export async function syncConfigToWorkspace(workspace: IWikiWorkspace): Promise<
  */
 export async function syncWorkspaceToConfig(workspace: IWikiWorkspace): Promise<void> {
   const updates: Partial<ITidgiConfigKnownFields> = {
+    id: workspace.id,
     name: workspace.name,
     enableQuickLoad: workspace.enableQuickLoad,
-    selectiveSyncFilter: workspace.selectiveSyncFilter,
     allowReadFileAttachment: workspace.allowReadFileAttachment,
   };
 
@@ -203,7 +208,7 @@ export async function saveTidgiConfig(wikiFolderPath: string, config: ITidgiConf
     }
 
     // Merge new config with existing, preserving unknown fields
-    const mergedConfig = { ...existingConfig, ...config };
+    const mergedConfig = { ...existingConfig, version: 1, ...config };
     const content = JSON.stringify(mergedConfig, null, 2);
     await writeTextFile(configPath, content);
   } catch (error) {

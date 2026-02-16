@@ -8,15 +8,18 @@ import type { IWikiWorkspace } from '../store/workspace';
  */
 export const WIKI_FOLDER_PATH = `${Paths.document.uri}wikis/`;
 
+let getCustomWikiFolderPath: (() => string | null) | undefined;
+
+export function registerCustomWikiFolderPathGetter(getter: () => string | null): void {
+  getCustomWikiFolderPath = getter;
+}
+
 /**
  * Get the effective wiki folder path, considering user's custom selection.
  * Must be called at runtime (not module init) to access store state.
  */
 export function getEffectiveWikiFolderPath(): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  const { useWorkspaceStore } = require('../store/workspace');
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-  const customPath = useWorkspaceStore.getState().customWikiFolderPath;
+  const customPath = getCustomWikiFolderPath?.();
   if (customPath) {
     // Ensure the custom path ends with '/' for proper directory handling
     return customPath.endsWith('/') ? customPath : `${customPath}/`;
@@ -25,7 +28,12 @@ export function getEffectiveWikiFolderPath(): string {
 }
 
 export const APP_CACHE_FOLDER_PATH = `${Paths.cache.uri}/`;
-export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/tiddlers/`;
+export const getWikiTiddlerFolderPath = (workspace: IWikiWorkspace) => {
+  if (workspace.isSubWiki === true) {
+    return `${workspace.wikiFolderLocation}/`;
+  }
+  return `${workspace.wikiFolderLocation}/tiddlers/`;
+};
 export const getWikiFilesFolderPath = (workspace: IWikiWorkspace) => `${workspace.wikiFolderLocation}/files/`;
 /**
  * Get file path like `file:///data/user/0/host.exp.exponent/files/wikis/wiki_88370/tiddlers/TiddlyWikiIconBlack.png`

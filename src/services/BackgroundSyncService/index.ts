@@ -13,6 +13,7 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCommit, gitDiffChangedFiles, gitHasChanges, gitPull, gitPush, gitPushToConflictBranch, gitResolveReference, IGitRemote } from '../GitService';
+import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
@@ -47,6 +48,15 @@ export async function unregisterBackgroundSyncAsync() {
  * Service for syncing wikis using git
  */
 export class GitBackgroundSyncService {
+  public getSubWikisForMainWorkspace(workspace: IWikiWorkspace): IWikiWorkspace[] {
+    if (workspace.isSubWiki === true) {
+      return [];
+    }
+    return this.#workspaceStore.getState().workspaces
+      .filter((item): item is IWikiWorkspace => item.type === 'wiki')
+      .filter(item => item.isSubWiki === true && item.mainWikiID === workspace.id);
+  }
+
   readonly #serverStore = useServerStore;
   readonly #workspaceStore = useWorkspaceStore;
   readonly #configStore = useConfigStore;
@@ -116,18 +126,19 @@ export class GitBackgroundSyncService {
 
       for (const workspace of workspaces) {
         if (workspace.type === 'wiki') {
+          const workspaceForSync = await this.reconcileWorkspaceID(workspace);
           // Sync with ALL online servers, not just the first one
-          const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
+          const onlineServers = this.getAllOnlineServersForWorkspace(workspaceForSync);
 
           if (onlineServers.length > 0) {
             haveConnectedServer = true;
 
             for (const server of onlineServers) {
               try {
-                const updated = await this.syncWorkspaceWithServer(workspace, server);
+                const updated = await this.syncWorkspaceWithServer(workspaceForSync, server);
                 haveUpdate = haveUpdate || updated;
               } catch (error) {
-                console.error(`Failed to sync workspace ${workspace.name} with server ${server.id}:`, error);
+                console.error(`Failed to sync workspace ${workspaceForSync.name} with server ${server.id}:`, error);
                 // Continue syncing with other servers even if one fails
               }
             }
@@ -197,7 +208,9 @@ export class GitBackgroundSyncService {
    * Sync workspace with specific server (public method for UI)
    */
   public async syncWikiWithServer(workspace: IWikiWorkspace, server: IServerInfo): Promise<boolean> {
-    return await this.syncWorkspaceWithServer(workspace, server);
+    return await this.syncWorkspaceWithServer(workspace, server, {
+      includeSubWikis: workspace.syncIncludeSubWikis !== false,
+    });
   }
 
   /**
@@ -262,10 +275,34 @@ export class GitBackgroundSyncService {
   private async syncWorkspaceWithServer(
     workspace: IWikiWorkspace,
     server: IServerInfo,
+    options?: { includeSubWikis?: boolean },
+  ): Promise<boolean> {
+    const includeSubWikis = options?.includeSubWikis === true && workspace.isSubWiki !== true;
+    if (includeSubWikis) {
+      const subWikis = this.getSubWikisForMainWorkspace(workspace);
+      const workspacesToSync = [workspace, ...subWikis];
+      let haveUpdate = false;
+      for (const workspaceToSync of workspacesToSync) {
+        const reconciled = await this.reconcileWorkspaceID(workspaceToSync);
+        const updated = await this.syncSingleWorkspaceWithServer(reconciled, server);
+        haveUpdate = haveUpdate || updated;
+      }
+      return haveUpdate;
+    }
+    return await this.syncSingleWorkspaceWithServer(workspace, server);
+  }
+
+  private async syncSingleWorkspaceWithServer(
+    workspace: IWikiWorkspace,
+    server: IServerInfo,
   ): Promise<boolean> {
     const remote = this.getRemoteConfig(workspace, server);
     if (remote === undefined) {
-      console.warn(`No remote config found for workspace ${workspace.name}`);
+      console.warn(`No remote config found for workspace ${workspace.name}`, {
+        workspaceId: workspace.id,
+        serverId: server.id,
+        syncedServers: workspace.syncedServers,
+      });
       return false;
     }
 
@@ -277,6 +314,7 @@ export class GitBackgroundSyncService {
 
       // Record HEAD SHA before pull to detect if new commits arrived
       const headBefore = await gitResolveReference(workspace, 'HEAD');
+      console.log('Start git pull', { workspaceId: workspace.id, serverId: server.id, baseUrl: remote.baseUrl, remoteWorkspaceId: remote.workspaceId });
       await gitPull(workspace, remote);
       const headAfter = await gitResolveReference(workspace, 'HEAD');
       if (headBefore !== headAfter) {
@@ -295,6 +333,7 @@ export class GitBackgroundSyncService {
 
       // 4. Try to push
       try {
+        console.log('Start git push', { workspaceId: workspace.id, serverId: server.id, baseUrl: remote.baseUrl, remoteWorkspaceId: remote.workspaceId });
         await gitPush(workspace, remote);
         this.updateLastSync(workspace.id, server.id);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -308,7 +347,12 @@ export class GitBackgroundSyncService {
 
       return true;
     } catch (error) {
-      console.error(`Sync failed for workspace ${workspace.name}:`, error);
+      console.error(`Sync failed for workspace ${workspace.name}:`, {
+        error,
+        workspaceId: workspace.id,
+        serverId: server.id,
+        serverUri: server.uri,
+      });
       // Use safe notification instead of Alert.alert which crashes in background mode
       this.#notifySyncError(workspace.name, (error as Error).message);
       return false;
@@ -382,19 +426,26 @@ export class GitBackgroundSyncService {
    */
   private getRemoteConfig(workspace: IWikiWorkspace, server: IServerInfo): IGitRemote | undefined {
     const syncedServer = workspace.syncedServers.find(s => s.serverID === server.id);
-    if (syncedServer === undefined) {
+    const mainWorkspace = workspace.isSubWiki === true && workspace.mainWikiID
+      ? this.#workspaceStore.getState().workspaces.find((item): item is IWikiWorkspace => item.type === 'wiki' && item.id === workspace.mainWikiID)
+      : undefined;
+    const syncedServerFromMainWorkspace = mainWorkspace?.syncedServers.find(s => s.serverID === server.id);
+    const resolvedSyncedServer = syncedServer ?? syncedServerFromMainWorkspace;
+    if (resolvedSyncedServer === undefined) {
       return undefined;
     }
 
-    // Get token from syncedServer
-    const token = syncedServer.token;
-    if (token === undefined || token === '') {
-      console.warn(`No token found for workspace ${workspace.name} and server ${server.id}`);
-      return undefined;
+    const token = typeof resolvedSyncedServer.token === 'string' && resolvedSyncedServer.token.length > 0
+      ? resolvedSyncedServer.token
+      : undefined;
+    if (token === undefined) {
+      console.log(`No token configured for workspace ${workspace.name} and server ${server.id}, use anonymous access`);
     }
 
-    // Use remoteWorkspaceId if available, otherwise fall back to workspace.id
-    const workspaceId = syncedServer.remoteWorkspaceId ?? workspace.id;
+    const legacyRemoteWorkspaceId = (resolvedSyncedServer as unknown as { remoteWorkspaceId?: string }).remoteWorkspaceId;
+    const workspaceId = typeof legacyRemoteWorkspaceId === 'string' && legacyRemoteWorkspaceId.length > 0
+      ? legacyRemoteWorkspaceId
+      : workspace.id;
 
     return {
       baseUrl: server.uri,
@@ -421,6 +472,22 @@ export class GitBackgroundSyncService {
       const newSyncedServers = workspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
       update(workspaceId, { syncedServers: newSyncedServers });
     }
+  }
+
+  private async reconcileWorkspaceID(workspace: IWikiWorkspace): Promise<IWikiWorkspace> {
+    const config = await readTidgiConfig(workspace);
+    const configWorkspaceID = typeof config.id === 'string' && config.id.length > 0 ? config.id : workspace.id;
+    if (workspace.id === configWorkspaceID) {
+      return workspace;
+    }
+    const renamed = this.#workspaceStore.getState().syncWorkspaceID(workspace.id, configWorkspaceID);
+    if (!renamed) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      id: configWorkspaceID,
+    };
   }
 }
 

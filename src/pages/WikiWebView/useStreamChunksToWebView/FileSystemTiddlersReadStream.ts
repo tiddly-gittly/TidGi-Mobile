@@ -6,10 +6,10 @@
  */
 
 import { Directory, File } from 'expo-file-system';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
-import { getWikiFilesFolderPath, getWikiTiddlerFolderPath } from '../../../constants/paths';
+import { getWikiTiddlerFolderPath } from '../../../constants/paths';
 import {
   getTitleFromFilename,
   makeSkinnyTiddler,
@@ -34,32 +34,27 @@ export interface IFileSystemTiddlersReadStreamOptions {
 }
 
 /**
- * If quickLoad, only load small amount of recent tiddlers, speed up loading time for huge wiki.
- */
-const QUICK_LOAD_LIMIT = 300;
-
-/**
  * Read tiddlers from filesystem and stream them as JSON array chunks
  * Supports both skinny loading (without text) and full loading
  */
 export class FileSystemTiddlersReadStream extends Readable {
-  private readonly workspace: IWikiWorkspace;
+  private readonly workspaces: IWikiWorkspace[];
   private readonly chunkSize: number;
   private readonly additionalContent?: string[];
-  private readonly quickLoadLimit: number;
+  private readonly quickLoadMode: boolean;
 
-  private tiddlerFiles: string[] = [];
+  private tiddlerFiles: Array<{ filePath: string; workspace: IWikiWorkspace }> = [];
   private currentIndex = 0;
   private hasStarted = false;
   private tiddlerCount = 0;
   private initDone = false;
 
-  constructor(workspace: IWikiWorkspace, options?: IFileSystemTiddlersReadStreamOptions) {
+  constructor(workspace: IWikiWorkspace | IWikiWorkspace[], options?: IFileSystemTiddlersReadStreamOptions) {
     super({ encoding: 'utf8' });
-    this.workspace = workspace;
+    this.workspaces = Array.isArray(workspace) ? workspace : [workspace];
     this.chunkSize = options?.chunkSize ?? 100;
     this.additionalContent = options?.additionalContent;
-    this.quickLoadLimit = options?.quickLoad === true ? QUICK_LOAD_LIMIT : -1;
+    this.quickLoadMode = options?.quickLoad === true;
   }
 
   init(): void {
@@ -70,48 +65,38 @@ export class FileSystemTiddlersReadStream extends Readable {
 
   private async initAsync(): Promise<void> {
     try {
-      const tiddlerFolderPath = getWikiTiddlerFolderPath(this.workspace);
-      const filesFolderPath = getWikiFilesFolderPath(this.workspace);
-      console.log(`[FileSystemTiddlersReadStream] init: tiddlerFolderPath=${tiddlerFolderPath}, filesFolderPath=${filesFolderPath}`);
+      this.tiddlerFiles = [];
+      for (const workspace of this.workspaces) {
+        const tiddlerFolderPath = getWikiTiddlerFolderPath(workspace);
+        console.log(`[FileSystemTiddlersReadStream] init workspace ${workspace.id}: tiddlerFolderPath=${tiddlerFolderPath}`);
 
-      if (isExternalPath(tiddlerFolderPath)) {
-        const plainPath = toPlainPath(tiddlerFolderPath);
-        const info = await ExternalStorage.getInfo(plainPath);
-        console.log(`[FileSystemTiddlersReadStream] (external) folder exists=${String(info.exists)}, isDirectory=${String(info.isDirectory)}, path=${plainPath}`);
-        if (info.exists && info.isDirectory) {
-          const relativePaths = await ExternalStorage.readDirRecursive(plainPath);
-          this.tiddlerFiles = relativePaths
-            .filter(p => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'))
-            .map(p => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${p}`);
-        }
-        // Also scan files/ folder for .meta companion files (backward compat with old attachment format)
-        const plainFilesPath = toPlainPath(filesFolderPath);
-        const filesInfo = await ExternalStorage.getInfo(plainFilesPath);
-        if (filesInfo.exists && filesInfo.isDirectory) {
-          const filesRelativePaths = await ExternalStorage.readDirRecursive(plainFilesPath);
-          const metaFiles = filesRelativePaths
-            .filter(p => p.endsWith('.meta'))
-            .map(p => `${plainFilesPath}${plainFilesPath.endsWith('/') ? '' : '/'}${p}`);
-          this.tiddlerFiles.push(...metaFiles);
-        }
-      } else {
-        const folder = new Directory(tiddlerFolderPath);
-        console.log(`[FileSystemTiddlersReadStream] (internal) folder.exists=${String(folder.exists)}, folder.uri=${folder.uri}`);
-        if (folder.exists) {
-          this.tiddlerFiles = this.collectTiddlerFiles(folder);
-        }
-        // Also scan files/ folder for .meta companion files (backward compat with old attachment format)
-        const filesFolder = new Directory(filesFolderPath);
-        if (filesFolder.exists) {
-          const filesMetaFiles = this.collectTiddlerFiles(filesFolder);
-          // Only add .meta files from files/ — the binary files themselves are loaded by _canonical_uri
-          this.tiddlerFiles.push(...filesMetaFiles.filter(f => f.endsWith('.meta')));
+        if (isExternalPath(tiddlerFolderPath)) {
+          const plainPath = toPlainPath(tiddlerFolderPath);
+          const info = await ExternalStorage.getInfo(plainPath);
+          console.log(`[FileSystemTiddlersReadStream] (external) folder exists=${String(info.exists)}, isDirectory=${String(info.isDirectory)}, path=${plainPath}`);
+          if (info.exists && info.isDirectory) {
+            const relativePaths = await ExternalStorage.readDirRecursive(plainPath);
+            this.tiddlerFiles.push(
+              ...relativePaths
+                .filter(p => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'))
+                .map(p => ({
+                  filePath: `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${p}`,
+                  workspace,
+                })),
+            );
+          }
+        } else {
+          const folder = new Directory(tiddlerFolderPath);
+          console.log(`[FileSystemTiddlersReadStream] (internal) folder.exists=${String(folder.exists)}, folder.uri=${folder.uri}`);
+          if (folder.exists) {
+            this.tiddlerFiles.push(...this.collectTiddlerFiles(folder, workspace));
+          }
         }
       }
 
       console.log(`[FileSystemTiddlersReadStream] Found ${this.tiddlerFiles.length} tiddler files`);
       if (this.tiddlerFiles.length > 0) {
-        console.log(`[FileSystemTiddlersReadStream] First few files: ${this.tiddlerFiles.slice(0, 5).join(', ')}`);
+        console.log(`[FileSystemTiddlersReadStream] First few files: ${this.tiddlerFiles.slice(0, 5).map(file => file.filePath).join(', ')}`);
       }
       this.initDone = true;
     } catch (error) {
@@ -121,13 +106,23 @@ export class FileSystemTiddlersReadStream extends Readable {
     }
   }
 
+  private async waitForInitDone(maxWaitMs = 30_000): Promise<boolean> {
+    const sleepMs = 50;
+    const maxChecks = Math.ceil(maxWaitMs / sleepMs);
+    for (let checkIndex = 0; checkIndex < maxChecks; checkIndex++) {
+      if (this.initDone) return true;
+      await new Promise(resolve => setTimeout(resolve, sleepMs));
+    }
+    return this.initDone;
+  }
+
   /**
    * Recursively collect tiddler file URIs from a directory tree.
    * Collects .tid files, .json tiddler files, and .meta companion files.
    * Skips .git, node_modules, and other non-tiddler directories.
    */
-  private collectTiddlerFiles(directory: Directory): string[] {
-    const result: string[] = [];
+  private collectTiddlerFiles(directory: Directory, workspace: IWikiWorkspace): Array<{ filePath: string; workspace: IWikiWorkspace }> {
+    const result: Array<{ filePath: string; workspace: IWikiWorkspace }> = [];
     try {
       const entries = directory.list();
       for (const entry of entries) {
@@ -136,15 +131,15 @@ export class FileSystemTiddlersReadStream extends Readable {
           if (directoryName === '.git' || directoryName === 'node_modules' || directoryName === '.DS_Store' || directoryName === 'output') {
             continue;
           }
-          result.push(...this.collectTiddlerFiles(entry));
+          result.push(...this.collectTiddlerFiles(entry, workspace));
         } else if (entry instanceof File) {
           // Collect .tid and .json tiddler files
           if (entry.name.endsWith('.tid') || entry.name.endsWith('.json')) {
-            result.push(entry.uri);
+            result.push({ filePath: entry.uri, workspace });
           } // Collect .meta files (they accompany binary files like images)
           // We'll parse the .meta to load binary tiddler metadata
           else if (entry.name.endsWith('.meta')) {
-            result.push(entry.uri);
+            result.push({ filePath: entry.uri, workspace });
           }
         }
       }
@@ -160,11 +155,8 @@ export class FileSystemTiddlersReadStream extends Readable {
       try {
         // Wait for async init to finish
         if (!this.initDone) {
-          const waitStart = Date.now();
-          while (!this.initDone && Date.now() - waitStart < 30_000) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-          }
-          if (!this.initDone) {
+          const initCompleted = await this.waitForInitDone();
+          if (!initCompleted) {
             console.error('[FileSystemTiddlersReadStream] init timed out after 30s');
             this.push(null);
             return;
@@ -180,11 +172,9 @@ export class FileSystemTiddlersReadStream extends Readable {
           // Add additional content if provided
           if (this.additionalContent && this.additionalContent.length > 0) {
             const additionalJson = this.additionalContent.join(',');
-            if (additionalJson) {
-              this.push(additionalJson);
-              if (this.tiddlerFiles.length > 0) {
-                this.push(',');
-              }
+            this.push(additionalJson);
+            if (this.tiddlerFiles.length > 0) {
+              this.push(',');
             }
           }
           return;
@@ -198,24 +188,14 @@ export class FileSystemTiddlersReadStream extends Readable {
           return;
         }
 
-        // Check quick load limit
-        if (this.quickLoadLimit > 0 && this.tiddlerCount >= this.quickLoadLimit) {
-          console.log(`[FileSystemTiddlersReadStream] _read: quick load limit reached (${this.tiddlerCount}/${this.quickLoadLimit})`);
-          this.push(']');
-          this.push(null);
-          return;
-        }
-
         // Read and process a chunk of tiddlers
         const chunk: Array<Record<string, string | string[]>> = [];
         const endIndex = Math.min(this.currentIndex + this.chunkSize, this.tiddlerFiles.length);
-        const limitedEndIndex = this.quickLoadLimit > 0
-          ? Math.min(endIndex, this.currentIndex + (this.quickLoadLimit - this.tiddlerCount))
-          : endIndex;
+        const limitedEndIndex = endIndex;
 
         for (let index = this.currentIndex; index < limitedEndIndex; index++) {
-          const filePath = this.tiddlerFiles[index];
-          const result = await this.readTiddlerFromFile(filePath);
+          const { filePath, workspace } = this.tiddlerFiles[index];
+          const result = await this.readTiddlerFromFile(filePath, workspace);
           if (result) {
             const tiddlers = Array.isArray(result) ? result : [result];
             for (const tiddler of tiddlers) {
@@ -239,10 +219,7 @@ export class FileSystemTiddlersReadStream extends Readable {
           this.push(chunkJson);
 
           // Add comma if not the last chunk
-          if (
-            this.currentIndex < this.tiddlerFiles.length &&
-            (this.quickLoadLimit <= 0 || this.tiddlerCount < this.quickLoadLimit)
-          ) {
+          if (this.currentIndex < this.tiddlerFiles.length) {
             this.push(',');
           }
         }
@@ -258,7 +235,7 @@ export class FileSystemTiddlersReadStream extends Readable {
    * Supports .tid (header+body), .json (tiddler JSON), and .meta (binary companion).
    * Uses ExternalStorage for external paths, expo-file-system File for internal paths.
    */
-  private async readTiddlerFromFile(filePath: string): Promise<ITiddlerFields | ITiddlerFields[] | null> {
+  private async readTiddlerFromFile(filePath: string, workspace: IWikiWorkspace): Promise<ITiddlerFields | ITiddlerFields[] | null> {
     try {
       const filename = filePath.split('/').pop() ?? '';
       const external = isExternalPath(filePath);
@@ -308,7 +285,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         }
         if (await fileExists(binaryPath)) {
           // Set canonical URI so WebView knows where to find the binary
-          const workspaceBase = this.workspace.wikiFolderLocation;
+          const workspaceBase = workspace.wikiFolderLocation;
           metaFields._canonical_uri = binaryPath.replace(workspaceBase + '/', '');
         }
         if (!metaFields.title) {
@@ -322,7 +299,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         const fallbackTitle = getTitleFromFilename(filename);
         const { fields: headerFields, bodyOffset, estimatedBodyLength } = parseTiddlerFileHeaderOnly(content, { title: fallbackTitle });
 
-        if (shouldSaveFullTiddler(headerFields, estimatedBodyLength)) {
+        if (!this.quickLoadMode && shouldSaveFullTiddler(headerFields, estimatedBodyLength)) {
           // Need full text — parse the body
           if (bodyOffset >= 0 && estimatedBodyLength > 0) {
             (headerFields as Record<string, string>).text = content.substring(bodyOffset);
@@ -331,7 +308,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         }
         // Skinny: return header-only with _is_skinny marker.
         // The text body is intentionally NOT loaded — it will be lazy-loaded by the syncadaptor.
-        return makeSkinnyTiddler(headerFields);
+        return makeSkinnyTiddler(headerFields) as unknown as ITiddlerFields;
       }
     } catch (error) {
       console.error(`Error reading tiddler file ${filePath}: ${(error as Error).message}`);

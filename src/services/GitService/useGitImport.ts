@@ -4,8 +4,8 @@
  */
 
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { useState } from 'react';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { gitClone, IGitRemote } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
@@ -20,6 +20,15 @@ export interface IGitImportQRCode {
   /** Token is optional - empty/undefined means anonymous access (insecure) */
   token?: string;
   workspaceId: string;
+  workspaceName?: string;
+  isSubWiki?: boolean;
+  mainWikiID?: string;
+}
+
+export interface IBatchImportItem {
+  qrData: IGitImportQRCode;
+  wikiName: string;
+  serverID: string;
 }
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
@@ -29,7 +38,13 @@ export function useGitImport() {
   const [error, setError] = useState<string | undefined>();
   const [cloneProgress, setCloneProgress] = useState({ phase: '', loaded: 0, total: 0 });
 
+  // Batch import state
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; failed: number }>({ current: 0, total: 0, failed: 0 });
+  const [isBatchImporting, setIsBatchImporting] = useState(false);
+  const [batchCreatedWorkspaces, setBatchCreatedWorkspaces] = useState<IWikiWorkspace[]>([]);
+
   const addWiki = useWorkspaceStore(state => state.add);
+  const workspaceList = useWorkspaceStore(state => state.workspaces);
   const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWorkspace, setCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
 
@@ -37,9 +52,16 @@ export function useGitImport() {
    * Import wiki from server via git clone
    */
   const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string) => {
+    // Reset individual operation state
+    setError(undefined);
+    setCreatedWorkspace(undefined);
+    setCloneProgress({ phase: '', loaded: 0, total: 0 });
+
     if (!WIKI_FOLDER_PATH) {
-      setError('Wiki folder path not available');
-      return;
+      const message = 'Wiki folder path not available';
+      setError(message);
+      setStatus('error');
+      throw new Error(message);
     }
 
     setStatus('creating');
@@ -48,15 +70,20 @@ export function useGitImport() {
 
     try {
       // 1. Create workspace
+      if (workspaceList.some(workspace => workspace.id === qrData.workspaceId)) {
+        throw new Error(`Workspace id already exists: ${qrData.workspaceId}`);
+      }
       const newWorkspace = addWiki({
         type: 'wiki',
+        id: qrData.workspaceId,
         name: wikiName,
+        isSubWiki: qrData.isSubWiki === true,
+        mainWikiID: qrData.mainWikiID ?? null,
         syncedServers: [{
           serverID,
           lastSync: Date.now(),
           syncActive: false,
           token: qrData.token,
-          remoteWorkspaceId: qrData.workspaceId,
         }],
       }) as IWikiWorkspace | undefined;
 
@@ -144,19 +171,66 @@ export function useGitImport() {
     }
   };
 
+  /**
+   * Batch import multiple wikis
+   */
+  const batchImportWikis = async (items: IBatchImportItem[]) => {
+    setIsBatchImporting(true);
+    setBatchProgress({ current: 0, total: items.length, failed: 0 });
+    setBatchCreatedWorkspaces([]);
+    // Reset general error state before batch
+    setError(undefined);
+
+    const created: IWikiWorkspace[] = [];
+    const remoteToLocalWorkspaceId = new Map<string, string>();
+
+    for (let index = 0; index < items.length; index++) {
+      setBatchProgress(previous => ({ ...previous, current: index + 1 }));
+      const item = items[index];
+      const qrDataToImport: IGitImportQRCode = { ...item.qrData };
+      if (qrDataToImport.isSubWiki === true && typeof qrDataToImport.mainWikiID === 'string') {
+        const mappedMainWikiID = remoteToLocalWorkspaceId.get(qrDataToImport.mainWikiID);
+        if (mappedMainWikiID) {
+          qrDataToImport.mainWikiID = mappedMainWikiID;
+        }
+      }
+
+      try {
+        const workspace = await importWiki(qrDataToImport, item.wikiName, item.serverID);
+        remoteToLocalWorkspaceId.set(item.qrData.workspaceId, workspace.id);
+        created.push(workspace);
+        setBatchCreatedWorkspaces(previous => [...previous, workspace]);
+      } catch (error_) {
+        console.error(`Batch import failed for ${item.wikiName}`, error_);
+        setBatchProgress(previous => ({ ...previous, failed: previous.failed + 1 }));
+        // We continue the loop even if one fails
+      }
+    }
+
+    setIsBatchImporting(false);
+    return created;
+  };
+
   const resetState = () => {
     setStatus('idle');
     setError(undefined);
     setCloneProgress({ phase: '', loaded: 0, total: 0 });
     setCreatedWorkspace(undefined);
+    setBatchProgress({ current: 0, total: 0, failed: 0 });
+    setBatchCreatedWorkspaces([]);
+    setIsBatchImporting(false);
   };
 
   return {
     importWiki,
+    batchImportWikis,
     resetState,
     status,
     error,
     cloneProgress,
     createdWorkspace,
+    batchProgress,
+    isBatchImporting,
+    batchCreatedWorkspaces,
   };
 }

@@ -9,11 +9,12 @@ import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParam } from 'tiddlywiki';
 import { getWikiFilesPathByTitle, getWikiTiddlerFolderPath, getWikiTiddlerPathByTitle } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
-import { IWikiWorkspace } from '../../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitDiffChangedFiles } from '../GitService';
 import { deleteFileOrDirectory, ensureDirectory, fileExists, findFileRecursively, readTextFile, writeTextFile } from './fileOperations';
 import { processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
+import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
 
 /**
@@ -24,6 +25,7 @@ export class FileSystemWikiStorageService {
   readonly #workspace: IWikiWorkspace;
   readonly #configStore = useConfigStore;
   readonly #routingService: TiddlerRoutingService;
+  readonly #tiddlerFilePathByTitle = new Map<string, string>();
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
@@ -41,11 +43,42 @@ export class FileSystemWikiStorageService {
     });
   }
 
+  async getRelatedWorkspacesRoutingConfig(): Promise<
+    Array<{
+      fileSystemPathFilter: string | null;
+      fileSystemPathFilterEnable: boolean;
+      id: string;
+      includeTagTree: boolean;
+      isSubWiki: boolean;
+      mainWikiID: string | null;
+      name: string;
+      order: number;
+      tagNames: string[];
+    }>
+  > {
+    const relatedWorkspaces = this.#getRelatedWorkspaces();
+    const result = await Promise.all(relatedWorkspaces.map(async (workspace) => {
+      const config = await readTidgiConfig(workspace);
+      return {
+        id: workspace.id,
+        name: config.name ?? workspace.name,
+        order: workspace.order ?? 0,
+        isSubWiki: workspace.isSubWiki === true,
+        mainWikiID: workspace.mainWikiID ?? null,
+        tagNames: Array.isArray(config.tagNames) ? config.tagNames : [],
+        includeTagTree: config.includeTagTree === true,
+        fileSystemPathFilterEnable: config.fileSystemPathFilterEnable === true,
+        fileSystemPathFilter: typeof config.fileSystemPathFilter === 'string' ? config.fileSystemPathFilter : null,
+      };
+    }));
+    return result.sort((workspaceA, workspaceB) => workspaceA.order - workspaceB.order);
+  }
+
   /**
    * Save tiddler to filesystem as .tid file
    * Returns e-tag for the saved tiddler
    */
-  async saveTiddler(title: string, fields: ITiddlerFieldsParam): Promise<string> {
+  async saveTiddler(title: string, fields: ITiddlerFieldsParam, targetWorkspaceId?: string): Promise<string> {
     try {
       const { text, title: _, ...fieldsToSave } = fields as (ITiddlerFieldsParam & { text?: string; title: string });
 
@@ -62,13 +95,15 @@ export class FileSystemWikiStorageService {
       const changeCount = '0';
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
+      const targetWorkspace = await this.#resolveTargetWorkspace(title, processedFields as ITiddlerFields, targetWorkspaceId);
+
       // Ensure tiddlers folder exists
-      const tiddlerFolderPath = getWikiTiddlerFolderPath(this.#workspace);
+      const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
       await ensureDirectory(tiddlerFolderPath);
 
       // Use routing service to determine file path
-      const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, this.#workspace);
-      const fullPath = `${this.#workspace.wikiFolderLocation}/${relativePath}`;
+      const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
+      const fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
 
       // Ensure parent directory exists
       const parentDirectory = fullPath.substring(0, fullPath.lastIndexOf('/'));
@@ -81,12 +116,82 @@ export class FileSystemWikiStorageService {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
       await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
+      this.#tiddlerFilePathByTitle.set(title, fullPath);
 
       return Etag;
     } catch (error) {
       console.error(`Failed to save tiddler ${title}: ${(error as Error).message}`);
       throw error;
     }
+  }
+
+  async #resolveTargetWorkspace(title: string, fields: ITiddlerFields, targetWorkspaceId?: string): Promise<IWikiWorkspace> {
+    const mainWorkspace = this.#workspace;
+    if (mainWorkspace.isSubWiki === true) {
+      return mainWorkspace;
+    }
+
+    const relatedWorkspaces = this.#getRelatedWorkspaces();
+
+    if (typeof targetWorkspaceId === 'string' && targetWorkspaceId !== '') {
+      const requestedWorkspace = relatedWorkspaces.find(workspace => workspace.id === targetWorkspaceId);
+      if (requestedWorkspace) {
+        return requestedWorkspace;
+      }
+    }
+
+    if (relatedWorkspaces.length <= 1) {
+      return mainWorkspace;
+    }
+
+    const routeResult = await this.#routingService.routeTiddler(title, fields, mainWorkspace, relatedWorkspaces);
+    const routedWorkspace = relatedWorkspaces.find(workspace => workspace.id === routeResult.workspaceId);
+    if (routedWorkspace) {
+      return routedWorkspace;
+    }
+
+    const mainConfig = await readTidgiConfig(mainWorkspace);
+    const subWikis = Array.isArray(mainConfig.subWikis) ? mainConfig.subWikis : [];
+    if (subWikis.length === 0) {
+      return mainWorkspace;
+    }
+
+    const rawTags = (fields as Record<string, unknown>).tags;
+    const tiddlerTags = Array.isArray(rawTags)
+      ? rawTags.filter((tag): tag is string => typeof tag === 'string')
+      : [];
+
+    const matchedSubWiki = subWikis.find((subWiki) => {
+      const hasTagRule = Array.isArray(subWiki.tagNames) && subWiki.tagNames.length > 0;
+      if (!hasTagRule) return false;
+      const isTagTiddler = subWiki.tagNames.includes(title);
+      const hasMatchingTag = subWiki.tagNames.some(tag => tiddlerTags.includes(tag));
+      return isTagTiddler || hasMatchingTag;
+    });
+
+    if (!matchedSubWiki) {
+      return mainWorkspace;
+    }
+
+    const localSubWorkspace = relatedWorkspaces.find(workspace =>
+      workspace.id !== mainWorkspace.id && (
+        workspace.id === matchedSubWiki.id ||
+        workspace.name === matchedSubWiki.name
+      )
+    );
+
+    return localSubWorkspace ?? mainWorkspace;
+  }
+
+  #getRelatedWorkspaces(): IWikiWorkspace[] {
+    const allWikiWorkspaces = useWorkspaceStore.getState().workspaces
+      .filter((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki');
+
+    const mainWorkspaceID = this.#workspace.isSubWiki === true && typeof this.#workspace.mainWikiID === 'string'
+      ? this.#workspace.mainWikiID
+      : this.#workspace.id;
+
+    return allWikiWorkspaces.filter(workspace => workspace.id === mainWorkspaceID || (workspace.isSubWiki === true && workspace.mainWikiID === mainWorkspaceID));
   }
 
   /**
@@ -130,44 +235,54 @@ export class FileSystemWikiStorageService {
     try {
       if (!title) {
         console.warn(`Failed to delete tiddler with no title`);
-        return false;
+        return true;
       }
 
-      // 1. Try the path from routing service (most likely location for saves we did)
+      const trackedFilePath = this.#tiddlerFilePathByTitle.get(title);
+      if (trackedFilePath && await fileExists(trackedFilePath)) {
+        await deleteFileOrDirectory(trackedFilePath);
+        await deleteFileOrDirectory(`${trackedFilePath}.meta`);
+        this.#tiddlerFilePathByTitle.delete(title);
+        return true;
+      }
+
       const routedRelativePath = this.#routingService.getTiddlerFilePathSync(title, {} as ITiddlerFields, this.#workspace);
       if (routedRelativePath) {
         const routedFull = `${this.#workspace.wikiFolderLocation}/${routedRelativePath}`;
         if (await fileExists(routedFull)) {
           await deleteFileOrDirectory(routedFull);
+          await deleteFileOrDirectory(`${routedFull}.meta`);
+          this.#tiddlerFilePathByTitle.delete(title);
           return true;
         }
       }
 
-      // 2. Default .tid path
       const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
       if (await fileExists(tidPath)) {
         await deleteFileOrDirectory(tidPath);
+        await deleteFileOrDirectory(`${tidPath}.meta`);
+        this.#tiddlerFilePathByTitle.delete(title);
         return true;
       }
 
-      // 3. Default files path + .meta
       const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
       if (await fileExists(filesPath)) {
         await deleteFileOrDirectory(filesPath);
         await deleteFileOrDirectory(`${filesPath}.meta`);
+        this.#tiddlerFilePathByTitle.delete(title);
         return true;
       }
 
-      // 4. Recursive search in tiddlers/ as last resort
       const found = await this.#findTiddlerFileRecursively(title);
       if (found) {
         await deleteFileOrDirectory(found);
         await deleteFileOrDirectory(`${found}.meta`);
+        this.#tiddlerFilePathByTitle.delete(title);
         return true;
       }
 
       console.warn(`Tiddler file not found for deletion: ${title}`);
-      return false;
+      return true;
     } catch (error) {
       console.error(`Failed to delete tiddler ${title}: ${(error as Error).message}`);
       throw error;
@@ -204,6 +319,7 @@ export class FileSystemWikiStorageService {
       // Try .tid file first
       const tidPath = `${getWikiTiddlerPathByTitle(this.#workspace, title)}.tid`;
       if (await fileExists(tidPath)) {
+        this.#tiddlerFilePathByTitle.set(title, tidPath);
         const content = await readTextFile(tidPath);
         // Extract text part (everything after first blank line)
         const blankLineMatch = /\r?\n\r?\n/.exec(content);
@@ -215,6 +331,7 @@ export class FileSystemWikiStorageService {
       // Try files folder
       const filesPath = getWikiFilesPathByTitle(this.#workspace, title);
       if (await fileExists(filesPath)) {
+        this.#tiddlerFilePathByTitle.set(title, filesPath);
         return await readTextFile(filesPath);
       }
     } catch {
@@ -222,6 +339,7 @@ export class FileSystemWikiStorageService {
       try {
         const found = await this.#findTiddlerFileRecursively(title);
         if (found) {
+          this.#tiddlerFilePathByTitle.set(title, found);
           const content = await readTextFile(found);
           // If it's a .tid file, extract text part
           if (found.endsWith('.tid')) {
