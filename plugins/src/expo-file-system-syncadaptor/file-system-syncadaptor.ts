@@ -260,6 +260,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     try {
       // Similar to https://github.com/TiddlyWiki/TiddlyWiki5/blob/master/core/modules/server/routes/put-tiddler.js#L36 but we just stop saving, and wait for lazy-load on client to complete, and let client to save again later.
       if (tiddler.fields._is_skinny) {
+        callback(null);
         return;
       }
       const title = tiddler.fields.title;
@@ -465,7 +466,19 @@ class TidGiMobileFileSystemSyncAdaptor {
 
     const sortedConfigs = [...routingConfigs].sort((workspaceA, workspaceB) => workspaceA.order - workspaceB.order);
     const tiddlerTitle = tiddler.fields.title;
-    const tiddlerTags = this.getTiddlerTags(tiddler);
+    let tiddlerTags = this.getTiddlerTags(tiddler);
+
+    // For draft tiddlers, merge tags from the original tiddler.
+    // This ensures drafts are saved to the same sub-wiki as their target,
+    // matching desktop's getTiddlerFileInfo behavior.
+    const draftOf = tiddler.fields['draft.of'];
+    if (draftOf && typeof draftOf === 'string') {
+      const originalTiddler = this.wiki.getTiddler(draftOf);
+      if (originalTiddler) {
+        const originalTags = this.getTiddlerTags(originalTiddler);
+        tiddlerTags = [...new Set([...tiddlerTags, ...originalTags])];
+      }
+    }
 
     for (const workspaceConfig of sortedConfigs) {
       if (this.matchesDirectTag(tiddlerTitle, tiddlerTags, workspaceConfig.tagNames)) {

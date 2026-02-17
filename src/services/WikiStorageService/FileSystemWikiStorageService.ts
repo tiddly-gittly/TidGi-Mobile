@@ -48,6 +48,13 @@ export class FileSystemWikiStorageService {
    * Populated once by `buildFileIndex()`, then kept in sync by save/delete.
    */
   readonly #tiddlerFilePathByTitle = new Map<string, string>();
+  /**
+   * Reverse lookup: absolute file path → tiddler title.
+   * Built alongside `#tiddlerFilePathByTitle` and kept in sync.
+   * Used by `getWikiChangeObserver$` to map git-changed file paths back
+   * to tiddler titles without re-parsing file headers.
+   */
+  readonly #titleByFilePath = new Map<string, string>();
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
@@ -123,6 +130,7 @@ export class FileSystemWikiStorageService {
       const title = this.#extractTitleFromHeader(content);
       if (title) {
         this.#tiddlerFilePathByTitle.set(title, filePath);
+        this.#titleByFilePath.set(toPlainPath(filePath), title);
       }
     } catch { /* skip unreadable files */ }
   }
@@ -185,8 +193,16 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Save tiddler to filesystem as .tid file
-   * Returns e-tag for the saved tiddler
+   * Save tiddler to filesystem as .tid file.
+   * Returns e-tag for the saved tiddler.
+   *
+   * Mirrors desktop's saveTiddler flow:
+   *   1. getTiddlerFileInfo → determine target path
+   *      - if existing file is already in the correct target directory → reuse path (overwrite)
+   *      - if directory changed → generate new path
+   *   2. saveTiddlerToFile → write to target path
+   *   3. cleanupTiddlerFiles → if old path ≠ new path, delete old file (MOVE semantic)
+   *   4. boot.files[title] = savedFileInfo → update registry
    */
   async saveTiddler(title: string, fields: ITiddlerFieldsParam, targetWorkspaceId?: string): Promise<string> {
     try {
@@ -206,41 +222,80 @@ export class FileSystemWikiStorageService {
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
       const targetWorkspace = this.#resolveTargetWorkspace(targetWorkspaceId);
+      const targetDirectory = targetWorkspace.wikiFolderLocation;
 
-      // Ensure tiddlers folder exists
-      const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
-      await ensureDirectory(tiddlerFolderPath);
+      // ─── Desktop getTiddlerFileInfo equivalent ───────────────────────
+      // Check if the existing file is already in the correct target directory.
+      // If yes → overwrite in place (reuse existing path). This prevents
+      // unnecessary file moves and echo loops, matching desktop behavior.
+      const oldPath = this.#tiddlerFilePathByTitle.get(title);
+      let fullPath: string;
 
-      // Use routing service to determine file path
-      const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
-      const fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
+      if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory)) {
+        // File is already in the correct workspace directory — overwrite in place
+        fullPath = oldPath;
+      } else {
+        // Directory changed (or no existing file) — generate new path
+        const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
+        await ensureDirectory(tiddlerFolderPath);
+
+        const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
+        fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
+      }
 
       // Ensure parent directory exists
       const parentDirectory = fullPath.substring(0, fullPath.lastIndexOf('/'));
       await ensureDirectory(parentDirectory);
 
-      // All tiddlers (including attachments with _canonical_uri) saved as .tid in tiddlers/
-      // For attachments, the _canonical_uri field in the .tid points to the binary file in files/
+      // Write the tiddler file
       const allFields = { ...fieldsToSave } as Record<string, unknown>;
       if (processedFields._canonical_uri) {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
       await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
 
-      // On desktop, file cleanup (old path → new path) is done by
-      // $tw.utils.cleanupTiddlerFiles which compares the DIRECTORY.
-      // On mobile, the syncadaptor's saveTiddler callback receives the
-      // new filepath and can call deleteTiddler on the old one if needed.
-      // We must NOT delete old files here — when TW saves "MyTiddler"
-      // after accepting a draft, oldPath is still the draft's path;
-      // deleting it here would delete the wrong file.
+      // ─── Desktop cleanupTiddlerFiles equivalent ──────────────────────
+      // If the file moved to a different location (routing changed),
+      // delete the old file. This implements the MOVE semantic.
+      if (oldPath && oldPath !== fullPath) {
+        // Remove old reverse index entry
+        this.#titleByFilePath.delete(toPlainPath(oldPath));
+        try {
+          if (await fileExists(oldPath)) {
+            await deleteFileOrDirectory(oldPath);
+          }
+          // Best-effort .meta companion cleanup
+          const oldMetaPath = `${oldPath}.meta`;
+          if (await fileExists(oldMetaPath)) {
+            await deleteFileOrDirectory(oldMetaPath);
+          }
+        } catch (error) {
+          console.warn(`saveTiddler cleanup: failed to remove old file ${oldPath}: ${(error as Error).message}`);
+        }
+      }
+
+      // Update registries (≈ desktop boot.files[title] = savedFileInfo)
       this.#tiddlerFilePathByTitle.set(title, fullPath);
+      this.#titleByFilePath.set(toPlainPath(fullPath), title);
 
       return Etag;
     } catch (error) {
       console.error(`Failed to save tiddler ${title}: ${(error as Error).message}`);
       throw error;
     }
+  }
+
+  /**
+   * Check if a file path is within a directory tree.
+   * Handles both plain paths and file:// URIs by normalizing before comparison.
+   * Mirrors desktop's: normalizedExisting.startsWith(normalizedTarget)
+   */
+  #isPathWithinDirectory(filePath: string, directoryPath: string): boolean {
+    const normalizedFile = toPlainPath(filePath);
+    const normalizedDirectory = toPlainPath(directoryPath);
+    // Ensure directory ends with / for proper prefix matching
+    const directoryWithSlash = normalizedDirectory.endsWith('/') ? normalizedDirectory : `${normalizedDirectory}/`;
+    return normalizedFile.startsWith(directoryWithSlash);
   }
 
   /**
@@ -351,6 +406,7 @@ export class FileSystemWikiStorageService {
     }
 
     this.#tiddlerFilePathByTitle.delete(title);
+    this.#titleByFilePath.delete(toPlainPath(filePath));
     return true;
   }
 
@@ -436,16 +492,25 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Derive a tiddler title from a relative file path.
-   * Reverses the sanitization applied during save.
+   * Derive a tiddler title from a file path, using either the reverse index
+   * or the full workspace-relative path. The `relativePath` comes from
+   * isomorphic-git's statusMatrix (relative to workspace root).
    */
   #titleFromFilePath(relativePath: string): string | undefined {
-    // Strip directory prefix (tiddlers/, files/, etc.)
-    const filename = relativePath.split('/').pop();
-    if (!filename) return undefined;
-    // Strip .tid or .meta extension
-    const title = filename.replace(/\.(tid|meta)$/, '');
-    return title || undefined;
+    // Try reverse lookup first: build absolute path and check
+    const absolutePath = `${toPlainPath(this.#workspace.wikiFolderLocation)}/${relativePath}`;
+    const titleFromIndex = this.#titleByFilePath.get(absolutePath);
+    if (titleFromIndex) return titleFromIndex;
+
+    // Also try checking all related workspace roots
+    for (const [title, filePath] of this.#tiddlerFilePathByTitle) {
+      const plainFilePath = toPlainPath(filePath);
+      if (plainFilePath.endsWith(`/${relativePath}`) || plainFilePath === absolutePath) {
+        return title;
+      }
+    }
+
+    return undefined;
   }
 }
 

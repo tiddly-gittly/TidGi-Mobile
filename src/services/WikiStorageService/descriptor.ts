@@ -10,6 +10,7 @@ export const WikiStorageServiceIPCDescriptor: ProxyDescriptor = {
     deleteTiddler: ProxyPropertyType.Function,
     getRelatedWorkspacesRoutingConfig: ProxyPropertyType.Function,
     getStatus: ProxyPropertyType.Function,
+    getTrackedTiddlerFilePath: ProxyPropertyType.Function,
     getWikiChangeObserver$: ProxyPropertyType.Function$,
     loadTiddlerText: ProxyPropertyType.Function,
     saveTiddler: ProxyPropertyType.Function,
