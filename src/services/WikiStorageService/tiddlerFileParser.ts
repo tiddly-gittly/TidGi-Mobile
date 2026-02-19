@@ -5,7 +5,7 @@
  * Purpose: Parse .tid and .meta files from filesystem into tiddler field objects
  */
 
-import type { ITiddlerFields } from 'tw5-typed';
+import type { ITiddlerFields } from 'tiddlywiki';
 
 /**
  * Parse a tiddler DIV in a *.tid file. It looks like this:

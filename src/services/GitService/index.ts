@@ -517,6 +517,7 @@ export async function gitClone(
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
   console.log('Git clone remote:', JSON.stringify(remote, null, 2));
+  console.log('Git clone strategy:', { depth: 1, noTags: true, singleBranch: true });
 
   try {
     await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote.token)));
@@ -527,6 +528,7 @@ export async function gitClone(
       url,
       singleBranch: true,
       depth: 1,
+      noTags: true,
       headers: createAuthHeader(remote.token),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
@@ -1046,6 +1048,33 @@ export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Prom
   } catch (error) {
     console.error(`Failed to get unsynced commit count: ${(error as Error).message}`);
     return 0;
+  }
+}
+
+/**
+ * Discard uncommitted changes for a specific file by checking out the HEAD version.
+ * For newly added files (not in HEAD), delete them from the working directory.
+ */
+export async function gitDiscardFileChanges(
+  workspace: IWikiWorkspace,
+  filePath: string,
+): Promise<void> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  try {
+    // Check if the file exists in HEAD
+    try {
+      await git.readBlob({ fs, dir: directory, oid: await git.resolveRef({ fs, dir: directory, ref: 'HEAD' }), filepath: filePath });
+      // File exists in HEAD — checkout the HEAD version
+      await git.checkout({ fs, dir: directory, ref: 'HEAD', filepaths: [filePath], force: true });
+    } catch {
+      // File doesn't exist in HEAD — it's a new file, delete from working tree
+      const fullPath = `${directory}/${filePath}`;
+      await fs.promises.unlink(fullPath);
+    }
+    console.log(`Discarded changes for ${filePath}`);
+  } catch (error) {
+    console.error(`Failed to discard changes for ${filePath}: ${(error as Error).message}`);
+    throw new Error(`Failed to discard changes: ${(error as Error).message}`);
   }
 }
 

@@ -104,7 +104,7 @@
     "expo-dev-client": "^6.0.20",
     "rimraf": "^6.1.2",
     "tiddlywiki": "^5.3.8",
-    "tw5-typed": "^0.5.14",
+    "tw5-typed": "^1.1.4",
     "typescript": "~5.9.3",
     "zx": "^8.4.1"
   }

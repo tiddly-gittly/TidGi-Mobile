@@ -539,7 +539,9 @@
   "Open": "開く",
   "Close": "閉じる",
   "Import": {
-    "ImportWiki": "Wikiをインポート"
+    "ImportWiki": "Wikiをインポート",
+    "ServerTokenProtected": "トークン保護",
+    "ServerTokenProtectedMessage": "このサーバーはトークン認証で保護されています。安全にインポートするには、TidGi デスクトップからQRコードをスキャンしてください。"
   },
   "ConfirmDelete": "本当に削除しますか？",
   "ConfirmDeleteDescription": "この操作は元に戻せません。",

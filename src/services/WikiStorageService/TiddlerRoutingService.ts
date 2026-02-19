@@ -7,7 +7,7 @@
  * given a workspace, compute the relative path for a .tid file.
  */
 
-import type { ITiddlerFields } from 'tw5-typed';
+import type { ITiddlerFields } from 'tiddlywiki';
 import { IWikiWorkspace } from '../../store/workspace';
 import { readTidgiConfig } from './tidgiConfigManager';
 

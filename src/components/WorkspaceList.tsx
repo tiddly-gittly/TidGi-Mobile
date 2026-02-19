@@ -20,7 +20,6 @@ interface WorkspaceListProps {
   onLongPress?: (workspace: IWorkspace) => void;
   onPress?: (workspace: IWorkspace) => void;
   onPressSettings?: (workspace: IWorkspace) => void;
-  onPressQuickLoad?: (workspace: IWorkspace) => void;
   onReorderEnd?: (workspaces: IWorkspace[]) => void;
   reorderable?: boolean;
   workspaces?: IWorkspace[];
@@ -32,7 +31,6 @@ interface WorkspaceListItemProps {
   onLongPress?: (workspace: IWorkspace) => void;
   onPress?: (workspace: IWorkspace) => void;
   onPressSettings?: (workspace: IWorkspace) => void;
-  onPressQuickLoad?: (workspace: IWorkspace) => void;
   onReorderPress?: () => void;
 }
 
@@ -42,7 +40,6 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
   onPress,
   onPressSettings,
   onLongPress,
-  onPressQuickLoad,
   onReorderPress,
 }) => {
   const { t } = useTranslation();
@@ -64,13 +61,6 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         right={(props) => (
           <RightButtonsContainer>
             {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
-            {(item as IWikiWorkspace).enableQuickLoad === true && (
-              <IconButton
-                {...props}
-                icon='speedometer'
-                onPress={() => onPressQuickLoad?.(item)}
-              />
-            )}
             <ItemRightIconButton
               {...props}
               name='reorder-three-sharp'
@@ -111,19 +101,24 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
   onLongPress,
   onPressSettings,
   onReorderEnd,
-  onPressQuickLoad,
   includeSubWikis = false,
   isFocused = true,
   reorderable = true,
   workspaces,
 }) => {
   const allWorkspacesList = useWorkspaceStore(useShallow(state => compact(state.workspaces)));
+  const workspaceIDSet = useMemo(() => new Set(allWorkspacesList.map(workspace => workspace.id)), [allWorkspacesList]);
   const workspacesList = useMemo(() =>
     (workspaces ?? allWorkspacesList).filter((workspace) => {
       if (workspace.type !== 'wiki') return true;
       if (includeSubWikis) return true;
-      return workspace.isSubWiki !== true;
-    }), [allWorkspacesList, includeSubWikis, workspaces]);
+      if (workspace.isSubWiki !== true) return true;
+      const { mainWikiID } = workspace;
+      const hasMainWikiID = typeof mainWikiID === 'string' && mainWikiID.length > 0;
+      if (!hasMainWikiID) return true;
+      const isOrphanSubWorkspace = !workspaceIDSet.has(mainWikiID);
+      return isOrphanSubWorkspace;
+    }), [allWorkspacesList, includeSubWikis, workspaceIDSet, workspaces]);
   const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, number>>({});
 
   const subWikisByMainWikiID = useMemo(() => {
@@ -188,7 +183,6 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
                 onPress={onPress}
                 onPressSettings={onPressSettings}
                 onLongPress={onLongPress}
-                onPressQuickLoad={onPressQuickLoad}
               />
             )}
             keyExtractor={item => item.id}
@@ -209,7 +203,6 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
                 onPress={onPress}
                 onPressSettings={onPressSettings}
                 onLongPress={onLongPress}
-                onPressQuickLoad={onPressQuickLoad}
               />
             )}
           />

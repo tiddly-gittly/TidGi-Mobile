@@ -83,7 +83,7 @@ export function useStreamChunksToWebView(
             }
           },
         });
-        tiddlersStream.pipe(webviewSendDataWriteStream);
+        tiddlersStream.pipe(webviewSendDataWriteStream as unknown as NodeJS.WritableStream);
         await new Promise<void>((resolve, reject) => {
           // wait for stream to finish before exit the transaction
           let readEnded = false;

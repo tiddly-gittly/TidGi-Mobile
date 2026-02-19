@@ -8,6 +8,7 @@ import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-s
 import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { gitClone, IGitRemote } from '../../services/GitService';
+import { logFor } from '../../services/LoggerService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 function isExternalPath(filepath: string): boolean {
@@ -67,6 +68,7 @@ export function useGitImport() {
     setStatus('creating');
     let workspaceId: string | undefined;
     let workspaceFolderLocation: string | undefined;
+    let workspaceLogger = logFor(qrData.workspaceId);
 
     try {
       // 1. Create workspace
@@ -93,9 +95,15 @@ export function useGitImport() {
 
       workspaceId = newWorkspace.id;
       workspaceFolderLocation = newWorkspace.wikiFolderLocation;
+      workspaceLogger = logFor(workspaceId);
       setCreatedWorkspace(newWorkspace);
 
       console.log('[import] wikiFolderLocation:', workspaceFolderLocation);
+      workspaceLogger.log('Import workspace created', {
+        isSubWiki: newWorkspace.isSubWiki,
+        mainWikiID: newWorkspace.mainWikiID,
+        wikiFolderLocation: workspaceFolderLocation,
+      });
 
       // Prepare directory for git clone
       const wikiFolder = newWorkspace.wikiFolderLocation;
@@ -127,15 +135,21 @@ export function useGitImport() {
       };
 
       console.log('[import] Starting git clone...');
+      workspaceLogger.log('Start git clone', {
+        baseUrl: remote.baseUrl,
+        remoteWorkspaceId: remote.workspaceId,
+      });
       await gitClone(newWorkspace, remote, (phase, loaded, total) => {
         setCloneProgress({ phase, loaded, total });
       });
       console.log('[import] Git clone completed');
+      workspaceLogger.log('Git clone completed');
 
       setStatus('success');
       return newWorkspace;
     } catch (error) {
       console.error('Git import failed:', (error as Error).message, (error as Error).stack);
+      workspaceLogger.error('Git import failed', error);
       setError((error as Error).message);
       setStatus('error');
 
@@ -182,29 +196,27 @@ export function useGitImport() {
     setError(undefined);
 
     const created: IWikiWorkspace[] = [];
-    const remoteToLocalWorkspaceId = new Map<string, string>();
+    let finishedCount = 0;
+    let failedCount = 0;
 
-    for (let index = 0; index < items.length; index++) {
-      setBatchProgress(previous => ({ ...previous, current: index + 1 }));
-      const item = items[index];
-      const qrDataToImport: IGitImportQRCode = { ...item.qrData };
-      if (qrDataToImport.isSubWiki === true && typeof qrDataToImport.mainWikiID === 'string') {
-        const mappedMainWikiID = remoteToLocalWorkspaceId.get(qrDataToImport.mainWikiID);
-        if (mappedMainWikiID) {
-          qrDataToImport.mainWikiID = mappedMainWikiID;
-        }
-      }
+    const results = await Promise.allSettled(items.map(async (item) => {
+      const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
+      return { item, workspace };
+    }));
 
-      try {
-        const workspace = await importWiki(qrDataToImport, item.wikiName, item.serverID);
-        remoteToLocalWorkspaceId.set(item.qrData.workspaceId, workspace.id);
-        created.push(workspace);
-        setBatchCreatedWorkspaces(previous => [...previous, workspace]);
-      } catch (error_) {
-        console.error(`Batch import failed for ${item.wikiName}`, error_);
-        setBatchProgress(previous => ({ ...previous, failed: previous.failed + 1 }));
-        // We continue the loop even if one fails
+    for (const result of results) {
+      finishedCount += 1;
+      if (result.status === 'fulfilled') {
+        created.push(result.value.workspace);
+        setBatchCreatedWorkspaces(previous => [...previous, result.value.workspace]);
+      } else {
+        failedCount += 1;
       }
+      setBatchProgress(previous => ({
+        ...previous,
+        current: finishedCount,
+        failed: failedCount,
+      }));
     }
 
     setIsBatchImporting(false);

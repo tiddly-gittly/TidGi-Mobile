@@ -330,6 +330,7 @@
     "AttachToMenuBarTip": "Make  a small TidGi popup window that pop when you click appbar mini icon. Tip: Right-click on mini app icon to access context menu.",
     "OpenWikisFolder": "Open Wikis Folder",
     "OpenLogFolder": "Open the Log folder",
+    "ViewAppLog": "View App Log",
     "OpenLogFolderDetail": "When reporting a problem, please open the latest .log file in the folder and send its content to the developer, or paste it to pastebin.com and then paste the URL into the Github Issue",
     "SystemDefault": "System Default",
     "SystemDefaultTheme": "System Default Theme",
@@ -560,9 +561,12 @@
     "SelectSubWorkspaces": "Select sub-workspaces to import",
     "ManualConfiguration": "Manual Configuration (Advanced)",
     "ManualConfigurationHint": "Paste the complete QR code JSON data below. This is only needed if QR scanning doesn't work.",
+    "FetchFromSavedServerFailed": "Failed to load workspace config from saved server",
     "QRCodeJSON": "QR Code JSON Data",
     "QRCodeParseError": "Failed to parse QR code",
-    "QRCodeInvalidFormat": "Invalid QR code format"
+    "QRCodeInvalidFormat": "Invalid QR code format",
+    "ServerTokenProtected": "Token Protected",
+    "ServerTokenProtectedMessage": "This server is protected by an authentication token. Please scan the QR code from TidGi Desktop to import securely."
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -617,7 +621,8 @@
     "CommitDetails": "Commit Details",
     "FilePreview": "File Preview",
     "Files": "Changed Files",
-    "NoFiles": "No changed files"
+    "NoFiles": "No changed files",
+    "DiscardChanges": "Discard"
   },
   "SubWiki": {
     "SubWikis": "Sub Workspaces",
@@ -641,6 +646,11 @@
     "Title": "Workspace Settings",
     "BasicInfo": "Basic Info",
     "WorkspaceName": "Workspace Name",
+    "ViewLog": "View Log",
+    "DeleteWithSubWorkspaces": "Delete sub workspaces together",
+    "LogEmpty": "No log available",
+    "ClearLogs": "Clear Logs",
+    "GeneralSettings": "General Settings",
     "SubWikiRouting": "Content Routing Rules",
     "RoutingDescription": "Route tiddlers to the appropriate workspace by tags and rules.",
     "TagNames": "Tag Rules",

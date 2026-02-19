@@ -4,7 +4,7 @@ import { Directory, File } from 'expo-file-system';
 import type { ShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
 
-import type { ITiddlerFieldsParam } from 'tiddlywiki';
+import type { ITiddlerFieldsParameter } from 'tiddlywiki';
 import { getWikiFilesPathByCanonicalUri } from '../../constants/paths';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import i18n from '../../i18n';
@@ -136,7 +136,7 @@ export class NativeService {
     // put into default workspace's database, with random title
     const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
     const created = format(new Date(), 'yyyyMMddHHmmssSSS');
-    let fields: ITiddlerFieldsParam = {
+    let fields: ITiddlerFieldsParameter = {
       created,
       modified: created,
       creator: i18n.t('Share.TidGiMobileShare'),

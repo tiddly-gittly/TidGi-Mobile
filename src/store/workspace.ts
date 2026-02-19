@@ -111,9 +111,11 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               case 'wiki': {
                 // When customWikiFolderPath is set (file:// path from MANAGE_EXTERNAL_STORAGE),
                 // use it as the base. Otherwise fall back to internal WIKI_FOLDER_PATH.
+                // Both place wikis under a `wikis/` subdirectory so the parent directory
+                // can also hold `logs/` and other shared data.
                 const customPath = state.customWikiFolderPath;
                 const wikiFolderBasePath = customPath
-                  ? (customPath.endsWith('/') ? customPath : `${customPath}/`)
+                  ? `${customPath.endsWith('/') ? customPath : `${customPath}/`}wikis/`
                   : WIKI_FOLDER_PATH;
                 if (!wikiFolderBasePath) return;
                 // name can't be empty

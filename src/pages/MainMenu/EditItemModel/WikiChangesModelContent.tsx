@@ -6,6 +6,7 @@ import { ActivityIndicator, Button, Card, List, Modal, Portal, Text } from 'reac
 import { styled } from 'styled-components/native';
 import {
   gitDiffChangedFiles,
+  gitDiscardFileChanges,
   gitGetChangedFilesForCommit,
   gitGetCommitHistory,
   gitGetFileContentAtRef as gitGetFileContentAtReference,
@@ -38,6 +39,13 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingFilePreview, setLoadingFilePreview] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [discardingFile, setDiscardingFile] = useState<string | undefined>();
+
+  const refreshUncommitted = async () => {
+    if (wiki === undefined) return;
+    const uncommitted = await gitDiffChangedFiles(wiki);
+    setUncommittedChanges(uncommitted);
+  };
 
   useEffect(() => {
     if (wiki === undefined) {
@@ -112,6 +120,29 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             title={item.path}
             description={item.type.toUpperCase()}
             left={(props) => <List.Icon {...props} icon='source-commit-local' />}
+            right={(props) => (
+              <Button
+                {...props}
+                mode='text'
+                compact
+                loading={discardingFile === item.path}
+                disabled={discardingFile !== undefined}
+                icon='undo-variant'
+                onPress={() => {
+                  setDiscardingFile(item.path);
+                  void gitDiscardFileChanges(wiki, item.path)
+                    .then(() => refreshUncommitted())
+                    .catch((error: unknown) => {
+                      console.error('Discard failed:', error);
+                    })
+                    .finally(() => {
+                      setDiscardingFile(undefined);
+                    });
+                }}
+              >
+                {t('GitHistory.DiscardChanges')}
+              </Button>
+            )}
             onPress={() => {
               void openFilePreview(item.path, item.type);
             }}

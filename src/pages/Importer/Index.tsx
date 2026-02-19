@@ -1,22 +1,23 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
-import React, { FC, useCallback, useEffect, useState } from 'react';
+import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
+import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, View } from 'react-native';
-import Collapsible from 'react-native-collapsible';
-import { Button, Checkbox, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
+import { Alert } from 'react-native';
+import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
-import { useServerStore } from '../../store/server';
+import { IServerInfo, useServerStore } from '../../store/server';
+import { ImporterServerConfigs } from './components/ImporterServerConfigs';
+import { GitQRData } from './types';
 
-interface GitQRData {
-  baseUrl: string;
-  /** Token is optional - empty means anonymous access (insecure) */
-  token?: string;
-  workspaceId: string;
-  workspaceName?: string;
-  subWorkspaces?: { id: string; name: string; mainWikiID?: string }[];
+function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
+  if (arrayA.length !== arrayB.length) return false;
+  for (let index = 0; index < arrayA.length; index++) {
+    if (arrayA[index] !== arrayB[index]) return false;
+  }
+  return true;
 }
 
 const Container = styled.View`
@@ -25,23 +26,12 @@ const Container = styled.View`
   height: 100%;
   overflow-y: scroll;
 `;
-const ButtonText = styled.Text`
-  height: 30px;
-`;
-const LargeCameraView = styled(CameraView)`
-  height: 80%;
-  width: 100%;
-`;
 const ImportWikiButton = styled(Button)`
   margin-top: 20px;
   min-height: 100px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-`;
-const ScanQRButton = styled(Button)`
-  margin: 10px 0;
-  min-height: 3em;
 `;
 /** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
 const ButtonLabelPadding = 30;
@@ -56,22 +46,6 @@ const ImportStatusText = styled.Text`
   width: 100%;
   display: flex;
   flex-direction: row;
-`;
-const QRScannedTitle = styled(Text)`
-  margin-top: 10px;
-`;
-const QRDetailText = styled(Text)`
-  color: #666;
-`;
-const SubWorkspaceSelectionContainer = styled(View)`
-  margin-top: 15px;
-  padding: 10px;
-  border-radius: 8px;
-  background-color: ${MD3Colors.neutralVariant95};
-`;
-const ManualConfigHint = styled(Text)`
-  margin-top: 10px;
-  color: #999;
 `;
 const WorkspaceNameInput = styled(TextInput)`
   margin-top: 10px;
@@ -100,10 +74,18 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [wikiName, setWikiName] = useState('');
   const [qrData, setQrData] = useState<GitQRData | undefined>();
   const [manualEdit, setManualEdit] = useState(false);
+  const [showSavedServers, setShowSavedServers] = useState(false);
+  const [isLoadingServerInfo, setIsLoadingServerInfo] = useState(false);
+  const [reachableServerIDs, setReachableServerIDs] = useState<string[]>([]);
   const [selectedSubWikiIds, setSelectedSubWikiIds] = useState<string[]>([]);
+  const scanHandledReference = useRef(false);
 
   const addServer = useServerStore(state => state.add);
+  const allServers = useServerStore(useShallow(state => Object.values(state.servers)));
   const addAsServer = route.params.addAsServer ?? true;
+
+  const reachableServers = allServers.filter(server => reachableServerIDs.includes(server.id));
+
   useEffect(() => {
     const getCameraPermissions = async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -113,9 +95,125 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     void getCameraPermissions();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkReachableServers = async () => {
+      const checks = await Promise.all(allServers.map(async (server) => {
+        const controller = new AbortController();
+        const timeoutID = setTimeout(() => {
+          controller.abort();
+        }, 5000);
+        try {
+          const response = await fetch(new URL('status', server.uri).toString(), {
+            method: 'GET',
+            signal: controller.signal,
+          });
+          return response.ok ? server.id : undefined;
+        } catch {
+          return undefined;
+        } finally {
+          clearTimeout(timeoutID);
+        }
+      }));
+
+      if (cancelled) return;
+      const nextReachableServerIDs = checks.filter((id): id is string => typeof id === 'string');
+      setReachableServerIDs(previous => areStringArraysEqual(previous, nextReachableServerIDs) ? previous : nextReachableServerIDs);
+    };
+
+    void checkReachableServers();
+    return () => {
+      cancelled = true;
+    };
+  }, [allServers]);
+
+  const fillFromQRCodeData = useCallback((qr: GitQRData) => {
+    setQrData(previous => {
+      if (
+        previous !== undefined &&
+        previous.baseUrl === qr.baseUrl &&
+        previous.workspaceId === qr.workspaceId &&
+        previous.workspaceName === qr.workspaceName
+      ) {
+        return previous;
+      }
+      return qr;
+    });
+
+    const nextWikiUrl = new URL(qr.baseUrl);
+    setWikiUrl(previous => {
+      if (previous?.origin === nextWikiUrl.origin) return previous;
+      return nextWikiUrl;
+    });
+
+    const nextWikiName = qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`;
+    setWikiName(previous => previous === nextWikiName ? previous : nextWikiName);
+
+    const nextSubWorkspaceIDs = Array.isArray(qr.subWorkspaces)
+      ? qr.subWorkspaces.map(workspace => workspace.id)
+      : [];
+    setSelectedSubWikiIds(previous => areStringArraysEqual(previous, nextSubWorkspaceIDs) ? previous : nextSubWorkspaceIDs);
+  }, []);
+
+  const onManualJSONInput = useCallback((text: string) => {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        'baseUrl' in parsed &&
+        'workspaceId' in parsed
+      ) {
+        fillFromQRCodeData(parsed as GitQRData);
+      }
+    } catch {
+      // Invalid JSON, ignore
+    }
+  }, [fillFromQRCodeData]);
+
+  const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
+    setIsLoadingServerInfo(true);
+    try {
+      const endpoint = `${server.uri.replace(/\/$/, '')}/tw-mobile-sync/git/mobile-sync-info`;
+      const response = await fetch(endpoint);
+      if (response.status === 403) {
+        // Server has token protection — user must scan QR code instead
+        Alert.alert(t('Import.ServerTokenProtected'), t('Import.ServerTokenProtectedMessage'));
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const parsed = await response.json() as unknown;
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        'baseUrl' in parsed &&
+        'workspaceId' in parsed &&
+        typeof (parsed as { baseUrl?: unknown }).baseUrl === 'string' &&
+        typeof (parsed as { workspaceId?: unknown }).workspaceId === 'string'
+      ) {
+        fillFromQRCodeData(parsed as GitQRData);
+        setManualEdit(false);
+        setShowSavedServers(false);
+        return;
+      }
+      throw new Error('Invalid payload');
+    } catch (error) {
+      Alert.alert(t('Import.FetchFromSavedServerFailed'), `${server.name}: ${(error as Error).message}`);
+    } finally {
+      setIsLoadingServerInfo(false);
+    }
+  }, [fillFromQRCodeData, t]);
+
   const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
+    if (scanHandledReference.current) {
+      return;
+    }
     const { data, type } = scanningResult;
     if (type === 'qr') {
+      scanHandledReference.current = true;
       console.log('QR code scanned, raw data:', data);
       try {
         setQrScannerOpen(false);
@@ -135,15 +233,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           // Valid Git QR code
           const qr = parsed as GitQRData;
           console.log('Valid Git QR code:', qr);
-          setQrData(qr);
-          setWikiUrl(new URL(qr.baseUrl));
-          // Use workspaceName from QR code, or fallback to a generated name
-          setWikiName(qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`);
-
-          // Select all sub-workspaces by default
-          if (Array.isArray(qr.subWorkspaces)) {
-            setSelectedSubWikiIds(qr.subWorkspaces.map(ws => ws.id));
-          }
+          fillFromQRCodeData(qr);
           return;
         } else {
           console.error('Invalid QR code format:', parsed);
@@ -161,7 +251,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         );
       }
     }
-  }, [t]);
+  }, [fillFromQRCodeData, t]);
 
   const {
     importWiki,
@@ -232,114 +322,44 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setQrData(undefined);
   }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, t]);
 
+  const serverConfigs = (
+    <ImporterServerConfigs
+      allServers={reachableServers}
+      handleBarcodeScanned={handleBarcodeScanned}
+      importStatus={importStatus}
+      isLoadingServerInfo={isLoadingServerInfo}
+      manualEdit={manualEdit}
+      onFetchSavedServer={(server) => {
+        void fetchWorkspaceInfoFromServer(server);
+      }}
+      onManualJSONInput={onManualJSONInput}
+      onToggleManualEdit={() => {
+        setManualEdit(previous => !previous);
+      }}
+      onToggleSavedServers={() => {
+        setShowSavedServers(previous => !previous);
+      }}
+      onToggleScanner={() => {
+        if (!qrScannerOpen) {
+          scanHandledReference.current = false;
+        }
+        setQrScannerOpen(previous => !previous);
+      }}
+      qrData={qrData}
+      qrScannerOpen={qrScannerOpen}
+      selectedSubWikiIds={selectedSubWikiIds}
+      setSelectedSubWikiIds={setSelectedSubWikiIds}
+      showSavedServers={showSavedServers}
+      t={t}
+    />
+  );
+
   if (hasPermission === undefined) {
     return <Text>{t('Import.RequestingCameraPermission')}</Text>;
   }
   if (!hasPermission) {
     return <Text>{t('Import.NoCameraAccess')}</Text>;
   }
-
-  const serverConfigs = (
-    <>
-      {qrScannerOpen && (
-        <LargeCameraView
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ['qr'],
-          }}
-        />
-      )}
-      <ScanQRButton
-        mode={importStatus === 'idle' ? 'elevated' : 'outlined'}
-        disabled={importStatus !== 'idle'}
-        labelStyle={{ padding: ButtonLabelPadding }}
-        onPress={() => {
-          setQrScannerOpen(!qrScannerOpen);
-        }}
-      >
-        <ButtonText>{t('AddWorkspace.ToggleQRCodeScanner')}</ButtonText>
-      </ScanQRButton>
-      {qrData && (
-        <>
-          <QRScannedTitle variant='titleMedium'>
-            {t('Import.QRCodeScanned')}
-          </QRScannedTitle>
-          <QRDetailText variant='bodySmall'>
-            {t('Import.Server')}: {qrData.baseUrl}
-          </QRDetailText>
-          <QRDetailText variant='bodySmall'>
-            {t('Import.WorkspaceID')}: {qrData.workspaceId}
-          </QRDetailText>
-
-          {qrData.subWorkspaces && qrData.subWorkspaces.length > 0 && (
-            <SubWorkspaceSelectionContainer>
-              <Text variant='titleSmall'>{t('Import.SelectSubWorkspaces')}</Text>
-              {qrData.subWorkspaces.map(sub => (
-                <Checkbox.Item
-                  key={sub.id}
-                  label={sub.name}
-                  status={selectedSubWikiIds.includes(sub.id) ? 'checked' : 'unchecked'}
-                  onPress={() => {
-                    setSelectedSubWikiIds(previous =>
-                      previous.includes(sub.id)
-                        ? previous.filter(id => id !== sub.id)
-                        : [...previous, sub.id]
-                    );
-                  }}
-                  mode='android'
-                />
-              ))}
-            </SubWorkspaceSelectionContainer>
-          )}
-        </>
-      )}
-      {!qrData && (
-        <Button
-          mode='text'
-          disabled={importStatus !== 'idle'}
-          onPress={() => {
-            setManualEdit(!manualEdit);
-          }}
-        >
-          <Text>{t('Import.ManualConfiguration')}</Text>
-        </Button>
-      )}
-      <Collapsible collapsed={!manualEdit}>
-        <ManualConfigHint variant='bodySmall'>
-          {t('Import.ManualConfigurationHint')}
-        </ManualConfigHint>
-        <TextInput
-          label={t('Import.QRCodeJSON')}
-          multiline
-          numberOfLines={4}
-          placeholder='{"baseUrl":"http://...","workspaceId":"...","workspaceName":"...","token":"..."}'
-          onChangeText={(text: string) => {
-            try {
-              const parsed = JSON.parse(text) as unknown;
-              if (
-                parsed !== null &&
-                typeof parsed === 'object' &&
-                'baseUrl' in parsed &&
-                'workspaceId' in parsed
-                // token is optional
-              ) {
-                const qr = parsed as GitQRData;
-                setQrData(qr);
-                setWikiUrl(new URL(qr.baseUrl));
-                setWikiName(qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`);
-                // Basic support for manual paste too
-                if (Array.isArray(qr.subWorkspaces)) {
-                  setSelectedSubWikiIds(qr.subWorkspaces.map(ws => ws.id));
-                }
-              }
-            } catch {
-              // Invalid JSON, ignore
-            }
-          }}
-        />
-      </Collapsible>
-    </>
-  );
 
   const autoStartImport = route.params.autoStartImport;
   return (
@@ -360,9 +380,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             onPress={addServerAndImport}
             labelStyle={{ padding: ButtonLabelPadding }}
           >
-            <ButtonText>
+            <Text>
               {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
-            </ButtonText>
+            </Text>
           </ImportWikiButton>
         </>
       )}

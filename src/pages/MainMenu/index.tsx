@@ -28,6 +28,8 @@ export interface MainMenuProps {
 
 export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
   const isFocused = useIsFocused();
+  const allWorkspaces = useWorkspaceStore(state => state.workspaces);
+  const workspaceIDSet = new Set(allWorkspaces.map(workspace => workspace.id));
 
   const [justReordered, setJustReordered] = useState(false);
   const preventAutoOpen = justReordered;
@@ -40,17 +42,14 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         isFocused={isFocused}
         onPress={(wiki) => {
           if (wiki.type === 'wiki' && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
+            if (!workspaceIDSet.has(wiki.mainWikiID)) {
+              navigation.navigate('WorkspaceDetail', { id: wiki.id });
+              return;
+            }
             navigation.navigate('WikiWebView', { id: wiki.mainWikiID });
             return;
           }
           navigation.navigate('WikiWebView', { id: wiki.id });
-        }}
-        onPressQuickLoad={(wiki) => {
-          if (wiki.type === 'wiki' && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
-            navigation.navigate('WikiWebView', { id: wiki.mainWikiID, quickLoad: true });
-            return;
-          }
-          navigation.navigate('WikiWebView', { id: wiki.id, quickLoad: true });
         }}
         onPressSettings={(wiki) => {
           if (wiki.type === 'wiki') {

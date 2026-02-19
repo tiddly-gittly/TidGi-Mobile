@@ -12,6 +12,7 @@ import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCommit, gitDiffChangedFiles, gitHasChanges, gitPull, gitPush, gitResolveConflictAndPush, gitResolveReference, IGitRemote } from '../GitService';
+import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
 
@@ -117,33 +118,47 @@ export class GitBackgroundSyncService {
 
     this.#isSyncing = true;
     try {
-      const workspaces = this.#workspaceStore.getState().workspaces;
-      let haveUpdate = false;
-      let haveConnectedServer = false;
+      const workspaces = this.#workspaceStore.getState().workspaces.filter((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki');
 
       await this.updateServerOnlineStatus();
 
-      for (const workspace of workspaces) {
-        if (workspace.type === 'wiki') {
-          const workspaceForSync = await this.reconcileWorkspaceID(workspace);
-          // Sync with ALL online servers, not just the first one
-          const onlineServers = this.getAllOnlineServersForWorkspace(workspaceForSync);
+      const reconciledWorkspaces = await Promise.all(workspaces.map(async workspace => await this.reconcileWorkspaceID(workspace)));
+      const syncTasks: Array<Promise<boolean>> = [];
+      const dedupe = new Set<string>();
 
-          if (onlineServers.length > 0) {
-            haveConnectedServer = true;
+      for (const workspace of reconciledWorkspaces) {
+        if (workspace.isSubWiki === true) {
+          const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
+          for (const server of onlineServers) {
+            const key = `${workspace.id}:${server.id}`;
+            if (dedupe.has(key)) continue;
+            dedupe.add(key);
+            syncTasks.push(this.syncSingleWorkspaceWithServer(workspace, server));
+          }
+          continue;
+        }
 
-            for (const server of onlineServers) {
-              try {
-                const updated = await this.syncWorkspaceWithServer(workspaceForSync, server);
-                haveUpdate = haveUpdate || updated;
-              } catch (error) {
-                console.error(`Failed to sync workspace ${workspaceForSync.name} with server ${server.id}:`, error);
-                // Continue syncing with other servers even if one fails
-              }
-            }
+        const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
+        const workspacesToSync = workspace.syncIncludeSubWikis === false
+          ? [workspace]
+          : [workspace, ...this.getSubWikisForMainWorkspace(workspace)];
+
+        for (const server of onlineServers) {
+          for (const workspaceToSync of workspacesToSync) {
+            const key = `${workspaceToSync.id}:${server.id}`;
+            if (dedupe.has(key)) continue;
+            dedupe.add(key);
+            syncTasks.push((async () => {
+              const reconciledWorkspace = await this.reconcileWorkspaceID(workspaceToSync);
+              return await this.syncSingleWorkspaceWithServer(reconciledWorkspace, server);
+            })());
           }
         }
       }
+
+      const haveConnectedServer = syncTasks.length > 0;
+      const results = await Promise.allSettled(syncTasks);
+      const haveUpdate = results.some(result => result.status === 'fulfilled' && result.value);
 
       return { haveUpdate, haveConnectedServer };
     } finally {
@@ -280,13 +295,11 @@ export class GitBackgroundSyncService {
     if (includeSubWikis) {
       const subWikis = this.getSubWikisForMainWorkspace(workspace);
       const workspacesToSync = [workspace, ...subWikis];
-      let haveUpdate = false;
-      for (const workspaceToSync of workspacesToSync) {
+      const updatedList = await Promise.all(workspacesToSync.map(async workspaceToSync => {
         const reconciled = await this.reconcileWorkspaceID(workspaceToSync);
-        const updated = await this.syncSingleWorkspaceWithServer(reconciled, server);
-        haveUpdate = haveUpdate || updated;
-      }
-      return haveUpdate;
+        return await this.syncSingleWorkspaceWithServer(reconciled, server);
+      }));
+      return updatedList.some(updated => updated);
     }
     return await this.syncSingleWorkspaceWithServer(workspace, server);
   }
@@ -295,12 +308,17 @@ export class GitBackgroundSyncService {
     workspace: IWikiWorkspace,
     server: IServerInfo,
   ): Promise<boolean> {
+    const workspaceLogger = logFor(workspace.id);
     const remote = this.getRemoteConfig(workspace, server);
     if (remote === undefined) {
       console.warn(`No remote config found for workspace ${workspace.name}`, {
         workspaceId: workspace.id,
         serverId: server.id,
         syncedServers: workspace.syncedServers,
+      });
+      workspaceLogger.warn('Remote config missing', {
+        serverId: server.id,
+        workspaceId: workspace.id,
       });
       return false;
     }
@@ -313,11 +331,17 @@ export class GitBackgroundSyncService {
 
       // Record HEAD SHA before pull to detect if new commits arrived
       const headBefore = await gitResolveReference(workspace, 'HEAD');
+      workspaceLogger.log('Start git pull', {
+        baseUrl: remote.baseUrl,
+        remoteWorkspaceId: remote.workspaceId,
+        serverId: server.id,
+      });
       console.log('Start git pull', { workspaceId: workspace.id, serverId: server.id, baseUrl: remote.baseUrl, remoteWorkspaceId: remote.workspaceId });
       await gitPull(workspace, remote);
       const headAfter = await gitResolveReference(workspace, 'HEAD');
       if (headBefore !== headAfter) {
         haveUpdate = true;
+        workspaceLogger.log('Remote changes detected after pull');
       }
 
       // Check if there are local changes
@@ -329,28 +353,43 @@ export class GitBackgroundSyncService {
 
       // 3. Commit local changes
       await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+      workspaceLogger.log('Local commit created');
 
       // 4. Try to push
       try {
+        workspaceLogger.log('Start git push', {
+          baseUrl: remote.baseUrl,
+          remoteWorkspaceId: remote.workspaceId,
+          serverId: server.id,
+        });
         console.log('Start git push', { workspaceId: workspace.id, serverId: server.id, baseUrl: remote.baseUrl, remoteWorkspaceId: remote.workspaceId });
         await gitPush(workspace, remote);
         this.updateLastSync(workspace.id, server.id);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        workspaceLogger.log('Git push finished');
       } catch (error) {
         if ((error as Error).message === 'PUSH_CONFLICT') {
           // Auto-resolve: merge remote changes and push again (like desktop git-sync-js)
           console.log('Push conflict detected, auto-resolving...');
+          workspaceLogger.warn('Push conflict detected, trying auto resolve');
           await gitResolveConflictAndPush(workspace, remote);
           this.updateLastSync(workspace.id, server.id);
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           console.log('Conflict resolved automatically');
+          workspaceLogger.log('Conflict resolved and pushed');
         } else {
+          workspaceLogger.error('Git push failed', error);
           throw error;
         }
       }
 
       return true;
     } catch (error) {
+      workspaceLogger.error('Sync failed', {
+        error: (error as Error).message,
+        serverId: server.id,
+        serverUri: server.uri,
+      });
       console.error(`Sync failed for workspace ${workspace.name}:`, {
         error,
         workspaceId: workspace.id,

@@ -177,11 +177,23 @@ class TidGiMobileFileSystemSyncAdaptor {
     return true;
   }
 
+  /**
+   * Local filepath cache — mirrors desktop's `boot.files` for filepath info.
+   *
+   * The IPC proxy makes `getTrackedTiddlerFilePath()` async, but TiddlyWiki's
+   * syncer calls `getTiddlerInfo()` synchronously. So we maintain a local cache:
+   * - Updated after each successful `saveTiddler()` (where we can `await`)
+   * - Consulted by `getTiddlerInfo()` (sync) and `deleteTiddler()` (async)
+   */
+  private filePathCache = new Map<string, string>();
+
   getTiddlerInfo(tiddler: Tiddler) {
-    const trackedFilePath = this.wikiStorageService.getTrackedTiddlerFilePath(tiddler.fields.title);
+    // Return from local cache — synchronous, no IPC.
+    // If we don't have a cached path yet (tiddler loaded before our first save),
+    // that's OK — the storage service's own registry is the fallback for delete.
     return {
       bag: tiddler.fields.bag,
-      filepath: trackedFilePath,
+      filepath: this.filePathCache.get(tiddler.fields.title),
     };
   }
 
@@ -221,32 +233,6 @@ class TidGiMobileFileSystemSyncAdaptor {
    * But HTML wiki already have all skinny tiddlers, so omit this. If this is necessary, maybe need mobile-sync plugin provide this, and store in asyncStorage, then provided here.
    */
   // async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
-  //   this.logger.log('getSkinnyTiddlers');
-  //   try {
-  //     // const selector = 'script.tiddlywiki-tiddler-store.skinnyTiddlers'
-  //     // this.logger.log(`getSkinnyTiddlers from ${selector}`);
-  //     // const tiddlersJSONPreloadInScriptTag = document.querySelector(selector)
-  //     // if (tiddlersJSONPreloadInScriptTag === null) {
-  //     //   callback?.(new Error('No tiddler store in HTML.'));
-  //     //   return;
-  //     // }
-
-  //     const skinnyTiddlerStoreString = await this.wikiStorageService.getSkinnyTiddlers();
-  //     if (skinnyTiddlerStoreString === undefined) {
-  //       callback?.(new Error('Load tiddler store failed'));
-  //       return;
-  //     }
-  //     const skinnyTiddlers = JSON.parse(skinnyTiddlerStoreString) as Array<Omit<ITiddlerFields, 'text'>> | undefined;
-  //     if (skinnyTiddlers === undefined) {
-  //       throw new Error('No tiddlers returned from callWikiIpcServerRoute getTiddlersJSON in getSkinnyTiddlers');
-  //     }
-  //     this.logger.log('skinnyTiddlers.length', skinnyTiddlers.length);
-  //     // Invoke the callback with the skinny tiddlers
-  //     callback(null, skinnyTiddlers);
-  //   } catch (error) {
-  //     // eslint-disable-next-line n/no-callback-literal
-  //     callback?.(error as Error);
-  //   }
   // }
 
   /*
@@ -281,7 +267,14 @@ class TidGiMobileFileSystemSyncAdaptor {
         if (etagInfo === undefined) {
           callback(new Error(`Response from server etag header failed to parsed from ${etag}`));
         } else {
-          const trackedFilePath = this.wikiStorageService.getTrackedTiddlerFilePath(title);
+          // getTrackedTiddlerFilePath goes through PostMessageCat IPC so it
+          // returns a Promise at runtime, even though TypeScript types it sync.
+          // eslint-disable-next-line @typescript-eslint/await-thenable
+          const trackedFilePath = await this.wikiStorageService.getTrackedTiddlerFilePath(title);
+          // Update local cache so getTiddlerInfo (sync) has the filepath
+          if (typeof trackedFilePath === 'string' && trackedFilePath.length > 0) {
+            this.filePathCache.set(title, trackedFilePath);
+          }
           // Invoke the callback
           callback(null, {
             bag: etagInfo.bag,
@@ -349,12 +342,33 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logger.log('deleteTiddler', title);
     try {
       this.addRecentUpdatedTiddlersFromClient('deletions', title);
-      const filePath = options?.tiddlerInfo?.adaptorInfo?.filepath;
-      // Always call storage service — it handles the "file not found" case
-      // gracefully (returns true without throwing), matching desktop semantics.
-      await this.wikiStorageService.deleteTiddler(title, filePath);
+
+      // Resolve filepath from multiple sources, in priority order:
+      //   1. Our local filePathCache (set by previous saveTiddler)
+      //   2. options.tiddlerInfo.adaptorInfo.filepath (from syncer, only if string)
+      //   3. undefined (let storage service use its own registry)
+      const cachedPath = this.filePathCache.get(title);
+      const optionsPath = options?.tiddlerInfo?.adaptorInfo?.filepath;
+      const resolvedFilePath = cachedPath ??
+        (typeof optionsPath === 'string' && optionsPath.length > 0 ? optionsPath : undefined);
+
+      this.logger.log('deleteTiddler paths', {
+        cachedPath,
+        optionsFilePath: typeof optionsPath === 'string' ? optionsPath : `(${typeof optionsPath})`,
+        resolvedFilePath,
+        title,
+      });
+
+      await this.wikiStorageService.deleteTiddler(title, resolvedFilePath);
+      this.filePathCache.delete(title);
+      this.logger.log('deleteTiddler done', title);
       callback(null, null);
     } catch (error) {
+      this.logger.log('deleteTiddler failed', {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        title,
+      });
       // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
     }

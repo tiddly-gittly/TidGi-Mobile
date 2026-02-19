@@ -15,16 +15,90 @@ function isExternalPath(filepath: string): boolean {
   return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
 }
 
+function getParentPath(path: string): string | undefined {
+  const plainPath = toPlainPath(path).replace(/\/$/, '');
+  const separatorIndex = plainPath.lastIndexOf('/');
+  if (separatorIndex <= 0) return undefined;
+  return plainPath.slice(0, separatorIndex);
+}
+
+function getInternalPathCandidates(path: string): string[] {
+  const candidates = new Set<string>();
+  candidates.add(path);
+  const plain = toPlainPath(path);
+  candidates.add(plain);
+  if (!path.startsWith('file://')) {
+    candidates.add(`file://${plain}`);
+  }
+  return Array.from(candidates);
+}
+
+async function isDirectoryEmpty(path: string): Promise<boolean> {
+  if (isExternalPath(path)) {
+    const entries = await ExternalStorage.readDir(path).catch(() => [] as string[]);
+    return entries.length === 0;
+  }
+  const directory = new Directory(path);
+  if (!directory.exists) return true;
+  try {
+    return directory.list().length === 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteEmptyParents(startDirectoryPath: string, stopAtPath?: string): Promise<void> {
+  const normalizedStopPath = typeof stopAtPath === 'string' && stopAtPath.length > 0
+    ? toPlainPath(stopAtPath).replace(/\/$/, '')
+    : undefined;
+
+  let currentDirectoryPath: string | undefined = toPlainPath(startDirectoryPath).replace(/\/$/, '');
+  while (typeof currentDirectoryPath === 'string' && currentDirectoryPath.length > 0) {
+    if (normalizedStopPath !== undefined && currentDirectoryPath === normalizedStopPath) {
+      break;
+    }
+
+    const empty = await isDirectoryEmpty(currentDirectoryPath);
+    if (!empty) break;
+
+    try {
+      if (isExternalPath(currentDirectoryPath)) {
+        await ExternalStorage.rmdir(currentDirectoryPath);
+      } else {
+        const directory = new Directory(currentDirectoryPath);
+        if (directory.exists) {
+          directory.delete();
+        }
+      }
+    } catch {
+      break;
+    }
+
+    currentDirectoryPath = getParentPath(currentDirectoryPath);
+  }
+}
+
 export async function fileExists(path: string): Promise<boolean> {
   if (isExternalPath(path)) {
     return ExternalStorage.exists(toPlainPath(path));
   }
-  return new File(path).exists;
+  for (const candidate of getInternalPathCandidates(path)) {
+    if (new File(candidate).exists) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function readTextFile(path: string): Promise<string> {
   if (isExternalPath(path)) {
     return ExternalStorage.readFileUtf8(toPlainPath(path));
+  }
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      return file.text();
+    }
   }
   return new File(path).text();
 }
@@ -32,6 +106,14 @@ export async function readTextFile(path: string): Promise<string> {
 export async function writeTextFile(path: string, content: string): Promise<void> {
   if (isExternalPath(path)) {
     return ExternalStorage.writeFileUtf8(toPlainPath(path), content);
+  }
+  // Prefer preserving existing scheme when possible
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      file.write(content);
+      return;
+    }
   }
   new File(path).write(content);
 }
@@ -46,9 +128,20 @@ export async function deleteFileOrDirectory(path: string): Promise<void> {
     }
     return ExternalStorage.deleteFile(plain);
   }
-  const file = new File(path);
-  if (file.exists) {
-    file.delete();
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      file.delete();
+      return;
+    }
+  }
+}
+
+export async function deleteFileWithEmptyParentsCleanup(path: string, stopAtPath?: string): Promise<void> {
+  await deleteFileOrDirectory(path);
+  const parentPath = getParentPath(path);
+  if (parentPath !== undefined) {
+    await deleteEmptyParents(parentPath, stopAtPath);
   }
 }
 
@@ -109,6 +202,59 @@ export async function findFileRecursively(
   };
 
   return search(new Directory(directoryPath));
+}
+
+export async function listTidFilesRecursively(directoryPath: string): Promise<string[]> {
+  if (isExternalPath(directoryPath)) {
+    const plainPath = toPlainPath(directoryPath);
+    const info = await ExternalStorage.getInfo(plainPath).catch(() => ({ exists: false, isDirectory: false }));
+    if (!info.exists || !info.isDirectory) return [];
+    const relativePaths = await ExternalStorage.readDirRecursive(plainPath).catch(() => [] as string[]);
+    return relativePaths
+      .filter(relativePath => relativePath.endsWith('.tid'))
+      .map(relativePath => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${relativePath}`);
+  }
+
+  const result: string[] = [];
+  const walkDirectory = (directory: Directory): void => {
+    if (!directory.exists) return;
+    let entries: Array<Directory | File> = [];
+    try {
+      entries = directory.list();
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry instanceof Directory) {
+        const name = entry.name.replace(/\/$/, '');
+        if (name === '.git' || name === 'node_modules' || name === '.DS_Store' || name === 'output') continue;
+        walkDirectory(entry);
+      } else if (entry instanceof File && entry.name.endsWith('.tid')) {
+        result.push(entry.uri);
+      }
+    }
+  };
+
+  walkDirectory(new Directory(directoryPath));
+  return result;
+}
+
+/**
+ * List the names of entries in a directory.
+ * Returns an empty array if the directory does not exist or is unreadable.
+ */
+export async function listDirectory(directoryPath: string): Promise<string[]> {
+  if (isExternalPath(directoryPath)) {
+    const plain = toPlainPath(directoryPath);
+    return ExternalStorage.readDir(plain).catch(() => [] as string[]);
+  }
+  const directory = new Directory(directoryPath);
+  if (!directory.exists) return [];
+  try {
+    return directory.list().map(entry => entry.name.replace(/\/$/, ''));
+  } catch {
+    return [];
+  }
 }
 
 export { isExternalPath, toPlainPath };
