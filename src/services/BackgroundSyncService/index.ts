@@ -11,7 +11,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitHasChanges, gitPull, gitPush, gitResolveConflictAndPush, gitResolveReference, IGitRemote } from '../GitService';
+import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitHasChanges, gitPushToIncoming, gitResolveReference, IGitRemote, triggerDesktopMerge } from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -329,58 +329,42 @@ export class GitBackgroundSyncService {
       // Mark sync as active
       this.setServerActive(workspace.id, server.id, true);
 
-      // Record HEAD SHA before pull to detect if new commits arrived
-      const headBefore = await gitResolveReference(workspace, 'HEAD');
-      workspaceLogger.log('Start git pull', {
-        baseUrl: remote.baseUrl,
-        remoteWorkspaceId: remote.workspaceId,
-        serverId: server.id,
-      });
-      console.log('Start git pull', { workspaceId: workspace.id, serverId: server.id, baseUrl: remote.baseUrl, remoteWorkspaceId: remote.workspaceId });
-      await gitPull(workspace, remote);
-      const headAfter = await gitResolveReference(workspace, 'HEAD');
-      if (headBefore !== headAfter) {
-        haveUpdate = true;
-        workspaceLogger.log('Remote changes detected after pull');
+      // ──────────────────────────────────────────────────────────
+      // Step 1: Commit local changes first.
+      // ──────────────────────────────────────────────────────────
+      const hasLocalChanges = await gitHasChanges(workspace);
+      if (hasLocalChanges) {
+        await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+        workspaceLogger.log('Local changes committed before sync');
       }
 
-      // Check if there are local changes
-      const hasChanges = await gitHasChanges(workspace);
-      if (!hasChanges) {
-        this.updateLastSync(workspace.id, server.id);
-        return haveUpdate;
-      }
-
-      // 3. Commit local changes
-      await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
-      workspaceLogger.log('Local commit created');
-
-      // 4. Try to push
-      try {
-        workspaceLogger.log('Start git push', {
+      // ──────────────────────────────────────────────────────────
+      // Step 2: Push to mobile-incoming branch + trigger desktop merge.
+      // Desktop handles all merge/conflict resolution, saving mobile battery.
+      // ──────────────────────────────────────────────────────────
+      if (hasLocalChanges) {
+        workspaceLogger.log('Pushing to mobile-incoming', {
           baseUrl: remote.baseUrl,
           remoteWorkspaceId: remote.workspaceId,
           serverId: server.id,
         });
-        console.log('Start git push', { workspaceId: workspace.id, serverId: server.id, baseUrl: remote.baseUrl, remoteWorkspaceId: remote.workspaceId });
-        await gitPush(workspace, remote);
-        this.updateLastSync(workspace.id, server.id);
+        await gitPushToIncoming(workspace, remote);
+        await triggerDesktopMerge(remote);
+        workspaceLogger.log('Desktop merge complete');
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // Step 3: Fetch desktop's merged main and reset local to match.
+      // ──────────────────────────────────────────────────────────
+      workspaceLogger.log('Fetching merged result from desktop');
+      haveUpdate = await gitFetchAndReset(workspace, remote);
+      if (haveUpdate) {
+        workspaceLogger.log('Remote changes detected');
+      }
+
+      this.updateLastSync(workspace.id, server.id);
+      if (hasLocalChanges) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        workspaceLogger.log('Git push finished');
-      } catch (error) {
-        if ((error as Error).message === 'PUSH_CONFLICT') {
-          // Auto-resolve: merge remote changes and push again (like desktop git-sync-js)
-          console.log('Push conflict detected, auto-resolving...');
-          workspaceLogger.warn('Push conflict detected, trying auto resolve');
-          await gitResolveConflictAndPush(workspace, remote);
-          this.updateLastSync(workspace.id, server.id);
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          console.log('Conflict resolved automatically');
-          workspaceLogger.log('Conflict resolved and pushed');
-        } else {
-          workspaceLogger.error('Git push failed', error);
-          throw error;
-        }
       }
 
       return true;

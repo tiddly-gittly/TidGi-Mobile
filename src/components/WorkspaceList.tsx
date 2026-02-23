@@ -4,7 +4,7 @@ import { compact } from 'lodash';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
-import { Card, IconButton, useTheme } from 'react-native-paper';
+import { Card, useTheme } from 'react-native-paper';
 import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';

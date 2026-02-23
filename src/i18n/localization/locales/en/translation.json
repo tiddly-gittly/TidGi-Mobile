@@ -650,6 +650,8 @@
     "DeleteWithSubWorkspaces": "Delete sub workspaces together",
     "LogEmpty": "No log available",
     "ClearLogs": "Clear Logs",
+    "ShareLog": "Share Log File",
+    "OpenLogFile": "Open Log File",
     "GeneralSettings": "General Settings",
     "SubWikiRouting": "Content Routing Rules",
     "RoutingDescription": "Route tiddlers to the appropriate workspace by tags and rules.",

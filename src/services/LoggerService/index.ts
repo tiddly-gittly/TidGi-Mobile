@@ -218,12 +218,29 @@ export async function listLogFiles(): Promise<string[]> {
 }
 
 /**
+ * List app-level log files (not workspace-specific).
+ */
+export async function listAppLogFiles(): Promise<string[]> {
+  const allFiles = await listLogFiles();
+  const prefix = getAppLogFilePrefix();
+  return allFiles.filter(name => name.startsWith(prefix));
+}
+
+/**
  * List log files for a specific workspace.
  */
 export async function listWorkspaceLogFiles(workspaceID: string): Promise<string[]> {
   const allFiles = await listLogFiles();
   const prefix = getWorkspaceLogFilePrefix(workspaceID);
   return allFiles.filter(name => name.startsWith(prefix));
+}
+
+/**
+ * Get the absolute path for a log file by its filename.
+ */
+export function getLogFilePath(fileName: string): string {
+  const directory = getLogDirectory();
+  return `${toPlainPath(directory)}/${fileName}`;
 }
 
 /**

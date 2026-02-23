@@ -186,39 +186,41 @@ export function useGitImport() {
   };
 
   /**
-   * Batch import multiple wikis
+   * Batch import multiple wikis **sequentially**.
+   *
+   * Sequential execution avoids race conditions on the shared
+   * `status` / `cloneProgress` state that caused the old parallel
+   * `Promise.allSettled` approach to flicker and report "success"
+   * prematurely when the first item finished while others were still
+   * cloning.
    */
   const batchImportWikis = async (items: IBatchImportItem[]) => {
     setIsBatchImporting(true);
     setBatchProgress({ current: 0, total: items.length, failed: 0 });
     setBatchCreatedWorkspaces([]);
-    // Reset general error state before batch
     setError(undefined);
 
     const created: IWikiWorkspace[] = [];
     let finishedCount = 0;
     let failedCount = 0;
 
-    const results = await Promise.allSettled(items.map(async (item) => {
-      const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
-      return { item, workspace };
-    }));
-
-    for (const result of results) {
-      finishedCount += 1;
-      if (result.status === 'fulfilled') {
-        created.push(result.value.workspace);
-        setBatchCreatedWorkspaces(previous => [...previous, result.value.workspace]);
-      } else {
+    for (const item of items) {
+      setBatchProgress(previous => ({ ...previous, current: finishedCount }));
+      try {
+        const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
+        created.push(workspace);
+        setBatchCreatedWorkspaces(previous => [...previous, workspace]);
+      } catch {
         failedCount += 1;
       }
-      setBatchProgress(previous => ({
-        ...previous,
-        current: finishedCount,
-        failed: failedCount,
-      }));
+      finishedCount += 1;
+      setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
     }
 
+    // Only mark success after ALL items have been processed
+    if (failedCount < items.length) {
+      setStatus('success');
+    }
     setIsBatchImporting(false);
     return created;
   };

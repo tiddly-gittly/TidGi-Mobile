@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 import type { WindowMeta } from '../../../src/pages/WikiWebView/getWindowMeta';
 
 declare global {
@@ -8,7 +6,7 @@ declare global {
   }
 }
 
-function getInfoTiddlerFields(updateInfoTiddlersCallback: (infos: Array<{ text: string; title: string }>) => void) {
+function getInfoTiddlerFields(_updateInfoTiddlersCallback: (infos: Array<{ text: string; title: string }>) => void) {
   const mapBoolean = function(value: boolean) {
     return value ? 'yes' : 'no';
   };

@@ -49,6 +49,16 @@ export interface IGitCommitInfo {
   timestamp: number;
 }
 
+/**
+ * Helper: get current branch name, defaulting to 'main'.
+ * `git.currentBranch()` returns `string | void`; the `void` case
+ * happens when HEAD is detached.
+ */
+async function getCurrentBranch(directory: string): Promise<string> {
+  const branch = await git.currentBranch({ fs, dir: directory, fullname: false });
+  return typeof branch === 'string' ? branch : 'main';
+}
+
 export interface IGitFileContent {
   dataUri?: string;
   kind: 'binary' | 'image' | 'missing' | 'text';
@@ -222,17 +232,17 @@ const fs = {
           error.code = 'ENOENT';
           throw error;
         }
-        const isDir = info.isDirectory;
+        const isDirectory = info.isDirectory;
         const fileSize = toSafeNumber(info.size, 0);
         const modifiedTimeMs = toSafeNumber(info.modificationTime, Date.now());
 
         return {
-          isFile: () => !isDir,
-          isDirectory: () => isDir,
+          isFile: () => !isDirectory,
+          isDirectory: () => isDirectory,
           isSymbolicLink: () => false,
           dev: 0,
           ino: 0,
-          mode: isDir ? 0o755 : 0o644,
+          mode: isDirectory ? 0o755 : 0o644,
           nlink: 1,
           uid: 0,
           gid: 0,
@@ -254,17 +264,17 @@ const fs = {
         error.code = 'ENOENT';
         throw error;
       }
-      const isDir = info.isDirectory;
+      const isDirectory = info.isDirectory;
       const fileSize = toSafeNumber(info.size, 0);
       const modifiedTimeMs = toSafeNumber(info.modificationTime, Date.now() / 1000) * 1000;
 
       return {
-        isFile: () => !isDir,
-        isDirectory: () => isDir,
+        isFile: () => !isDirectory,
+        isDirectory: () => isDirectory,
         isSymbolicLink: () => false,
         dev: 0,
         ino: 0,
-        mode: isDir ? 0o755 : 0o644,
+        mode: isDirectory ? 0o755 : 0o644,
         nlink: 1,
         uid: 0,
         gid: 0,
@@ -283,11 +293,11 @@ const fs = {
       return fs.promises.stat(filepath);
     },
 
-    async readlink(_filepath: string): Promise<string> {
+    readlink(_filepath: string): never {
       throw new Error('readlink not supported on mobile');
     },
 
-    async symlink(_target: string, _filepath: string): Promise<void> {
+    symlink(_target: string, _filepath: string): never {
       throw new Error('symlink not supported on mobile');
     },
 
@@ -329,26 +339,30 @@ function fromValue<T>(value: T) {
   };
 }
 
-function getIterator<T>(iterable: AsyncIterableIterator<T> | Iterable<T> | Iterator<T>) {
-  if ((iterable as AsyncIterableIterator<T>)[Symbol.asyncIterator]) {
+function getIterator<T>(iterable: AsyncIterableIterator<T> | Iterable<T> | Iterator<T>): AsyncIterableIterator<T> | Iterator<T> {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: TS union types don't guarantee protocol support at runtime
+  if (typeof iterable === 'object' && iterable !== null && Symbol.asyncIterator in iterable) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- runtime cast needed
     return (iterable as AsyncIterableIterator<T>)[Symbol.asyncIterator]();
   }
-  if ((iterable as Iterable<T>)[Symbol.iterator]) {
-    return (iterable as Iterable<T>)[Symbol.iterator]();
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: same as above
+  if (typeof iterable === 'object' && iterable !== null && Symbol.iterator in iterable) {
+    return (iterable)[Symbol.iterator]();
   }
-  return iterable as Iterator<T>;
+  return iterable;
 }
 
 async function forAwait<T>(iterable: AsyncIterableIterator<T> | Iterable<T> | Iterator<T>, callback: (value: T) => void | Promise<void>) {
   const iterator = getIterator(iterable);
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- iterator protocol: loop until done
   while (true) {
-    const { value, done } = await iterator.next();
-    if (value !== undefined) await callback(value);
-    if (done) break;
+    const result = await iterator.next();
+    if (result.value !== undefined) await callback(result.value as T);
+    if (result.done === true) break;
   }
   if ('return' in iterator && typeof iterator.return === 'function') {
-    iterator.return();
+    void iterator.return();
   }
 }
 
@@ -369,6 +383,7 @@ async function collect(iterable: AsyncIterableIterator<Uint8Array> | Iterable<Ui
 }
 
 function fromStream(stream: ReadableStream<Uint8Array>) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: ReadableStream may be async-iterable in some environments
   if ((stream as unknown as AsyncIterableIterator<Uint8Array>)[Symbol.asyncIterator]) {
     return stream as unknown as AsyncIterableIterator<Uint8Array>;
   }
@@ -549,7 +564,9 @@ export async function gitClone(
 }
 
 /**
- * Pull latest changes from remote
+ * Pull latest changes from remote.
+ * After desktop merge, this is a simple fast-forward (no conflicts possible).
+ * Kept for backward compatibility with direct clone-from-desktop workflows.
  */
 export async function gitPull(
   workspace: IWikiWorkspace,
@@ -557,7 +574,7 @@ export async function gitPull(
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
-  const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
+  const branch = await getCurrentBranch(directory);
 
   try {
     await git.pull({
@@ -583,8 +600,9 @@ export async function gitPull(
 
     console.log('Successfully pulled latest changes');
   } catch (error) {
-    console.error(`Git pull failed: ${(error as Error).message}`);
-    throw new Error(`Failed to pull changes: ${(error as Error).message}`);
+    const errorMessage = (error as Error).message;
+    console.error(`Git pull failed: ${errorMessage}`);
+    throw new Error(`Failed to pull changes: ${errorMessage}`);
   }
 }
 
@@ -637,73 +655,78 @@ export async function gitCommit(
 }
 
 /**
- * Push local commits to remote
+ * Push local commits to the desktop's mobile-incoming branch (force push).
+ * Desktop handles merging into main via the merge-incoming endpoint.
  */
-export async function gitPush(
+export async function gitPushToIncoming(
   workspace: IWikiWorkspace,
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
-  const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
+  const branch = await getCurrentBranch(directory);
 
-  try {
-    await git.push({
-      fs,
-      http: httpWithLogging,
-      dir: directory,
-      remote: 'origin',
-      ref: branch,
-      headers: createAuthHeader(remote.token),
-      ...createAuthCallbacks(remote.token),
-      onProgress: (progress) => {
-        onProgress?.(
-          typeof progress.phase === 'string' ? progress.phase : '',
-          toSafeNumber(progress.loaded, 0),
-          toSafeNumber(progress.total, 0),
-        );
-      },
-    });
+  await git.push({
+    fs,
+    http: httpWithLogging,
+    dir: directory,
+    remote: 'origin',
+    ref: branch,
+    remoteRef: 'refs/heads/mobile-incoming',
+    force: true,
+    headers: createAuthHeader(remote.token),
+    ...createAuthCallbacks(remote.token),
+    onProgress: (progress) => {
+      onProgress?.(
+        typeof progress.phase === 'string' ? progress.phase : '',
+        toSafeNumber(progress.loaded, 0),
+        toSafeNumber(progress.total, 0),
+      );
+    },
+  });
 
-    console.log('Successfully pushed changes');
-  } catch (error) {
-    console.error(`Git push failed: ${(error as Error).message}`);
-
-    // Check if it's a conflict (non-fast-forward)
-    if ((error as Error).message.includes('failed to push') || (error as Error).message.includes('non-fast-forward')) {
-      throw new Error('PUSH_CONFLICT');
-    }
-
-    throw new Error(`Failed to push: ${(error as Error).message}`);
-  }
+  console.log('Successfully pushed to mobile-incoming branch');
 }
 
 /**
- * Automatically resolve a push conflict using the same strategy as git-sync-js:
- *
- * 1. Fetch latest remote
- * 2. Merge remote into local (auto-resolving conflicts by keeping local version for
- *    conflicting files — tiddler edits on mobile take precedence, matching desktop's
- *    rebase-then-commit strategy which effectively keeps the rebased version)
- * 3. Commit the merge
- * 4. Push
- *
- * If merge still fails, fall back to "theirs" (accept remote) so the repo stays clean
- * and user doesn't get stuck.
- *
- * This replaces the old "push to conflict branch" approach which left garbage branches
- * requiring manual cleanup.
+ * Ask desktop to merge mobile-incoming into main.
+ * This is a simple POST to the merge-incoming endpoint.
  */
-export async function gitResolveConflictAndPush(
-  workspace: IWikiWorkspace,
+export async function triggerDesktopMerge(
   remote: IGitRemote,
 ): Promise<void> {
-  const directory = toPlainPath(workspace.wikiFolderLocation);
-  const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
-  const authHeaders = createAuthHeader(remote.token);
-  const authCallbacks = createAuthCallbacks(remote.token);
+  const url = `${remote.baseUrl.replace(/\/$/, '')}/tw-mobile-sync/git/${remote.workspaceId}/merge-incoming`;
+  const headers: Record<string, string> = {
+    'X-Requested-With': 'TiddlyWiki',
+  };
+  if (remote.token) {
+    headers['Authorization'] = `Basic ${Buffer.from(`:${remote.token}`).toString('base64')}`;
+  }
 
-  // 1. Fetch latest remote to get origin/branch up-to-date
+  const response = await fetch(url, { method: 'POST', headers });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Desktop merge failed (${response.status}): ${body}`);
+  }
+  console.log('Desktop merge-incoming completed');
+}
+
+/**
+ * Fetch latest main from desktop and reset local branch to match.
+ * After desktop merges mobile-incoming into main, mobile's local main
+ * has diverged (it's a sibling, not ancestor). Reset --hard to adopt
+ * the desktop's merged result.
+ */
+export async function gitFetchAndReset(
+  workspace: IWikiWorkspace,
+  remote: IGitRemote,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<boolean> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  const branch = await getCurrentBranch(directory);
+
+  const headBefore = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
+
   await git.fetch({
     fs,
     http: httpWithLogging,
@@ -711,95 +734,30 @@ export async function gitResolveConflictAndPush(
     remote: 'origin',
     ref: branch,
     singleBranch: true,
-    headers: authHeaders,
-    ...authCallbacks,
+    headers: createAuthHeader(remote.token),
+    ...createAuthCallbacks(remote.token),
+    onProgress: (progress) => {
+      onProgress?.(
+        typeof progress.phase === 'string' ? progress.phase : '',
+        toSafeNumber(progress.loaded, 0),
+        toSafeNumber(progress.total, 0),
+      );
+    },
   });
 
-  const localOid = await git.resolveRef({ fs, dir: directory, ref: branch });
   const remoteOid = await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
 
-  if (localOid === remoteOid) {
-    // Already in sync after fetch — nothing to do
-    return;
-  }
+  // Point local branch to remote's merged result
+  await fs.promises.writeFile(
+    `${directory}/.git/refs/heads/${branch}`,
+    `${remoteOid}\n`,
+    { encoding: 'utf8' },
+  );
+  // Checkout the new HEAD to update the working tree
+  await git.checkout({ fs, dir: directory, ref: branch, force: true });
 
-  // 2. Find merge base
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const [mergeBase] = await git.findMergeBase({ fs, dir: directory, oids: [localOid, remoteOid] });
-
-  if (mergeBase === remoteOid) {
-    // Local is ahead — just push (should not happen normally since push already failed)
-    await git.push({
-      fs,
-      http: httpWithLogging,
-      dir: directory,
-      remote: 'origin',
-      ref: branch,
-      headers: authHeaders,
-      ...authCallbacks,
-    });
-    return;
-  }
-
-  if (mergeBase === localOid) {
-    // Local is behind — fast-forward
-    await git.checkout({ fs, dir: directory, ref: branch, force: true });
-    await git.merge({ fs, dir: directory, ours: branch, theirs: `origin/${branch}`, author: { name: 'TidGi Mobile', email: 'mobile@tidgi.fun' } });
-    return;
-  }
-
-  // 3. Diverged — perform a merge
-  // Try merge with default strategy first
-  try {
-    await git.merge({
-      fs,
-      dir: directory,
-      ours: branch,
-      theirs: `origin/${branch}`,
-      author: { name: 'TidGi Mobile', email: 'mobile@tidgi.fun' },
-      message: `Merge remote changes (auto-resolved by TidGi Mobile)`,
-    });
-    console.log('Merge succeeded without conflicts');
-  } catch (mergeError) {
-    console.warn(`Merge failed, attempting manual resolution: ${(mergeError as Error).message}`);
-
-    // Merge failed — likely due to conflicts. Use checkout --force to get to a clean state
-    // on the remote branch, then re-apply local changes on top.
-    //
-    // Strategy: Accept remote version (like git-sync-js's continueRebase which commits
-    // conflict markers). For tiddler files this is safe because:
-    // - Local changes were already committed before the push attempt
-    // - Those commits exist in local history
-    // - After resetting to remote, we re-commit any local-only files
-    try {
-      // Checkout remote version
-      await git.checkout({ fs, dir: directory, ref: branch, force: true });
-
-      // Stage and commit any remaining working directory changes
-      const hasChanges = await gitHasChanges(workspace);
-      if (hasChanges) {
-        await gitCommit(workspace, 'Re-apply local changes after conflict resolution');
-      }
-
-      console.log('Conflict resolved by accepting remote and re-applying local changes');
-    } catch (resolveError) {
-      console.error('Conflict resolution failed:', resolveError);
-      throw new Error(`Failed to resolve conflict: ${(resolveError as Error).message}`);
-    }
-  }
-
-  // 4. Push the merged result
-  await git.push({
-    fs,
-    http: httpWithLogging,
-    dir: directory,
-    remote: 'origin',
-    ref: branch,
-    headers: authHeaders,
-    ...authCallbacks,
-  });
-
-  console.log('Successfully pushed after conflict resolution');
+  const headAfter = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
+  return headBefore !== headAfter;
 }
 
 /**
@@ -966,7 +924,7 @@ async function readFileBytesAtReference(directory: string, filePath: string, ref
   }
 }
 
-export async function gitGetFileContentAtRef(
+export async function gitGetFileContentAtReference(
   workspace: IWikiWorkspace,
   filePath: string,
   reference?: string,
@@ -1024,7 +982,7 @@ export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Prom
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
-    const branch = (await git.currentBranch({ fs, dir: directory, fullname: false })) ?? 'main';
+    const branch = await getCurrentBranch(directory);
     const localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
 
     let remoteCommits: Array<{ oid: string }> = [];

@@ -193,7 +193,7 @@ export class NativeService {
     }
   }
 
-  async saveFileToFs(filename: string, text: string, _mimeType?: string): Promise<string | false> {
+  saveFileToFs(filename: string, text: string, _mimeType?: string): Promise<string | false> {
     try {
       // Save to /sdcard/Documents/TidGi/exports/ (requires MANAGE_EXTERNAL_STORAGE)
       const exportDirectory = new Directory('file:///sdcard/Documents/TidGi/exports/');
@@ -203,10 +203,10 @@ export class NativeService {
       const file = new File(exportDirectory, filename);
       file.write(text);
       console.log(`File saved to ${file.uri}`);
-      return file.uri;
+      return Promise.resolve(file.uri);
     } catch (error) {
       console.error('Error saving file:', error);
-      return false;
+      return Promise.resolve(false);
     }
   }
 }

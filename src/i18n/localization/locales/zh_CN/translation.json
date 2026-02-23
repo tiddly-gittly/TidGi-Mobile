@@ -631,6 +631,8 @@
     "DeleteWithSubWorkspaces": "同时删除子工作区",
     "LogEmpty": "暂无可显示的日志",
     "ClearLogs": "清空日志",
+    "ShareLog": "分享日志文件",
+    "OpenLogFile": "打开日志文件",
     "GeneralSettings": "通用设置",
     "SubWikiRouting": "内容路由规则",
     "RoutingDescription": "按标签与规则将条目保存到对应工作区。",

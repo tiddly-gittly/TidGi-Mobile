@@ -104,18 +104,9 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
       }
     } catch (error) {
       const errorMessage = (error as Error).message;
-
-      if (errorMessage === 'PUSH_CONFLICT') {
-        // Show conflict dialog
-        setShowConflictDialog(true);
-        // Extract branch name from error if available
-        // This is a placeholder - actual branch name would come from service
-        setConflictBranch('client/mobile/123456');
-      } else {
-        setSyncError(errorMessage);
-        setSnackbarMessage(t('Sync.SyncFailed'));
-        setSnackbarVisible(true);
-      }
+      setSyncError(errorMessage);
+      setSnackbarMessage(t('Sync.SyncFailed'));
+      setSnackbarVisible(true);
     } finally {
       setSyncing(false);
     }

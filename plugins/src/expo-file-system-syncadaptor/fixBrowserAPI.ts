@@ -2,7 +2,8 @@
 exports.startup = () => {
   $tw.rootWidget.addEventListener('tm-browser-refresh', function() {
     // TODO: remove old listener first if https://github.com/Jermolene/TiddlyWiki5/issues/7192 is fixed.
-    void window?.service?.wikiHookService?.triggerFullReload?.();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: window.service may not be ready
+    window?.service?.wikiHookService?.triggerFullReload?.();
     return false;
   });
 };

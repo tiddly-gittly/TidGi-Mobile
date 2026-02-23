@@ -15,6 +15,7 @@ const setLanguage = () => {
     }
   }
   const existingTiddler = $tw.wiki.getTiddler('$:/language');
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: fields may not exist on TW tiddler object
   if (existingTiddler?.fields?.text !== twLanguage) {
     $tw.wiki.addTiddler({
       ...existingTiddler?.fields,

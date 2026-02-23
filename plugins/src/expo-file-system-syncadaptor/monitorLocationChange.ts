@@ -8,6 +8,7 @@ const setup = () => {
   }
   window.addEventListener('hashchange', () => {
     const lastLocationHash = location.hash;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: service may not be available
     window.service?.wikiHookService?.saveLocationInfo(lastLocationHash);
   });
 };

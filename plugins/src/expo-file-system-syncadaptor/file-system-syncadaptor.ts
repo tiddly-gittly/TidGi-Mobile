@@ -8,7 +8,7 @@ import type { FileSystemWikiStorageService as WikiStorageService } from '../../.
 
 interface Logger {
   alert: (message: string) => void;
-  log: (...arguments_: any[]) => void;
+  log: (...arguments_: unknown[]) => void;
   setSaveBuffer?: (logger: Logger) => void;
 }
 
@@ -70,30 +70,33 @@ class TidGiMobileFileSystemSyncAdaptor {
       throw new Error("TidGi-Mobile wikiStorageService is undefined, can't load wiki.");
     }
     this.wikiStorageService = window.service.wikiStorageService;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: window.meta may not be injected yet
     if (window.meta?.()?.workspaceID === undefined) {
       throw new Error("TidGi-Mobile workspaceID is undefined, can't load wiki.");
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard
     this.workspaceID = window.meta?.()?.workspaceID;
     this.wiki = options.wiki;
     this.hasStatus = false;
     this.isAnonymous = false;
-    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor') as any;
+    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor') as unknown as Logger;
     this.isLoggedIn = false;
     this.isReadOnly = false;
     this.logoutIsAvailable = true;
+
     this.tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
     // React-Native don't have fs monitor, so no SSE on mobile
     // this.setupSSE();
   }
 
   setupSSE() {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: may not be available on all platforms
     if (this.wikiStorageService.getWikiChangeObserver$ === undefined) {
       console.error("getWikiChangeObserver$ is undefined in wikiStorageService, can't subscribe to server changes.");
       return;
     }
     const debouncedSync = debounce(() => {
       if ($tw.syncer === undefined) {
-        console.error('Syncer is undefined in TidGiMobileFileSystemSyncAdaptor. Abort the `syncFromServer` in `setupSSE debouncedSync`.');
         return;
       }
       $tw.syncer.syncFromServer();
@@ -107,6 +110,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.wikiStorageService.getWikiChangeObserver$().subscribe((change: IChangedTiddlers) => {
       // `$tw.syncer.syncFromServer` calling `this.getUpdatedTiddlers`, so we need to update `this.updatedTiddlers` before it do so. See `core/modules/syncer.js` in the core
       Object.keys(change).forEach(title => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: change[title] may be falsy
         if (!change[title]) {
           return;
         }
@@ -199,6 +203,7 @@ class TidGiMobileFileSystemSyncAdaptor {
 
   getTiddlerRevision(title: string) {
     const tiddler = this.wiki.getTiddler(title);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime
     return tiddler?.fields?.revision;
   }
 
@@ -209,21 +214,24 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logger.log('Getting status');
     try {
       const status = await this.wikiStorageService.getStatus();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined even though type says otherwise
       if (status === undefined) {
         throw new Error('No status returned from callWikiIpcServerRoute getStatus');
       }
       this.hasStatus = true;
       // Record the recipe
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: status.space may be undefined
       this.recipe = status.space?.recipe;
       // Check if we're logged in
       this.isLoggedIn = status.username !== 'GUEST';
-      this.isReadOnly = !!status.read_only;
-      this.isAnonymous = !!status.anonymous;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: JSON may omit these boolean fields
+      this.isReadOnly = status.read_only ?? false;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: JSON may omit these boolean fields
+      this.isAnonymous = status.anonymous ?? false;
       // this.logoutIsAvailable = 'logout_is_available' in status ? !!status.logout_is_available : true;
 
       callback?.(null, this.isLoggedIn, status.username, this.isReadOnly, this.isAnonymous);
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
     }
   }
@@ -260,6 +268,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
       const targetWorkspaceId = await this.routeTiddlerToWorkspace(tiddler);
       const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings(), targetWorkspaceId);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
       } else {
@@ -283,8 +292,8 @@ class TidGiMobileFileSystemSyncAdaptor {
         }
       }
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
-      callback?.(error as Error);
+      // saveTiddler callback is required by TiddlyWiki interface but may be a no-op at runtime
+      callback(error as Error);
     }
   }
 
@@ -302,7 +311,9 @@ class TidGiMobileFileSystemSyncAdaptor {
       const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
       const tiddlerFields: ITiddlerFields = {
         ...tiddler.fields,
+
         text: tiddlerText ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime
         type: tiddler.fields.type ?? 'text/vnd.tiddlywiki',
         _is_skinny: undefined,
         revision: undefined,
@@ -316,7 +327,6 @@ class TidGiMobileFileSystemSyncAdaptor {
       // }
       callback?.(null, tiddlerFields);
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
     }
   }
@@ -369,8 +379,7 @@ class TidGiMobileFileSystemSyncAdaptor {
         stack: (error as Error).stack,
         title,
       });
-      // eslint-disable-next-line n/no-callback-literal
-      callback?.(error as Error);
+      callback(error as Error);
     }
   }
 
@@ -441,6 +450,7 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 
   matchesTagTree(tiddlerTitle: string, workspaceTagNames: string[]): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: TW widget may not be available
     if (!$tw.rootWidget?.makeFakeWidgetWithVariables) {
       return false;
     }
@@ -523,6 +533,7 @@ declare var exports: {
 if ($tw.browser && typeof window !== 'undefined') {
   const isInTidGi = typeof document !== 'undefined' && window.isInTidGi;
   const servicesExposed = Boolean(window.service?.wikiStorageService);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: window.meta may not be injected when module loads
   const hasWorkspaceIDinMeta = Boolean(window.meta?.()?.workspaceID);
   if (isInTidGi && servicesExposed && hasWorkspaceIDinMeta) {
     exports.adaptorClass = TidGiMobileFileSystemSyncAdaptor;

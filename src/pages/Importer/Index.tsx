@@ -388,12 +388,35 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       )}
       {!['idle', 'error', 'success'].includes(importStatus) && (
         <>
-          <ImportStatusText>
-            <Text>{t('Loading')}{' '}</Text>
-            {isBatchImporting
-              ? `${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`
-              : importStatus}
-          </ImportStatusText>
+          {/* Overall batch progress — shown when multiple wikis are being imported */}
+          {isBatchImporting && (
+            <>
+              <Text variant='titleSmall'>
+                {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
+              </Text>
+              <ProgressBar
+                animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
+                color={MD3Colors.tertiary40}
+              />
+            </>
+          )}
+          {/* Per-step progress */}
+          {importStatus === 'cloning'
+            ? (
+              <>
+                <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
+                <Text variant='bodySmall'>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
+                <ProgressBar
+                  animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+                  color={MD3Colors.primary40}
+                />
+              </>
+            )
+            : (
+              <ImportStatusText>
+                <Text>{t('Loading')} {importStatus}</Text>
+              </ImportStatusText>
+            )}
         </>
       )}
       {importStatus === 'error' && (
@@ -410,18 +433,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </Button>
         </>
       )}
-      {importStatus === 'cloning' && (
-        <>
-          <Text variant='titleLarge'>{t('Loading')}</Text>
-          <Text>{t('Sync.CloningRepository')}</Text>
-          <Text>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
-          <ProgressBar
-            animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
-            color={MD3Colors.primary40}
-          />
-        </>
-      )}
-      {importStatus === 'success' && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
+      {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
         <>
           <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
 

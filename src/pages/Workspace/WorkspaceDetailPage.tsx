@@ -7,22 +7,17 @@ import { Button, Checkbox, Dialog, Portal, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import type { RootStackParameterList } from '../../App';
+import { LogViewerDialog } from '../../components/LogViewerDialog';
 import { ServerList } from '../../components/ServerList';
 import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
 import { gitGetUnsyncedCommitCount } from '../../services/GitService';
-import { clearAllLogs, listWorkspaceLogFiles, readLogFile } from '../../services/LoggerService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
-import { FooterRow, LogScrollView, LogText } from './workspaceStyles';
+import { FooterRow } from './workspaceStyles';
 
 const ActionButton = styled(Button)`
   margin-top: 8px;
-  border-radius: 8px;
-`;
-
-const LogPickerButton = styled(Button)`
-  margin-bottom: 8px;
   border-radius: 8px;
 `;
 
@@ -39,9 +34,6 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteSubWorkspacesTogether, setDeleteSubWorkspacesTogether] = useState(false);
   const [workspaceLogVisible, setWorkspaceLogVisible] = useState(false);
-  const [workspaceLogText, setWorkspaceLogText] = useState('');
-  const [logFileNames, setLogFileNames] = useState<string[]>([]);
-  const [selectedLogFile, setSelectedLogFile] = useState<string | undefined>();
 
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.Title'));
 
@@ -85,20 +77,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
         mode='outlined'
         icon='file-document-outline'
         onPress={() => {
-          void (async () => {
-            const files = await listWorkspaceLogFiles(wiki.id);
-            setLogFileNames(files);
-            if (files.length > 0) {
-              const latestFile = files[files.length - 1];
-              setSelectedLogFile(latestFile);
-              const content = await readLogFile(latestFile);
-              setWorkspaceLogText(content ?? t('WorkspaceSettings.LogEmpty'));
-            } else {
-              setSelectedLogFile(undefined);
-              setWorkspaceLogText(t('WorkspaceSettings.LogEmpty'));
-            }
-            setWorkspaceLogVisible(true);
-          })();
+          setWorkspaceLogVisible(true);
         }}
       >
         {t('WorkspaceSettings.ViewLog')}
@@ -235,58 +214,13 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog
+        <LogViewerDialog
+          scope={wiki.id}
           visible={workspaceLogVisible}
           onDismiss={() => {
             setWorkspaceLogVisible(false);
           }}
-        >
-          <Dialog.Title>{t('WorkspaceSettings.ViewLog')}</Dialog.Title>
-          <Dialog.Content>
-            {logFileNames.length > 1 && (
-              <LogPickerButton
-                mode='outlined'
-                compact
-                onPress={() => {
-                  // cycle to previous log file
-                  const currentIndex = selectedLogFile ? logFileNames.indexOf(selectedLogFile) : logFileNames.length - 1;
-                  const nextIndex = (currentIndex - 1 + logFileNames.length) % logFileNames.length;
-                  const nextFile = logFileNames[nextIndex];
-                  setSelectedLogFile(nextFile);
-                  void readLogFile(nextFile).then((content) => {
-                    setWorkspaceLogText(content ?? t('WorkspaceSettings.LogEmpty'));
-                  });
-                }}
-              >
-                {selectedLogFile ?? ''}
-              </LogPickerButton>
-            )}
-          </Dialog.Content>
-          <Dialog.ScrollArea>
-            <LogScrollView>
-              <LogText>{workspaceLogText}</LogText>
-            </LogScrollView>
-          </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button
-              onPress={() => {
-                void clearAllLogs().then(() => {
-                  setWorkspaceLogText(t('WorkspaceSettings.LogEmpty'));
-                  setLogFileNames([]);
-                });
-              }}
-            >
-              {t('WorkspaceSettings.ClearLogs')}
-            </Button>
-            <Button
-              onPress={() => {
-                setWorkspaceLogVisible(false);
-              }}
-            >
-              {t('Close')}
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
+        />
       </Portal>
     </PageContainer>
   );

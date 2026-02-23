@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable unicorn/no-null */
 class TidGiMobileDownloadSaver {
   info = {
     name: 'tidgi-mobile-download',
@@ -7,7 +5,7 @@ class TidGiMobileDownloadSaver {
     capabilities: ['download'],
   };
 
-  save(text: string, method: 'download', callback: (none: null | Error) => void, options: { downloadType?: string; variables?: { filename?: string } }): boolean {
+  save(text: string, _method: 'download', callback: (none: null | Error) => void, options: { downloadType?: string; variables?: { filename?: string } }): boolean {
     if (window.service?.nativeService === undefined) {
       const error = new Error("TidGi-Mobile nativeService is undefined, can't save file.");
       callback(error);
@@ -18,7 +16,7 @@ class TidGiMobileDownloadSaver {
       const p = document.location.pathname.lastIndexOf('/');
       if (p !== -1) {
         // We decode the pathname because document.location is URL encoded by the browser
-        filename = $tw.utils.decodeURIComponentSafe(document.location.pathname.substr(p + 1));
+        filename = $tw.utils.decodeURIComponentSafe(document.location.pathname.substring(p + 1));
       }
     }
     if (!filename) {
@@ -36,7 +34,6 @@ class TidGiMobileDownloadSaver {
   }
 }
 
-// eslint-disable-next-line no-var
 interface IExports {
   canSave: (wiki: typeof $tw.wiki) => boolean;
   create: (wiki: typeof $tw.wiki) => TidGiMobileDownloadSaver;

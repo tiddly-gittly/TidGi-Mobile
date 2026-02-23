@@ -9,7 +9,7 @@ import {
   gitDiscardFileChanges,
   gitGetChangedFilesForCommit,
   gitGetCommitHistory,
-  gitGetFileContentAtRef as gitGetFileContentAtReference,
+  gitGetFileContentAtReference,
   gitResolveReference,
   IGitCommitInfo,
   IGitFileContent,

@@ -11,12 +11,12 @@ import { IWorkspace, useWorkspaceStore } from '../../../store/workspace';
  * `Directory.delete()` failures on directories with locked or
  * permission-restricted files (e.g. .git/objects/pack).
  */
-export function recursiveDeleteDirectory(dir: Directory): void {
-  if (!dir.exists) return;
+export function recursiveDeleteDirectory(directory: Directory): void {
+  if (!directory.exists) return;
   // Always delete contents first before removing the directory itself.
   // Expo FS on Android logs a native ERROR for `Directory.delete()` on non-empty
   // directories even when JS catches it, so we avoid the fast-path attempt.
-  const entries = dir.list();
+  const entries = directory.list();
   for (const entry of entries) {
     if (entry instanceof File) {
       try {
@@ -28,7 +28,7 @@ export function recursiveDeleteDirectory(dir: Directory): void {
   }
   // After emptying, delete the now-empty directory
   try {
-    dir.delete();
+    directory.delete();
   } catch { /* best effort — may still fail on some Android versions */ }
 }
 
