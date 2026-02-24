@@ -51,6 +51,16 @@ function applyDetoxBuildGradle(contents) {
     );
   }
 
+  // ── 3. packaging pickFirst for duplicate native libs ──────────────────────
+  // react-native-gesture-handler's androidTest variant packages libfbjni.so
+  // which also comes from react-android. pickFirst avoids merge failures.
+  if (!contents.includes('libfbjni.so')) {
+    contents = contents.replace(
+      /^(android\s*\{)/m,
+      '$1\n    packaging {\n        jniLibs {\n            pickFirsts += ["**/libfbjni.so"]\n        }\n    }',
+    );
+  }
+
   return contents;
 }
 
@@ -63,31 +73,8 @@ const withDetox = (config) => {
     if (!gradleConfig.modResults.contents.includes('Detox-android')) {
       gradleConfig.modResults.contents = gradleConfig.modResults.contents.replace(
         /(allprojects\s*\{\s*\n\s*repositories\s*\{)/,
-        '$1\n    // Detox local Maven repo (shipped with the npm package)\n    maven { url "$rootDir/../node_modules/detox/Detox-android" }',
+        '$1\n    // Detox local Maven repo (shipped with the npm package)\n    maven { url = "$rootDir/../node_modules/detox/Detox-android" }',
       );
-    }
-
-    if (!gradleConfig.modResults.contents.includes('Detox duplicate native lib workaround')) {
-      gradleConfig.modResults.contents += `
-
-// Detox duplicate native lib workaround
-// Some RN libraries (e.g. react-native-gesture-handler androidTest variant)
-// package libfbjni.so while react-android also contributes the same file.
-// Keep the first one to avoid :mergeDebugAndroidTestNativeLibs failures.
-subprojects {
-  afterEvaluate { p ->
-    if (p.hasProperty('android')) {
-      p.android {
-        packagingOptions {
-          jniLibs {
-            pickFirsts += ['**/libfbjni.so']
-          }
-        }
-      }
-    }
-  }
-}
-`;
     }
 
     return gradleConfig;
