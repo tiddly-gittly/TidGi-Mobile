@@ -18,12 +18,7 @@
     "lint:fix": "eslint ./src --ext ts,tsx,json --fix",
     "check": "tsc --noEmit --skipLibCheck",
     "init-submodules": "git submodule update --init --recursive",
-    "detox:install": "adb install -r e2e/artifacts/apks/app-release-dev-client.apk && adb install -r e2e/artifacts/apks/app-debug-androidTest.apk",
-    "detox:test": "TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.usb.dev-client",
-    "detox:test:emulator": "TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.emulator.dev-client",
-    "detox:test:smoke": "TS_NODE_PROJECT=tsconfig.e2e.json CUCUMBER_TAGS='@smoke' detox test --configuration android.usb.dev-client",
-    "detox:test:settings": "TS_NODE_PROJECT=tsconfig.e2e.json CUCUMBER_TAGS='@settings' detox test --configuration android.usb.dev-client",
-    "detox:test:sync": "TS_NODE_PROJECT=tsconfig.e2e.json CUCUMBER_TAGS='@mobilesync' detox test --configuration android.usb.dev-client"
+    "detox:test": "TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.usb.dev-client"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

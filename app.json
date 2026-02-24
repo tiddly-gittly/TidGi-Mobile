@@ -42,7 +42,7 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.MANAGE_EXTERNAL_STORAGE"
       ],
-      "package": "ren.onetwo.tidgi.mobile"
+      "package": "ren.onetwo.tidgi.mobile.test"
     },
     "web": {
       "favicon": "./assets/favicon.png"

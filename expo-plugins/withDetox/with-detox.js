@@ -22,7 +22,7 @@
  *   "plugins": ["./expo-plugins/withDetox/with-detox.js"]
  */
 
-const { withAppBuildGradle, withDangerousMod } = require('@expo/config-plugins');
+const { withAppBuildGradle, withDangerousMod, withSettingsGradle } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -42,11 +42,14 @@ function applyDetoxBuildGradle(contents) {
     );
   }
 
-  // ── 2. androidTestImplementation in dependencies ───────────────────────────
-  if (!contents.includes('com.wix:detox')) {
+  // ── 2. androidTestImplementation as a LOCAL project reference ─────────────
+  // Using project(':detox') instead of 'com.wix:detox:+' (Maven coordinate)
+  // because the local node_modules copy is the authoritative source and the
+  // Maven artifact may not align with the installed version.
+  if (!contents.includes('project(\':detox\')')) {
     contents = contents.replace(
       /^(dependencies\s*\{)/m,
-      "$1\n    androidTestImplementation('com.wix:detox:+')",
+      "$1\n    androidTestImplementation(project(':detox'))",
     );
   }
 
@@ -54,7 +57,23 @@ function applyDetoxBuildGradle(contents) {
 }
 
 const withDetox = (config) => {
-  // ── Step 1: patch build.gradle ─────────────────────────────────────────────
+  // ── Step 1: add :detox local project to settings.gradle ───────────────────
+  // The detox Android library lives in node_modules/detox/android/detox.
+  // Including it as a local Gradle project (rather than a Maven coordinate)
+  // guarantees the version matches the JS package and avoids network fetches.
+  config = withSettingsGradle(config, (settingsConfig) => {
+    if (!settingsConfig.modResults.contents.includes("include ':detox'")) {
+      settingsConfig.modResults.contents += [
+        '',
+        '// Detox E2E testing — include local Android library from node_modules',
+        "include ':detox'",
+        "project(':detox').projectDir = new File(rootProject.projectDir, '../node_modules/detox/android/detox')",
+      ].join('\n');
+    }
+    return settingsConfig;
+  });
+
+  // ── Step 2: patch app/build.gradle ────────────────────────────────────────
   config = withAppBuildGradle(config, (gradleConfig) => {
     gradleConfig.modResults.contents = applyDetoxBuildGradle(
       gradleConfig.modResults.contents,
@@ -62,7 +81,7 @@ const withDetox = (config) => {
     return gradleConfig;
   });
 
-  // ── Step 2: copy DetoxTest.java + androidTest AndroidManifest.xml ──────────
+  // ── Step 3: copy DetoxTest.java + androidTest AndroidManifest.xml ──────────
   config = withDangerousMod(config, [
     'android',
     async (dangerousConfig) => {

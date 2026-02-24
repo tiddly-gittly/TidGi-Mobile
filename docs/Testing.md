@@ -1,0 +1,110 @@
+# E2E Testing Guide
+
+E2E test guide for TidGi-Mobile using Detox + Cucumber (Gherkin).
+
+## Prerequisites
+
+### APK files (one-time CI build)
+
+The test runner needs two APKs built by CI.  
+You do **not** need a local Android SDK or Gradle — only `adb`.
+
+1. Trigger the **Build Dev Client APK** GitHub Actions workflow (push a commit or run `workflow_dispatch`)
+2. Download the artifact `dev-client-apks-*` from the Actions run
+3. Extract the two APKs into `e2e/artifacts/apks/`:
+   ```
+   e2e/artifacts/apks/app-release-dev-client.apk   ← main app (Expo dev client)
+   e2e/artifacts/apks/app-debug-androidTest.apk    ← Detox instrumentation runner
+   ```
+
+### Install APKs onto your device
+
+```bash
+adb install -r e2e/artifacts/apks/app-release-dev-client.apk
+adb install -r e2e/artifacts/apks/app-debug-androidTest.apk
+```
+
+Only needed again when you build new APKs from CI (i.e. after native code changes).
+
+### Start Metro
+
+In a **separate terminal**, keep this running while tests execute:
+
+```bash
+pnpm start
+```
+
+Metro provides fast-refresh — TypeScript changes in `src/` take effect without reinstalling the APK.
+
+---
+
+## Running tests
+
+```bash
+# Run all E2E tests (physical device connected via USB)
+pnpm detox:test
+
+# Run only a specific tag (same @ tag as in the .feature file)
+pnpm detox:test --tags="@smoke"
+pnpm detox:test --tags="@settings"
+pnpm detox:test --tags="@mobilesync"
+
+# Run tests against an emulator instead of a physical device
+TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.emulator.dev-client
+
+# Run a single scenario by name
+pnpm detox:test --name "App launches and shows main menu"
+```
+
+> **Note:** Do not pass extra flags beyond `--tags` and `--name` unless you know what you're doing — other flags may require interactive confirmation.
+
+---
+
+## When do you need to rebuild the APK?
+
+| Change type | Action needed |
+|---|---|
+| `e2e/` step definitions / feature files | None — loaded by Node.js at test time |
+| `src/` TypeScript / React Native code | None — Metro fast-refresh handles it |
+| `expo-plugins/`, `app.json`, native modules | Trigger CI → download new APKs → reinstall |
+
+---
+
+## Project structure
+
+```tree
+e2e/
+├── features/            # Gherkin scenarios (.feature)
+│   ├── smoke.feature
+│   ├── settings.feature
+│   └── desktop-sync.feature
+├── stepDefinitions/     # TypeScript step implementations
+│   ├── smoke.steps.ts
+│   ├── settings.steps.ts
+│   └── desktopSync.steps.ts
+├── support/
+│   └── hooks.ts         # Detox lifecycle (BeforeAll / After / AfterStep)
+├── artifacts/
+│   └── apks/            # APKs downloaded from CI (gitignored)
+│       ├── app-release-dev-client.apk
+│       └── app-debug-androidTest.apk
+└── cucumber.js          # Cucumber runner config
+
+expo-plugins/
+└── withDetox/           # Expo config plugin — injects Detox into Android build
+    ├── with-detox.js
+    ├── DetoxTest.java   # Template (package placeholder replaced at prebuild)
+    └── AndroidManifest.xml  # Fixes android:exported merge error on SDK ≥ 31
+```
+
+---
+
+## Desktop-sync tests (`@mobilesync`)
+
+These require a running TidGi Desktop instance:
+
+```bash
+TIDGI_DESKTOP_URL=http://192.168.x.x:5212 pnpm detox:test --tags="@mobilesync"
+```
+
+Without `TIDGI_DESKTOP_URL` the default `http://localhost:5212` is used.
