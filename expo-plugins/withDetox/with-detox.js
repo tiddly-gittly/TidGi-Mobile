@@ -22,7 +22,7 @@
  *   "plugins": ["./expo-plugins/withDetox/with-detox.js"]
  */
 
-const { withAppBuildGradle, withDangerousMod, withSettingsGradle } = require('@expo/config-plugins');
+const { withAppBuildGradle, withDangerousMod, withProjectBuildGradle } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -42,14 +42,15 @@ function applyDetoxBuildGradle(contents) {
     );
   }
 
-  // ── 2. androidTestImplementation as a LOCAL project reference ─────────────
-  // Using project(':detox') instead of 'com.wix:detox:+' (Maven coordinate)
-  // because the local node_modules copy is the authoritative source and the
-  // Maven artifact may not align with the installed version.
-  if (!contents.includes('project(\':detox\')')) {
+  // ── 2. androidTestImplementation via local Maven repo ─────────────────────
+  // Use the Maven coordinate resolved from the local Detox-android/ repo
+  // (added to allprojects.repositories by withProjectBuildGradle below).
+  // Do NOT use project(':detox') — including Detox as a Gradle subproject fails
+  // because its build.gradle expects to be evaluated in its own root context.
+  if (!contents.includes("com.wix:detox")) {
     contents = contents.replace(
       /^(dependencies\s*\{)/m,
-      "$1\n    androidTestImplementation(project(':detox'))",
+      "$1\n    androidTestImplementation('com.wix:detox:+')",
     );
   }
 
@@ -57,20 +58,19 @@ function applyDetoxBuildGradle(contents) {
 }
 
 const withDetox = (config) => {
-  // ── Step 1: add :detox local project to settings.gradle ───────────────────
-  // The detox Android library lives in node_modules/detox/android/detox.
-  // Including it as a local Gradle project (rather than a Maven coordinate)
-  // guarantees the version matches the JS package and avoids network fetches.
-  config = withSettingsGradle(config, (settingsConfig) => {
-    if (!settingsConfig.modResults.contents.includes("include ':detox'")) {
-      settingsConfig.modResults.contents += [
-        '',
-        '// Detox E2E testing — include local Android library from node_modules',
-        "include ':detox'",
-        "project(':detox').projectDir = new File(rootProject.projectDir, '../node_modules/detox/android/detox')",
-      ].join('\n');
+  // ── Step 1: add Detox local Maven repo to root build.gradle ───────────────
+  // The Detox npm package ships a local Maven repo at Detox-android/.
+  // Adding it to allprojects.repositories lets Gradle resolve com.wix:detox
+  // from the exact version that matches the installed JS package — no network
+  // fetch required, and no version mismatch.
+  config = withProjectBuildGradle(config, (gradleConfig) => {
+    if (!gradleConfig.modResults.contents.includes('detox/Detox-android')) {
+      gradleConfig.modResults.contents = gradleConfig.modResults.contents.replace(
+        "maven { url 'https://www.jitpack.io' }",
+        "maven { url 'https://www.jitpack.io' }\n    maven {\n      // Detox Android SDK — local Maven repo shipped with the npm package\n      url \"$rootDir/../node_modules/detox/Detox-android\"\n    }",
+      );
     }
-    return settingsConfig;
+    return gradleConfig;
   });
 
   // ── Step 2: patch app/build.gradle ────────────────────────────────────────
