@@ -9,7 +9,14 @@
  *  1. Adds `testInstrumentationRunner` + `testBuildType` to defaultConfig in
  *     android/app/build.gradle.
  *  2. Adds `androidTestImplementation('com.wix:detox:+')` to dependencies.
- *  3. Writes DetoxTest.java into the androidTest source set.
+ *  3. Copies DetoxTest.java (with package-name substitution) into the
+ *     androidTest source set.
+ *  4. Copies an androidTest AndroidManifest.xml that fixes the
+ *     `android:exported` merge error on SDK 31+.
+ *
+ * The template files live next to this plugin:
+ *   expo-plugins/withDetox/DetoxTest.java
+ *   expo-plugins/withDetox/AndroidManifest.xml
  *
  * Usage in app.json:
  *   "plugins": ["./expo-plugins/withDetox/with-detox.js"]
@@ -19,48 +26,11 @@ const { withAppBuildGradle, withDangerousMod } = require('@expo/config-plugins')
 const fs = require('fs');
 const path = require('path');
 
-/** Generate DetoxTest.java content for the given Android package name. */
-function detoxTestJava(packageName) {
-  return `package ${packageName};
-
-import com.wix.detox.Detox;
-import com.wix.detox.config.DetoxConfig;
-
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-
-import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.filters.LargeTest;
-import androidx.test.rule.ActivityTestRule;
-
-@RunWith(AndroidJUnit4.class)
-@LargeTest
-public class DetoxTest {
-
-    @Rule
-    // Replace MainActivity.class with your own Main Activity
-    public ActivityTestRule<MainActivity> mActivityRule =
-        new ActivityTestRule<>(MainActivity.class, false, false);
-
-    @Test
-    public void runDetoxTests() {
-        DetoxConfig detoxConfig = new DetoxConfig();
-        detoxConfig.idlePolicyConfig.masterTimeoutSec = 90;
-        detoxConfig.idlePolicyConfig.idleResourceTimeoutSec = 60;
-        detoxConfig.rnContextLoadTimeoutSec = (BuildConfig.DEBUG ? 180 : 60);
-
-        Detox.runTests(mActivityRule, detoxConfig);
-    }
-}
-`;
-}
+const PLUGIN_DIR = __dirname;
 
 /** Patch android/app/build.gradle to add Detox test config. */
 function applyDetoxBuildGradle(contents) {
   // ── 1. testInstrumentationRunner + testBuildType in defaultConfig ──────────
-  // Insert after the last line of defaultConfig that we can anchor to.
-  // We look for `versionName` which is always present in Expo-generated gradle.
   if (!contents.includes('testInstrumentationRunner')) {
     contents = contents.replace(
       /(versionName\s+"[^"]*")/,
@@ -73,7 +43,7 @@ function applyDetoxBuildGradle(contents) {
   }
 
   // ── 2. androidTestImplementation in dependencies ───────────────────────────
-  if (!contents.includes("com.wix:detox")) {
+  if (!contents.includes('com.wix:detox')) {
     contents = contents.replace(
       /^(dependencies\s*\{)/m,
       "$1\n    androidTestImplementation('com.wix:detox:+')",
@@ -92,33 +62,38 @@ const withDetox = (config) => {
     return gradleConfig;
   });
 
-  // ── Step 2: write DetoxTest.java ───────────────────────────────────────────
+  // ── Step 2: copy DetoxTest.java + androidTest AndroidManifest.xml ──────────
   config = withDangerousMod(config, [
     'android',
     async (dangerousConfig) => {
       const packageName =
-        dangerousConfig.android?.package ??
-        dangerousConfig.modRequest.packageName ??
-        'com.tidgi';
-      const packagePath = packageName.split('.').join('/');
+        dangerousConfig.android?.package ?? 'com.tidgi';
+      const projectRoot = dangerousConfig.modRequest.projectRoot;
 
-      const testDir = path.join(
-        dangerousConfig.modRequest.projectRoot,
-        'android',
-        'app',
-        'src',
-        'androidTest',
-        'java',
+      // ── DetoxTest.java ─────────────────────────────────────────────────────
+      const testJavaDir = path.join(
+        projectRoot, 'android', 'app', 'src', 'androidTest', 'java',
         ...packageName.split('.'),
       );
+      await fs.promises.mkdir(testJavaDir, { recursive: true });
 
-      await fs.promises.mkdir(testDir, { recursive: true });
+      const templateJava = await fs.promises.readFile(
+        path.join(PLUGIN_DIR, 'DetoxTest.java'), 'utf8',
+      );
+      const finalJava = templateJava.replace(/__PACKAGE__/g, packageName);
+      await fs.promises.writeFile(
+        path.join(testJavaDir, 'DetoxTest.java'), finalJava, 'utf8',
+      );
 
-      const destPath = path.join(testDir, 'DetoxTest.java');
-      // Only write if not already present (idempotent)
-      if (!fs.existsSync(destPath)) {
-        await fs.promises.writeFile(destPath, detoxTestJava(packageName), 'utf8');
-      }
+      // ── AndroidManifest.xml for androidTest ────────────────────────────────
+      const manifestDir = path.join(
+        projectRoot, 'android', 'app', 'src', 'androidTest',
+      );
+      await fs.promises.mkdir(manifestDir, { recursive: true });
+      await fs.promises.copyFile(
+        path.join(PLUGIN_DIR, 'AndroidManifest.xml'),
+        path.join(manifestDir, 'AndroidManifest.xml'),
+      );
 
       return dangerousConfig;
     },

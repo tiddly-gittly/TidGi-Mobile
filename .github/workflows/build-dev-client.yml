@@ -1,0 +1,133 @@
+name: Build Dev Client APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+    paths-ignore:
+      - "README.md"
+      - "wiki/**"
+      - "public/**"
+      - ".vscode"
+      - ".idea"
+  pull_request:
+    branches:
+      - master
+      - main
+    paths-ignore:
+      - "README.md"
+      - "wiki/**"
+      - "public/**"
+      - ".vscode"
+      - ".idea"
+
+jobs:
+  build-dev-client:
+    name: Build dev-client + Detox test APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: pnpm
+      - name: Set Up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: "17"
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.10.2
+      - name: Set Build Tools Version
+        run: |
+          echo "BUILD_TOOLS_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)" >> $GITHUB_ENV
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - uses: actions/cache@v4
+        name: Cache Gradle Wrapper and Dependencies
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build tw plugins & scripts
+        run: |
+          pnpm run build:plugin
+          pnpm run build:tw-assets
+
+      - name: Install expo-dev-client
+        run: pnpm install expo-dev-client -w
+
+      # Modify app.json for dev-client to use different package name and app name
+      - name: Modify app.json for dev-client
+        run: |
+          node -e "
+          const fs = require('fs');
+          const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          appJson.expo.name = 'TidGi Test';
+          appJson.expo.android.package = 'ren.onetwo.tidgi.mobile.test';
+          appJson.expo.ios.bundleIdentifier = 'ren.onetwo.tidgi.mobile.test';
+          fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+          "
+
+      - name: Expo prebuild (dev-client)
+        run: pnpm exec expo prebuild -p android --clean
+
+      - name: Save AndroidManifest (dev-client prebuild)
+        run: |
+          mkdir -p /tmp/apk-artifacts
+          cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-dev-client.xml
+
+      - name: Build dev-client APK (debug + androidTest)
+        run: |
+          cd android
+          ./gradlew assembleDebug assembleAndroidTest --no-daemon --warning-mode all -DtestBuildType=debug
+
+      - name: Rename dev-client APK
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/app-release-dev-client.apk
+
+      - name: Upload dev-client APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-client-apks-${{ github.run_number }}-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/debug/app-release-dev-client.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            /tmp/apk-artifacts/AndroidManifest-dev-client.xml
+          if-no-files-found: warn
+
+      - name: Create Release (dev-client APKs)
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          generate_release_notes: false
+          files: |
+            android/app/build/outputs/apk/debug/app-release-dev-client.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

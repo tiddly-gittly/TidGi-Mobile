@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Release APK
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
       - "scripts/**"
       - ".vscode"
       - ".idea"
+      - "e2e/**"
   pull_request:
     branches:
       - master
@@ -23,10 +24,11 @@ on:
       - ".scripts/**"
       - ".vscode"
       - ".idea"
+      - "e2e/**"
 
 jobs:
   build:
-    name: Install and build
+    name: Build release APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -113,11 +115,15 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
-      - name: Save release APK before android dir gets cleaned
-        run: |
-          mkdir -p /tmp/apk-artifacts
-          cp android/app/build/outputs/apk/release/app-release-signed.apk /tmp/apk-artifacts/app-release-signed.apk 2>/dev/null || \
-          cp android/app/build/outputs/apk/release/app-release.apk /tmp/apk-artifacts/app-release-signed.apk 2>/dev/null || true
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ github.run_number }}-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/release/app-release-signed.apk
+            android/app/build/outputs/apk/release/app-release.apk
+            /tmp/apk-artifacts/AndroidManifest-release.xml
+          if-no-files-found: ignore
 
       - name: Create Release (release APK)
         uses: softprops/action-gh-release@v1
@@ -125,65 +131,7 @@ jobs:
         with:
           draft: true
           generate_release_notes: true
-          files: /tmp/apk-artifacts/app-release-signed.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Optionally create an development build
-      - name: Install expo-dev-client
-        run: pnpm install expo-dev-client -w
-      # Modify app.json for dev-client to use different package name and app name
-      - name: Modify app.json for dev-client
-        run: |
-          node -e "
-          const fs = require('fs');
-          const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
-          appJson.expo.name = 'TidGi Test';
-          appJson.expo.android.package = 'ren.onetwo.tidgi.mobile.test';
-          appJson.expo.ios.bundleIdentifier = 'ren.onetwo.tidgi.mobile.test';
-          fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
-          "
-      # Same step as above
-      - name: Build by eject eas and not remove debug signing key for apk
-        run: pnpm exec expo prebuild -p android --clean
-
-      - name: Save AndroidManifest (dev-client prebuild)
-        run: |
-          mkdir -p /tmp/apk-artifacts
-          cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-dev-client.xml
-      - name: Build dev-client APK (debug + androidTest variants)
-        run: |
-          cd android
-          ./gradlew clean
-          ./gradlew assembleDebug assembleAndroidTest --no-daemon --warning-mode all -DtestBuildType=debug
-
-      - name: Rename Development Build APK
-        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/app-release-dev-client.apk
-
-      - name: Collect all APKs for upload
-        run: |
-          mkdir -p /tmp/apk-upload
-          cp /tmp/apk-artifacts/app-release-signed.apk /tmp/apk-upload/app-release-signed.apk || true
-          cp android/app/build/outputs/apk/debug/app-release-dev-client.apk /tmp/apk-upload/app-release-dev-client.apk || true
-          cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /tmp/apk-upload/app-debug-androidTest.apk || true
-          cp /tmp/apk-artifacts/AndroidManifest-release.xml /tmp/apk-upload/AndroidManifest-release.xml || true
-          cp /tmp/apk-artifacts/AndroidManifest-dev-client.xml /tmp/apk-upload/AndroidManifest-dev-client.xml || true
-
-      - name: Upload APK artifact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: apks-${{ github.run_number }}-${{ github.sha }}
-          path: /tmp/apk-upload/*.*
-          if-no-files-found: ignore
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          draft: true
-          generate_release_notes: false
           files: |
-            android/app/build/outputs/apk/debug/app-release-dev-client.apk
-            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            android/app/build/outputs/apk/release/app-release-signed.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
