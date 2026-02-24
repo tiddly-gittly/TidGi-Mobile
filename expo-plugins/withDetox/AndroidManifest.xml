@@ -1,34 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   AndroidManifest for the androidTest source set.
-  Fixes the "android:exported" merge error when targeting SDK 31+.
-  The androidx.test library declares activities/services without explicit
-  android:exported; this manifest forces the correct values via tools:node="merge".
+  Provides permissions needed by Detox and cleartext traffic for local
+  dev-server communication.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <application
-        android:usesCleartextTraffic="true"
-        tools:replace="android:usesCleartextTraffic">
-
-        <!-- Fix for androidx.test.core InstrumentationActivityInvoker$BootstrapActivity -->
-        <activity
-            android:name="androidx.test.core.app.InstrumentationActivityInvoker$BootstrapActivity"
-            android:exported="false"
-            tools:node="merge" />
-
-        <activity
-            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyActivity"
-            android:exported="false"
-            tools:node="merge" />
-
-        <activity
-            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyFloatingActivity"
-            android:exported="false"
-            tools:node="merge" />
-    </application>
+    <application android:usesCleartextTraffic="true" />
 </manifest>
