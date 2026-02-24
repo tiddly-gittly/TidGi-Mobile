@@ -99,6 +99,7 @@
     "babel-plugin-transform-typescript-metadata": "^0.3.2",
     "babel-preset-expo": "^54.0.10",
     "cross-env": "^7.0.3",
+    "detox": "20.47.0",
     "drizzle-kit": "^0.30.5",
     "eslint-config-tidgi": "^2.2.0",
     "eslint-plugin-react-native": "^5.0.0",
