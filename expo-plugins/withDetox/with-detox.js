@@ -10,6 +10,8 @@
  *     android/app/build.gradle.
  *  2. Adds `androidTestImplementation('com.wix:detox:+')` to dependencies.
  *  3. Writes DetoxTest.java into the androidTest source set.
+ *  4. Writes a test AndroidManifest.xml that adds `android:exported="false"`
+ *     to androidx.test.core activities (required for Android 12+).
  *
  * Usage in app.json:
  *   "plugins": ["./expo-plugins/withDetox/with-detox.js"]
@@ -119,6 +121,47 @@ const withDetox = (config) => {
       if (!fs.existsSync(destPath)) {
         await fs.promises.writeFile(destPath, detoxTestJava(packageName), 'utf8');
       }
+
+      return dangerousConfig;
+    },
+  ]);
+
+  // ── Step 3: write test AndroidManifest.xml (Android 12+ compatibility) ────
+  // androidx.test.core adds EmptyActivity / EmptyFloatingActivity with intent
+  // filters but without android:exported, which is required for API 31+.
+  // A manifest override in the androidTest source set silences the merger error.
+  config = withDangerousMod(config, [
+    'android',
+    async (dangerousConfig) => {
+      const androidTestDir = path.join(
+        dangerousConfig.modRequest.projectRoot,
+        'android',
+        'app',
+        'src',
+        'androidTest',
+      );
+
+      await fs.promises.mkdir(androidTestDir, { recursive: true });
+
+      const manifestPath = path.join(androidTestDir, 'AndroidManifest.xml');
+      const manifestContent = `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Fix Android 12+ manifest merger error: androidx.test.core activities
+             declare intent filters without android:exported. -->
+        <activity
+            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyActivity"
+            android:exported="false"
+            tools:node="mergeOnlyAttributes" />
+        <activity
+            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyFloatingActivity"
+            android:exported="false"
+            tools:node="mergeOnlyAttributes" />
+    </application>
+</manifest>
+`;
+      await fs.promises.writeFile(manifestPath, manifestContent, 'utf8');
 
       return dangerousConfig;
     },
