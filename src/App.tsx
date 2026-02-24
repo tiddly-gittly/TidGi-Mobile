@@ -101,6 +101,7 @@ export const App: React.FC = () => {
                   headerTitleStyle: { color: theme.colors.primary },
                   headerRight: () => (
                     <SettingsIcon
+                      testID='settings-icon-button'
                       name='settings'
                       size={32}
                       color={theme.colors.primary}

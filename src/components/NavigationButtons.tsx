@@ -19,6 +19,7 @@ export function ImporterButton() {
 
   return (
     <MainFeatureButton
+      testID='import-wiki-button'
       mode='outlined'
       onPress={() => {
         navigation.navigate('Importer', {});

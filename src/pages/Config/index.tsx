@@ -40,6 +40,7 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
   ], [t]);
   return (
     <PreferencesList
+      testID='config-screen'
       sections={sections}
       renderSectionHeader={({ section: { title } }) => <TitleText variant='headlineLarge'>{title}</TitleText>}
       renderItem={({ item }) => item()}

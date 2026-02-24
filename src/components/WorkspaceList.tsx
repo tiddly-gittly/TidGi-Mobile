@@ -48,6 +48,7 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
 
   return (
     <WorkspaceCard
+      testID={`workspace-item-${item.id}`}
       onPress={() => {
         onPress?.(item);
       }}

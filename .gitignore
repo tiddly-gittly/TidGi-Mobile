@@ -47,3 +47,7 @@ build/
 # prebuild
 /android/
 /ios
+
+# Detox APK artifacts (download from CI, do not commit)
+e2e/artifacts/apks/*.apk
+e2e/reports/

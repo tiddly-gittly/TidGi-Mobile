@@ -23,6 +23,7 @@ export function General(): JSX.Element {
       <Text variant='titleLarge'>{t('Preference.Theme')}</Text>
       <SegmentedContainer>
         <SegmentedButtons
+          testID='theme-segmented-buttons'
           value={theme}
           onValueChange={(newValue) => {
             setConfig({ theme: newValue as typeof theme });
@@ -34,6 +35,7 @@ export function General(): JSX.Element {
       <SwitchContainer>
         <FlexibleText>{t('Preference.TranslucentStatusBarDescription')}</FlexibleText>
         <Switch
+          testID='translucent-status-bar-switch'
           value={translucentStatusBar}
           onValueChange={(value) => {
             setConfig({ translucentStatusBar: value });
@@ -44,6 +46,7 @@ export function General(): JSX.Element {
       <SwitchContainer>
         <FlexibleText>{t('Preference.HideStatusBarDescription')}</FlexibleText>
         <Switch
+          testID='hide-status-bar-switch'
           value={hideStatusBar}
           onValueChange={(value) => {
             setConfig({ hideStatusBar: value });

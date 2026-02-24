@@ -56,6 +56,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
       <Text variant='bodySmall'>{t('Sync.UnsyncedCommitCount', { count: pendingCommitCount })}</Text>
 
       <ActionButton
+        testID='workspace-sync-button'
         mode='outlined'
         icon='sync'
         onPress={() => {
@@ -83,6 +84,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
         {t('WorkspaceSettings.ViewLog')}
       </ActionButton>
       <ActionButton
+        testID='workspace-general-settings-button'
         mode='outlined'
         icon='cog'
         onPress={() => {
@@ -155,6 +157,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
 
       <FooterRow>
         <Button
+          testID='workspace-delete-button'
           onPress={() => {
             setDeleteDialogVisible(true);
           }}

@@ -96,6 +96,7 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
         />
       )}
       <ScanQRButton
+        testID='toggle-scanner-button'
         mode={importStatus === 'idle' ? 'elevated' : 'outlined'}
         disabled={importStatus !== 'idle'}
         labelStyle={{ padding: ButtonLabelPadding }}
@@ -161,6 +162,7 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
           onChangeText={onManualJSONInput}
         />
         <Button
+          testID='toggle-server-list-button'
           mode='text'
           disabled={allServers.length === 0 || isLoadingServerInfo}
           onPress={onToggleSavedServers}
@@ -171,6 +173,7 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
           {allServers.map(server => (
             <SavedServerButton
               key={server.id}
+              testID={`saved-server-button-${server.id}`}
               mode='outlined'
               onPress={() => {
                 onFetchSavedServer(server);

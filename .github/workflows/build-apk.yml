@@ -151,11 +151,11 @@ jobs:
         run: |
           mkdir -p /tmp/apk-artifacts
           cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-dev-client.xml
-      - name: Build dev-client APK (debug variant)
+      - name: Build dev-client APK (debug + androidTest variants)
         run: |
           cd android
           ./gradlew clean
-          ./gradlew assembleDebug --no-daemon --warning-mode all
+          ./gradlew assembleDebug assembleAndroidTest --no-daemon --warning-mode all -DtestBuildType=debug
 
       - name: Rename Development Build APK
         run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/app-release-dev-client.apk
@@ -165,6 +165,7 @@ jobs:
           mkdir -p /tmp/apk-upload
           cp /tmp/apk-artifacts/app-release-signed.apk /tmp/apk-upload/app-release-signed.apk || true
           cp android/app/build/outputs/apk/debug/app-release-dev-client.apk /tmp/apk-upload/app-release-dev-client.apk || true
+          cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /tmp/apk-upload/app-debug-androidTest.apk || true
           cp /tmp/apk-artifacts/AndroidManifest-release.xml /tmp/apk-upload/AndroidManifest-release.xml || true
           cp /tmp/apk-artifacts/AndroidManifest-dev-client.xml /tmp/apk-upload/AndroidManifest-dev-client.xml || true
 
@@ -183,5 +184,6 @@ jobs:
           generate_release_notes: false
           files: |
             android/app/build/outputs/apk/debug/app-release-dev-client.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

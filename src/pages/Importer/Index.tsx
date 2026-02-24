@@ -363,7 +363,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   const autoStartImport = route.params.autoStartImport;
   return (
-    <Container>
+    <Container testID='importer-screen'>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
       {autoStartImport !== true && serverConfigs}
       {importStatus === 'idle' && !qrScannerOpen && qrData && (
@@ -376,6 +376,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             }}
           />
           <ImportWikiButton
+            testID='import-wiki-confirm-button'
             mode='elevated'
             onPress={addServerAndImport}
             labelStyle={{ padding: ButtonLabelPadding }}
@@ -442,6 +443,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             .map((ws) => (
               <OpenWikiButton
                 key={ws.id}
+                testID={`open-wiki-button-${ws.id}`}
                 mode='elevated'
                 onPress={() => {
                   navigation.navigate('MainMenu', { fromWikiID: ws.id });

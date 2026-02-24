@@ -25,6 +25,7 @@ export function TiddlyWiki(): JSX.Element {
   return (
     <>
       <StyledTextInput
+        testID='username-input'
         label={t('Preference.DefaultUserName')}
         value={userName}
         onChangeText={(newText: string) => {
@@ -36,6 +37,7 @@ export function TiddlyWiki(): JSX.Element {
       <SwitchContainer>
         <FlexibleText>{t('Preference.RememberLastVisitState')}</FlexibleText>
         <Switch
+          testID='remember-last-visit-switch'
           value={rememberLastVisitState}
           onValueChange={(value) => {
             setConfig({ rememberLastVisitState: value });
