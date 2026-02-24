@@ -66,6 +66,30 @@ const withDetox = (config) => {
         '$1\n    // Detox local Maven repo (shipped with the npm package)\n    maven { url "$rootDir/../node_modules/detox/Detox-android" }',
       );
     }
+
+    if (!gradleConfig.modResults.contents.includes('Detox duplicate native lib workaround')) {
+      gradleConfig.modResults.contents += `
+
+// Detox duplicate native lib workaround
+// Some RN libraries (e.g. react-native-gesture-handler androidTest variant)
+// package libfbjni.so while react-android also contributes the same file.
+// Keep the first one to avoid :mergeDebugAndroidTestNativeLibs failures.
+subprojects {
+  afterEvaluate { p ->
+    if (p.hasProperty('android')) {
+      p.android {
+        packagingOptions {
+          jniLibs {
+            pickFirsts += ['**/libfbjni.so']
+          }
+        }
+      }
+    }
+  }
+}
+`;
+    }
+
     return gradleConfig;
   });
 
