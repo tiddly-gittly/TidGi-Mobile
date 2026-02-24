@@ -107,17 +107,17 @@ jobs:
           cd android
           ./gradlew assembleDebug :app:assembleAndroidTest --no-daemon --warning-mode all -DtestBuildType=debug
 
-      - name: Rename dev-client APK
-        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/app-release-dev-client.apk
+      - name: Collect APKs into flat staging dir
+        run: |
+          mkdir -p /tmp/apk-artifacts
+          mv android/app/build/outputs/apk/debug/app-debug.apk /tmp/apk-artifacts/app-release-dev-client.apk
+          mv android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /tmp/apk-artifacts/app-debug-androidTest.apk
 
       - name: Upload dev-client APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: dev-client-apks-${{ github.run_number }}-${{ github.sha }}
-          path: |
-            android/app/build/outputs/apk/debug/app-release-dev-client.apk
-            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            /tmp/apk-artifacts/AndroidManifest-dev-client.xml
+          path: /tmp/apk-artifacts/
           if-no-files-found: warn
 
       - name: Create Release (dev-client APKs)
@@ -127,7 +127,7 @@ jobs:
           draft: true
           generate_release_notes: false
           files: |
-            android/app/build/outputs/apk/debug/app-release-dev-client.apk
-            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            /tmp/apk-artifacts/app-release-dev-client.apk
+            /tmp/apk-artifacts/app-debug-androidTest.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
