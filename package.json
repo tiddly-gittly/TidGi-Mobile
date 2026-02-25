@@ -18,7 +18,7 @@
     "lint:fix": "eslint ./src --ext ts,tsx,json --fix",
     "check": "tsc --noEmit --skipLibCheck",
     "init-submodules": "git submodule update --init --recursive",
-    "detox:test": "TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.usb.dev-client"
+    "detox:test": "adb reverse --remove-all; adb reverse tcp:8081 tcp:8081; TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.usb.dev-client"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

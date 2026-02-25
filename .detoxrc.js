@@ -38,6 +38,12 @@ module.exports = {
     jest: undefined,
   },
 
+  // NOTE: do not set a fixed server port here — Detox 20's `server.port`
+  // config prevents the WebSocket server from starting (ws-server never logs
+  // "listening"). Instead, the `detox:test` package.json script resets all
+  // adb reverse entries and re-adds tcp:8081 (Metro) before running, so the
+  // randomly-chosen Detox port never conflicts with stale mappings.
+
   apps: {
     /**
      * Dev-client APK built once by CI.
@@ -48,6 +54,12 @@ module.exports = {
       type: 'android.apk',
       binaryPath: 'e2e/artifacts/apks/app-release-dev-client.apk',
       testBinaryPath: 'e2e/artifacts/apks/app-debug-androidTest.apk',
+      // Do NOT reinstall on every run: the Expo dev client stores the last-used
+      // Metro server URL in AsyncStorage. Reinstalling wipes that memory and
+      // the app shows the "Connect to development server" screen instead of
+      // launching straight into TidGi. Install the APK once via `pnpm detox:install`
+      // (or from CI artifacts) and Detox will reuse that installation.
+      reinstallApp: false,
     },
   },
 

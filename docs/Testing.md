@@ -13,9 +13,14 @@ You do **not** need a local Android SDK or Gradle — only `adb`.
 2. Download the artifact `dev-client-apks-*` from the Actions run
 3. Extract the two APKs into `e2e/artifacts/apks/`:
    ```
-   e2e/artifacts/apks/app-release-dev-client.apk   ← main app (Expo dev client)
-   e2e/artifacts/apks/app-debug-androidTest.apk    ← Detox instrumentation runner
+   e2e/artifacts/apks/app-release-dev-client.apk   ← main app (package: ren.onetwo.tidgi.mobile.test)
+   e2e/artifacts/apks/app-debug-androidTest.apk    ← Detox instrumentation runner (package: ren.onetwo.tidgi.mobile.test.test)
    ```
+
+   > **Why two APKs?** Android's instrumentation testing model requires a separate
+   > "test APK" that targets the main app. The system automatically appends `.test`
+   > to the base package name, so the two APKs have different package IDs and do
+   > not conflict. They cannot be merged into one.
 
 ### Install APKs onto your device
 
@@ -34,7 +39,9 @@ In a **separate terminal**, keep this running while tests execute:
 pnpm start
 ```
 
-Metro provides fast-refresh — TypeScript changes in `src/` take effect without reinstalling the APK.
+Metro serves the JS bundle to the device. `expo start` also runs `adb reverse tcp:8081 tcp:8081` so the Android device can reach `localhost:8081` on your Mac.
+
+> **Do not run `adb reverse --remove-all`** before or during tests — it removes Metro's port mapping and causes the Expo dev client to show the "Connect to development server" screen.
 
 ---
 
@@ -45,18 +52,19 @@ Metro provides fast-refresh — TypeScript changes in `src/` take effect without
 pnpm detox:test
 
 # Run only a specific tag (same @ tag as in the .feature file)
-pnpm detox:test --tags="@smoke"
-pnpm detox:test --tags="@settings"
-pnpm detox:test --tags="@mobilesync"
+# Note: the `--` separator is required to pass flags through pnpm to detox/cucumber
+pnpm detox:test -- --tags "@smoke"
+pnpm detox:test -- --tags "@settings"
+pnpm detox:test -- --tags "@mobilesync"
 
 # Run tests against an emulator instead of a physical device
 TS_NODE_PROJECT=tsconfig.e2e.json detox test --configuration android.emulator.dev-client
 
 # Run a single scenario by name
-pnpm detox:test --name "App launches and shows main menu"
+pnpm detox:test -- --name "App launches and shows main menu"
 ```
 
-> **Note:** Do not pass extra flags beyond `--tags` and `--name` unless you know what you're doing — other flags may require interactive confirmation.
+> **Note:** The `--` is required so pnpm forwards the flags to the underlying detox/cucumber process rather than consuming them itself.
 
 ---
 
