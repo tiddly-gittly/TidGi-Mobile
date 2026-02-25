@@ -11,10 +11,12 @@
  *   - @mobilesync: full newInstance relaunch so wiki state is clean.
  *
  * Expo dev-client workarounds (see https://github.com/expo/detox-tools/issues/2):
- *   - device.launchApp() returns while the dev-client connection screen is shown
- *     (the connection UI itself is a React Native screen, so the bridge is ready).
- *   - After launch, we dismiss the first-run onboarding overlay ("Continue"),
- *     then the dev menu if it auto-appears, then wait for the actual TidGi UI.
+ *   - device.launchApp() returns once the RN bridge is ready, but the Expo
+ *     dev-client may show overlays (first-run onboarding, dev menu) as separate
+ *     Android windows that steal focus (has-window-focus=false).
+ *   - Espresso/Detox CANNOT interact with views while another window has focus.
+ *   - device.pressBack() works regardless of window focus (it's a system key event).
+ *   - We use a single pressBack() to dismiss any overlay, then verify main menu.
  *   - The deep-link URL passed via `url:` tells the dev-client to auto-connect
  *     to Metro without user interaction.
  */
@@ -34,48 +36,58 @@ const METRO_URL = process.env.METRO_URL ?? 'http://localhost:8081';
 // The slug comes from app.json → expo.slug ("tidgi-mobile"), NOT expo.scheme ("tidgi").
 const EXPO_DEV_CLIENT_URL = `exp+tidgi-mobile://expo-development-client/?url=${encodeURIComponent(METRO_URL)}`;
 
+const MAIN_MENU_ID = 'main-menu-screen';
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Check if main menu is currently visible (non-throwing). */
+async function isMainMenuVisible(timeoutMs = 3_000): Promise<boolean> {
+  try {
+    await waitFor(element(by.id(MAIN_MENU_ID)))
+      .toBeVisible()
+      .withTimeout(timeoutMs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Dismiss Expo dev-client overlays that may appear after launch:
- *  1. First-run onboarding overlay ("This is the developer menu..." → "Continue")
- *  2. Dev menu that sometimes auto-opens (dismiss via device.shake())
- *  3. "Connect to development server" screen (tap "Connect" button)
+ * Dismiss Expo dev-client overlays that appear after launch.
+ *
+ * The Expo dev-client can show:
+ *  1. First-run onboarding bottom sheet ("This is the developer menu..." → "Continue")
+ *  2. Dev menu (auto-opens or via shake)
+ *
+ * Both are separate Android windows that steal focus (has-window-focus=false),
+ * blocking all Espresso/Detox view interactions ("app seems idle").
+ *
+ * Strategy:
+ *  - device.pressBack() is a system-level key event that works regardless of
+ *    window focus. It dismisses bottom sheets and dialogs.
+ *  - We press back once, wait briefly, then check if main menu became visible.
+ *  - If still not visible (e.g. app is still loading the bundle from Metro),
+ *    we just wait — the caller's withTimeout will handle the overall deadline.
+ *
+ * See https://github.com/expo/detox-tools/issues/2#issuecomment-2399181780
  */
 async function dismissExpoOverlays() {
-  // Overlay 1: first-run onboarding ("Continue" button).
-  // Only shows once after initial install. Quick timeout since it appears immediately.
+  // If the main menu is already visible, no overlay is blocking — skip.
+  if (await isMainMenuVisible(5_000)) return;
+
+  // An overlay is likely blocking. Press back to dismiss it.
+  // pressBack() works even when has-window-focus=false.
   try {
-    await waitFor(element(by.text('Continue')))
-      .toBeVisible()
-      .withTimeout(5_000);
-    await element(by.text('Continue')).tap();
+    await device.pressBack();
   } catch {
-    // Not shown — already dismissed in a previous run.
+    // Ignore — pressBack can occasionally fail if the app is in a transition.
   }
 
-  // Overlay 2: dev menu auto-open. Shake hides it (per kyaroru, expo/detox-tools#2).
-  try {
-    await waitFor(element(by.text('Copy link')))
-      .toBeVisible()
-      .withTimeout(3_000);
-    // Dev menu is open — shake to close it
-    await device.shake();
-  } catch {
-    // Dev menu not open — fine.
-  }
+  // Give the app a moment to process the dismissal and render.
+  await new Promise(resolve => setTimeout(resolve, 1_000));
 
-  // Overlay 3: "Connect to development server" screen.
-  // Normally the deep-link URL handles auto-connect, but as a fallback
-  // tap the Connect button if the screen is still visible.
-  try {
-    await waitFor(element(by.text('Connect')))
-      .toBeVisible()
-      .withTimeout(5_000);
-    await element(by.text('Connect')).tap();
-  } catch {
-    // Not shown — deep link auto-connected to Metro.
-  }
+  // If still not visible, the JS bundle may still be loading from Metro.
+  // That's OK — the caller will waitFor(main-menu-screen) with a longer timeout.
 }
 
 // ── Global setup / teardown ──────────────────────────────────────────────────
@@ -105,7 +117,7 @@ BeforeAll({ timeout: 3 * 60 * 1000 }, async () => {
   await dismissExpoOverlays();
 
   // Wait for the TidGi main screen to appear (JS bundle loaded via Metro).
-  await waitFor(element(by.id('import-wiki-button')))
+  await waitFor(element(by.id(MAIN_MENU_ID)))
     .toBeVisible()
     .withTimeout(2 * 60 * 1000);
 });
@@ -135,24 +147,41 @@ Before({ timeout: 60_000 }, async (message: ITestCaseHookParameter) => {
       },
     });
     await dismissExpoOverlays();
-    await waitFor(element(by.id('import-wiki-button')))
+    await waitFor(element(by.id(MAIN_MENU_ID)))
       .toBeVisible()
       .withTimeout(60_000);
   } else {
-    // Smoke / settings: just bring the app to foreground + navigate back to root.
-    // Use try/catch for pressBack — it can fail if app is already at root.
+    // Smoke / settings: reuse the running app instance.
+    // First check if we're already on main menu — if so, nothing to do.
+    if (await isMainMenuVisible()) return;
+
+    // Not on main menu — bring app to foreground and try navigating back.
     await device.launchApp({ newInstance: false });
-    for (let index = 0; index < 4; index++) {
+
+    // Check again after foregrounding.
+    if (await isMainMenuVisible()) return;
+
+    // Still not visible — try pressing back to navigate from sub-screens.
+    // Be careful: pressing back on the root activity exits the app.
+    // So we press once, check, repeat — never blindly press multiple times.
+    for (let index = 0; index < 3; index++) {
       try {
         await device.pressBack();
+        if (await isMainMenuVisible()) return;
       } catch {
-        break; // Already at root or no more screens to go back
+        break;
       }
     }
-    // After pressing back, wait briefly for the main menu to appear.
-    await waitFor(element(by.id('import-wiki-button')))
+
+    // Last resort: relaunch the app entirely.
+    await device.launchApp({
+      newInstance: true,
+      url: EXPO_DEV_CLIENT_URL,
+    });
+    await dismissExpoOverlays();
+    await waitFor(element(by.id(MAIN_MENU_ID)))
       .toBeVisible()
-      .withTimeout(10_000);
+      .withTimeout(30_000);
   }
 });
 
