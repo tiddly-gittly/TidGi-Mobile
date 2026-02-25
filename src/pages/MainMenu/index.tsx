@@ -36,7 +36,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
   useAutoOpenDefaultWiki(preventAutoOpen);
 
   return (
-    <Container>
+    <Container testID='main-menu-screen'>
       <WorkspaceList
         includeSubWikis={false}
         isFocused={isFocused}
