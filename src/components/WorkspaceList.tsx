@@ -64,6 +64,8 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
             {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
             <ItemRightIconButton
               {...props}
+              testID={`workspace-settings-icon-${item.id}`}
+              accessibilityLabel='workspace-settings-icon'
               name='reorder-three-sharp'
               color={theme.colors.onSecondaryContainer}
               onPress={() => {

@@ -10,6 +10,29 @@ import { by, element, expect as detoxExpect, waitFor } from 'detox';
 
 const UI_TIMEOUT = 10_000;
 
+// ── Config screen scroll helper ───────────────────────────────────────────────
+
+/**
+ * Scroll the config SectionList until a section header / element with the
+ * given text is visible. Scrolls in steps of 300px, up to 8 attempts.
+ */
+async function scrollConfigUntilVisible(text: string) {
+  for (let i = 0; i < 8; i++) {
+    try {
+      await waitFor(element(by.text(text)))
+        .toBeVisible()
+        .withTimeout(800);
+      return;
+    } catch {
+      await element(by.id('config-screen')).scroll(300, 'down');
+    }
+  }
+  // Final assertion — will throw a meaningful error if still not visible
+  await waitFor(element(by.text(text)))
+    .toBeVisible()
+    .withTimeout(UI_TIMEOUT);
+}
+
 // ── State for toggle-change assertions ───────────────────────────────────────
 
 let translucentSwitchWasChecked: boolean | null = null;
@@ -25,6 +48,12 @@ async function isSwitchChecked(testID: string): Promise<boolean> {
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
+
+Then('I should see the theme segmented buttons', async () => {
+  await waitFor(element(by.id('theme-segmented-buttons')))
+    .toBeVisible()
+    .withTimeout(UI_TIMEOUT);
+});
 
 When(/^I tap the "([^"]+)" theme button$/, async (label: string) => {
   await waitFor(element(by.text(label)))
@@ -46,6 +75,18 @@ Then(/^the selected theme should be "([^"]+)"$/, async (label: string) => {
 });
 
 // ── Status bar toggles ───────────────────────────────────────────────────────
+
+Then('I should see the translucent status bar toggle', async () => {
+  await waitFor(element(by.id('translucent-status-bar-switch')))
+    .toBeVisible()
+    .withTimeout(UI_TIMEOUT);
+});
+
+Then('I should see the hide status bar toggle', async () => {
+  await waitFor(element(by.id('hide-status-bar-switch')))
+    .toBeVisible()
+    .withTimeout(UI_TIMEOUT);
+});
 
 When('I toggle the translucent status bar switch', async () => {
   translucentSwitchWasChecked = await isSwitchChecked('translucent-status-bar-switch');
@@ -87,6 +128,23 @@ Then('the hide status bar switch state should be restored', async () => {
 
 // ── TiddlyWiki user name ─────────────────────────────────────────────────────
 
+When(/^I scroll down to "([^"]+)"$/, async (sectionTitle: string) => {
+  await scrollConfigUntilVisible(sectionTitle);
+});
+
+Then('I should see the username input field', async () => {
+  await waitFor(element(by.id('username-input')))
+    .toBeVisible()
+    .withTimeout(UI_TIMEOUT);
+});
+
+Then('I should see the language section header', async () => {
+  // Section header text comes from t('Preference.Languages') → '语言/Lang' in zh_CN
+  await waitFor(element(by.text('语言/Lang')))
+    .toBeVisible()
+    .withTimeout(UI_TIMEOUT);
+});
+
 When(/^I clear and type "([^"]*)" into the username field$/, async (text: string) => {
   const input = element(by.id('username-input'));
   await input.clearText();
@@ -102,29 +160,20 @@ Then(/^the username field should show "([^"]*)"$/, async (expectedText: string) 
 // ── Workspace conditional guard ───────────────────────────────────────────────
 
 Given('at least one workspace exists', async () => {
-  // Check that at least one workspace-item exists in the list
-  await waitFor(element(by.id(new RegExp('^workspace-item-'))))
+  // The help workspace ('workspace-item-help') is always present after install.
+  // Use it to confirm the workspace list has rendered.
+  await waitFor(element(by.id('workspace-item-help')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
 });
 
-// ── WorkspaceDetail navigation ───────────────────────────────────────────────
+// ── WorkspaceDetail navigation ───────────────────────────────────────────────────
 
 When('I tap the settings icon on the first workspace', async () => {
-  // The right-side icon button in WorkspaceListItemBase opens WorkspaceDetail.
-  // On Android, pressing the right icon (reorder / settings) navigates there.
-  // We use a long-press on the workspace card which also opens detail in the
-  // current navigation setup. Actually the cog button does. Let's use the
-  // correct approach: short-tap the reorder/icon button.
-  // Since we can't target the inner IconButton by testID directly here, we
-  // navigate by tapping the right-hand icon via label text fallback.
-  // The button calls onPressSettings which navigates to WorkspaceDetail.
-  // In MainMenu: onPressSettings => navigation.navigate('WorkspaceDetail', {id})
-  // The icon is Ionicons "reorder-three-sharp" — no text, so we tap by icon type.
-  // Use the workspaceList card's right subtree. Since we added testID to the
-  // Card itself, we can get its subtree, but inner icons are trickier.
-  // Pragmatic approach: swipe the first workspace card to find the icon button.
-  await element(by.id(new RegExp('^workspace-item-'))).atIndex(0).longPress();
+  // Each icon has testID `workspace-settings-icon-${id}` AND
+  // accessibilityLabel 'workspace-settings-icon'.
+  // by.label() matches accessibilityLabel, so atIndex(0) gets the first one.
+  await element(by.label('workspace-settings-icon')).atIndex(0).tap();
 });
 
 Then('I should see the workspace detail screen', async () => {
@@ -153,15 +202,15 @@ When('I tap the workspace general settings button', async () => {
 });
 
 Then('I should see the workspace sync page', async () => {
-  // WorkspaceSyncPage title is "Workspace Sync"
-  await waitFor(element(by.text('Workspace Sync')))
+  // WorkspaceSyncPage title in zh_CN: 工作区同步
+  await waitFor(element(by.text('工作区同步')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
 });
 
 Then('I should see the workspace settings page', async () => {
-  // WorkspaceSettingsPage title is "Workspace Settings" (from WorkspaceSettings.Title)
-  await waitFor(element(by.text('Workspace Settings')))
+  // WorkspaceSettingsPage title in zh_CN: 通用设置 (Preference.WorkspaceSettings.GeneralSettings)
+  await waitFor(element(by.text('通用设置')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
 });

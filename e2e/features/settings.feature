@@ -10,22 +10,23 @@ Feature: Settings - verify preference screens read and write correctly
     Then I should see the settings screen
 
   # ── Theme ────────────────────────────────────────────────────────────────────
+  # Theme button labels in zh_CN: 系统默认 / 亮色主题 / 黑暗主题
 
   @settings-theme
   Scenario: Switch theme to Dark and back to System Default
     Then I should see the theme segmented buttons
-    When I tap the "Dark Theme" theme button
-    Then the selected theme should be "Dark Theme"
-    When I tap the "System Default" theme button
-    Then the selected theme should be "System Default"
+    When I tap the "黑暗主题" theme button
+    Then the selected theme should be "黑暗主题"
+    When I tap the "系统默认" theme button
+    Then the selected theme should be "系统默认"
 
   @settings-theme
   Scenario: Switch theme to Light Theme
     Then I should see the theme segmented buttons
-    When I tap the "Light Theme" theme button
-    Then the selected theme should be "Light Theme"
-    When I tap the "System Default" theme button
-    Then the selected theme should be "System Default"
+    When I tap the "亮色主题" theme button
+    Then the selected theme should be "亮色主题"
+    When I tap the "系统默认" theme button
+    Then the selected theme should be "系统默认"
 
   # ── Status bar toggles ───────────────────────────────────────────────────────
 
@@ -46,20 +47,22 @@ Feature: Settings - verify preference screens read and write correctly
     Then the hide status bar switch state should be restored
 
   # ── TiddlyWiki user name ─────────────────────────────────────────────────────
+  # Section title in zh_CN: 太微（TiddlyWiki）
 
   @settings-tiddlywiki
   Scenario: Set a custom user name in TiddlyWiki settings
-    When I scroll down to "TiddlyWiki"
+    When I scroll down to "太微（TiddlyWiki）"
     Then I should see the username input field
     When I clear and type "TestUser" into the username field
     Then the username field should show "TestUser"
     When I clear and type "" into the username field
 
   # ── Language ─────────────────────────────────────────────────────────────────
+  # Section title in zh_CN: 语言/Lang
 
   @settings-language
   Scenario: Settings screen shows language section
-    When I scroll down to "Lang/语言"
+    When I scroll down to "语言/Lang"
     Then I should see the language section header
 
   # ── Workspace settings (requires at least one workspace) ─────────────────────
