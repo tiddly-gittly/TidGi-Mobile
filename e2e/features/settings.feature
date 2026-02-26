@@ -64,35 +64,3 @@ Feature: Settings - verify preference screens read and write correctly
   Scenario: Settings screen shows language section
     When I scroll down to "语言/Lang"
     Then I should see the language section header
-
-  # ── Workspace settings (requires at least one workspace) ─────────────────────
-
-  @settings-workspace
-  Scenario: Open workspace detail from main menu
-    When I press back
-    Then I should see the main menu screen
-    Given at least one workspace exists
-    When I tap the settings icon on the first workspace
-    Then I should see the workspace detail screen
-    And I should see the workspace sync button
-    And I should see the workspace general settings button
-
-  @settings-workspace
-  Scenario: Open workspace general settings page
-    When I press back
-    Then I should see the main menu screen
-    Given at least one workspace exists
-    When I tap the settings icon on the first workspace
-    Then I should see the workspace detail screen
-    When I tap the workspace general settings button
-    Then I should see the workspace settings page
-
-  @settings-workspace
-  Scenario: Navigate to workspace sync page from workspace detail
-    When I press back
-    Then I should see the main menu screen
-    Given at least one workspace exists
-    When I tap the settings icon on the first workspace
-    Then I should see the workspace detail screen
-    When I tap the workspace sync button
-    Then I should see the workspace sync page

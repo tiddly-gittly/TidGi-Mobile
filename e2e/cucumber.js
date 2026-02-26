@@ -3,11 +3,12 @@
  * Run via: pnpm detox test --configuration android.usb.debug
  *
  * Tag filtering examples:
- *   CUCUMBER_TAGS='@smoke'            – only smoke tests
- *   CUCUMBER_TAGS='@settings'         – only settings tests
- *   CUCUMBER_TAGS='@mobilesync'       – only desktop-sync tests
+ *   CUCUMBER_TAGS='@smoke'              – only smoke tests
+ *   CUCUMBER_TAGS='@settings'           – only settings tests
+ *   CUCUMBER_TAGS='@workspace'          – only workspace navigation tests
+ *   CUCUMBER_TAGS='@mobilesync'         – only desktop-sync tests (requires desktop)
  *   CUCUMBER_TAGS='@smoke or @settings' – smoke + settings
- *   (default) all three suites
+ *   (default) smoke + settings + workspace (no desktop required)
  */
 module.exports = {
   default: {
@@ -15,7 +16,7 @@ module.exports = {
     paths: ['e2e/features/**/*.feature'],
     format: ['progress-bar', 'html:e2e/reports/cucumber-report.html'],
     formatOptions: { snippetInterface: 'async-await' },
-    tags: process.env.CUCUMBER_TAGS ?? '@smoke or @settings or @mobilesync',
+    tags: process.env.CUCUMBER_TAGS ?? '@smoke or @settings or @workspace',
     loader: 'ts-node/esm',
     requireModule: ['ts-node/register'],
     // Allow Detox waitFor() calls with up to 30 s to complete inside a step.

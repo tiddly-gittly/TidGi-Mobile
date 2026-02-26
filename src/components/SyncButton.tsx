@@ -20,6 +20,8 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
   return (
     <IconButton
       {...props}
+      testID={`sync-icon-button-${workspaceID}`}
+      accessibilityLabel='sync-icon-button'
       icon={iconName}
       iconColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80) : undefined}
       onPress={async () => {

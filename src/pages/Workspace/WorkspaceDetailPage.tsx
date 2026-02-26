@@ -52,8 +52,8 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   }
 
   return (
-    <PageContainer>
-      <Text variant='bodySmall'>{t('Sync.UnsyncedCommitCount', { count: pendingCommitCount })}</Text>
+    <PageContainer testID='workspace-detail-screen'>
+      <Text variant='bodySmall' testID='workspace-unsynced-count'>{t('Sync.UnsyncedCommitCount', { count: pendingCommitCount })}</Text>
 
       <ActionButton
         testID='workspace-sync-button'
@@ -66,6 +66,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
         {t('Sync.WorkspaceSync')}
       </ActionButton>
       <ActionButton
+        testID='workspace-changes-button'
         mode='outlined'
         icon='history'
         onPress={() => {

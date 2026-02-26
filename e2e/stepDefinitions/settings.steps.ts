@@ -5,7 +5,7 @@
  * workspace detail navigation, and workspace settings pages.
  */
 
-import { Given, Then, When } from '@cucumber/cucumber';
+import { Then, When } from '@cucumber/cucumber';
 import { by, element, expect as detoxExpect, waitFor } from 'detox';
 
 const UI_TIMEOUT = 10_000;
@@ -17,7 +17,7 @@ const UI_TIMEOUT = 10_000;
  * given text is visible. Scrolls in steps of 300px, up to 8 attempts.
  */
 async function scrollConfigUntilVisible(text: string) {
-  for (let i = 0; i < 8; i++) {
+  for (let index = 0; index < 8; index++) {
     try {
       await waitFor(element(by.text(text)))
         .toBeVisible()
@@ -157,60 +157,3 @@ Then(/^the username field should show "([^"]*)"$/, async (expectedText: string) 
   await detoxExpect(element(by.id('username-input'))).toHaveText(expectedText);
 });
 
-// ── Workspace conditional guard ───────────────────────────────────────────────
-
-Given('at least one workspace exists', async () => {
-  // The help workspace ('workspace-item-help') is always present after install.
-  // Use it to confirm the workspace list has rendered.
-  await waitFor(element(by.id('workspace-item-help')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-});
-
-// ── WorkspaceDetail navigation ───────────────────────────────────────────────────
-
-When('I tap the settings icon on the first workspace', async () => {
-  // Each icon has testID `workspace-settings-icon-${id}` AND
-  // accessibilityLabel 'workspace-settings-icon'.
-  // by.label() matches accessibilityLabel, so atIndex(0) gets the first one.
-  await element(by.label('workspace-settings-icon')).atIndex(0).tap();
-});
-
-Then('I should see the workspace detail screen', async () => {
-  await waitFor(element(by.id('workspace-sync-button')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-});
-
-Then('I should see the workspace sync button', async () => {
-  await detoxExpect(element(by.id('workspace-sync-button'))).toBeVisible();
-});
-
-Then('I should see the workspace general settings button', async () => {
-  await waitFor(element(by.id('workspace-general-settings-button')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-  await detoxExpect(element(by.id('workspace-general-settings-button'))).toBeVisible();
-});
-
-When('I tap the workspace sync button', async () => {
-  await element(by.id('workspace-sync-button')).tap();
-});
-
-When('I tap the workspace general settings button', async () => {
-  await element(by.id('workspace-general-settings-button')).tap();
-});
-
-Then('I should see the workspace sync page', async () => {
-  // WorkspaceSyncPage title in zh_CN: 工作区同步
-  await waitFor(element(by.text('工作区同步')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-});
-
-Then('I should see the workspace settings page', async () => {
-  // WorkspaceSettingsPage title in zh_CN: 通用设置 (Preference.WorkspaceSettings.GeneralSettings)
-  await waitFor(element(by.text('通用设置')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-});

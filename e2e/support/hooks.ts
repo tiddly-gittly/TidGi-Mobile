@@ -63,45 +63,65 @@ async function isMainMenuVisible(timeoutMs = 3_000): Promise<boolean> {
  * blocking all Espresso/Detox view interactions ("app seems idle").
  *
  * Strategy:
- *  - device.pressBack() is a system-level key event that works regardless of
- *    window focus. It dismisses bottom sheets and dialogs.
- *  - We press back once, wait briefly, then check if main menu became visible.
- *  - If still not visible (e.g. app is still loading the bundle from Metro),
- *    we just wait — the caller's withTimeout will handle the overall deadline.
+ *  - Wait up to 40 s for the main menu to appear (covers warm bundle loads).
+ *    If it appears, return immediately — no overlay is blocking.
+ *  - Only call pressBack() AFTER this 40 s window so that the RN bridge has
+ *    had time to initialize. Calling pressBack() during early RN init causes a
+ *    NullPointerException in ReactActivityDelegate.onUserLeaveHint().
+ *  - Press back ONCE to dismiss any overlay that appeared after bundle load.
+ *  - The caller's waitFor(main-menu-screen, 4 min) handles the remaining wait
+ *    for cold first-run bundle downloads (which can exceed 1 minute).
  *
  * See https://github.com/expo/detox-tools/issues/2#issuecomment-2399181780
  */
 async function dismissExpoOverlays() {
-  // If the main menu is already visible, no overlay is blocking — skip.
-  if (await isMainMenuVisible(5_000)) return;
+  // Fast path: if main menu is already visible (warm run, cached bundle), done.
+  if (await isMainMenuVisible(40_000)) return;
 
-  // An overlay is likely blocking. Press back to dismiss it.
-  // pressBack() works even when has-window-focus=false.
+  // Bundle is still loading or an overlay is blocking.
+  // By now (40 s elapsed) the RN bridge should be initialized, so pressBack()
+  // is safe — it will dismiss any overlay without crashing.
   try {
     await device.pressBack();
   } catch {
-    // Ignore — pressBack can occasionally fail if the app is in a transition.
+    // Ignore — pressBack can fail if the app is mid-transition.
   }
 
-  // Give the app a moment to process the dismissal and render.
-  await new Promise(resolve => setTimeout(resolve, 1_000));
+  // Brief pause for the dismissal animation.
+  await new Promise(resolve => setTimeout(resolve, 2_000));
 
-  // If still not visible, the JS bundle may still be loading from Metro.
-  // That's OK — the caller will waitFor(main-menu-screen) with a longer timeout.
+  // Caller's waitFor(main-menu-screen, 4 min) handles any remaining wait
+  // (e.g. first-run bundle download from Metro taking > 1 minute).
 }
 
 // ── Global setup / teardown ──────────────────────────────────────────────────
 
-BeforeAll({ timeout: 3 * 60 * 1000 }, async () => {
+BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // Clear stale adb reverse entries from previous runs, then re-add Metro (8081).
-  // Detox picks a random port during init() and does `adb reverse tcp:PORT`.
-  // If any old mapping for that port remains → "Address already in use" → init fails.
   try {
     execSync('adb reverse --remove-all', { stdio: 'ignore' });
     execSync('adb reverse tcp:8081 tcp:8081', { stdio: 'ignore' });
   } catch {
     // Non-fatal — detox.init() will surface the real error if device is unreachable.
   }
+
+  // ── Expo dev-client pre-launch ────────────────────────────────────────────
+  // Wake the device and start the app before detox.init() to give Metro a
+  // head-start serving the bundle. The NPE in ReactActivityDelegate.
+  // onUserLeaveHint() is fixed in MainActivity.kt (try/catch override).
+  const appPackage = 'ren.onetwo.tidgi.mobile.test';
+  try {
+    execSync('adb shell input keyevent 224', { stdio: 'ignore' }); // KEYCODE_WAKEUP
+    execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' }); // no-op with PIN lock
+    execSync(`adb shell am force-stop ${appPackage}`, { stdio: 'ignore' });
+    await new Promise<void>(resolve => setTimeout(resolve, 1_500));
+    execSync(
+      `adb shell am start -n ${appPackage}/.MainActivity --es url '${EXPO_DEV_CLIENT_URL}'`,
+      { stdio: 'ignore' },
+    );
+    // Head-start: let Metro begin serving the bundle before detox.init() connects.
+    await new Promise<void>(resolve => setTimeout(resolve, 5_000));
+  } catch { /* non-fatal */ }
 
   await detox.init();
 
@@ -117,9 +137,10 @@ BeforeAll({ timeout: 3 * 60 * 1000 }, async () => {
   await dismissExpoOverlays();
 
   // Wait for the TidGi main screen to appear (JS bundle loaded via Metro).
+  // Allow up to 4 minutes: first run after code changes may require a full re-bundle.
   await waitFor(element(by.id(MAIN_MENU_ID)))
     .toBeVisible()
-    .withTimeout(2 * 60 * 1000);
+    .withTimeout(4 * 60 * 1000);
 });
 
 AfterAll(async () => {
