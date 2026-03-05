@@ -20,7 +20,7 @@ export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootSt
   }
 
   return (
-    <PageContainer>
+    <PageContainer testID='workspace-sync-page'>
       <WorkspaceSyncModalContent
         workspace={wiki}
         showCloseButton={false}

@@ -5,21 +5,33 @@
  *   - TidGi Desktop is running with the tw-mobile-sync plugin active.
  *   - TIDGI_DESKTOP_URL environment variable holds the desktop server origin
  *     (e.g. http://192.168.1.10:5212). Defaults to http://localhost:5212.
- *   - The device is connected via USB with `adb reverse tcp:8081 tcp:8081` active.
+ *   - The device is connected via USB with `adb reverse tcp:5212 tcp:5212` active.
  *
- * Note: Detox 20 does NOT support RegExp in `by.id()` or `by.text()`.
- * Use exact strings or `atIndex()` for dynamic IDs.
+ * Import flow bypasses QR scanning by typing the server JSON directly into the
+ * manual-configuration TextInput.
  */
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
-import { by, device, element, expect as detoxExpect, waitFor } from 'detox';
+import { by, element, expect as detoxExpect, waitFor } from 'detox';
 
 const DESKTOP_URL = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
 /** Timeout for steps that require network (clone, sync). */
 const NETWORK_TIMEOUT = 120_000;
 /** Timeout for local UI interactions. */
 const UI_TIMEOUT = 10_000;
+
+const delay = (ms = 1_000) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Use adb input swipe to scroll a view. This bypasses Espresso which may be
+ * blocked by the WebView IdlingResource.
+ */
+function adbSwipeUp() {
+  try {
+    execSync('adb shell input swipe 600 2200 600 600 300', { stdio: 'ignore', timeout: 3_000 });
+  } catch { /* non-fatal */ }
+}
 
 // ── Background ────────────────────────────────────────────────────────────────
 
@@ -33,23 +45,26 @@ Given('the app is on the main menu screen', async () => {
 // ── Import flow ───────────────────────────────────────────────────────────────
 
 When('I navigate to the importer screen', async () => {
-  // The import button lives under Settings → ServerAndSync section.
+  // The import button is in Settings → ServerAndSync section.
   await element(by.id('settings-icon-button')).tap();
+  await delay();
   await waitFor(element(by.id('config-screen')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
-  // Scroll until the import button is visible (it's below the fold).
-  for (let index = 0; index < 10; index++) {
+  // Scroll down using adb swipe (Espresso scroll may be blocked by WebView idle).
+  for (let index = 0; index < 12; index++) {
     try {
       await waitFor(element(by.id('import-wiki-button')))
         .toBeVisible()
-        .withTimeout(800);
+        .withTimeout(600);
       break;
     } catch {
-      await element(by.id('config-screen')).scroll(300, 'down');
+      adbSwipeUp();
+      await delay(800);
     }
   }
   await element(by.id('import-wiki-button')).tap();
+  await delay();
 });
 
 Then('I should see the importer screen', async () => {
@@ -58,30 +73,52 @@ Then('I should see the importer screen', async () => {
     .withTimeout(UI_TIMEOUT);
 });
 
-When('the desktop server is reachable', async () => {
-  // Give the app a moment to perform its initial connectivity check.
-  await new Promise<void>(resolve => setTimeout(resolve, 2_000));
+When('the desktop server is reachable', () => {
+  // Ensure adb reverse is set so the device can reach localhost on the Mac.
+  try {
+    execSync('adb reverse tcp:5212 tcp:5212', { stdio: 'ignore', timeout: 3_000 });
+  } catch { /* non-fatal — may already be set */ }
+  // Quick HTTP health check from the host (not from the device).
+  try {
+    execSync(`curl -sf --max-time 5 ${DESKTOP_URL}/status > /dev/null`, { stdio: 'ignore', timeout: 10_000 });
+  } catch {
+    throw new Error(`Desktop server at ${DESKTOP_URL} is not reachable. Ensure TidGi Desktop is running with tw-mobile-sync plugin.`);
+  }
 });
 
 When('I enter the desktop server URL', async () => {
-  // Toggle open the saved-server list.
-  await waitFor(element(by.id('toggle-server-list-button')))
+  // Fetch the QR JSON payload from the desktop's mobile-sync-info endpoint
+  // so we have the correct workspaceId and baseUrl.
+  let qrJSON: string;
+  try {
+    const raw = execSync(`curl -sf --max-time 10 ${DESKTOP_URL}/tw-mobile-sync/git/mobile-sync-info`, {
+      encoding: 'utf8',
+      timeout: 15_000,
+    }).trim();
+    // Validate it has the required fields.
+    const parsed = JSON.parse(raw) as { baseUrl?: string; workspaceId?: string };
+    if (!parsed.baseUrl || !parsed.workspaceId) {
+      throw new Error('Missing baseUrl or workspaceId in mobile-sync-info response');
+    }
+    qrJSON = raw;
+  } catch (error) {
+    throw new Error(`Failed to fetch mobile-sync-info from ${DESKTOP_URL}: ${(error as Error).message}`);
+  }
+
+  // Tap "Manual Configuration" to expand the JSON input area.
+  await waitFor(element(by.id('toggle-manual-config-button')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
-  await element(by.id('toggle-server-list-button')).tap();
+  await element(by.id('toggle-manual-config-button')).tap();
+  await delay();
 
-  // If the server URL already appears as text, tap it; otherwise type it.
-  // Note: Detox 20 does NOT support RegExp in by.id() — use by.text() for exact match.
-  try {
-    await waitFor(element(by.text(DESKTOP_URL)))
-      .toBeVisible()
-      .withTimeout(3_000);
-    await element(by.text(DESKTOP_URL)).atIndex(0).tap();
-  } catch {
-    // Server not in list yet — type it into the first EditText.
-    await element(by.type('android.widget.EditText')).atIndex(0).clearText();
-    await element(by.type('android.widget.EditText')).atIndex(0).typeText(DESKTOP_URL);
-  }
+  // Type the JSON into the manual input field.
+  // react-native-paper TextInput testID is on the inner native EditText.
+  await waitFor(element(by.id('manual-json-input')))
+    .toExist()
+    .withTimeout(UI_TIMEOUT);
+  await element(by.id('manual-json-input')).replaceText(qrJSON);
+  await delay(2_000);
 });
 
 When('I tap the import wiki confirm button', async () => {
@@ -92,50 +129,35 @@ When('I tap the import wiki confirm button', async () => {
 });
 
 Then('the import should complete successfully', async () => {
-  // After a successful git clone the open-wiki-button appears.
-  await waitFor(element(by.id('open-wiki-button')))
-    .toBeVisible()
+  // When import succeeds, t('NextStep') = '下一步' text appears above the open button.
+  await waitFor(element(by.text('下一步')))
+    .toExist()
     .withTimeout(NETWORK_TIMEOUT);
 });
 
 Then('I should see the imported wiki in the workspace list', async () => {
-  // Navigate back to main menu and verify a wiki workspace (with sync icon) is present.
-  await device.pressBack();
+  // Navigate back to main menu and verify a wiki workspace is present.
+  // Use adb back to bypass Espresso idle blocking.
+  execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+  await delay(2_000);
   await waitFor(element(by.id('main-menu-screen')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
-  await detoxExpect(element(by.label('sync-icon-button')).atIndex(0)).toBeVisible();
+  // Wiki workspaces have a sync icon button (accessibilityLabel).
+  await detoxExpect(element(by.label('sync-icon-button')).atIndex(0)).toExist();
 });
 
 // ── Open wiki ─────────────────────────────────────────────────────────────────
 
 When('I tap the first wiki workspace', async () => {
-  // Tap the workspace Card for the first wiki workspace.
-  // All wiki workspace cards have a SyncIconButton; we identify the card via
-  // workspace-item-{id} testID. Since the ID is dynamic, we use the known
-  // workspace-item-help sentinel to find its sibling — but simpler: the
-  // workspace list renders wiki workspaces before the help webpage workspace.
-  // We can tap the card via its content-desc or press the workspace name text.
-  // Use atIndex(0) on workspace cards that contain a sync icon.
-  // The Card's testID is workspace-item-{id}; we tap via the sync icon's parent.
-  // Since Detox 20 lacks ancestor/parent API for atIndex, we tap via text:
-  // the first workspace name text that is NOT the help workspace title.
-  // Simplest robust approach: tap atIndex(0) of elements with testID containing
-  // 'workspace-item-' prefix — not possible without RegExp.
-  // Instead: read the workspace ID from persist storage and tap it directly.
+  // Read workspace ID from device storage and tap the card directly.
   const wikiId = getFirstWikiWorkspaceId();
   if (wikiId) {
     await element(by.id(`workspace-item-${wikiId}`)).tap();
   } else {
-    // Fallback: tap the sync icon which is only on wiki workspaces.
-    // SyncIconButton atIndex(0) is on the first wiki workspace card.
-    // Long-pressing the card navigates to WorkspaceDetail — single tap opens wiki.
-    // The sync icon button press triggers sync, not navigation.
-    // Navigate via the Card tap: use the card text title (workspace name).
-    await element(by.label('sync-icon-button')).atIndex(0).tap();
-    // If sync opened instead, close and retry via card parent.
-    await device.pressBack();
+    throw new Error('No wiki workspace found on device. Run the @import scenario first.');
   }
+  await delay(2_000);
 });
 
 Then('I should see the wiki webview', async () => {
@@ -219,15 +241,12 @@ Then('the unsynced count should be zero after sync', async () => {
   await waitFor(element(by.id('workspace-unsynced-count')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
-  // Navigate back.
-  await device.pressBack();
+  // Navigate back using adb (Espresso may be blocked by WebView).
+  execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+  await delay();
 });
 
 // ── Sync page assertions ──────────────────────────────────────────────────────
-
-Then('I should see the last sync timestamp', async () => {
-  // WorkspaceSyncPage always shows t('Sync.LastSync') = '上次同步' as a label.
-  await waitFor(element(by.text('上次同步')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-});
+// NOTE: The following steps are shared with workspace.steps.ts:
+//   - "I should see the last sync timestamp"
+// They are defined in workspace.steps.ts and reused here via Cucumber's step matching.

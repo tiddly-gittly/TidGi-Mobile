@@ -21,10 +21,15 @@
  *     to Metro without user interaction.
  */
 
-import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, Status } from '@cucumber/cucumber';
+import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, setDefaultTimeout, Status } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
+import { writeFileSync } from 'fs';
+
+// Cucumber default step timeout — must be long enough for Detox waitFor() calls.
+// The config file's `timeout` property may not be honored in all Cucumber versions.
+setDefaultTimeout(30_000);
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,7 +39,8 @@ const METRO_URL = process.env.METRO_URL ?? 'http://localhost:8081';
 // Expo dev-client deep-link that auto-connects to Metro without manual interaction.
 // Format: exp+<slug>://expo-development-client/?url=<encoded-metro-url>
 // The slug comes from app.json → expo.slug ("tidgi-mobile"), NOT expo.scheme ("tidgi").
-const EXPO_DEV_CLIENT_URL = `exp+tidgi-mobile://expo-development-client/?url=${encodeURIComponent(METRO_URL)}`;
+// `disableOnboarding=1` prevents the first-run onboarding overlay from appearing.
+const EXPO_DEV_CLIENT_URL = `exp+tidgi-mobile://expo-development-client/?url=${encodeURIComponent(METRO_URL)}&disableOnboarding=1`;
 
 const MAIN_MENU_ID = 'main-menu-screen';
 
@@ -74,21 +80,24 @@ async function isMainMenuVisible(timeoutMs = 3_000): Promise<boolean> {
  *
  * See https://github.com/expo/detox-tools/issues/2#issuecomment-2399181780
  */
-async function dismissExpoOverlays() {
+async function dismissExpoOverlays(initialWaitMs = 40_000) {
   // Fast path: if main menu is already visible (warm run, cached bundle), done.
-  if (await isMainMenuVisible(40_000)) return;
+  if (await isMainMenuVisible(initialWaitMs)) return;
 
   // Bundle is still loading or an overlay is blocking.
-  // By now (40 s elapsed) the RN bridge should be initialized, so pressBack()
-  // is safe — it will dismiss any overlay without crashing.
-  try {
-    await device.pressBack();
-  } catch {
-    // Ignore — pressBack can fail if the app is mid-transition.
+  // pressBack() dismisses the overlay without crashing (NPE fixed in APK).
+  // Try up to 3 times — the onboarding screen may need one press, and the
+  // dev menu that auto-opens after it may need another.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await device.pressBack();
+    } catch {
+      // Ignore — pressBack can fail if the app is mid-transition.
+    }
+    // Brief pause for the dismissal animation, then check.
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+    if (await isMainMenuVisible(5_000)) return;
   }
-
-  // Brief pause for the dismissal animation.
-  await new Promise(resolve => setTimeout(resolve, 2_000));
 
   // Caller's waitFor(main-menu-screen, 4 min) handles any remaining wait
   // (e.g. first-run bundle download from Metro taking > 1 minute).
@@ -105,26 +114,54 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
     // Non-fatal — detox.init() will surface the real error if device is unreachable.
   }
 
-  // ── Expo dev-client pre-launch ────────────────────────────────────────────
-  // Wake the device and start the app before detox.init() to give Metro a
-  // head-start serving the bundle. The NPE in ReactActivityDelegate.
-  // onUserLeaveHint() is fixed in MainActivity.kt (try/catch override).
-  const appPackage = 'ren.onetwo.tidgi.mobile.test';
+  // Wake the screen so the app can render in the foreground.
   try {
     execSync('adb shell input keyevent 224', { stdio: 'ignore' }); // KEYCODE_WAKEUP
-    execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' }); // no-op with PIN lock
-    execSync(`adb shell am force-stop ${appPackage}`, { stdio: 'ignore' });
-    await new Promise<void>(resolve => setTimeout(resolve, 1_500));
-    execSync(
-      `adb shell am start -n ${appPackage}/.MainActivity --es url '${EXPO_DEV_CLIENT_URL}'`,
-      { stdio: 'ignore' },
-    );
-    // Head-start: let Metro begin serving the bundle before detox.init() connects.
-    await new Promise<void>(resolve => setTimeout(resolve, 5_000));
+    execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' }); // no-op with PIN
   } catch { /* non-fatal */ }
+
+  // ── Disable Expo dev-menu auto-show ────────────────────────────────────────
+  // The Expo dev-client shows overlays on first launch (onboarding) and optionally
+  // on every launch ("show at launch" preference). These overlays steal Android
+  // window focus, blocking ALL Espresso/Detox interactions.
+  // Fix: write SharedPreferences BEFORE launching the app to mark onboarding as
+  // finished and disable "show at launch". Also disable gesture activation so
+  // shaking or long-press won't accidentally open the dev menu mid-test.
+  try {
+    const appPackage = 'ren.onetwo.tidgi.mobile.test';
+    const prefsFile = 'expo.modules.devmenu.sharedpreferences.xml';
+    const localPath = '/tmp/expo_devmenu_prefs.xml';
+    const devicePath = '/data/local/tmp/expo_devmenu_prefs.xml';
+    // Write the XML to a local temp file, push to device, then copy into the
+    // app's private data directory via `run-as`.
+    writeFileSync(
+      localPath,
+      [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<map>',
+        '  <boolean name="isOnboardingFinished" value="true" />',
+        '  <boolean name="showsAtLaunch" value="false" />',
+        '  <boolean name="motionGestureEnabled" value="false" />',
+        '  <boolean name="touchGestureEnabled" value="false" />',
+        '  <boolean name="showFab" value="false" />',
+        '</map>',
+      ].join('\n'),
+    );
+    execSync(`adb push ${localPath} ${devicePath}`, { stdio: 'ignore', timeout: 5_000 });
+    execSync(
+      `adb shell "run-as ${appPackage} sh -c 'mkdir -p shared_prefs && cp ${devicePath} shared_prefs/${prefsFile}'"`,
+      { stdio: 'ignore', timeout: 5_000 },
+    );
+  } catch { /* non-fatal — the disableOnboarding=1 URL param is a fallback */ }
 
   await detox.init();
 
+  // The deep-link URL (EXPO_DEV_CLIENT_URL) tells Expo dev-client to auto-
+  // connect to Metro without showing the server picker. On second+ launches,
+  // the URL is also cached in AsyncStorage.
+  // detoxEnableSynchronization:0 is set globally in .detoxrc.js → app.launchArgs,
+  // so the native side never registers IdlingResources. We also call
+  // disableSynchronization() as a belt-and-suspenders safeguard.
   await device.launchApp({
     newInstance: true,
     url: EXPO_DEV_CLIENT_URL,
@@ -132,6 +169,7 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
       TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
     },
   });
+  await device.disableSynchronization();
 
   // Handle Expo dev-client overlays that may block the UI.
   await dismissExpoOverlays();
@@ -149,7 +187,7 @@ AfterAll(async () => {
 
 // ── Per-scenario hooks ───────────────────────────────────────────────────────
 
-Before({ timeout: 60_000 }, async (message: ITestCaseHookParameter) => {
+Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
   const { pickle } = message;
   await detox.onTestStart({
     title: pickle.uri,
@@ -167,39 +205,71 @@ Before({ timeout: 60_000 }, async (message: ITestCaseHookParameter) => {
         TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
       },
     });
-    await dismissExpoOverlays();
+    await device.disableSynchronization();
+    await dismissExpoOverlays(15_000);
     await waitFor(element(by.id(MAIN_MENU_ID)))
       .toBeVisible()
       .withTimeout(60_000);
   } else {
-    // Smoke / settings: reuse the running app instance.
-    // First check if we're already on main menu — if so, nothing to do.
-    if (await isMainMenuVisible()) return;
+    // Smoke / settings / workspace: reuse the running app instance.
+    //
+    // IMPORTANT: After TiddlyWiki boots inside a WebView, its continuous JS
+    // execution keeps the React Native main thread message queue non-empty.
+    // This blocks Espresso's IdlingResource mechanism, which in turn blocks
+    // ALL Detox commands (including device.disableSynchronization() itself).
+    //
+    // To break out of this deadlock we use raw adb commands (which bypass
+    // Espresso entirely) to navigate back to the main menu screen. Once
+    // the WebView is no longer in the view hierarchy (i.e., we're on the
+    // main menu), the main thread settles and Espresso becomes responsive.
+    //
+    // Strategy:
+    //  1. Press BACK via adb up to 5 times to pop navigation stack
+    //  2. After each press, briefly sleep then check via adb if the
+    //     main-menu-screen testID exists in the view hierarchy
+    //  3. Once we're on the main menu (or as fallback), call
+    //     device.disableSynchronization() which should succeed now
 
-    // Not on main menu — bring app to foreground and try navigating back.
-    await device.launchApp({ newInstance: false });
-
-    // Check again after foregrounding.
-    if (await isMainMenuVisible()) return;
-
-    // Still not visible — try pressing back to navigate from sub-screens.
-    // Be careful: pressing back on the root activity exits the app.
-    // So we press once, check, repeat — never blindly press multiple times.
-    for (let index = 0; index < 3; index++) {
+    // Helper: press back via adb (bypasses Espresso)
+    const pressBackViaAdb = () => {
       try {
-        await device.pressBack();
-        if (await isMainMenuVisible()) return;
-      } catch {
-        break;
+        execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
+      } catch { /* non-fatal */ }
+    };
+
+    // Try pressing back multiple times via adb to reach main menu
+    for (let index = 0; index < 5; index++) {
+      // Check if main menu is visible by looking for its testID via Detox
+      // (this may time out if Espresso is blocked, hence a short timeout)
+      if (await isMainMenuVisible(2_000)) {
+        await device.disableSynchronization();
+        return;
       }
+      pressBackViaAdb();
+      // Wait for navigation animation
+      await new Promise(resolve => setTimeout(resolve, 1_500));
     }
 
-    // Last resort: relaunch the app entirely.
+    // Final check — if we still can't see main menu, try
+    // disableSynchronization first (may succeed if WebView was unloaded
+    // by the back presses), then check.
+    try {
+      await device.disableSynchronization();
+    } catch { /* may still be blocked */ }
+
+    if (await isMainMenuVisible(5_000)) return;
+
+    // Last resort: full relaunch via adb (kills app, Detox reconnects)
+    try {
+      execSync('adb shell am force-stop ren.onetwo.tidgi.mobile.test', { stdio: 'ignore' });
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+    } catch { /* non-fatal */ }
     await device.launchApp({
       newInstance: true,
       url: EXPO_DEV_CLIENT_URL,
     });
-    await dismissExpoOverlays();
+    await device.disableSynchronization();
+    await dismissExpoOverlays(15_000);
     await waitFor(element(by.id(MAIN_MENU_ID)))
       .toBeVisible()
       .withTimeout(30_000);

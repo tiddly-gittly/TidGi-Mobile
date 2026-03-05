@@ -36,6 +36,8 @@ Given('at least one wiki workspace exists', async () => {
 When('I tap the settings icon on the first workspace', async () => {
   // accessibilityLabel='workspace-settings-icon' is set on every workspace settings icon.
   await element(by.label('workspace-settings-icon')).atIndex(0).tap();
+  // Allow navigation animation to complete (sync is disabled for WebView apps).
+  await new Promise(resolve => setTimeout(resolve, 1_000));
 });
 
 Then('I should see the workspace detail screen', async () => {
@@ -69,8 +71,7 @@ When('I tap the workspace changes button', async () => {
 // ── Sub-page assertions ───────────────────────────────────────────────────────
 
 Then('I should see the workspace sync page', async () => {
-  // WorkspaceSyncPage sets its title to t('Sync.WorkspaceSync') = '工作区同步'
-  await waitFor(element(by.text('工作区同步')))
+  await waitFor(element(by.id('workspace-sync-page')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
 });
@@ -83,15 +84,13 @@ Then('I should see the last sync timestamp', async () => {
 });
 
 Then('I should see the workspace settings page', async () => {
-  // WorkspaceSettingsPage title: t('WorkspaceSettings.Title') = '工作区设置'
-  await waitFor(element(by.text('工作区设置')))
+  await waitFor(element(by.id('workspace-settings-page')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
 });
 
 Then('I should see the commit history page', async () => {
-  // WorkspaceChangesPage title: t('GitHistory.Commits') = '提交历史'
-  await waitFor(element(by.text('提交历史')))
+  await waitFor(element(by.id('workspace-changes-page')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
 });

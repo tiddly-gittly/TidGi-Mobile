@@ -27,6 +27,17 @@
  *   • App src/ TS changes          → Metro fast-refresh → effective on next run
  *   • Native changes (build.gradle / Expo plugins) → CI rebuild required
  *
+ * Troubleshooting:
+ *   • "SocketTimeoutException" / app can't connect to Metro:
+ *       VS Code's automatic port forwarding (remote.autoForwardPorts) can steal
+ *       IPv4 port 8081 while Metro listens on IPv6. Disable it in VS Code
+ *       Settings → Remote: Auto Forward Ports → uncheck, then reset adb reverse:
+ *         adb reverse --remove-all && adb reverse tcp:8081 tcp:8081
+ *   • "Detox can't connect to test app" forever:
+ *       Ensure Metro is running (`pnpm start`) and `adb reverse tcp:8081 tcp:8081`
+ *       is active. Also verify `lsof -i tcp:8081` shows only the Metro `node`
+ *       process listening, not VS Code's Code Helper.
+ *
  * @type {Detox.DetoxConfig}
  */
 module.exports = {

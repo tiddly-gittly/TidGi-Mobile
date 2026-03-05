@@ -4,6 +4,23 @@ E2E test guide for TidGi-Mobile using Detox + Cucumber (Gherkin).
 
 ## Prerequisites
 
+### Device state before running tests
+
+**The Android device must be:**
+
+1. **Connected via USB** with USB debugging authorised (`adb devices` shows `device`, not `unauthorized`)
+2. **Screen unlocked** — on the launcher / home screen or any non-fullscreen app
+3. **TidGi app NOT running** — the test framework will launch the app itself. If the app is already open (especially with a WebView / wiki loaded), Espresso's idle-resource mechanism may deadlock. Force-stop it first: `adb shell am force-stop ren.onetwo.tidgi.mobile.test`
+4. **No game or full-screen app in foreground** — some apps block `adb shell input` commands; exit them before starting
+
+> **Troubleshooting "app seems idle" / Espresso deadlock:**
+> After TiddlyWiki boots inside a WebView its continuous JS execution keeps the
+> React Native main thread busy. This blocks Espresso's IdlingResource checks
+> and causes Detox commands (including `device.disableSynchronization()`) to hang.
+> The test hooks call `device.disableSynchronization()` immediately after launch
+> to work around this. If you see "The app seems to be idle" warnings, ensure the
+> app was **not** already running when the test started.
+
 ### APK files (one-time CI build)
 
 The test runner needs two APKs built by CI.  
@@ -109,10 +126,63 @@ expo-plugins/
 
 ## Desktop-sync tests (`@mobilesync`)
 
-These require a running TidGi Desktop instance:
+These scenarios verify importing a wiki from TidGi Desktop and syncing changes.
+
+### Pre-conditions
+
+1. **TidGi Desktop running** with the `tw-mobile-sync` plugin active.
+   The plugin provides the HTTP API that the mobile app clones/syncs from.
+
+2. **Build & deploy the plugin** (from the `tw-mobile-sync` repo):
+   ```bash
+   cd /path/to/tw-mobile-sync
+   pnpm build
+   # Copy the built JSON into the Desktop dev wiki's tiddlers/
+   cp dist/\$__plugins_linonetwo_tw-mobile-sync.json \
+      /path/to/TidGi-Desktop/wiki-dev/wiki/tiddlers/
+   ```
+   Then **restart** the TidGi Desktop dev wiki so the new plugin is loaded.
+
+3. **Desktop server URL** — the mobile device must be able to reach the desktop
+   over the network. Find the port from:
+   - `TidGi-Desktop/wiki-dev/wiki/tidgi.config.json` (`enableHTTPAPI: true`)
+   - Default port is **5212** unless configured otherwise
+
+4. **QR scan bypassed by manual JSON input** — the E2E test bypasses QR code
+   scanning by fetching the server's `mobile-sync-info` endpoint and typing
+   the JSON payload directly into the manual configuration TextInput.
+   Set the server URL via environment variable:
+   ```bash
+   TIDGI_DESKTOP_URL=http://192.168.x.x:5212 pnpm detox:test -- --tags "@mobilesync"
+   ```
+   Without `TIDGI_DESKTOP_URL` the default `http://localhost:5212` is used
+   (works when the device reaches the Mac via `adb reverse`).
+
+### Running
 
 ```bash
-TIDGI_DESKTOP_URL=http://192.168.x.x:5212 pnpm detox:test --tags="@mobilesync"
+# Ensure adb reverse is set (the detox:test script does this automatically)
+adb reverse tcp:5212 tcp:5212
+
+# Run all desktop-sync scenarios
+pnpm detox:test -- --tags "@mobilesync"
+
+# Run only the import scenario
+pnpm detox:test -- --tags "@import"
+
+# Run only sync scenarios (requires a wiki already imported)
+pnpm detox:test -- --tags "@sync"
 ```
 
-Without `TIDGI_DESKTOP_URL` the default `http://localhost:5212` is used.
+### Device requirements for @mobilesync
+
+Same as the general prerequisites above, plus:
+- **USB connected** with `adb reverse tcp:5212 tcp:5212` active, OR WiFi on the same LAN
+- At least 200 MB free storage for the cloned wiki
+
+### Technical notes
+
+- **Import flow**: The test navigates to Settings → scrolls to "Import Wiki" button → enters the Importer screen → taps "Manual Configuration" → pastes the QR JSON (fetched from `${DESKTOP_URL}/tw-mobile-sync/git/mobile-sync-info`) → taps confirm.
+- **Scrolling**: Uses `adb shell input swipe` instead of Detox/Espresso `scroll()` because Espresso's scroll is blocked by the WebView IdlingResource when sync is disabled.
+- **Workspace ID discovery**: The step definitions read the device's persist storage via `adb shell run-as` to find the first wiki workspace ID, which is needed for dynamic testIDs like `workspace-item-{id}`.
+- **Sync verification**: After writing a test tiddler via `adb shell printf`, the test taps the sync button and waits for "同步完成" text to appear.

@@ -21,9 +21,8 @@ export function General(): JSX.Element {
   return (
     <>
       <Text variant='titleLarge'>{t('Preference.Theme')}</Text>
-      <SegmentedContainer>
+      <SegmentedContainer testID='theme-segmented-buttons'>
         <SegmentedButtons
-          testID='theme-segmented-buttons'
           value={theme}
           onValueChange={(newValue) => {
             setConfig({ theme: newValue as typeof theme });

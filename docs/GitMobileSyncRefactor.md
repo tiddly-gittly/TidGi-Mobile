@@ -453,3 +453,71 @@ skinny HTML 是一个不含 tiddler store 的空壳 HTML，只包含 boot.css、
 2. Git 二进制依赖：dugite 在打包时会被裁剪，需确认保留了 git-upload-pack/git-receive-pack 相关命令
 3. 大文件/二进制 tiddler：canonical_uri 机制需保留，避免仓库过大
 4. 移动端 JS Git 实现：若选用 isomorphic-git 等库，需确认其 Expo FS 兼容性与性能
+
+## 2026-03-05 交接状态（迁移到另一台电脑）
+
+本节用于跨机器接力测试，记录当前会话结束时的可执行状态。
+
+### 1) 已完成的关键改动（本轮）
+
+- E2E 稳定性相关（非 sync）
+   - `e2e/support/hooks.ts`：
+      - 增加 `setDefaultTimeout(30_000)`。
+      - 强化 Expo dev-client 首次启动 overlay 处理。
+      - Before hook 改为优先使用 adb back 回到主菜单，避免 WebView + Espresso idle 死锁。
+   - `e2e/stepDefinitions/settings.steps.ts`：
+      - 配置页滚动改为 adb swipe fallback（sync disabled 场景更稳定）。
+      - theme/switch/username/language 相关等待与断言逻辑已重构（包含 `replaceText` 路径）。
+   - `e2e/stepDefinitions/smoke.steps.ts`、`workspace.steps.ts`：
+      - 导航后补充短延时，降低动画时序抖动。
+
+- 可测性 testID 补齐
+   - `src/pages/Config/General.tsx`：`theme-segmented-buttons` 移到外层容器。
+   - `src/pages/Config/TiddlyWiki.tsx`：补充 `username-input-container` 包裹层。
+   - `src/pages/Importer/components/ImporterServerConfigs.tsx`：补充 `toggle-manual-config-button`、`manual-json-input`。
+   - `src/pages/Workspace/WorkspaceSyncPage.tsx`、`WorkspaceSettingsPage.tsx`、`WorkspaceChangesPage.tsx`：补充页面级 testID。
+
+- Desktop-sync 场景改造（进行中）
+   - `e2e/stepDefinitions/desktopSync.steps.ts` 已改为“手动 JSON 输入”导入路径，不再依赖扫码。
+   - 导入 URL 来源改为 `/tw-mobile-sync/git/mobile-sync-info`，并在步骤中加入 `adb reverse tcp:5212 tcp:5212`。
+
+### 2) 非 sync 测试现状
+
+- 最近一次完整通过结果（本会话内）：
+   - 命令：`pnpm detox:test -- --tags "@smoke or @settings or @workspace"`
+   - 结果：`12 scenarios (12 passed), 78 steps (78 passed)`。
+- 注意：Detox 偶发会遇到 adb reverse 端口残留冲突（`cannot bind listener: Address already in use`），清理 `adb reverse --remove-all` 后重试可恢复。
+
+### 3) mobile-sync 插件构建与部署状态
+
+- 已完成构建并部署到 Desktop dev wiki：
+   - 目标文件：`TidGi-Desktop/wiki-dev/wiki/tiddlers/$__plugins_linonetwo_tw-mobile-sync.json`
+   - 当前文件大小约 84KB（已是本轮更新后的文件）。
+- `TidGi-Mobile` 仓库当前不存在 `dist/`（插件构建产物已移动/清理）。
+
+### 4) 当前环境快照（结束时）
+
+- 终端里 `TidGi-Desktop` 的 `start:dev` 在运行（由你手动维持）。
+- 本机此刻测试前置状态不是“即刻可跑”：
+   - `adb devices` 一度为空（设备未连接）。
+   - `8081` 无监听（Metro 未运行）。
+- 因此迁移到新机器后，请按下面 checklist 先恢复环境。
+
+### 5) 在另一台电脑继续测试的最小 checklist
+
+1. 启动 Desktop dev wiki（确保 tw-mobile-sync 插件已加载）。
+2. 在 Mobile 仓库启动 Metro：`pnpm start`。
+3. USB 连接手机并通过调试授权：`adb devices` 显示 `device`。
+4. 先跑非 sync 回归：
+    - `pnpm detox:test -- --tags "@smoke or @settings or @workspace"`
+5. 再跑 sync：
+    - 先确认 `TIDGI_DESKTOP_URL`（默认 `http://localhost:5212`，或用局域网 IP）。
+    - 执行 `pnpm detox:test -- --tags "@mobilesync"`。
+
+### 6) 仍需你在新机器上确认的事项
+
+- `desktopSync.steps.ts` 的“手动 JSON 输入导入 + 后续同步断言”需要完整实机回归一遍（本轮主要完成了代码改造与非 sync 稳定化）。
+- 若遇到 WebView/Idle 类卡住，优先确认：
+   - 测试前 app 不在前台运行。
+   - 设备不在全屏游戏/受限页面。
+   - adb reverse 映射已清理并重建。

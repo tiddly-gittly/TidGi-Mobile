@@ -20,7 +20,7 @@ export function WorkspaceSettingsPage({ route, navigation }: StackScreenProps<Ro
   }
 
   return (
-    <PageContainer>
+    <PageContainer testID='workspace-settings-page'>
       <WorkspaceSettings workspace={wiki} />
     </PageContainer>
   );

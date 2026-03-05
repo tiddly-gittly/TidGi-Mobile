@@ -142,6 +142,7 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
 
       {!qrData && (
         <Button
+          testID='toggle-manual-config-button'
           mode='text'
           disabled={importStatus !== 'idle'}
           onPress={onToggleManualEdit}
@@ -155,6 +156,7 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
           {t('Import.ManualConfigurationHint')}
         </ManualConfigHint>
         <TextInput
+          testID='manual-json-input'
           label={t('Import.QRCodeJSON')}
           multiline
           numberOfLines={4}

@@ -12,6 +12,8 @@ const StyledTextInput = styled(TextInput)`
   margin-top: 10px;
 `;
 
+const StyledTextInputContainer = styled.View``;
+
 export function TiddlyWiki(): JSX.Element {
   const { t } = useTranslation();
 
@@ -24,15 +26,17 @@ export function TiddlyWiki(): JSX.Element {
   }, []);
   return (
     <>
-      <StyledTextInput
-        testID='username-input'
-        label={t('Preference.DefaultUserName')}
-        value={userName}
-        onChangeText={(newText: string) => {
-          userNameSetter(newText);
-          userNameTextFieldOnChange(newText);
-        }}
-      />
+      <StyledTextInputContainer testID='username-input-container'>
+        <StyledTextInput
+          testID='username-input'
+          label={t('Preference.DefaultUserName')}
+          value={userName}
+          onChangeText={(newText: string) => {
+            userNameSetter(newText);
+            userNameTextFieldOnChange(newText);
+          }}
+        />
+      </StyledTextInputContainer>
       <Text>{t('Preference.DefaultUserNameDetail')}</Text>
       <SwitchContainer>
         <FlexibleText>{t('Preference.RememberLastVisitState')}</FlexibleText>

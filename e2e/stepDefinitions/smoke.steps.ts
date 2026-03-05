@@ -38,10 +38,14 @@ Then('I should see the settings icon', async () => {
 
 When('I tap the settings icon', async () => {
   await element(by.id('settings-icon-button')).tap();
+  // Allow navigation animation to complete (sync is disabled for WebView apps).
+  await new Promise(resolve => setTimeout(resolve, 1_000));
 });
 
 When('I press back', async () => {
   await device.pressBack();
+  // Allow navigation animation to complete.
+  await new Promise(resolve => setTimeout(resolve, 1_000));
 });
 
 // ── Settings / Config screen ──────────────────────────────────────────────────
