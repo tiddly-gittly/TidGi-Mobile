@@ -43,6 +43,8 @@ function toFileUri(plainPath: string): string {
 
 const CHECKOUT_BATCH_SIZE = 200;
 const NATIVE_WRITE_BATCH_SIZE = 64;
+const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
+const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
 
 interface INativeWriteTask {
   base64Content: string;
@@ -56,7 +58,9 @@ let nativeWriteFlushScheduled = false;
 let nativeWriteFlushPromise: Promise<void> | undefined;
 
 function canUseAndroidNativeBatchWrite(filepath: string): boolean {
-  return Platform.OS === 'android' && !filepath.startsWith('file://content://');
+  return Platform.OS === 'android'
+    && isExternalPath(filepath)
+    && typeof ExternalStorage.writeFilesBase64 === 'function';
 }
 
 function scheduleNativeBatchWrite(path: string, base64Content: string): Promise<void> {
@@ -98,6 +102,8 @@ export interface IGitRemote {
   baseUrl: string;
   /** Token is optional - empty/undefined means anonymous access (insecure) */
   token?: string;
+  tokenAuthHeaderName?: string;
+  tokenAuthHeaderValue?: string;
   workspaceId: string;
 }
 
@@ -532,15 +538,26 @@ const httpWithLogging = {
  * Includes CSRF header to bypass TiddlyWiki's CSRF protection
  * If token is empty/undefined, still includes CSRF header but no Authorization
  */
-function createAuthHeader(token?: string): { Authorization?: string; 'X-Requested-With': string } {
-  const headers: { Authorization?: string; 'X-Requested-With': string } = {
+function createAuthHeader(remote: Pick<IGitRemote, 'token' | 'tokenAuthHeaderName' | 'tokenAuthHeaderValue'>): Record<string, string | undefined> {
+  const headers: Record<string, string | undefined> = {
     // TiddlyWiki expects a non-empty X-Requested-With to bypass CSRF for POST
     'X-Requested-With': 'TiddlyWiki',
   };
 
-  if (token !== undefined && token !== '') {
-    const credentials = Buffer.from(`:${token}`).toString('base64');
+  if (remote.token !== undefined && remote.token !== '') {
+    const credentials = Buffer.from(`:${remote.token}`).toString('base64');
     headers.Authorization = `Basic ${credentials}`;
+  }
+
+  const tokenAuthHeaderName = typeof remote.tokenAuthHeaderName === 'string' && remote.tokenAuthHeaderName.length > 0
+    ? remote.tokenAuthHeaderName
+    : (remote.token ? `${DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX}-${remote.token}` : undefined);
+  const tokenAuthHeaderValue = typeof remote.tokenAuthHeaderValue === 'string' && remote.tokenAuthHeaderValue.length > 0
+    ? remote.tokenAuthHeaderValue
+    : (remote.token ? DEFAULT_TIDGI_USER_NAME : undefined);
+
+  if (tokenAuthHeaderName && tokenAuthHeaderValue) {
+    headers[tokenAuthHeaderName] = tokenAuthHeaderValue;
   }
 
   return headers;
@@ -600,7 +617,7 @@ export async function gitClone(
   console.log('Git clone strategy:', { depth: 1, noTags: true, singleBranch: true });
 
   try {
-    await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote.token)));
+    await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote)));
     await git.clone({
       fs,
       http: httpWithLogging,
@@ -611,7 +628,7 @@ export async function gitClone(
       noTags: true,
       nonBlocking: true,
       batchSize: CHECKOUT_BATCH_SIZE,
-      headers: createAuthHeader(remote.token),
+      headers: normalizeHeaders(createAuthHeader(remote)),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
         onProgress?.(
@@ -650,7 +667,7 @@ export async function gitPull(
       dir: directory,
       ref: branch,
       singleBranch: true,
-      headers: createAuthHeader(remote.token),
+      headers: normalizeHeaders(createAuthHeader(remote)),
       ...createAuthCallbacks(remote.token),
       author: {
         name: 'TidGi Mobile',
@@ -741,7 +758,7 @@ export async function gitPushToIncoming(
     ref: branch,
     remoteRef: 'refs/heads/mobile-incoming',
     force: true,
-    headers: createAuthHeader(remote.token),
+    headers: normalizeHeaders(createAuthHeader(remote)),
     ...createAuthCallbacks(remote.token),
     onProgress: (progress) => {
       onProgress?.(
@@ -763,12 +780,7 @@ export async function triggerDesktopMerge(
   remote: IGitRemote,
 ): Promise<void> {
   const url = `${remote.baseUrl.replace(/\/$/, '')}/tw-mobile-sync/git/${remote.workspaceId}/merge-incoming`;
-  const headers: Record<string, string> = {
-    'X-Requested-With': 'TiddlyWiki',
-  };
-  if (remote.token) {
-    headers['Authorization'] = `Basic ${Buffer.from(`:${remote.token}`).toString('base64')}`;
-  }
+  const headers = normalizeHeaders(createAuthHeader(remote));
 
   const response = await fetch(url, { method: 'POST', headers });
   if (!response.ok) {
@@ -801,7 +813,7 @@ export async function gitFetchAndReset(
     remote: 'origin',
     ref: branch,
     singleBranch: true,
-    headers: createAuthHeader(remote.token),
+    headers: normalizeHeaders(createAuthHeader(remote)),
     ...createAuthCallbacks(remote.token),
     onProgress: (progress) => {
       onProgress?.(

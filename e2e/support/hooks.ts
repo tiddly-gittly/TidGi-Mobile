@@ -42,6 +42,7 @@ const METRO_URL = process.env.METRO_URL ?? 'http://localhost:8081';
 // The slug comes from app.json → expo.slug ("tidgi-mobile"), NOT expo.scheme ("tidgi").
 // `disableOnboarding=1` prevents the first-run onboarding overlay from appearing.
 const EXPO_DEV_CLIENT_URL = `exp+tidgi-mobile://expo-development-client/?url=${encodeURIComponent(METRO_URL)}&disableOnboarding=1`;
+const ATTACH_EXISTING_APP = process.env.TIDGI_ATTACH_EXISTING_APP === 'true';
 
 const MAIN_MENU_ID = 'main-menu-screen';
 
@@ -210,16 +211,18 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // this at startup and configures the OkHttp synchronizer to ignore matching URLs,
   // so the persistent Metro WebSocket no longer blocks the Espresso idle check.
   // launchApp() then returns within seconds of the app connecting.
-  await device.launchApp({
-    newInstance: true,
-    url: EXPO_DEV_CLIENT_URL,
-    launchArgs: {
-      // Blacklist Metro hot-reload WebSocket URL so OkHttp doesn't block Espresso idle.
-      // Pattern matches ws://localhost:8081/... and http://localhost:8081/... connections.
-      detoxURLBlacklist: '[".*localhost:8081.*"]',
-      TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
-    },
-  });
+  await device.launchApp(ATTACH_EXISTING_APP
+    ? { newInstance: false }
+    : {
+      newInstance: true,
+      url: EXPO_DEV_CLIENT_URL,
+      launchArgs: {
+        // Blacklist Metro hot-reload WebSocket URL so OkHttp doesn't block Espresso idle.
+        // Pattern matches ws://localhost:8081/... and http://localhost:8081/... connections.
+        detoxURLBlacklist: '[".*localhost:8081.*"]',
+        TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
+      },
+    });
   await device.disableSynchronization();
 
   // After launchApp() returns (Espresso became idle after ~3 min of git I/O), Metro may

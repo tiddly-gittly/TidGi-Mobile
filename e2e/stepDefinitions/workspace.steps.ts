@@ -41,7 +41,16 @@ function getFirstWikiWorkspaceId(): string | undefined {
     );
     return wiki?.id;
   } catch {
-    return undefined;
+    try {
+      const raw = execSync(
+        'adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis',
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
+      ).trim();
+      const fallbackId = raw.split(/\r?\n/).map(value => value.trim()).find(value => value.length > 0);
+      return fallbackId;
+    } catch {
+      return undefined;
+    }
   }
 }
 

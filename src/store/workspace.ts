@@ -63,6 +63,8 @@ export interface IWikiServerSync {
    * Git remote token for authentication (not synced to tidgi.config.json)
    */
   token?: string;
+  tokenAuthHeaderName?: string;
+  tokenAuthHeaderValue?: string;
 }
 /**
  * use `1` (1970 - 1 - 1 00:00:00:001 UTC) to sync every thing to the newly added server.

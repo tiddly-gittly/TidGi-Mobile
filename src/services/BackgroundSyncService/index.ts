@@ -427,6 +427,12 @@ export class GitBackgroundSyncService {
     const token = typeof resolvedSyncedServer.token === 'string' && resolvedSyncedServer.token.length > 0
       ? resolvedSyncedServer.token
       : undefined;
+    const tokenAuthHeaderName = typeof resolvedSyncedServer.tokenAuthHeaderName === 'string' && resolvedSyncedServer.tokenAuthHeaderName.length > 0
+      ? resolvedSyncedServer.tokenAuthHeaderName
+      : undefined;
+    const tokenAuthHeaderValue = typeof resolvedSyncedServer.tokenAuthHeaderValue === 'string' && resolvedSyncedServer.tokenAuthHeaderValue.length > 0
+      ? resolvedSyncedServer.tokenAuthHeaderValue
+      : undefined;
     if (token === undefined) {
       console.log(`No token configured for workspace ${workspace.name} and server ${server.id}, use anonymous access`);
     }
@@ -440,6 +446,8 @@ export class GitBackgroundSyncService {
       baseUrl: server.uri,
       workspaceId,
       token,
+      tokenAuthHeaderName,
+      tokenAuthHeaderValue,
     };
   }
 

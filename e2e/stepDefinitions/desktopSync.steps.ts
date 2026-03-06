@@ -266,7 +266,24 @@ function getFirstWikiWorkspace(): { id: string; wikiFolderLocation: string } | u
     if (wiki?.id && wiki.wikiFolderLocation) {
       return { id: wiki.id, wikiFolderLocation: wiki.wikiFolderLocation };
     }
-    return undefined;
+  } catch {
+    // Fall back to the actual imported wiki folders when the persisted zustand
+    // store file is absent in the current app build.
+  }
+
+  try {
+    const raw = execSync(
+      'adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis',
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
+    ).trim();
+    const id = raw.split(/\r?\n/).map(value => value.trim()).find(value => value.length > 0);
+    if (!id) {
+      return undefined;
+    }
+    return {
+      id,
+      wikiFolderLocation: `file:///data/user/0/ren.onetwo.tidgi.mobile.test/files/wikis/${id}`,
+    };
   } catch {
     return undefined;
   }

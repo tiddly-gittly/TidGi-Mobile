@@ -142,7 +142,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         previous !== undefined &&
         previous.baseUrl === qr.baseUrl &&
         previous.workspaceId === qr.workspaceId &&
-        previous.workspaceName === qr.workspaceName
+        previous.workspaceName === qr.workspaceName &&
+        previous.token === qr.token &&
+        previous.tokenAuthHeaderName === qr.tokenAuthHeaderName &&
+        previous.tokenAuthHeaderValue === qr.tokenAuthHeaderValue
       ) {
         return previous;
       }

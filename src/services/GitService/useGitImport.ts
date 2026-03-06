@@ -20,6 +20,8 @@ export interface IGitImportQRCode {
   baseUrl: string;
   /** Token is optional - empty/undefined means anonymous access (insecure) */
   token?: string;
+  tokenAuthHeaderName?: string;
+  tokenAuthHeaderValue?: string;
   workspaceId: string;
   workspaceName?: string;
   isSubWiki?: boolean;
@@ -86,6 +88,8 @@ export function useGitImport() {
           lastSync: Date.now(),
           syncActive: false,
           token: qrData.token,
+          tokenAuthHeaderName: qrData.tokenAuthHeaderName,
+          tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
         }],
       }) as IWikiWorkspace | undefined;
 
@@ -132,6 +136,8 @@ export function useGitImport() {
         baseUrl: qrData.baseUrl,
         workspaceId: qrData.workspaceId,
         token: qrData.token,
+        tokenAuthHeaderName: qrData.tokenAuthHeaderName,
+        tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
       };
 
       console.log('[import] Starting git clone...');
