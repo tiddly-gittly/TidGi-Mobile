@@ -8,6 +8,7 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import git from 'isomorphic-git';
 import pTimeout from 'p-timeout';
+import { Platform } from 'react-native';
 import { IWikiWorkspace } from '../../store/workspace';
 
 function toSafeNumber(value: unknown, fallback = 0): number {
@@ -38,6 +39,56 @@ function isExternalPath(filepath: string): boolean {
 function toFileUri(plainPath: string): string {
   if (plainPath.startsWith('file://')) return plainPath;
   return `file://${plainPath}`;
+}
+
+const CHECKOUT_BATCH_SIZE = 200;
+const NATIVE_WRITE_BATCH_SIZE = 64;
+
+interface INativeWriteTask {
+  base64Content: string;
+  path: string;
+  reject: (reason?: unknown) => void;
+  resolve: () => void;
+}
+
+let pendingNativeWriteTasks: INativeWriteTask[] = [];
+let nativeWriteFlushScheduled = false;
+let nativeWriteFlushPromise: Promise<void> | undefined;
+
+function canUseAndroidNativeBatchWrite(filepath: string): boolean {
+  return Platform.OS === 'android' && !filepath.startsWith('file://content://');
+}
+
+function scheduleNativeBatchWrite(path: string, base64Content: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    pendingNativeWriteTasks.push({ path, base64Content, resolve, reject });
+    if (nativeWriteFlushScheduled) return;
+    nativeWriteFlushScheduled = true;
+    void Promise.resolve().then(() => {
+      nativeWriteFlushScheduled = false;
+      if (!nativeWriteFlushPromise) {
+        nativeWriteFlushPromise = flushPendingNativeWrites().finally(() => {
+          nativeWriteFlushPromise = undefined;
+        });
+      }
+    });
+  });
+}
+
+async function flushPendingNativeWrites(): Promise<void> {
+  while (pendingNativeWriteTasks.length > 0) {
+    const batch = pendingNativeWriteTasks.splice(0, NATIVE_WRITE_BATCH_SIZE);
+    try {
+      await ExternalStorage.writeFilesBase64(
+        batch.map(task => toPlainPath(task.path)),
+        batch.map(task => task.base64Content),
+      );
+      batch.forEach(task => task.resolve());
+    } catch (error) {
+      batch.forEach(task => task.reject(error));
+    }
+    await Promise.resolve();
+  }
 }
 
 /**
@@ -123,14 +174,21 @@ const fs = {
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
+      const base64 = typeof data === 'string'
+        ? Buffer.from(data, 'utf8').toString('base64')
+        : Buffer.isBuffer(data)
+          ? data.toString('base64')
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+
+      if (canUseAndroidNativeBatchWrite(filepath)) {
+        return scheduleNativeBatchWrite(filepath, base64);
+      }
+
       if (isExternalPath(filepath)) {
         const plain = toPlainPath(filepath);
         if (typeof data === 'string') {
           return ExternalStorage.writeFileUtf8(plain, data);
         }
-        const base64 = Buffer.isBuffer(data)
-          ? data.toString('base64')
-          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
         return ExternalStorage.writeFileBase64(plain, base64);
       }
 
@@ -146,9 +204,6 @@ const fs = {
       if (typeof data === 'string') {
         await FileSystemLegacy.writeAsStringAsync(toFileUri(filepath), data, { encoding: FileSystemLegacy.EncodingType.UTF8 });
       } else {
-        const base64 = Buffer.isBuffer(data)
-          ? data.toString('base64')
-          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
         await FileSystemLegacy.writeAsStringAsync(toFileUri(filepath), base64, { encoding: FileSystemLegacy.EncodingType.Base64 });
       }
     },
@@ -554,6 +609,8 @@ export async function gitClone(
       singleBranch: true,
       depth: 1,
       noTags: true,
+      nonBlocking: true,
+      batchSize: CHECKOUT_BATCH_SIZE,
       headers: createAuthHeader(remote.token),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
@@ -764,7 +821,7 @@ export async function gitFetchAndReset(
     { encoding: 'utf8' },
   );
   // Checkout the new HEAD to update the working tree
-  await git.checkout({ fs, dir: directory, ref: branch, force: true });
+  await git.checkout({ fs, dir: directory, ref: branch, force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
 
   const headAfter = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
   return headBefore !== headAfter;
@@ -1033,7 +1090,7 @@ export async function gitDiscardFileChanges(
     try {
       await git.readBlob({ fs, dir: directory, oid: await git.resolveRef({ fs, dir: directory, ref: 'HEAD' }), filepath: filePath });
       // File exists in HEAD — checkout the HEAD version
-      await git.checkout({ fs, dir: directory, ref: 'HEAD', filepaths: [filePath], force: true });
+      await git.checkout({ fs, dir: directory, ref: 'HEAD', filepaths: [filePath], force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
     } catch {
       // File doesn't exist in HEAD — it's a new file, delete from working tree
       const fullPath = `${directory}/${filePath}`;
