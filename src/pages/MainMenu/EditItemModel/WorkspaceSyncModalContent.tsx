@@ -24,7 +24,7 @@ export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton 
   return (
     <Container>
       <Text variant='titleLarge'>{t('Sync.WorkspaceSync')}</Text>
-      <Text variant='bodyMedium'>
+      <Text variant='bodyMedium' testID='last-sync-label'>
         {t('Sync.LastSync')}: {lastSyncTimestamp ? new Date(lastSyncTimestamp).toLocaleString() : '-'}
       </Text>
 

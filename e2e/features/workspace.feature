@@ -10,7 +10,7 @@ Feature: Workspace detail, sync and settings navigation
 
   Background:
     Given the app has launched
-    And at least one workspace exists
+    And at least one wiki workspace exists
 
   Scenario: Workspace detail page shows all action buttons
     When I tap the settings icon on the first workspace

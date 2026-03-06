@@ -167,7 +167,10 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       };
     }
 
-    const timeout = setTimeout(run, 0);
+    // Delay git I/O by 5 s after mount so that Detox can send disableSynchronization()
+    // before the isomorphic-git filesystem calls flood the RN bridge (which would
+    // keep Espresso in "not idle" state and prevent any Detox interaction).
+    const timeout = setTimeout(run, 5_000);
     return () => {
       clearTimeout(timeout);
     };

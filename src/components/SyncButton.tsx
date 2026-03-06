@@ -16,11 +16,20 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const iconName = getSyncIconName(isSyncSucceed, isConnected, inSyncing);
+  // Dynamic testID encodes sync result so E2E tests can detect outcome without a toast:
+  //   sync-icon-button-{id}         → initial / syncing state
+  //   sync-result-success-{id}      → last sync succeeded
+  //   sync-result-failed-{id}       → last sync failed
+  const buttonTestID = isSyncSucceed === true
+    ? `sync-result-success-${workspaceID}`
+    : isSyncSucceed === false
+    ? `sync-result-failed-${workspaceID}`
+    : `sync-icon-button-${workspaceID}`;
 
   return (
     <IconButton
       {...props}
-      testID={`sync-icon-button-${workspaceID}`}
+      testID={buttonTestID}
       accessibilityLabel='sync-icon-button'
       icon={iconName}
       iconColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80) : undefined}

@@ -57,7 +57,7 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
-  const [conflictBranch, setConflictBranch] = useState<string | null>(null);
+  const [conflictBranch, _setConflictBranch] = useState<string | null>(null);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const updateWorkspace = useWorkspaceStore(state => state.update);

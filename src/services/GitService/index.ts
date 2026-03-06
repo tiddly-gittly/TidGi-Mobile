@@ -31,6 +31,16 @@ function isExternalPath(filepath: string): boolean {
 }
 
 /**
+ * Ensure a filesystem path has the `file://` URI prefix required by Expo FS.
+ * isomorphic-git passes plain paths (via path.join(dir, ...)) so we must
+ * re-add the scheme before calling any FileSystemLegacy API.
+ */
+function toFileUri(plainPath: string): string {
+  if (plainPath.startsWith('file://')) return plainPath;
+  return `file://${plainPath}`;
+}
+
+/**
  * Git remote configuration with authentication
  */
 export interface IGitRemote {
@@ -91,12 +101,12 @@ const fs = {
       // Internal path — use legacy Expo FS
       try {
         if (encoding === 'utf8') {
-          return await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+          return await FileSystemLegacy.readAsStringAsync(toFileUri(filepath), { encoding: FileSystemLegacy.EncodingType.UTF8 });
         }
-        const base64 = await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.Base64 });
+        const base64 = await FileSystemLegacy.readAsStringAsync(toFileUri(filepath), { encoding: FileSystemLegacy.EncodingType.Base64 });
         return Buffer.from(base64, 'base64');
       } catch {
-        const info = await FileSystemLegacy.getInfoAsync(filepath).catch(() => ({ exists: false }));
+        const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath)).catch(() => ({ exists: false }));
         if (!info.exists) {
           const enoentError = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
           enoentError.code = 'ENOENT';
@@ -105,9 +115,9 @@ const fs = {
           throw enoentError;
         }
         if (encoding === 'utf8') {
-          return await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+          return await FileSystemLegacy.readAsStringAsync(toFileUri(filepath), { encoding: FileSystemLegacy.EncodingType.UTF8 });
         }
-        const base64 = await FileSystemLegacy.readAsStringAsync(filepath, { encoding: FileSystemLegacy.EncodingType.Base64 });
+        const base64 = await FileSystemLegacy.readAsStringAsync(toFileUri(filepath), { encoding: FileSystemLegacy.EncodingType.Base64 });
         return Buffer.from(base64, 'base64');
       }
     },
@@ -128,18 +138,18 @@ const fs = {
       const lastSlash = filepath.lastIndexOf('/');
       if (lastSlash > 0) {
         const parentDirectory = filepath.substring(0, lastSlash);
-        const parentInfo = await FileSystemLegacy.getInfoAsync(parentDirectory);
+        const parentInfo = await FileSystemLegacy.getInfoAsync(toFileUri(parentDirectory));
         if (!parentInfo.exists) {
-          await FileSystemLegacy.makeDirectoryAsync(parentDirectory, { intermediates: true });
+          await FileSystemLegacy.makeDirectoryAsync(toFileUri(parentDirectory), { intermediates: true });
         }
       }
       if (typeof data === 'string') {
-        await FileSystemLegacy.writeAsStringAsync(filepath, data, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+        await FileSystemLegacy.writeAsStringAsync(toFileUri(filepath), data, { encoding: FileSystemLegacy.EncodingType.UTF8 });
       } else {
         const base64 = Buffer.isBuffer(data)
           ? data.toString('base64')
           : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
-        await FileSystemLegacy.writeAsStringAsync(filepath, base64, { encoding: FileSystemLegacy.EncodingType.Base64 });
+        await FileSystemLegacy.writeAsStringAsync(toFileUri(filepath), base64, { encoding: FileSystemLegacy.EncodingType.Base64 });
       }
     },
 
@@ -155,13 +165,13 @@ const fs = {
         return ExternalStorage.deleteFile(plain);
       }
 
-      const info = await FileSystemLegacy.getInfoAsync(filepath);
+      const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath));
       if (!info.exists) {
         const enoentError = new Error(`ENOENT: no such file or directory, unlink '${filepath}'`) as NodeJS.ErrnoException;
         enoentError.code = 'ENOENT';
         throw enoentError;
       }
-      await FileSystemLegacy.deleteAsync(filepath, { idempotent: true });
+      await FileSystemLegacy.deleteAsync(toFileUri(filepath), { idempotent: true });
     },
 
     async readdir(filepath: string): Promise<string[]> {
@@ -170,15 +180,15 @@ const fs = {
       }
 
       try {
-        return await FileSystemLegacy.readDirectoryAsync(filepath);
+        return await FileSystemLegacy.readDirectoryAsync(toFileUri(filepath));
       } catch {
-        const info = await FileSystemLegacy.getInfoAsync(filepath).catch(() => ({ exists: false }));
+        const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath)).catch(() => ({ exists: false }));
         if (!info.exists) {
           const enoentError = new Error(`ENOENT: no such file or directory, scandir '${filepath}'`) as NodeJS.ErrnoException;
           enoentError.code = 'ENOENT';
           throw enoentError;
         }
-        return await FileSystemLegacy.readDirectoryAsync(filepath);
+        return await FileSystemLegacy.readDirectoryAsync(toFileUri(filepath));
       }
     },
 
@@ -188,9 +198,9 @@ const fs = {
       }
 
       try {
-        const info = await FileSystemLegacy.getInfoAsync(filepath);
+        const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath));
         if (info.exists) return;
-        await FileSystemLegacy.makeDirectoryAsync(filepath, { intermediates: options?.recursive ?? true });
+        await FileSystemLegacy.makeDirectoryAsync(toFileUri(filepath), { intermediates: options?.recursive ?? true });
       } catch (error) {
         if (!options?.recursive) throw error;
       }
@@ -201,9 +211,9 @@ const fs = {
         return ExternalStorage.rmdir(toPlainPath(filepath));
       }
 
-      const info = await FileSystemLegacy.getInfoAsync(filepath);
+      const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath));
       if (!info.exists) return;
-      await FileSystemLegacy.deleteAsync(filepath, { idempotent: true });
+      await FileSystemLegacy.deleteAsync(toFileUri(filepath), { idempotent: true });
     },
 
     async stat(filepath: string): Promise<{
@@ -258,7 +268,7 @@ const fs = {
       }
 
       // Internal path
-      const info = await FileSystemLegacy.getInfoAsync(filepath);
+      const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath));
       if (!info.exists) {
         const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
         error.code = 'ENOENT';

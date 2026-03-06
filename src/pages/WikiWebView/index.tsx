@@ -30,7 +30,9 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
     case undefined:
     case 'wiki': {
       return (
-        <Container>
+        // testID lets E2E tests confirm navigation landed on this screen immediately,
+        // without waiting for the WebView content to load (which can take 30-90 s).
+        <Container testID='wiki-webview-screen'>
           {(activeWorkspace !== undefined) && <WikiViewer wikiWorkspace={activeWorkspace} webviewSideReceiver={getWebviewSideReceiver()} quickLoad={quickLoad ?? false} />}
         </Container>
       );
@@ -38,13 +40,13 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
 
     case 'webpage': {
       return (
-        <Container>
+        <Container testID='wiki-webview-screen'>
           <WebView source={{ uri: activeWorkspace.uri }} />
         </Container>
       );
     }
     default: {
-      <Container>
+      <Container testID='wiki-webview-screen'>
         <Text>{t('Loading')}</Text>
       </Container>;
     }

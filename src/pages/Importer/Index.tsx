@@ -87,12 +87,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const reachableServers = allServers.filter(server => reachableServerIDs.includes(server.id));
 
   useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === PermissionStatus.GRANTED);
+    // Lazy camera permission: only check permission status, don't request it.
+    // This avoids heavy Camera module initialization that can block the main
+    // thread and interfere with Espresso/Detox. The actual permission request
+    // happens when the user taps the QR scanner button.
+    const checkCameraPermission = async () => {
+      try {
+        const { status } = await Camera.getCameraPermissionsAsync();
+        setHasPermission(status === PermissionStatus.GRANTED);
+      } catch {
+        setHasPermission(false);
+      }
     };
 
-    void getCameraPermissions();
+    void checkCameraPermission();
   }, []);
 
   useEffect(() => {
@@ -340,6 +348,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         setShowSavedServers(previous => !previous);
       }}
       onToggleScanner={() => {
+        if (hasPermission !== true) {
+          // Camera permission not granted — request it first.
+          void Camera.requestCameraPermissionsAsync().then(({ status }) => {
+            setHasPermission(status === PermissionStatus.GRANTED);
+            if (status === PermissionStatus.GRANTED) {
+              scanHandledReference.current = false;
+              setQrScannerOpen(true);
+            }
+          });
+          return;
+        }
         if (!qrScannerOpen) {
           scanHandledReference.current = false;
         }
@@ -355,10 +374,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   );
 
   if (hasPermission === undefined) {
-    return <Text>{t('Import.RequestingCameraPermission')}</Text>;
+    // Camera permission still loading — render the full importer page anyway
+    // so manual JSON input is accessible. Only the QR scanner section is hidden.
   }
-  if (!hasPermission) {
-    return <Text>{t('Import.NoCameraAccess')}</Text>;
+  if (hasPermission === false) {
+    // Camera permission denied — still render the importer page.
+    // QR scanner will be unavailable but manual input works.
   }
 
   const autoStartImport = route.params.autoStartImport;

@@ -9,4 +9,5 @@ onlyBuiltDependencies:
   - dtrace-provider
   - esbuild
   - less
+  - svelte-preprocess
   - unrs-resolver

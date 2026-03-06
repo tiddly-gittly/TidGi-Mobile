@@ -32,7 +32,7 @@ async function scrollConfigUntilVisible(text: string) {
     await delay(300);
   } catch { /* non-fatal */ }
 
-  for (let index = 0; index < 12; index++) {
+  for (let index = 0; index < 15; index++) {
     try {
       await waitFor(element(by.text(text)))
         .toBeVisible()
@@ -40,9 +40,10 @@ async function scrollConfigUntilVisible(text: string) {
       return;
     } catch {
       // Use adb input swipe as fallback — this always works regardless of
-      // Espresso synchronization state. Swipe from y=2200 to y=600 (big gesture).
+      // Espresso synchronization state. Use moderate swipe to avoid overshooting
+      // past the target element (nav bar area at bottom of screen).
       try {
-        execSync('adb shell input swipe 600 2200 600 600 300', { stdio: 'ignore', timeout: 3_000 });
+        execSync('adb shell input swipe 540 1800 540 1000 300', { stdio: 'ignore', timeout: 3_000 });
       } catch { /* non-fatal */ }
       await delay(800);
     }
@@ -179,13 +180,21 @@ Then('I should see the language section header', async () => {
 });
 
 When(/^I clear and type "([^"]*)" into the username field$/, async (text: string) => {
-  // Scroll the TextInput fully into view — it's inside the TiddlyWiki section
-  // which may be partially off-screen.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await element(by.id('config-screen')).scroll(250, 'down');
-    await delay(300);
+  // Ensure the TextInput is visible before interacting. Use adb swipe instead
+  // of Detox scroll to avoid Espresso idle blocking. Only scroll if needed.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await waitFor(element(by.id('username-input')))
+        .toBeVisible()
+        .withTimeout(800);
+      break;
+    } catch {
+      try {
+        execSync('adb shell input swipe 600 1800 600 1200 300', { stdio: 'ignore', timeout: 3_000 });
+      } catch { /* non-fatal */ }
+      await delay(500);
+    }
   }
-  // Use replaceText which works even if the view isn't 75% visible (unlike clearText/typeText).
   const input = element(by.id('username-input'));
   await input.replaceText(text);
   await delay(500);
@@ -194,4 +203,3 @@ When(/^I clear and type "([^"]*)" into the username field$/, async (text: string
 Then(/^the username field should show "([^"]*)"$/, async (expectedText: string) => {
   await detoxExpect(element(by.id('username-input'))).toHaveText(expectedText);
 });
-

@@ -16,7 +16,7 @@ export default [
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['./*.js', './*.mjs'],
+          allowDefaultProject: ['./*.js', './*.mjs', 'e2e/cucumber.js'],
         },
         tsconfigRootDir: __dirname,
       },

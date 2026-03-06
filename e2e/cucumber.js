@@ -19,9 +19,9 @@ module.exports = {
     tags: process.env.CUCUMBER_TAGS ?? '@smoke or @settings or @workspace',
     loader: 'ts-node/esm',
     requireModule: ['ts-node/register'],
-    // Allow Detox waitFor() calls with up to 30 s to complete inside a step.
-    // Cucumber's built-in default is 5 000 ms which is shorter than cold-start
-    // and element-wait timeouts used in step definitions.
-    timeout: 30_000,
+    // Allow Detox waitFor() calls with up to 120 s to complete inside a step.
+    // Some scenarios (wiki webview cold-start, git sync) take 30-90 s.
+    // Individual steps that don't need this long still finish early.
+    timeout: 120_000,
   },
 };

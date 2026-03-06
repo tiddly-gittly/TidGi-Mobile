@@ -28,8 +28,9 @@ import detox from 'detox/internals';
 import { writeFileSync } from 'fs';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
-// The config file's `timeout` property may not be honored in all Cucumber versions.
-setDefaultTimeout(30_000);
+// WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
+// Fast steps finish well before this limit.
+setDefaultTimeout(120_000);
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -106,18 +107,52 @@ async function dismissExpoOverlays(initialWaitMs = 40_000) {
 // ── Global setup / teardown ──────────────────────────────────────────────────
 
 BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
-  // Clear stale adb reverse entries from previous runs, then re-add Metro (8081).
+  // Clear stale adb reverse entries from previous runs, then re-add Metro (8081)
+  // and Desktop server port (from TIDGI_DESKTOP_URL).
   try {
     execSync('adb reverse --remove-all', { stdio: 'ignore' });
     execSync('adb reverse tcp:8081 tcp:8081', { stdio: 'ignore' });
+    // Also map the Desktop server port so @mobilesync tests can reach it.
+    const desktopUrl = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
+    const desktopPort = new URL(desktopUrl).port || '5212';
+    execSync(`adb reverse tcp:${desktopPort} tcp:${desktopPort}`, { stdio: 'ignore' });
   } catch {
     // Non-fatal — detox.init() will surface the real error if device is unreachable.
   }
 
+  // Pre-grant camera permission so the Importer screen renders immediately
+  // without showing a system permission dialog during @mobilesync tests.
+  try {
+    execSync('adb shell pm grant ren.onetwo.tidgi.mobile.test android.permission.CAMERA', { stdio: 'ignore' });
+  } catch { /* non-fatal */ }
+
+  // Grant MANAGE_EXTERNAL_STORAGE so the app can write to external wiki folders.
+  // On Android 11+, this is a special permission that requires appops (not pm grant).
+  try {
+    execSync('adb shell appops set ren.onetwo.tidgi.mobile.test MANAGE_EXTERNAL_STORAGE allow', { stdio: 'ignore' });
+  } catch { /* non-fatal */ }
+
+  // Prevent BlackShark (JoyUI) and MIUI-derived power managers from killing the test app.
+  // BlackShark's ThirdAppProcessManagerService kills apps without touch events after ~3 min.
+  // Detox holds the app's Activity in foreground for the duration of the test but never
+  // generates touch events during the launchApp() idle wait. Adding to Doze whitelist and
+  // granting RUN_IN_BACKGROUND prevents this aggressive cgroup kill.
+  try {
+    execSync('adb shell cmd deviceidle whitelist +ren.onetwo.tidgi.mobile.test', { stdio: 'ignore' });
+    execSync('adb shell appops set ren.onetwo.tidgi.mobile.test RUN_IN_BACKGROUND allow', { stdio: 'ignore' });
+    execSync('adb shell appops set ren.onetwo.tidgi.mobile.test RUN_ANY_IN_BACKGROUND allow', { stdio: 'ignore' });
+  } catch { /* non-fatal */ }
+
   // Wake the screen so the app can render in the foreground.
   try {
     execSync('adb shell input keyevent 224', { stdio: 'ignore' }); // KEYCODE_WAKEUP
-    execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' }); // no-op with PIN
+    execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' }); // dismiss keyguard without PIN
+    // Prevent the screen from turning off during long-running tests (wiki WebView loading).
+    // screen_off_timeout=0 is not allowed on some devices; use a large value (1 hour).
+    execSync('adb shell settings put system screen_off_timeout 3600000', { stdio: 'ignore' });
+    // NOTE: DO NOT use `settings put secure lockscreen.disabled 1` — on MIUI/BlackShark (JoyUI)
+    // this command triggers cascading system-service crashes (SYSTEM_TOMBSTONE every ~5 s) and
+    // causes the device to reboot. Use `wm dismiss-keyguard` above instead.
   } catch { /* non-fatal */ }
 
   // ── Disable Expo dev-menu auto-show ────────────────────────────────────────
@@ -162,23 +197,85 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // detoxEnableSynchronization:0 is set globally in .detoxrc.js → app.launchArgs,
   // so the native side never registers IdlingResources. We also call
   // disableSynchronization() as a belt-and-suspenders safeguard.
+  // Launch the app and wait for it to reach a stable idle state.
+  //
+  // The 3-minute idle wait is caused by the Expo dev-client's OkHttp Metro WebSocket:
+  // the dev-client maintains a persistent WebSocket to Metro for fast-refresh. OkHttp
+  // registers this connection as an active IdlingResource, keeping Espresso "busy".
+  // Espresso only becomes idle after ~3 minutes when the Metro WS connection enters a
+  // keep-alive state. On BlackShark devices, the OS power manager SIGKILLs apps after
+  // ~3 minutes without user interaction, killing the app right as it becomes idle.
+  //
+  // Fix: pass `detoxURLBlacklist` as a launch arg. Detox's native Android module reads
+  // this at startup and configures the OkHttp synchronizer to ignore matching URLs,
+  // so the persistent Metro WebSocket no longer blocks the Espresso idle check.
+  // launchApp() then returns within seconds of the app connecting.
   await device.launchApp({
     newInstance: true,
     url: EXPO_DEV_CLIENT_URL,
     launchArgs: {
+      // Blacklist Metro hot-reload WebSocket URL so OkHttp doesn't block Espresso idle.
+      // Pattern matches ws://localhost:8081/... and http://localhost:8081/... connections.
+      detoxURLBlacklist: '[".*localhost:8081.*"]',
       TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
     },
   });
   await device.disableSynchronization();
 
-  // Handle Expo dev-client overlays that may block the UI.
-  await dismissExpoOverlays();
+  // After launchApp() returns (Espresso became idle after ~3 min of git I/O), Metro may
+  // immediately apply a pending fast-refresh (from test-code changes between runs).
+  // The fast-refresh causes: (a) RN bridge briefly drops, (b) app JS runtime reloads,
+  // (c) React Navigation resets — app may navigate to wiki page instead of main menu.
+  //
+  // Fix: wait 20 s unconditionally so the hot-refresh completes and the app settles
+  // before we attempt any element lookup. 20 s > typical RN bundle reload time (~8-12 s)
+  // on this device. This is only done once per test run in BeforeAll.
+  await new Promise<void>(resolve => setTimeout(resolve, 20_000));
 
-  // Wait for the TidGi main screen to appear (JS bundle loaded via Metro).
-  // Allow up to 4 minutes: first run after code changes may require a full re-bundle.
-  await waitFor(element(by.id(MAIN_MENU_ID)))
-    .toBeVisible()
-    .withTimeout(4 * 60 * 1000);
+  // Ensure synchronization stays disabled (hot-refresh resets native state on some devices).
+  try {
+    await device.disableSynchronization();
+  } catch { /* non-fatal */ }
+
+  const mainMenuDeadline = Date.now() + 3 * 60_000;
+  let mainMenuReady = false;
+
+  while (!mainMenuReady) {
+    const remaining = mainMenuDeadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error('[BeforeAll] Main menu not visible after 3 minutes (deadline exceeded after hot-refresh wait)');
+    }
+
+    try {
+      await dismissExpoOverlays();
+      await waitFor(element(by.id(MAIN_MENU_ID)))
+        .toBeVisible()
+        .withTimeout(Math.min(60_000, remaining));
+      mainMenuReady = true;
+    } catch (error) {
+      const errorMessage = String(error);
+      if (errorMessage.includes("can't connect") || errorMessage.includes('connect to the test app')) {
+        // RN bridge is reconnecting (hot-refresh or synchronisation toggle).
+        console.log('[BeforeAll] Detox WS disconnected; waiting 8 s for reconnection...');
+        await new Promise<void>(resolve => setTimeout(resolve, 8_000));
+        // Re-send disableSynchronization — may have been reset by bundle reload.
+        try {
+          await device.disableSynchronization();
+        } catch { /* non-fatal */ }
+      } else {
+        // Element not found: app navigated away from main menu (e.g. wiki WebView).
+        // Navigate back via adb to avoid Espresso blocking (WebView keeps JS thread busy).
+        console.log('[BeforeAll] main-menu-screen not visible; pressing back via adb...');
+        try {
+          execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
+        } catch { /* non-fatal */ }
+        await new Promise<void>(resolve => setTimeout(resolve, 2_000));
+        try {
+          await device.disableSynchronization();
+        } catch { /* non-fatal */ }
+      }
+    }
+  }
 });
 
 AfterAll(async () => {
@@ -196,14 +293,78 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
   });
 
   const isSyncScenario = pickle.tags.some(tag => tag.name === '@mobilesync');
-  if (isSyncScenario) {
-    // Full relaunch so git state is clean for each sync scenario
+  const isImportScenario = pickle.tags.some(tag => tag.name === '@import');
+  if (isImportScenario) {
+    // Full relaunch only for @import so git state is clean
     await device.launchApp({
       newInstance: true,
       url: EXPO_DEV_CLIENT_URL,
       launchArgs: {
         TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
       },
+    });
+    await device.disableSynchronization();
+    await dismissExpoOverlays(15_000);
+    await waitFor(element(by.id(MAIN_MENU_ID)))
+      .toBeVisible()
+      .withTimeout(60_000);
+  } else if (isSyncScenario) {
+    // @open, @sync: reuse the running app instance (wiki already imported).
+    // Navigate back to main menu via adb (bypass Espresso idle blocks).
+    const pressBackViaAdb = () => {
+      try {
+        execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
+      } catch { /* non-fatal */ }
+    };
+
+    // Wake the screen in case it turned off during a long previous scenario.
+    try {
+      execSync('adb shell input keyevent 224', { stdio: 'ignore', timeout: 2_000 });
+    } catch { /* non-fatal */ }
+
+    // WorkspaceList fires gitGetUnsyncedCommitCount on mount (5s delay after our
+    // WorkspaceList fix), but the first 5s after import it can still block Espresso.
+    // Use an 8s timeout to cover that window before deciding to press back.
+    if (await isMainMenuVisible(8_000)) {
+      await device.disableSynchronization();
+      return;
+    }
+
+    // Not on main menu — could be on WikiWebView, WorkspaceDetail, etc.
+    // Press back until we reach the root screen.
+    for (let index = 0; index < 6; index++) {
+      if (await isMainMenuVisible(2_000)) {
+        await device.disableSynchronization();
+        return;
+      }
+      pressBackViaAdb();
+      await new Promise(resolve => setTimeout(resolve, 1_200));
+    }
+
+    // Still not on main menu. Try a React Native reload (faster than force-stop).
+    try {
+      await device.disableSynchronization();
+    } catch { /* may still be blocked */ }
+
+    if (await isMainMenuVisible(5_000)) return;
+
+    // Last resort: reload React Native bundle (preserves native app process).
+    try {
+      await device.reloadReactNative();
+      await device.disableSynchronization();
+      await waitFor(element(by.id(MAIN_MENU_ID)))
+        .toBeVisible()
+        .withTimeout(30_000);
+      return;
+    } catch { /* RN reload failed; fall through to force-stop */ }
+
+    try {
+      execSync('adb shell am force-stop ren.onetwo.tidgi.mobile.test', { stdio: 'ignore' });
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+    } catch { /* non-fatal */ }
+    await device.launchApp({
+      newInstance: true,
+      url: EXPO_DEV_CLIENT_URL,
     });
     await device.disableSynchronization();
     await dismissExpoOverlays(15_000);
@@ -285,9 +446,56 @@ After(async (message: ITestCaseHookParameter) => {
   });
 });
 
+/**
+ * Capture diagnostic snapshot when a step fails.
+ *
+ * Outputs:
+ *  1. Screenshot (Detox artifact, saved to artifacts/ folder)
+ *  2. Compact UI element list via `adb uiautomator dump` (printed to console)
+ *  3. Tail of the desktop TidGi log (last 15 relevant lines)
+ *
+ * The adb dump is intentionally printed to stderr so it appears in the test
+ * runner output even when stdout is suppressed.
+ */
 AfterStep(async (message) => {
-  const { result } = message;
-  if (result.status === Status.FAILED) {
-    await device.takeScreenshot('step-failure');
+  const { result, pickleStep } = message;
+  if (result.status !== Status.FAILED) return;
+
+  const stepSlug = pickleStep.text.replace(/\W+/g, '-').slice(0, 50);
+
+  // 1. Screenshot
+  try {
+    await device.takeScreenshot(`fail-${stepSlug}`);
+  } catch { /* non-fatal */ }
+
+  // 2. UI element dump — helps diagnose which screen/elements are visible
+  try {
+    const raw = execSync(
+      'adb shell uiautomator dump /dev/stdout',
+      { encoding: 'utf8', timeout: 8_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    // Extract resource-id and text/content-desc for quick scan (order-independent)
+    const ids = Array.from(raw.matchAll(/resource-id="([^"]+)"/g)).map(m => m[1].split('/').pop()).filter(Boolean);
+    const texts = Array.from(raw.matchAll(/(?:text|content-desc)="([^"]{1,80})"/g)).map(m => m[1]).filter(Boolean);
+    console.error(
+      `\n[AfterStep FAIL] Step: "${pickleStep.text}"\n` +
+        `[AfterStep FAIL] Screen IDs: ${[...new Set(ids)].slice(0, 20).join(', ') || '(none)'}\n` +
+        `[AfterStep FAIL] Visible text: ${[...new Set(texts)].slice(0, 15).join(' | ') || '(none)'}`,
+    );
+  } catch (dumpError) {
+    console.error('[AfterStep FAIL] UI dump failed:', dumpError);
   }
+
+  // 3. Desktop TidGi log tail — helps confirm whether git operations reached the server
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const logPath = `I:\\github\\TidGi-Desktop\\userData-dev\\logs\\TidGi-${today}.log`;
+    const lines = execSync(
+      `powershell -NoProfile -Command "Get-Content '${logPath}' | Where-Object { $_ -match 'merge|mobile|receive|upload|sync|error' } | Select-Object -Last 15"`,
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    if (lines.trim()) {
+      console.error('[AfterStep FAIL] Desktop log tail:\n' + lines.trimEnd().split('\n').map(l => `  ${l}`).join('\n'));
+    }
+  } catch { /* non-fatal — desktop may not be running */ }
 });

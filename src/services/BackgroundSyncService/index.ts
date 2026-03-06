@@ -11,7 +11,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitHasChanges, gitPushToIncoming, gitResolveReference, IGitRemote, triggerDesktopMerge } from '../GitService';
+import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
