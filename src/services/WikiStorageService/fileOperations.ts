@@ -23,12 +23,18 @@ function getParentPath(path: string): string | undefined {
 }
 
 function getInternalPathCandidates(path: string): string[] {
-  const candidates = new Set<string>();
-  candidates.add(path);
+  // expo-file-system's new File/Directory API requires file:// URI scheme.
+  // java.io.File(URI) in Kotlin throws "URI is not absolute" for plain paths
+  // like "/data/user/...". Always normalize to file:// URI form.
   const plain = toPlainPath(path);
-  candidates.add(plain);
-  if (!path.startsWith('file://')) {
-    candidates.add(`file://${plain}`);
+  const uriForm = `file://${plain}`;
+  if (path === uriForm) return [uriForm];
+  // If original path is already a file:// URI (possibly different encoding),
+  // try both forms so we can find existing files saved under either format.
+  const candidates = new Set<string>();
+  candidates.add(uriForm);
+  if (path.startsWith('file://')) {
+    candidates.add(path);
   }
   return Array.from(candidates);
 }
