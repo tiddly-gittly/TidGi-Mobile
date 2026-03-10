@@ -10,17 +10,15 @@
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
-import { by, element, waitFor } from 'detox';
+import { by, element } from 'detox';
+import { waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 
 // ── Guards ────────────────────────────────────────────────────────────────────
 
 Given('at least one workspace exists', async () => {
-  // Check for any workspace (help or wiki).
-  await waitFor(element(by.id('workspace-item-help')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('workspace-item-help'), UI_TIMEOUT, 'workspace-item-help (no workspace found on main menu)', 'visible');
 });
 
 /**
@@ -87,21 +85,15 @@ When('I tap the settings icon on the first workspace', async () => {
 });
 
 Then('I should see the workspace detail screen', async () => {
-  await waitFor(element(by.id('workspace-detail-screen')))
-    .toExist()
-    .withTimeout(30_000);
+  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
 });
 
 Then('I should see the workspace sync button', async () => {
-  await waitFor(element(by.id('workspace-sync-button')))
-    .toExist()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('workspace-sync-button'), UI_TIMEOUT, 'workspace-sync-button on detail screen');
 });
 
 Then('I should see the workspace general settings button', async () => {
-  await waitFor(element(by.id('workspace-general-settings-button')))
-    .toExist()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('workspace-general-settings-button'), UI_TIMEOUT, 'workspace-general-settings-button');
 });
 
 When('I tap the workspace sync button', async () => {
@@ -119,33 +111,21 @@ When('I tap the workspace changes button', async () => {
 // ── Sub-page assertions ───────────────────────────────────────────────────────
 
 Then('I should see the workspace sync page', async () => {
-  await waitFor(element(by.id('workspace-sync-page')))
-    .toExist()
-    .withTimeout(30_000);
+  await waitForElement(by.id('workspace-sync-page'), 30_000, 'workspace-sync-page');
 });
 
 Then('I should see the last sync timestamp', async () => {
-  // Text is "上次同步: -" or "上次同步: 2026/..." — exact match fails.
-  // Use testID='last-sync-label' on the Text element instead.
-  await waitFor(element(by.id('last-sync-label')))
-    .toExist()
-    .withTimeout(30_000);
+  await waitForElement(by.id('last-sync-label'), 30_000, 'last-sync-label on sync page');
 });
 
 Then('I should see the workspace settings page', async () => {
-  await waitFor(element(by.id('workspace-settings-page')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('workspace-settings-page'), UI_TIMEOUT, 'workspace-settings-page', 'visible');
 });
 
 Then('I should see the commit history page', async () => {
-  await waitFor(element(by.id('workspace-changes-page')))
-    .toExist()
-    .withTimeout(30_000);
+  await waitForElement(by.id('workspace-changes-page'), 30_000, 'workspace-changes-page');
 });
 
 Then('I should see the unsynced commit count label', async () => {
-  await waitFor(element(by.id('workspace-unsynced-count')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('workspace-unsynced-count'), UI_TIMEOUT, 'workspace-unsynced-count label', 'visible');
 });

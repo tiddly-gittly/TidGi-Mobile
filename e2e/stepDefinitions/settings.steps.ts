@@ -8,6 +8,7 @@
 import { Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, element, expect as detoxExpect, waitFor } from 'detox';
+import { waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 
@@ -73,14 +74,10 @@ async function isSwitchChecked(testID: string): Promise<boolean> {
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 Then('I should see the theme segmented buttons', async () => {
-  // Scroll the settings SectionList to the top — the theme section (General)
-  // is the first section but may be off-screen if a previous scenario scrolled.
   try {
     await element(by.id('config-screen')).scrollTo('top');
   } catch { /* non-fatal — may already be at top */ }
-  await waitFor(element(by.id('theme-segmented-buttons')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('theme-segmented-buttons'), UI_TIMEOUT, 'theme-segmented-buttons on config screen', 'visible');
 });
 
 When(/^I tap the "([^"]+)" theme button$/, async (label: string) => {
@@ -105,29 +102,22 @@ Then(/^the selected theme should be "([^"]+)"$/, async (label: string) => {
 // ── Status bar toggles ───────────────────────────────────────────────────────
 
 Then('I should see the translucent status bar toggle', async () => {
-  await waitFor(element(by.id('translucent-status-bar-switch')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('translucent-status-bar-switch'), UI_TIMEOUT, 'translucent-status-bar-switch', 'visible');
 });
 
 Then('I should see the hide status bar toggle', async () => {
-  await waitFor(element(by.id('hide-status-bar-switch')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('hide-status-bar-switch'), UI_TIMEOUT, 'hide-status-bar-switch', 'visible');
 });
 
 When('I toggle the translucent status bar switch', async () => {
   translucentSwitchWasChecked = await isSwitchChecked('translucent-status-bar-switch');
   await element(by.id('translucent-status-bar-switch')).tap();
-  // Allow React state update + animation to complete (sync is disabled)
   await delay(2_000);
 });
 
 Then('the translucent status bar switch state should have changed', async () => {
   const expected = !translucentSwitchWasChecked;
-  await waitFor(element(by.id('translucent-status-bar-switch')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('translucent-status-bar-switch'), UI_TIMEOUT, 'translucent-status-bar-switch after toggle', 'visible');
   await detoxExpect(element(by.id('translucent-status-bar-switch'))).toHaveToggleValue(expected);
 });
 

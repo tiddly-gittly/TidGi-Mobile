@@ -26,6 +26,7 @@ import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
 import { writeFileSync } from 'fs';
+import { captureDeviceSnapshot, diagnosticError, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
 // WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
@@ -108,12 +109,12 @@ async function dismissExpoOverlays(initialWaitMs = 40_000) {
 // ── Global setup / teardown ──────────────────────────────────────────────────
 
 BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
-  // Clear stale adb reverse entries from previous runs, then re-add Metro (8081)
-  // and Desktop server port (from TIDGI_DESKTOP_URL).
+  // Set up adb reverse for Metro and Desktop server ports.
+  // NOTE: Do NOT use `adb reverse --remove-all` — it removes Metro's port
+  // mapping and causes the Expo dev client to show "Connect to dev server".
+  // Instead, set each port individually (idempotent if already mapped).
   try {
-    execSync('adb reverse --remove-all', { stdio: 'ignore' });
     execSync('adb reverse tcp:8081 tcp:8081', { stdio: 'ignore' });
-    // Also map the Desktop server port so @mobilesync tests can reach it.
     const desktopUrl = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
     const desktopPort = new URL(desktopUrl).port || '5212';
     execSync(`adb reverse tcp:${desktopPort} tcp:${desktopPort}`, { stdio: 'ignore' });
@@ -148,12 +149,13 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   try {
     execSync('adb shell input keyevent 224', { stdio: 'ignore' }); // KEYCODE_WAKEUP
     execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' }); // dismiss keyguard without PIN
-    // Prevent the screen from turning off during long-running tests (wiki WebView loading).
-    // screen_off_timeout=0 is not allowed on some devices; use a large value (1 hour).
+    // Prevent the screen from turning off during long-running tests.
+    // CAUTION: Only change system (not secure/global) settings here.
+    // DO NOT use `settings put secure lockscreen.disabled 1` — on MIUI/BlackShark
+    // (JoyUI) this triggers cascading system-service crashes and device reboots.
+    // DO NOT use `settings put global stay_on_while_plugged_in` — on some devices
+    // this writes to a protected namespace and causes system_server restarts.
     execSync('adb shell settings put system screen_off_timeout 3600000', { stdio: 'ignore' });
-    // NOTE: DO NOT use `settings put secure lockscreen.disabled 1` — on MIUI/BlackShark (JoyUI)
-    // this command triggers cascading system-service crashes (SYSTEM_TOMBSTONE every ~5 s) and
-    // causes the device to reboot. Use `wm dismiss-keyguard` above instead.
   } catch { /* non-fatal */ }
 
   // ── Disable Expo dev-menu auto-show ────────────────────────────────────────
@@ -246,7 +248,11 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   while (!mainMenuReady) {
     const remaining = mainMenuDeadline - Date.now();
     if (remaining <= 0) {
-      throw new Error('[BeforeAll] Main menu not visible after 3 minutes (deadline exceeded after hot-refresh wait)');
+      const snapshot = captureDeviceSnapshot();
+      throw new Error(
+        `[BeforeAll] Main menu not visible after 3 minutes.\n` +
+          `  ${formatSnapshot(snapshot)}`,
+      );
     }
 
     try {
@@ -471,34 +477,16 @@ AfterStep(async (message) => {
     await device.takeScreenshot(`fail-${stepSlug}`);
   } catch { /* non-fatal */ }
 
-  // 2. UI element dump — helps diagnose which screen/elements are visible
-  try {
-    const raw = execSync(
-      'adb shell uiautomator dump /dev/stdout',
-      { encoding: 'utf8', timeout: 8_000, stdio: ['ignore', 'pipe', 'ignore'] },
-    );
-    // Extract resource-id and text/content-desc for quick scan (order-independent)
-    const ids = Array.from(raw.matchAll(/resource-id="([^"]+)"/g)).map(m => m[1].split('/').pop()).filter(Boolean);
-    const texts = Array.from(raw.matchAll(/(?:text|content-desc)="([^"]{1,80})"/g)).map(m => m[1]).filter(Boolean);
-    console.error(
-      `\n[AfterStep FAIL] Step: "${pickleStep.text}"\n` +
-        `[AfterStep FAIL] Screen IDs: ${[...new Set(ids)].slice(0, 20).join(', ') || '(none)'}\n` +
-        `[AfterStep FAIL] Visible text: ${[...new Set(texts)].slice(0, 15).join(' | ') || '(none)'}`,
-    );
-  } catch (dumpError) {
-    console.error('[AfterStep FAIL] UI dump failed:', dumpError);
-  }
+  // 2. Device snapshot — captures activity, view tree, JS errors
+  const snapshot = captureDeviceSnapshot();
+  console.error(
+    `\n[AfterStep FAIL] Step: "${pickleStep.text}"\n` +
+      `[AfterStep FAIL] ${formatSnapshot(snapshot)}`,
+  );
 
-  // 3. Desktop TidGi log tail — helps confirm whether git operations reached the server
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const logPath = `I:\\github\\TidGi-Desktop\\userData-dev\\logs\\TidGi-${today}.log`;
-    const lines = execSync(
-      `powershell -NoProfile -Command "Get-Content '${logPath}' | Where-Object { $_ -match 'merge|mobile|receive|upload|sync|error' } | Select-Object -Last 15"`,
-      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
-    );
-    if (lines.trim()) {
-      console.error('[AfterStep FAIL] Desktop log tail:\n' + lines.trimEnd().split('\n').map(l => `  ${l}`).join('\n'));
-    }
-  } catch { /* non-fatal — desktop may not be running */ }
+  // 3. Desktop TidGi log tail — confirms whether git operations reached the server
+  const logTail = getDesktopLogTail();
+  if (logTail) {
+    console.error('[AfterStep FAIL] Desktop log tail:\n' + logTail.split('\n').map(l => `  ${l}`).join('\n'));
+  }
 });

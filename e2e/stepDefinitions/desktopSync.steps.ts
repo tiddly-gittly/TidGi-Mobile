@@ -1,14 +1,15 @@
 /**
  * Step definitions for Desktop Sync scenarios.
  *
- * Pre-condition:
- *   - TidGi Desktop is running with the tw-mobile-sync plugin active.
- *   - TIDGI_DESKTOP_URL environment variable holds the desktop server origin
- *     (e.g. http://192.168.1.10:5212). Defaults to http://localhost:5212.
- *   - The device is connected via USB with `adb reverse tcp:5212 tcp:5212` active.
+ * Pre-conditions:
+ *   - TidGi Desktop running with tw-mobile-sync plugin active.
+ *   - TIDGI_DESKTOP_URL env var with desktop origin (default: http://localhost:5212).
+ *   - Device connected via USB, `adb reverse` set by hooks.ts BeforeAll.
  *
- * Import flow bypasses QR scanning by typing the server JSON directly into the
- * manual-configuration TextInput.
+ * Principles:
+ *   - Use Detox for all UI interactions (tap, waitFor, replaceText).
+ *   - Use adb only for device storage reads and file writes (non-UI).
+ *   - On failure, capture device snapshot for diagnostics instead of bare timeouts.
  */
 
 import { Given, Then, When } from '@cucumber/cucumber';
@@ -17,121 +18,99 @@ import { by, device, element, waitFor } from 'detox';
 import { writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { diagnosticError, waitForElement } from '../support/diagnostics';
 
 const DESKTOP_URL = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
+const DESKTOP_AUTH_TOKEN = process.env.TIDGI_DESKTOP_AUTH_TOKEN ?? '';
+const DESKTOP_AUTH_USER = process.env.TIDGI_DESKTOP_AUTH_USER ?? 'TidGi User';
+/**
+ * Full QR-code JSON payload. Required when tokenAuth is enabled
+ * (the /tw-mobile-sync/git/mobile-sync-info endpoint returns 403).
+ */
+const DESKTOP_QR_JSON = process.env.TIDGI_DESKTOP_QR_JSON ?? '';
 /** Timeout for steps that require network (clone, sync). */
 const NETWORK_TIMEOUT = 120_000;
 /** Timeout for local UI interactions. */
 const UI_TIMEOUT = 10_000;
 
-const delay = (ms = 1_000) => new Promise(resolve => setTimeout(resolve, ms));
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function curlAuthArguments(): string {
+  if (!DESKTOP_AUTH_TOKEN) return '';
+  return `-H "x-tidgi-auth-token-${DESKTOP_AUTH_TOKEN}: ${DESKTOP_AUTH_USER}"`;
+}
+
+const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 /**
- * Use adb input swipe to scroll a view. This bypasses Espresso which may be
- * blocked by the WebView IdlingResource.
- * Uses a moderate swipe distance to avoid overshooting.
+ * Scroll the config screen. Prefers Detox swipe; falls back to adb if blocked.
  */
-function adbSwipeUp(distance: 'large' | 'small' = 'large') {
+async function scrollDown(distance: 'large' | 'small' = 'large') {
   try {
-    if (distance === 'small') {
-      // Small nudge: ~300px scroll (from y=1600 to y=1300)
-      execSync('adb shell input swipe 540 1600 540 1300 250', { stdio: 'ignore', timeout: 3_000 });
-    } else {
-      // Large scroll: ~800px (from y=1800 to y=1000). Avoids nav bar area (below y=2200).
-      execSync('adb shell input swipe 540 1800 540 1000 300', { stdio: 'ignore', timeout: 3_000 });
-    }
-  } catch { /* non-fatal */ }
+    const pct = distance === 'small' ? 0.3 : 0.6;
+    await element(by.id('config-screen')).swipe('up', 'slow', pct);
+  } catch {
+    try {
+      const endY = distance === 'small' ? 1300 : 1000;
+      execSync(`adb shell input swipe 540 1800 540 ${endY} 300`, { stdio: 'ignore', timeout: 3_000 });
+    } catch { /* non-fatal */ }
+  }
 }
 
 // ── Background ────────────────────────────────────────────────────────────────
 
 Given('the app is on the main menu screen', async () => {
-  // The Before hook already lands on main-menu-screen. Just confirm it's there.
-  // After @mobilesync newInstance relaunch, the app needs extra time for the RN
-  // bridge to fully settle before Espresso/Detox can send commands.
-  await waitFor(element(by.id('main-menu-screen')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-  // Extra settling time after newInstance relaunch.
+  await waitForElement(by.id('main-menu-screen'), UI_TIMEOUT, 'main-menu-screen visible', 'visible');
   await delay(3_000);
 });
 
 // ── Import flow ───────────────────────────────────────────────────────────────
 
 When('I navigate to the importer screen', { timeout: 60_000 }, async () => {
-  // Re-disable sync as belt-and-suspenders after the app has settled.
   try {
     await device.disableSynchronization();
   } catch { /* non-fatal */ }
 
-  // The import button is in Settings → ServerAndSync section.
-  // Try Detox tap first; fall back to adb tap if Espresso is blocked.
-  try {
-    await element(by.id('settings-icon-button')).tap();
-  } catch {
-    // Settings icon is typically in the top-right area of the app bar.
-    // On 1080x2400 screens, try center-right near the top.
-    execSync('adb shell input tap 980 150', { stdio: 'ignore', timeout: 3_000 });
-  }
+  // Navigate to Settings
+  await element(by.id('settings-icon-button')).tap();
   await delay(2_000);
+  await waitForElement(by.id('config-screen'), UI_TIMEOUT, 'config-screen after tapping settings icon', 'visible');
 
-  // Verify we reached the config screen.
-  await waitFor(element(by.id('config-screen')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
-
-  // Scroll down to find the import button. Use moderate swipes to avoid
-  // overshooting past it (the button is in the 4th section).
-  let buttonFound = false;
+  // Scroll to find the import button
   for (let index = 0; index < 15; index++) {
     try {
-      // Use toExist() instead of toBeVisible() — the button may be in the
-      // view tree but partially hidden by the system navigation bar.
-      await waitFor(element(by.id('import-wiki-button')))
-        .toExist()
-        .withTimeout(500);
-      buttonFound = true;
+      await waitFor(element(by.id('import-wiki-button'))).toExist().withTimeout(500);
       break;
     } catch {
-      adbSwipeUp('small');
+      if (index === 14) {
+        throw diagnosticError('import-wiki-button after scrolling 15 times through settings', 15 * 1100);
+      }
+      await scrollDown('small');
       await delay(600);
     }
   }
 
-  if (!buttonFound) {
-    throw new Error('import-wiki-button not found after scrolling through the settings page');
-  }
-
-  // The button exists in the view tree. Now try to tap it.
-  // If it's at the bottom edge (behind the nav bar), nudge scroll to bring it
-  // to the middle of the screen, then try again.
-  let tapped = false;
-  for (let tapAttempt = 0; tapAttempt < 5; tapAttempt++) {
+  // Tap with scroll-retry if element is behind nav bar
+  for (let attempt = 0; attempt < 5; attempt++) {
     try {
       await element(by.id('import-wiki-button')).tap();
-      tapped = true;
       break;
     } catch {
-      // Nudge scroll UP (content moves up, button moves higher on screen)
-      adbSwipeUp('small');
+      if (attempt === 4) {
+        throw diagnosticError('tapping import-wiki-button (may be behind system nav bar)', 5 * 900);
+      }
+      await scrollDown('small');
       await delay(400);
     }
   }
+  await delay(1_500);
 
-  if (!tapped) {
-    throw new Error('Failed to tap import-wiki-button after multiple scroll+tap attempts');
-  }
-  await delay();
+  // Verify Importer screen appeared
+  await waitForElement(by.id('importer-screen'), 10_000, 'importer-screen after tapping import button');
 });
 
 Then('I should see the importer screen', async () => {
-  // Use toExist() instead of toBeVisible() — after newInstance relaunch,
-  // Espresso may not respond to visibility checks but can check the view tree.
-  // Increase timeout: when a wiki workspace exists, background git I/O
-  // can delay Espresso response significantly.
-  await waitFor(element(by.id('importer-screen')))
-    .toExist()
-    .withTimeout(30_000);
+  await waitForElement(by.id('importer-screen'), 30_000, 'importer-screen');
 });
 
 When('the desktop server is reachable', () => {
@@ -144,8 +123,14 @@ When('the desktop server is reachable', () => {
   // Quick HTTP health check from the host (not from the device).
   // Use curl.exe explicitly (Windows ships it in System32) and avoid Unix-only
   // redirects like `> /dev/null` — stdio: 'pipe' lets Node discard the output.
+  // Do NOT use -f: a 401 (tokenAuth) or 403 response still means the server is
+  // UP — we just need auth.  Only fail on connection errors (exit codes 6/7/28).
   try {
-    execSync(`curl.exe -sf --max-time 5 ${DESKTOP_URL}/status`, { stdio: 'pipe', timeout: 10_000 });
+    const authArguments = curlAuthArguments();
+    execSync(
+      `curl.exe -s --max-time 5 ${authArguments} -o NUL -w "%{http_code}" ${DESKTOP_URL}/status`,
+      { stdio: 'pipe', timeout: 10_000 },
+    );
   } catch {
     throw new Error(`Desktop server at ${DESKTOP_URL} is not reachable. Ensure TidGi Desktop is running with tw-mobile-sync plugin.`);
   }
@@ -154,59 +139,73 @@ When('the desktop server is reachable', () => {
 When('I enter the desktop server URL', async () => {
   // Fetch the QR JSON payload from the desktop's mobile-sync-info endpoint
   // so we have the correct workspaceId and baseUrl.
+  // When tokenAuth is enabled the endpoint returns 403; in that case
+  // TIDGI_DESKTOP_QR_JSON must be provided as an env var instead.
   let qrJSON: string;
-  try {
-    const raw = execSync(`curl.exe -sf --max-time 10 ${DESKTOP_URL}/tw-mobile-sync/git/mobile-sync-info`, {
-      encoding: 'utf8',
-      timeout: 15_000,
-    }).trim();
-    // Validate it has the required fields.
-    const parsed = JSON.parse(raw) as { baseUrl?: string; workspaceId?: string };
+  if (DESKTOP_QR_JSON) {
+    // Env var provided — validate and use directly.
+    const parsed = JSON.parse(DESKTOP_QR_JSON) as { baseUrl?: string; workspaceId?: string };
     if (!parsed.baseUrl || !parsed.workspaceId) {
-      throw new Error('Missing baseUrl or workspaceId in mobile-sync-info response');
+      throw new Error('TIDGI_DESKTOP_QR_JSON is missing baseUrl or workspaceId');
     }
-    qrJSON = raw;
-  } catch (error) {
-    throw new Error(`Failed to fetch mobile-sync-info from ${DESKTOP_URL}: ${(error as Error).message}`);
+    qrJSON = DESKTOP_QR_JSON;
+  } else {
+    try {
+      const authArguments = curlAuthArguments();
+      const raw = execSync(
+        `curl.exe -sf --max-time 10 ${authArguments} ${DESKTOP_URL}/tw-mobile-sync/git/mobile-sync-info`,
+        { encoding: 'utf8', timeout: 15_000 },
+      ).trim();
+      // Validate it has the required fields.
+      const parsed = JSON.parse(raw) as { baseUrl?: string; workspaceId?: string };
+      if (!parsed.baseUrl || !parsed.workspaceId) {
+        throw new Error('Missing baseUrl or workspaceId in mobile-sync-info response');
+      }
+      qrJSON = raw;
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch mobile-sync-info from ${DESKTOP_URL}: ${(error as Error).message}. ` +
+          'If tokenAuth is enabled set TIDGI_DESKTOP_QR_JSON env var with the full QR payload.',
+      );
+    }
   }
 
   // Tap "Manual Configuration" to expand the JSON input area.
-  await waitFor(element(by.id('toggle-manual-config-button')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('toggle-manual-config-button'), UI_TIMEOUT, 'toggle-manual-config-button on importer screen', 'visible');
   await element(by.id('toggle-manual-config-button')).tap();
   await delay();
 
   // Type the JSON into the manual input field.
   // react-native-paper TextInput testID is on the inner native EditText.
-  await waitFor(element(by.id('manual-json-input')))
-    .toExist()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input after expanding manual config');
   await element(by.id('manual-json-input')).replaceText(qrJSON);
   await delay(2_000);
 });
 
 When('I tap the import wiki confirm button', async () => {
-  await waitFor(element(by.id('import-wiki-confirm-button')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('import-wiki-confirm-button'), UI_TIMEOUT, 'import-wiki-confirm-button', 'visible');
   await element(by.id('import-wiki-confirm-button')).tap();
 });
 
 Then('the import should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {
   // When import succeeds, t('NextStep') = '下一步' text appears above the open button.
   // Git clone can take a long time — the step timeout must exceed NETWORK_TIMEOUT.
-  await waitFor(element(by.text('下一步')))
-    .toExist()
-    .withTimeout(NETWORK_TIMEOUT);
+  await waitForElement(by.text('下一步'), NETWORK_TIMEOUT, 'import success indicator (下一步 button)');
 });
 
-Then('I should see the imported wiki in the workspace list', async () => {
+Then('I should see the imported wiki in the workspace list', { timeout: 30_000 }, async () => {
   // Navigate back to main menu. After a successful import, the navigation
-  // stack may be: MainMenu → Settings → Importer(success). Press back
-  // multiple times to ensure we reach the main menu.
+  // stack may be: MainMenu → Settings → Importer(success). Press back via
+  // device.pressBack() (preferred over adb) to pop the navigation stack.
   for (let index = 0; index < 4; index++) {
-    execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+    try {
+      await device.pressBack();
+    } catch {
+      // Fallback to adb if Detox pressBack fails (Espresso blocked by WebView)
+      try {
+        execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+      } catch { /* non-fatal */ }
+    }
     await delay(1_500);
     try {
       await waitFor(element(by.id('main-menu-screen')))
@@ -215,11 +214,14 @@ Then('I should see the imported wiki in the workspace list', async () => {
       break;
     } catch { /* keep pressing back */ }
   }
-  await delay(1_000);
+  // Extra settling time for workspace list to re-render after import
+  await delay(3_000);
   // Wiki workspaces have a sync icon button (accessibilityLabel).
-  await waitFor(element(by.label('sync-icon-button')).atIndex(0))
-    .toExist()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(
+    by.label('sync-icon-button'),
+    20_000,
+    'sync-icon-button in workspace list after import (wiki workspace card not rendered yet?)',
+  );
 });
 
 // ── Open wiki ─────────────────────────────────────────────────────────────────
@@ -236,14 +238,7 @@ When('I tap the first wiki workspace', async () => {
 });
 
 Then('I should see the wiki webview', { timeout: 60_000 }, async () => {
-  // The WikiWebView screen's outer Container View has testID='wiki-webview-screen'.
-  // It appears immediately when React Navigation completes the transition,
-  // regardless of how long the wiki HTML takes to load inside it.
-  // Using by.id() avoids the Espresso IdlingResource registered by android.webkit.WebView,
-  // which blocks ALL Espresso commands while the WebView is busy parsing HTML.
-  await waitFor(element(by.id('wiki-webview-screen')))
-    .toBeVisible()
-    .withTimeout(30_000);
+  await waitForElement(by.id('wiki-webview-screen'), 30_000, 'wiki-webview-screen after tapping workspace');
 });
 
 // ── Create change & sync ──────────────────────────────────────────────────────
@@ -352,28 +347,25 @@ When('I tap the sync button for the first wiki workspace', async () => {
 });
 
 Then('the sync should complete successfully', async () => {
-  // After a successful sync the SyncIconButton's testID changes to
-  // `sync-result-success-{wikiId}`. This is the most reliable way to detect
-  // sync completion without requiring a toast notification.
   const wikiId = getFirstWikiWorkspaceId();
   if (!wikiId) throw new Error('No wiki workspace found.');
-
-  await waitFor(element(by.id(`sync-result-success-${wikiId}`)))
-    .toExist()
-    .withTimeout(NETWORK_TIMEOUT);
+  await waitForElement(
+    by.id(`sync-result-success-${wikiId}`),
+    NETWORK_TIMEOUT,
+    `sync-result-success-${wikiId} (sync may have failed or timed out)`,
+  );
 });
 
 Then('the unsynced count should be zero after sync', async () => {
-  // Navigate to workspace detail to verify the unsynced commit count is 0.
   await element(by.label('workspace-settings-icon')).atIndex(0).tap();
-  await waitFor(element(by.id('workspace-detail-screen')))
-    .toExist()
-    .withTimeout(30_000);
-  await waitFor(element(by.id('workspace-unsynced-count')))
-    .toExist()
-    .withTimeout(30_000);
-  // Navigate back using adb (Espresso may be blocked by WebView).
-  execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen after tapping settings icon');
+  await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count label');
+  // Navigate back using device.pressBack; fall back to adb if blocked.
+  try {
+    await device.pressBack();
+  } catch {
+    execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+  }
   await delay();
 });
 

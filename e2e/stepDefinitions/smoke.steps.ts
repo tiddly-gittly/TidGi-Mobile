@@ -4,7 +4,8 @@
  */
 
 import { Given, Then, When } from '@cucumber/cucumber';
-import { by, device, element, expect as detoxExpect, waitFor } from 'detox';
+import { by, device, element, expect as detoxExpect } from 'detox';
+import { waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 
@@ -51,7 +52,5 @@ When('I press back', async () => {
 // ── Settings / Config screen ──────────────────────────────────────────────────
 
 Then('I should see the settings screen', async () => {
-  await waitFor(element(by.id('config-screen')))
-    .toBeVisible()
-    .withTimeout(UI_TIMEOUT);
+  await waitForElement(by.id('config-screen'), UI_TIMEOUT, 'config-screen (settings)', 'visible');
 });

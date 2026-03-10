@@ -100,19 +100,25 @@ pnpm detox:test -- --name "App launches and shows main menu"
 ```tree
 e2e/
 ├── features/            # Gherkin scenarios (.feature)
-│   ├── smoke.feature
-│   ├── settings.feature
-│   └── desktop-sync.feature
+│   ├── smoke.feature             # @smoke — app launch & basic navigation
+│   ├── settings.feature          # @settings — theme, toggles, username
+│   ├── workspace.feature         # @workspace — workspace detail pages
+│   ├── desktop-sync.feature      # @mobilesync — import, open, sync with Desktop
+│   └── conflict-resolution.feature  # @conflict — concurrent-edit merge tests
 ├── stepDefinitions/     # TypeScript step implementations
 │   ├── smoke.steps.ts
 │   ├── settings.steps.ts
-│   └── desktopSync.steps.ts
+│   ├── workspace.steps.ts
+│   ├── desktopSync.steps.ts
+│   └── conflict.steps.ts
 ├── support/
-│   └── hooks.ts         # Detox lifecycle (BeforeAll / After / AfterStep)
+│   ├── hooks.ts         # Detox lifecycle (BeforeAll / Before / After / AfterStep)
+│   └── diagnostics.ts   # Device snapshot & diagnostic error helpers
 ├── artifacts/
 │   └── apks/            # APKs downloaded from CI (gitignored)
 │       ├── app-release-dev-client.apk
 │       └── app-debug-androidTest.apk
+├── reports/             # Test reports (gitignored)
 └── cucumber.js          # Cucumber runner config
 
 expo-plugins/
@@ -143,28 +149,42 @@ These scenarios verify importing a wiki from TidGi Desktop and syncing changes.
    ```
    Then **restart** the TidGi Desktop dev wiki so the new plugin is loaded.
 
-3. **Desktop server URL** — the mobile device must be able to reach the desktop
-   over the network. Find the port from:
-   - `TidGi-Desktop/wiki-dev/wiki/tidgi.config.json` (`enableHTTPAPI: true`)
-   - Default port is **5212** unless configured otherwise
+3. **Desktop server URL & auth token** — when `tokenAuth` is enabled (default
+   in TidGi Desktop), the server requires an auth token header. The token is
+   a random `nanoid` generated when the wiki starts; it is persisted in
+   `TidGi-Desktop/userData-dev/settings/settings.json` under
+   `workspaces.<id>.authToken`.
 
-4. **QR scan bypassed by manual JSON input** — the E2E test bypasses QR code
-   scanning by fetching the server's `mobile-sync-info` endpoint and typing
-   the JSON payload directly into the manual configuration TextInput.
-   Set the server URL via environment variable:
+   You need to set these environment variables:
    ```bash
-   TIDGI_DESKTOP_URL=http://192.168.x.x:5212 pnpm detox:test -- --tags "@mobilesync"
+   # Required — desktop server origin
+   TIDGI_DESKTOP_URL=http://localhost:15313
+
+   # Required when tokenAuth is enabled — the authToken from settings.json
+   TIDGI_DESKTOP_AUTH_TOKEN=pgosct3xricbrwa3ere1e
+
+   # Optional — defaults to "TidGi User"
+   TIDGI_DESKTOP_AUTH_USER="TidGi User"
+
+   # Required for @import — full QR JSON payload (bypasses mobile-sync-info endpoint)
+   # Build this from the Desktop's settings.json fields:
+   TIDGI_DESKTOP_QR_JSON='{"baseUrl":"http://localhost:15313","workspaceId":"<id>","workspaceName":"wiki","token":"<authToken>","tokenAuthHeaderName":"x-tidgi-auth-token-<authToken>","tokenAuthHeaderValue":"TidGi User"}'
    ```
-   Without `TIDGI_DESKTOP_URL` the default `http://localhost:5212` is used
-   (works when the device reaches the Mac via `adb reverse`).
+
+   The `authToken` survives Desktop restarts (persisted in settings.json).
+   It only changes if the workspace is re-created.
+
+4. **adb reverse port mapping** — the test hooks automatically set up
+   `adb reverse tcp:8081` (Metro) and the Desktop server port. You do NOT
+   need to do this manually.
 
 ### Running
 
 ```bash
-# Ensure adb reverse is set (the detox:test script does this automatically)
-adb reverse tcp:5212 tcp:5212
-
-# Run all desktop-sync scenarios
+# Run all desktop-sync scenarios (import + open + sync)
+TIDGI_DESKTOP_URL=http://localhost:15313 \
+TIDGI_DESKTOP_AUTH_TOKEN=<token> \
+TIDGI_DESKTOP_QR_JSON='<json>' \
 pnpm detox:test -- --tags "@mobilesync"
 
 # Run only the import scenario
@@ -172,17 +192,86 @@ pnpm detox:test -- --tags "@import"
 
 # Run only sync scenarios (requires a wiki already imported)
 pnpm detox:test -- --tags "@sync"
+
+# Run conflict resolution tests (requires @import and @sync to have run first)
+pnpm detox:test -- --tags "@conflict"
 ```
 
 ### Device requirements for @mobilesync
 
 Same as the general prerequisites above, plus:
-- **USB connected** with `adb reverse tcp:5212 tcp:5212` active, OR WiFi on the same LAN
+- **USB connected** — `adb reverse` is set up automatically by the test hooks
 - At least 200 MB free storage for the cloned wiki
 
 ### Technical notes
 
-- **Import flow**: The test navigates to Settings → scrolls to "Import Wiki" button → enters the Importer screen → taps "Manual Configuration" → pastes the QR JSON (fetched from `${DESKTOP_URL}/tw-mobile-sync/git/mobile-sync-info`) → taps confirm.
-- **Scrolling**: Uses `adb shell input swipe` instead of Detox/Espresso `scroll()` because Espresso's scroll is blocked by the WebView IdlingResource when sync is disabled.
-- **Workspace ID discovery**: The step definitions read the device's persist storage via `adb shell run-as` to find the first wiki workspace ID, which is needed for dynamic testIDs like `workspace-item-{id}`.
-- **Sync verification**: After writing a test tiddler via `adb shell printf`, the test taps the sync button and waits for "同步完成" text to appear.
+- **Import flow**: The test navigates to Settings → scrolls to "Import Wiki"
+  button → enters the Importer screen → taps "Manual Configuration" → pastes
+  the QR JSON → taps confirm. The QR JSON is provided via `TIDGI_DESKTOP_QR_JSON`
+  env var (required when tokenAuth is enabled, since the `/mobile-sync-info`
+  endpoint returns 403).
+- **Scrolling**: Uses Detox `swipe('up')` on the `config-screen` ScrollView;
+  falls back to `adb shell input swipe` if Espresso is blocked.
+- **Workspace ID discovery**: Step definitions read the device's persist storage
+  via `adb shell run-as` to find the first wiki workspace ID, needed for
+  dynamic testIDs like `workspace-item-{id}`.
+- **Sync verification**: After writing a test tiddler via adb push, the test
+  taps the sync button and waits for `sync-result-success-{wikiId}` testID.
+- **Diagnostic errors**: All `waitForElement` calls capture a device snapshot
+  on failure, showing the current activity, visible screen IDs, text, and
+  any JS errors — instead of just "timeout expired".
+
+---
+
+## Troubleshooting
+
+### Expo dev-client error screen (`DevLauncherErrorActivity`)
+
+**Symptom**: App shows a red error screen instead of the main menu. Detox
+reports `Screen IDs: (none)` and all steps fail.
+
+**Cause**: The Expo dev-client cached a broken bundle or Metro connection
+state. This often happens after `adb shell pm clear` or Metro restart.
+
+**Fix**: Reinstall the APKs to clear all cached state:
+```bash
+adb install -r e2e/artifacts/apks/app-release-dev-client.apk
+adb install -r e2e/artifacts/apks/app-debug-androidTest.apk
+```
+
+### Device reboots during tests
+
+**Cause**: Certain `adb shell settings put secure/global ...` commands trigger
+system-service crashes on MIUI / BlackShark (JoyUI) ROMs. The test hooks
+explicitly avoid these commands (see comments in `hooks.ts`).
+
+**Prevention**: The hooks only modify `settings put system screen_off_timeout`.
+Do NOT manually run `settings put secure lockscreen.disabled` or
+`settings put global stay_on_while_plugged_in` on these devices.
+
+### "App seems to be idle" warnings
+
+**Symptom**: Detox prints repeated "The app seems to be idle" messages and
+commands time out.
+
+**Cause**: Espresso's idle-resource mechanism is blocked by WebView JS
+execution or OkHttp connections to Metro.
+
+**Prevention**: The hooks pass `detoxURLBlacklist: '[".*localhost:8081.*"]'`
+as a launch arg and call `device.disableSynchronization()` immediately. If
+the issue persists, ensure the app was NOT already running when tests started:
+```bash
+adb shell am force-stop ren.onetwo.tidgi.mobile.test
+```
+
+### Metro cache issues
+
+If Metro is serving a stale bundle (e.g., missing recent code changes):
+```bash
+# Restart Metro with cleared cache
+pnpm start -- --clear
+```
+Then pre-warm the bundle before running tests:
+```bash
+curl -sf "http://localhost:8081/index.bundle?platform=android&dev=true" -o NUL
+```

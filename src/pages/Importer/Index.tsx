@@ -225,12 +225,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     const { data, type } = scanningResult;
     if (type === 'qr') {
       scanHandledReference.current = true;
-      console.log('QR code scanned, raw data:', data);
       try {
         setQrScannerOpen(false);
         // Try to parse as JSON (Git QR format)
         const parsed = JSON.parse(data) as unknown;
-        console.log('Parsed QR code data:', parsed);
 
         if (
           parsed !== null &&
@@ -243,7 +241,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         ) {
           // Valid Git QR code
           const qr = parsed as GitQRData;
-          console.log('Valid Git QR code:', qr);
           fillFromQRCodeData(qr);
           return;
         } else {
