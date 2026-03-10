@@ -30,7 +30,7 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
   const theme = useTheme();
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [_hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [addServerToWiki] = useWorkspaceStore(useShallow(state => [state.addServer]));
   const addServer = useServerStore(useShallow(state => state.add));
@@ -41,9 +41,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const availableServersToPick = useMemo(() => {
     if (wiki === undefined) return [];
     return Object.entries(useServerStore.getState().servers)
-      .filter(([id]) => wiki.syncedServers?.map(item => item.serverID)?.includes?.(id))
+      .filter(([id]) => wiki.syncedServers.map(item => item.serverID).includes(id))
       .map(([id, server]) => {
-        const lastSync = wiki.syncedServers?.find(item => item.serverID === id)?.lastSync;
+        const lastSync = wiki.syncedServers.find(item => item.serverID === id)?.lastSync;
         return {
           id,
           label: `${server.name} (${lastSync === undefined ? '-' : new Date(lastSync).toLocaleString()})`,
@@ -51,16 +51,14 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
       });
   }, [wiki]);
 
-  const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>(availableServersToPick?.[0]?.id ?? '');
+  const [pickerSelectedServerID, setPickerSelectedServerID] = useState<string>(availableServersToPick[0]?.id ?? '');
   const handleFillSelectedServer = useCallback(() => {
-    if (pickerSelectedServerID && wiki !== undefined) {
-      const selectedServer = servers[pickerSelectedServerID];
-      if (selectedServer !== undefined) {
-        setServerUrlString(selectedServer.uri);
-        setServerName(selectedServer.name);
-      }
+    const selectedServer = pickerSelectedServerID ? servers[pickerSelectedServerID] : undefined;
+    if (selectedServer) {
+      setServerUrlString(selectedServer.uri);
+      setServerName(selectedServer.name);
     }
-  }, [pickerSelectedServerID, servers, wiki]);
+  }, [pickerSelectedServerID, servers]);
 
   useEffect(() => {
     void (async () => {
@@ -111,7 +109,6 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
           setQrScannerOpen(!qrScannerOpen);
         }}
       >
-        {/* eslint-disable-next-line react-native/no-raw-text */}
         <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
       </ScanQRButton>
       {availableServersToPick.length > 0 && (

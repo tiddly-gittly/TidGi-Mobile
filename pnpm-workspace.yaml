@@ -1,4 +1,13 @@
+packages:
+  - .
+  - plugins
+
 onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - detox
   - dprint
+  - dtrace-provider
   - esbuild
+  - less
+  - svelte-preprocess
   - unrs-resolver

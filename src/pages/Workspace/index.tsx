@@ -1,0 +1,9 @@
+export { WorkspaceAddServerPage } from './WorkspaceAddServerPage';
+export { WorkspaceChangesPage } from './WorkspaceChangesPage';
+export { WorkspaceDetailPage } from './WorkspaceDetailPage';
+export { WorkspacePerformancePage } from './WorkspacePerformancePage';
+export { WorkspaceRoutingConfigPage } from './WorkspaceRoutingConfigPage';
+export { WorkspaceServerEditPage } from './WorkspaceServerEditPage';
+export { WorkspaceSettingsPage } from './WorkspaceSettingsPage';
+export { WorkspaceSubWikiManagerPage } from './WorkspaceSubWikiManagerPage';
+export { WorkspaceSyncPage } from './WorkspaceSyncPage';

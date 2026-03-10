@@ -13,7 +13,6 @@ import {
   getDevicePushTokenAsync,
   getPermissionsAsync,
   PermissionStatus,
-  removeNotificationSubscription,
   requestPermissionsAsync,
   scheduleNotificationAsync,
   setNotificationChannelAsync,
@@ -24,15 +23,16 @@ import { Platform } from 'react-native';
 import type { RootStackParameterList } from '../../App';
 
 export function useWikiWebViewNotification({ id }: { id?: string }) {
-  const responseListener = useRef<ReturnType<typeof addNotificationResponseReceivedListener>>();
-  const gotoWikiListNotificationIdentifier = useRef<string | undefined>();
+  const responseListener = useRef<ReturnType<typeof addNotificationResponseReceivedListener> | undefined>(undefined);
+  const gotoWikiListNotificationIdentifier = useRef<string | undefined>(undefined);
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'WikiWebView'>['navigation']>();
 
   useEffect(() => {
     responseListener.current = addNotificationResponseReceivedListener(response => {
       // response is like `{"actionIdentifier": "expo.modules.notifications.actions.DEFAULT", "notification": {"date": 1693231845518, "request": {"content": [Object], "identifier": "98a087f5-0383-4b8e-bda8-b386521cc999", "trigger": [Object]}}}`
-      const route = response.notification.request.content.data.route as 'MainMenu';
-      if (route && id) {
+      const data = response.notification.request.content.data as { route?: 'MainMenu' } | undefined;
+      const route = data?.route;
+      if (route === 'MainMenu') {
         navigation.reset({
           index: 0,
           routes: [{ name: route, params: { fromWikiID: id } }],
@@ -66,7 +66,7 @@ export function useWikiWebViewNotification({ id }: { id?: string }) {
 
     return () => {
       if (responseListener.current !== undefined) {
-        removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
       if (gotoWikiListNotificationIdentifier.current !== undefined) {
         void dismissNotificationAsync(gotoWikiListNotificationIdentifier.current);
@@ -112,6 +112,8 @@ async function registerForPushNotifications() {
       shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
     }),
   });
   return token;

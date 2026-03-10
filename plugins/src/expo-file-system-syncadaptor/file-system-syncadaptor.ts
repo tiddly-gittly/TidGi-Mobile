@@ -1,27 +1,44 @@
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable unicorn/no-null */
 import debounce from 'lodash/debounce';
-import type { IChangedTiddlers, ITiddlerFields, Logger, Syncer, Tiddler, Wiki } from 'tiddlywiki';
+import type { IChangedTiddlers, ITiddlerFields, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import type { AppDataService } from '../../../src/services/AppDataService/index.js';
-import type { BackgroundSyncService } from '../../../src/services/BackgroundSyncService/index.js';
+import type { GitBackgroundSyncService } from '../../../src/services/BackgroundSyncService/index.js';
 import type { NativeService } from '../../../src/services/NativeService/index.js';
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
-import type { WikiStorageService } from '../../../src/services/WikiStorageService/index.js';
+import type { FileSystemWikiStorageService as WikiStorageService } from '../../../src/services/WikiStorageService/FileSystemWikiStorageService.js';
+
+interface Logger {
+  alert: (message: string) => void;
+  log: (...arguments_: unknown[]) => void;
+  setSaveBuffer?: (logger: Logger) => void;
+}
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 // type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
 type ISyncAdaptorPutTiddlersCallback = (error: Error | null | string, etag?: {
   bag: string;
+  filepath?: string;
 }, version?: string) => void;
 type ISyncAdaptorLoadTiddlerCallback = (error: Error | null, tiddler?: ITiddlerFields) => void;
-type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { bag?: string } | null) => void;
+type ISyncAdaptorDeleteTiddlerCallback = (error: Error | null, adaptorInfo?: { bag?: string; filepath?: string } | null) => void;
+
+interface IRelatedWorkspaceRoutingConfig {
+  fileSystemPathFilter: string | null;
+  fileSystemPathFilterEnable: boolean;
+  id: string;
+  includeTagTree: boolean;
+  isSubWiki: boolean;
+  mainWikiID: string | null;
+  name: string;
+  order: number;
+  tagNames: string[];
+}
 
 declare global {
   interface Window {
     isInTidGi?: boolean;
     service?: {
       appDataService: AppDataService;
-      backgroundSyncService: BackgroundSyncService;
+      backgroundSyncService: GitBackgroundSyncService;
       nativeService: NativeService;
       wikiHookService: WikiHookService;
       wikiStorageService: WikiStorageService;
@@ -43,36 +60,43 @@ class TidGiMobileFileSystemSyncAdaptor {
   workspaceID: string;
   recipe?: string;
   tiddlersToNotSave: string[];
+  routingConfigCache?: {
+    fetchedAt: number;
+    items: IRelatedWorkspaceRoutingConfig[];
+  };
 
   constructor(options: { wiki: Wiki }) {
     if (window.service?.wikiStorageService === undefined) {
       throw new Error("TidGi-Mobile wikiStorageService is undefined, can't load wiki.");
     }
     this.wikiStorageService = window.service.wikiStorageService;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: window.meta may not be injected yet
     if (window.meta?.()?.workspaceID === undefined) {
       throw new Error("TidGi-Mobile workspaceID is undefined, can't load wiki.");
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard
     this.workspaceID = window.meta?.()?.workspaceID;
     this.wiki = options.wiki;
     this.hasStatus = false;
     this.isAnonymous = false;
-    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor');
+    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor') as unknown as Logger;
     this.isLoggedIn = false;
     this.isReadOnly = false;
     this.logoutIsAvailable = true;
+
     this.tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
     // React-Native don't have fs monitor, so no SSE on mobile
     // this.setupSSE();
   }
 
   setupSSE() {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: may not be available on all platforms
     if (this.wikiStorageService.getWikiChangeObserver$ === undefined) {
       console.error("getWikiChangeObserver$ is undefined in wikiStorageService, can't subscribe to server changes.");
       return;
     }
     const debouncedSync = debounce(() => {
       if ($tw.syncer === undefined) {
-        console.error('Syncer is undefined in TidGiMobileFileSystemSyncAdaptor. Abort the `syncFromServer` in `setupSSE debouncedSync`.');
         return;
       }
       $tw.syncer.syncFromServer();
@@ -86,6 +110,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.wikiStorageService.getWikiChangeObserver$().subscribe((change: IChangedTiddlers) => {
       // `$tw.syncer.syncFromServer` calling `this.getUpdatedTiddlers`, so we need to update `this.updatedTiddlers` before it do so. See `core/modules/syncer.js` in the core
       Object.keys(change).forEach(title => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: change[title] may be falsy
         if (!change[title]) {
           return;
         }
@@ -148,7 +173,7 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 
   setLoggerSaveBuffer(loggerForSaving: Logger) {
-    this.logger.setSaveBuffer(loggerForSaving);
+    this.logger.setSaveBuffer?.(loggerForSaving);
   }
 
   isReady() {
@@ -156,14 +181,29 @@ class TidGiMobileFileSystemSyncAdaptor {
     return true;
   }
 
+  /**
+   * Local filepath cache — mirrors desktop's `boot.files` for filepath info.
+   *
+   * The IPC proxy makes `getTrackedTiddlerFilePath()` async, but TiddlyWiki's
+   * syncer calls `getTiddlerInfo()` synchronously. So we maintain a local cache:
+   * - Updated after each successful `saveTiddler()` (where we can `await`)
+   * - Consulted by `getTiddlerInfo()` (sync) and `deleteTiddler()` (async)
+   */
+  private filePathCache = new Map<string, string>();
+
   getTiddlerInfo(tiddler: Tiddler) {
+    // Return from local cache — synchronous, no IPC.
+    // If we don't have a cached path yet (tiddler loaded before our first save),
+    // that's OK — the storage service's own registry is the fallback for delete.
     return {
       bag: tiddler.fields.bag,
+      filepath: this.filePathCache.get(tiddler.fields.title),
     };
   }
 
   getTiddlerRevision(title: string) {
     const tiddler = this.wiki.getTiddler(title);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime
     return tiddler?.fields?.revision;
   }
 
@@ -174,21 +214,24 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logger.log('Getting status');
     try {
       const status = await this.wikiStorageService.getStatus();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined even though type says otherwise
       if (status === undefined) {
         throw new Error('No status returned from callWikiIpcServerRoute getStatus');
       }
       this.hasStatus = true;
       // Record the recipe
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: status.space may be undefined
       this.recipe = status.space?.recipe;
       // Check if we're logged in
       this.isLoggedIn = status.username !== 'GUEST';
-      this.isReadOnly = !!status.read_only;
-      this.isAnonymous = !!status.anonymous;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: JSON may omit these boolean fields
+      this.isReadOnly = status.read_only ?? false;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: JSON may omit these boolean fields
+      this.isAnonymous = status.anonymous ?? false;
       // this.logoutIsAvailable = 'logout_is_available' in status ? !!status.logout_is_available : true;
 
       callback?.(null, this.isLoggedIn, status.username, this.isReadOnly, this.isAnonymous);
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
     }
   }
@@ -198,32 +241,6 @@ class TidGiMobileFileSystemSyncAdaptor {
    * But HTML wiki already have all skinny tiddlers, so omit this. If this is necessary, maybe need mobile-sync plugin provide this, and store in asyncStorage, then provided here.
    */
   // async getSkinnyTiddlers(callback: ISyncAdaptorGetTiddlersJSONCallback) {
-  //   this.logger.log('getSkinnyTiddlers');
-  //   try {
-  //     // const selector = 'script.tiddlywiki-tiddler-store.skinnyTiddlers'
-  //     // this.logger.log(`getSkinnyTiddlers from ${selector}`);
-  //     // const tiddlersJSONPreloadInScriptTag = document.querySelector(selector)
-  //     // if (tiddlersJSONPreloadInScriptTag === null) {
-  //     //   callback?.(new Error('No tiddler store in HTML.'));
-  //     //   return;
-  //     // }
-
-  //     const skinnyTiddlerStoreString = await this.wikiStorageService.getSkinnyTiddlers();
-  //     if (skinnyTiddlerStoreString === undefined) {
-  //       callback?.(new Error('Load tiddler store failed'));
-  //       return;
-  //     }
-  //     const skinnyTiddlers = JSON.parse(skinnyTiddlerStoreString) as Array<Omit<ITiddlerFields, 'text'>> | undefined;
-  //     if (skinnyTiddlers === undefined) {
-  //       throw new Error('No tiddlers returned from callWikiIpcServerRoute getTiddlersJSON in getSkinnyTiddlers');
-  //     }
-  //     this.logger.log('skinnyTiddlers.length', skinnyTiddlers.length);
-  //     // Invoke the callback with the skinny tiddlers
-  //     callback(null, skinnyTiddlers);
-  //   } catch (error) {
-  //     // eslint-disable-next-line n/no-callback-literal
-  //     callback?.(error as Error);
-  //   }
   // }
 
   /*
@@ -237,6 +254,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     try {
       // Similar to https://github.com/TiddlyWiki/TiddlyWiki5/blob/master/core/modules/server/routes/put-tiddler.js#L36 but we just stop saving, and wait for lazy-load on client to complete, and let client to save again later.
       if (tiddler.fields._is_skinny) {
+        callback(null);
         return;
       }
       const title = tiddler.fields.title;
@@ -248,7 +266,9 @@ class TidGiMobileFileSystemSyncAdaptor {
       }
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
-      const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings());
+      const targetWorkspaceId = await this.routeTiddlerToWorkspace(tiddler);
+      const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings(), targetWorkspaceId);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined
       if (etag === undefined) {
         callback(new Error('Response from server is missing required `etag` header'));
       } else {
@@ -256,15 +276,24 @@ class TidGiMobileFileSystemSyncAdaptor {
         if (etagInfo === undefined) {
           callback(new Error(`Response from server etag header failed to parsed from ${etag}`));
         } else {
+          // getTrackedTiddlerFilePath goes through PostMessageCat IPC so it
+          // returns a Promise at runtime, even though TypeScript types it sync.
+          // eslint-disable-next-line @typescript-eslint/await-thenable
+          const trackedFilePath = await this.wikiStorageService.getTrackedTiddlerFilePath(title);
+          // Update local cache so getTiddlerInfo (sync) has the filepath
+          if (typeof trackedFilePath === 'string' && trackedFilePath.length > 0) {
+            this.filePathCache.set(title, trackedFilePath);
+          }
           // Invoke the callback
           callback(null, {
             bag: etagInfo.bag,
+            filepath: trackedFilePath,
           }, etagInfo.revision);
         }
       }
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
-      callback?.(error as Error);
+      // saveTiddler callback is required by TiddlyWiki interface but may be a no-op at runtime
+      callback(error as Error);
     }
   }
 
@@ -282,7 +311,9 @@ class TidGiMobileFileSystemSyncAdaptor {
       const tiddlerText = await this.wikiStorageService.loadTiddlerText(title);
       const tiddlerFields: ITiddlerFields = {
         ...tiddler.fields,
+
         text: tiddlerText ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime
         type: tiddler.fields.type ?? 'text/vnd.tiddlywiki',
         _is_skinny: undefined,
         revision: undefined,
@@ -290,23 +321,30 @@ class TidGiMobileFileSystemSyncAdaptor {
       };
 
       // only add revision if it > 0 or exists
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+
       // if (this.wiki.getChangeCount(title)) {
       //   tiddlerFields.revision = String(this.wiki.getChangeCount(title));
       // }
       callback?.(null, tiddlerFields);
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
       callback?.(error as Error);
     }
   }
 
-  /*
-  Delete a tiddler and invoke the callback with (err)
-  options include:
-  tiddlerInfo: the syncer's tiddlerInfo for this tiddler
-  */
-  async deleteTiddler(title: string, callback: ISyncAdaptorDeleteTiddlerCallback, _options: { tiddlerInfo: { adaptorInfo: { bag?: string } } }) {
+  /**
+   * Delete a tiddler and invoke the callback with (err)
+   *
+   * Desktop logic (FileSystemAdaptor.ts):
+   *   const fileInfo = this.boot.files[title];
+   *   if (!fileInfo) { callback(null, null); return; }  // nothing to delete
+   *   $tw.utils.deleteTiddlerFile(fileInfo, ...);
+   *
+   * We mirror that: pass whatever filepath we have to the storage service,
+   * which will try to find and delete the file.  If the file doesn't exist
+   * (e.g. a draft that was only in memory) the storage service returns
+   * success, and we do the same.
+   */
+  async deleteTiddler(title: string, callback: ISyncAdaptorDeleteTiddlerCallback, options?: { tiddlerInfo?: { adaptorInfo?: { bag?: string; filepath?: string } } }) {
     if (this.isReadOnly) {
       callback(null);
       return;
@@ -314,16 +352,34 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.logger.log('deleteTiddler', title);
     try {
       this.addRecentUpdatedTiddlersFromClient('deletions', title);
-      const deleted = await this.wikiStorageService.deleteTiddler(title);
-      if (deleted) {
-        // Invoke the callback & return null adaptorInfo
-        callback(null, null);
-      } else {
-        callback(new Error('getTiddler returned undefined from callWikiIpcServerRoute getTiddler in loadTiddler'));
-      }
+
+      // Resolve filepath from multiple sources, in priority order:
+      //   1. Our local filePathCache (set by previous saveTiddler)
+      //   2. options.tiddlerInfo.adaptorInfo.filepath (from syncer, only if string)
+      //   3. undefined (let storage service use its own registry)
+      const cachedPath = this.filePathCache.get(title);
+      const optionsPath = options?.tiddlerInfo?.adaptorInfo?.filepath;
+      const resolvedFilePath = cachedPath ??
+        (typeof optionsPath === 'string' && optionsPath.length > 0 ? optionsPath : undefined);
+
+      this.logger.log('deleteTiddler paths', {
+        cachedPath,
+        optionsFilePath: typeof optionsPath === 'string' ? optionsPath : `(${typeof optionsPath})`,
+        resolvedFilePath,
+        title,
+      });
+
+      await this.wikiStorageService.deleteTiddler(title, resolvedFilePath);
+      this.filePathCache.delete(title);
+      this.logger.log('deleteTiddler done', title);
+      callback(null, null);
     } catch (error) {
-      // eslint-disable-next-line n/no-callback-literal
-      callback?.(error as Error);
+      this.logger.log('deleteTiddler failed', {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        title,
+      });
+      callback(error as Error);
     }
   }
 
@@ -354,9 +410,122 @@ class TidGiMobileFileSystemSyncAdaptor {
       };
     }
   }
+
+  async getRoutingConfigs(): Promise<IRelatedWorkspaceRoutingConfig[]> {
+    const cacheTTL = 2000;
+    if (this.routingConfigCache && Date.now() - this.routingConfigCache.fetchedAt < cacheTTL) {
+      return this.routingConfigCache.items;
+    }
+
+    if (typeof this.wikiStorageService.getRelatedWorkspacesRoutingConfig !== 'function') {
+      return [];
+    }
+
+    const configs = await this.wikiStorageService.getRelatedWorkspacesRoutingConfig() as IRelatedWorkspaceRoutingConfig[];
+    this.routingConfigCache = {
+      fetchedAt: Date.now(),
+      items: Array.isArray(configs) ? configs : [],
+    };
+    return this.routingConfigCache.items;
+  }
+
+  getTiddlerTags(tiddler: Tiddler): string[] {
+    const rawTags = tiddler.fields.tags;
+    if (Array.isArray(rawTags)) {
+      return rawTags.filter((tag): tag is string => typeof tag === 'string');
+    }
+    if (typeof rawTags === 'string') {
+      return $tw.utils.parseStringArray(rawTags);
+    }
+    return [];
+  }
+
+  matchesDirectTag(tiddlerTitle: string, tiddlerTags: string[], workspaceTagNames: string[]): boolean {
+    if (workspaceTagNames.length === 0) {
+      return false;
+    }
+    const hasMatchingTag = workspaceTagNames.some(tagName => tiddlerTags.includes(tagName));
+    const isTitleATagName = workspaceTagNames.includes(tiddlerTitle);
+    return hasMatchingTag || isTitleATagName;
+  }
+
+  matchesTagTree(tiddlerTitle: string, workspaceTagNames: string[]): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: TW widget may not be available
+    if (!$tw.rootWidget?.makeFakeWidgetWithVariables) {
+      return false;
+    }
+    for (const tagName of workspaceTagNames) {
+      const result = this.wiki.filterTiddlers(
+        '[in-tagtree-of:inclusive<tagName>]',
+        $tw.rootWidget.makeFakeWidgetWithVariables({ tagName }),
+        this.wiki.makeTiddlerIterator([tiddlerTitle]),
+      );
+      if (result.length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  matchesCustomFilter(tiddlerTitle: string, filterExpression: string): boolean {
+    const filters = filterExpression
+      .split('\n')
+      .map(filter => filter.trim())
+      .filter(filter => filter.length > 0);
+
+    for (const filter of filters) {
+      const result = this.wiki.filterTiddlers(filter, undefined, this.wiki.makeTiddlerIterator([tiddlerTitle]));
+      if (result.length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async routeTiddlerToWorkspace(tiddler: Tiddler): Promise<string | undefined> {
+    const routingConfigs = await this.getRoutingConfigs();
+    if (routingConfigs.length === 0) {
+      return undefined;
+    }
+
+    const sortedConfigs = [...routingConfigs].sort((workspaceA, workspaceB) => workspaceA.order - workspaceB.order);
+    const tiddlerTitle = tiddler.fields.title;
+    let tiddlerTags = this.getTiddlerTags(tiddler);
+
+    // For draft tiddlers, merge tags from the original tiddler.
+    // This ensures drafts are saved to the same sub-wiki as their target,
+    // matching desktop's getTiddlerFileInfo behavior.
+    const draftOf = tiddler.fields['draft.of'];
+    if (draftOf && typeof draftOf === 'string') {
+      const originalTiddler = this.wiki.getTiddler(draftOf);
+      if (originalTiddler) {
+        const originalTags = this.getTiddlerTags(originalTiddler);
+        tiddlerTags = [...new Set([...tiddlerTags, ...originalTags])];
+      }
+    }
+
+    for (const workspaceConfig of sortedConfigs) {
+      if (this.matchesDirectTag(tiddlerTitle, tiddlerTags, workspaceConfig.tagNames)) {
+        return workspaceConfig.id;
+      }
+
+      if (workspaceConfig.includeTagTree && workspaceConfig.tagNames.length > 0) {
+        if (this.matchesTagTree(tiddlerTitle, workspaceConfig.tagNames)) {
+          return workspaceConfig.id;
+        }
+      }
+
+      if (workspaceConfig.fileSystemPathFilterEnable && typeof workspaceConfig.fileSystemPathFilter === 'string' && workspaceConfig.fileSystemPathFilter.length > 0) {
+        if (this.matchesCustomFilter(tiddlerTitle, workspaceConfig.fileSystemPathFilter)) {
+          return workspaceConfig.id;
+        }
+      }
+    }
+
+    return sortedConfigs.find(workspaceConfig => !workspaceConfig.isSubWiki)?.id;
+  }
 }
 
-// eslint-disable-next-line no-var
 declare var exports: {
   adaptorClass: typeof TidGiMobileFileSystemSyncAdaptor;
 };
@@ -364,6 +533,7 @@ declare var exports: {
 if ($tw.browser && typeof window !== 'undefined') {
   const isInTidGi = typeof document !== 'undefined' && window.isInTidGi;
   const servicesExposed = Boolean(window.service?.wikiStorageService);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: window.meta may not be injected when module loads
   const hasWorkspaceIDinMeta = Boolean(window.meta?.()?.workspaceID);
   if (isInTidGi && servicesExposed && hasWorkspaceIDinMeta) {
     exports.adaptorClass = TidGiMobileFileSystemSyncAdaptor;

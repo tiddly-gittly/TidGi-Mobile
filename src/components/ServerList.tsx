@@ -2,11 +2,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { compact } from 'lodash';
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList } from 'react-native';
 import { Card, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
-import { backgroundSyncService } from '../services/BackgroundSyncService';
+import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
 
 interface ServerListProps {
@@ -17,13 +16,18 @@ interface ServerListProps {
   serverIDs?: string[];
 }
 
+/**
+ * Renders a plain list of server cards (no FlatList/VirtualizedList).
+ * Safe to embed inside any ScrollView without "VirtualizedLists should never
+ * be nested inside plain ScrollViews" warnings.
+ */
 export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, onlineOnly, serverIDs, activeIDs = [] }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const serverList = useServerStore(useShallow(state => compact(serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]))));
   useEffect(() => {
     if (onlineOnly === true) {
-      void backgroundSyncService.updateServerOnlineStatus();
+      void gitBackgroundSyncService.updateServerOnlineStatus();
     }
   }, [onlineOnly]);
   const filteredServer = useMemo(() => {
@@ -34,8 +38,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, on
     return newServerList;
   }, [serverList, onlineOnly]);
 
-  const renderItem = useCallback(({ item }: { item: IServerInfo }) => {
-    const serverInfo = item;
+  const renderItem = useCallback((serverInfo: IServerInfo) => {
     return (
       <ServerCard
         key={serverInfo.id}
@@ -49,7 +52,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, on
         <Card.Title
           left={(props) => <Ionicons name={serverInfo.status === ServerStatus.online ? 'wifi' : 'cloud-offline'} color={theme.colors.primary} {...props} />}
           title={serverInfo.name}
-          subtitle={activeIDs?.includes(serverInfo.id) ? t('EditWorkspace.SyncActive') : t('EditWorkspace.SyncNotActive')}
+          subtitle={activeIDs.includes(serverInfo.id) ? t('EditWorkspace.SyncActive') : t('EditWorkspace.SyncNotActive')}
         />
       </ServerCard>
     );
@@ -57,11 +60,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onLongPress, on
 
   return (
     <>
-      <FlatList
-        data={filteredServer}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-      />
+      {filteredServer.map(renderItem)}
     </>
   );
 };

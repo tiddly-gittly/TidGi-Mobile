@@ -2,8 +2,7 @@ import { cloneDeep, uniqBy } from 'lodash';
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { defaultTextBasedTiddlerFilter } from '../constants/filters';
-import { WIKI_FOLDER_PATH } from '../constants/paths';
+import { registerCustomWikiFolderPathGetter, WIKI_FOLDER_PATH } from '../constants/paths';
 import { expoFileSystemStorage } from '../utils/expoFileSystemStorage';
 
 export interface IWikiWorkspace {
@@ -24,10 +23,21 @@ export interface IWikiWorkspace {
    */
   name: string;
   /**
-   * TiddlyWiki filter that used to decide a tiddler title should be synced or not.
-   * If empty, all tiddlers will be synced.
+   * Display order for workspace list (lower number = higher priority)
    */
-  selectiveSyncFilter?: string;
+  order?: number;
+  /**
+   * Whether this workspace is a sub-wiki attached to a main wiki.
+   */
+  isSubWiki?: boolean;
+  /**
+   * Main wiki workspace id when this workspace is a sub-wiki.
+   */
+  mainWikiID?: string | null;
+  /**
+   * Whether manual sync should include all sub-wikis attached to this main wiki.
+   */
+  syncIncludeSubWikis?: boolean;
   syncedServers: IWikiServerSync[];
   type?: 'wiki';
   /**
@@ -49,23 +59,38 @@ export interface IWikiServerSync {
    * Is currently syncing
    */
   syncActive: boolean;
+  /**
+   * Git remote token for authentication (not synced to tidgi.config.json)
+   */
+  token?: string;
+  tokenAuthHeaderName?: string;
+  tokenAuthHeaderValue?: string;
 }
 /**
  * use `1` (1970 - 1 - 1 00:00:00:001 UTC) to sync every thing to the newly added server.
  */
 const LAST_SYNC_TO_SYNC_ALL = 1;
 export interface WikiState {
+  /**
+   * User-selected custom wiki storage directory. When set, new wikis will be
+   * created here instead of the default internal document directory.
+   */
+  customWikiFolderPath: string | null;
   workspaces: IWorkspace[];
 }
 interface WikiActions {
   /**
    * @returns id of new workspace if successful, undefined otherwise
    */
-  add: (newWikiWorkspace: Omit<IWikiWorkspace, 'id' | 'wikiFolderLocation'> | (Omit<IPageWorkspace, 'id' | 'name'> & { name?: IPageWorkspace['name'] })) => IWorkspace | undefined;
+  add: (
+    newWikiWorkspace: (Omit<IWikiWorkspace, 'wikiFolderLocation'> & { id?: string }) | (Omit<IPageWorkspace, 'id' | 'name'> & { name?: IPageWorkspace['name'] }),
+  ) => IWorkspace | undefined;
   addServer: (id: string, newServerID: string) => void;
   remove: (id: string) => void;
   removeAll: () => void;
   removeSyncedServersFromWorkspace: (serverIDToRemove: string) => void;
+  syncWorkspaceID: (id: string, newID: string) => boolean;
+  setCustomWikiFolderPath: (path: string | null) => void;
   setServerActive: (id: string, serverIDToActive: string, isActive?: boolean) => void;
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
@@ -79,25 +104,41 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
   immer(devtools(
     persist(
       (set) => ({
+        customWikiFolderPath: null,
         workspaces: defaultWorkspaces,
         add(newWorkspace) {
           let result: IWorkspace | undefined;
           set((state) => {
             switch (newWorkspace.type) {
               case 'wiki': {
-                if (WIKI_FOLDER_PATH === undefined) return;
+                // When customWikiFolderPath is set (file:// path from MANAGE_EXTERNAL_STORAGE),
+                // use it as the base. Otherwise fall back to internal WIKI_FOLDER_PATH.
+                // Both place wikis under a `wikis/` subdirectory so the parent directory
+                // can also hold `logs/` and other shared data.
+                const customPath = state.customWikiFolderPath;
+                const wikiFolderBasePath = customPath
+                  ? `${customPath.endsWith('/') ? customPath : `${customPath}/`}wikis/`
+                  : WIKI_FOLDER_PATH;
+                if (!wikiFolderBasePath) return;
                 // name can't be empty
                 newWorkspace.name = newWorkspace.name || 'wiki';
+                const requestedID = (newWorkspace as IWikiWorkspace).id;
+                if (typeof requestedID === 'string' && requestedID.length > 0 && state.workspaces.some(workspace => workspace.id === requestedID)) {
+                  return;
+                }
                 // can have same name, but not same id
                 const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name || workspace.id === newWorkspace.name);
-                const id = sameNameWorkspace === undefined ? newWorkspace.name : `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}`;
-                const wikiFolderLocation = `${WIKI_FOLDER_PATH}${id}`;
+                const id = typeof requestedID === 'string' && requestedID.length > 0
+                  ? requestedID
+                  : (sameNameWorkspace ? `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}` : newWorkspace.name);
+                const wikiFolderLocation = `${wikiFolderBasePath}${id}`;
                 const newWikiWorkspaceWithID = {
                   ...(newWorkspace as IWikiWorkspace),
                   id,
                   wikiFolderLocation,
-                  selectiveSyncFilter: defaultTextBasedTiddlerFilter,
                   allowReadFileAttachment: true,
+                  enableQuickLoad: true,
+                  syncIncludeSubWikis: true,
                 } satisfies IWikiWorkspace;
                 state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];
                 result = cloneDeep(newWikiWorkspaceWithID);
@@ -115,11 +156,16 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
           });
           return result;
         },
+        setCustomWikiFolderPath(path) {
+          set((state) => {
+            state.customWikiFolderPath = path;
+          });
+        },
         update(id, newWikiWorkspace) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
-            const oldWiki = state.workspaces[oldWikiIndex];
-            if (oldWiki !== undefined) {
+            if (oldWikiIndex >= 0) {
+              const oldWiki = state.workspaces[oldWikiIndex];
               state.workspaces[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace } as typeof oldWiki;
             }
           });
@@ -127,9 +173,9 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         addServer(id, newServerID) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
-            const oldWiki = state.workspaces[oldWikiIndex];
-            if (oldWiki !== undefined) {
-              if (oldWiki.type === undefined) {
+            if (oldWikiIndex >= 0) {
+              const oldWiki = state.workspaces[oldWikiIndex];
+              if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
               }
               if (oldWiki.type !== 'wiki') return;
@@ -148,14 +194,16 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         setServerActive(id, serverIDToActive, isActive = true) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
-            const oldWiki = state.workspaces[oldWikiIndex];
-            if (oldWiki.type === undefined) {
-              oldWiki.type = 'wiki';
-            }
-            if (oldWiki.type !== 'wiki') return;
-            const serverToChange = oldWiki?.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
-            if (serverToChange !== undefined) {
-              serverToChange.syncActive = isActive;
+            if (oldWikiIndex >= 0) {
+              const oldWiki = state.workspaces[oldWikiIndex];
+              if (!oldWiki.type) {
+                oldWiki.type = 'wiki';
+              }
+              if (oldWiki.type !== 'wiki') return;
+              const serverToChange = oldWiki.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
+              if (serverToChange) {
+                serverToChange.syncActive = isActive;
+              }
             }
           });
         },
@@ -174,10 +222,37 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             state.workspaces.forEach(workspace => {
               if (workspace.type === 'wiki' && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
                 workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
-                state.update(workspace.id, workspace);
+                // No need to call state.update() - immer already tracks mutations
               }
             });
           });
+        },
+        syncWorkspaceID(id, newID) {
+          let updated = false;
+          set((state) => {
+            if (!newID || id === newID) {
+              return;
+            }
+            if (state.workspaces.some(workspace => workspace.id === newID)) {
+              return;
+            }
+
+            const targetWorkspace = state.workspaces.find(workspace => workspace.id === id);
+            if (!targetWorkspace || targetWorkspace.type !== 'wiki') {
+              return;
+            }
+
+            targetWorkspace.id = newID;
+
+            state.workspaces.forEach((workspace) => {
+              if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
+                workspace.mainWikiID = newID;
+              }
+            });
+
+            updated = true;
+          });
+          return updated;
         },
       }),
       {
@@ -187,3 +262,5 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
     ),
   )),
 );
+
+registerCustomWikiFolderPathGetter(() => useWorkspaceStore.getState().customWikiFolderPath);

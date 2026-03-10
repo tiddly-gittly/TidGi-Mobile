@@ -82,7 +82,7 @@ export function CreateWebpageShortcutTab() {
       <FlatList
         data={filterTemplate(webPages)}
         renderItem={renderItem}
-        keyExtractor={(item, index) => `helpPage-${index}`}
+        keyExtractor={(_item, index) => `helpPage-${index}`}
       />
     </Container>
   );

@@ -1,4 +1,4 @@
-import React, { Component, MutableRefObject } from 'react';
+import React, { Component, RefObject } from 'react';
 import { Text } from 'react-native-paper';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { FAKE_USER_AGENT } from '../../constants/webview';
@@ -9,12 +9,12 @@ interface CustomWebViewProps {
   injectedJavaScript: string;
   onLoadEnd?: () => void;
   onLoadStart?: () => void;
-  onMessageReference: MutableRefObject<(event: WebViewMessageEvent) => void>;
+  onMessageReference: RefObject<(event: WebViewMessageEvent) => void>;
   preferredLanguage: string | undefined | null;
   reloadingKey: string | number;
   triggerFullReload: () => void;
   useFileProtocol: boolean | undefined;
-  webViewReference: MutableRefObject<WebView | null>;
+  webViewReference: RefObject<WebView | null>;
   wikiFolderLocation: string;
 }
 

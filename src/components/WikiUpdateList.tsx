@@ -1,6 +1,3 @@
-/* eslint-disable react-native/no-raw-text */
-/* eslint-disable @typescript-eslint/no-confusing-void-expression */
-
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { compact } from 'lodash';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -9,7 +6,7 @@ import { Button, Card, Modal, Portal, Text, useTheme } from 'react-native-paper'
 import { styled } from 'styled-components/native';
 import type { LastArrayElement } from 'type-fest';
 import i18n from '../i18n';
-import { backgroundSyncService } from '../services/BackgroundSyncService';
+import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { ITiddlerChange, TiddlersLogOperation } from '../services/WikiStorageService/types';
 import { IWikiWorkspace } from '../store/workspace';
 
@@ -38,7 +35,7 @@ const ScrollableContent = styled(ScrollView)`
   max-height: 400px;
 `;
 
-type ChangeLogs = Awaited<ReturnType<typeof backgroundSyncService.getChangeLogsSinceLastSync>>;
+type ChangeLogs = Awaited<ReturnType<typeof gitBackgroundSyncService.getChangeLogsSinceLastSync>>;
 
 const WikiCardComponent: React.FC<{
   item: LastArrayElement<ChangeLogs>;
@@ -106,7 +103,7 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onLongPress, wiki, las
   useEffect(() => {
     void (async () => {
       if (lastSyncDate === undefined) return;
-      const changes = await backgroundSyncService.getChangeLogsSinceLastSync(wiki, lastSyncDate.getTime(), true);
+      const changes = await gitBackgroundSyncService.getChangeLogsSinceLastSync(wiki);
       setChangesAfterLastSync(compact(changes));
     })();
   }, [wiki, lastSyncDate]);
@@ -131,7 +128,9 @@ export const WikiUpdateList: React.FC<WikiListProps> = ({ onLongPress, wiki, las
       />
       <ChangeDetailsModal
         visible={modalVisible}
-        onDismiss={() => setModalVisible(false)}
+        onDismiss={() => {
+          setModalVisible(false);
+        }}
         selectedChange={selectedChange}
       />
     </>

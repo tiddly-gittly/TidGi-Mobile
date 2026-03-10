@@ -1,17 +1,17 @@
 import { format } from 'date-fns';
 import { Camera, PermissionStatus } from 'expo-camera';
-import * as fs from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 import type { ShareIntent } from 'expo-share-intent';
 import { compact } from 'lodash';
 
-import type { ITiddlerFieldsParam } from 'tiddlywiki';
+import type { ITiddlerFieldsParameter } from 'tiddlywiki';
 import { getWikiFilesPathByCanonicalUri } from '../../constants/paths';
 import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import type { WikiHookService } from '../WikiHookService';
-import { WikiStorageService } from '../WikiStorageService';
+import { FileSystemWikiStorageService as WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
 /**
@@ -106,7 +106,10 @@ export class NativeService {
       case 'file': {
         if (files && files.length > 0) {
           const filesWithFileLoadedToText = await Promise.all(files.map(async (file) => {
-            const text = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: 'base64' });
+            const filePath = file.path.startsWith('file://') ? file.path : `file://${file.path}`;
+            const fileHandle = new File(filePath);
+            const arrayBuffer = await fileHandle.arrayBuffer();
+            const text = Buffer.from(arrayBuffer).toString('base64');
             return { ...file, text, type: file.mimeType };
           }));
           script = importBinaryTiddlers(filesWithFileLoadedToText);
@@ -133,7 +136,7 @@ export class NativeService {
     // put into default workspace's database, with random title
     const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
     const created = format(new Date(), 'yyyyMMddHHmmssSSS');
-    let fields: ITiddlerFieldsParam = {
+    let fields: ITiddlerFieldsParameter = {
       created,
       modified: created,
       creator: i18n.t('Share.TidGiMobileShare'),
@@ -156,11 +159,14 @@ export class NativeService {
               const canonicalUri = `files/${file.fileName || randomTitle}`;
               const filePath = getWikiFilesPathByCanonicalUri(defaultWiki, canonicalUri);
               const filesDirectory = `${defaultWiki.wikiFolderLocation}/files`;
-              await fs.makeDirectoryAsync(filesDirectory, { intermediates: true });
-              await fs.copyAsync({
-                from: file.path.startsWith('file://') ? file.path : `file://${file.path}`,
-                to: filePath,
-              });
+              const directory = new Directory(filesDirectory);
+              if (!directory.exists) {
+                directory.create();
+              }
+              const sourceFile = new File(file.path.startsWith('file://') ? file.path : `file://${file.path}`);
+              const destinationFile = new File(filePath);
+              sourceFile.copy(destinationFile);
+
               const fileFields = {
                 ...fields,
                 type: file.mimeType,
@@ -169,7 +175,10 @@ export class NativeService {
               await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
             } else {
               // Original behavior: embed file content as base64
-              const fileContent = await fs.readAsStringAsync(file.path.startsWith('file://') ? file.path : `file://${file.path}`, { encoding: fs.EncodingType.Base64 });
+              const filePath = file.path.startsWith('file://') ? file.path : `file://${file.path}`;
+              const fileHandle = new File(filePath);
+              const arrayBuffer = await fileHandle.arrayBuffer();
+              const fileContent = Buffer.from(arrayBuffer).toString('base64');
               const fileFields = {
                 ...fields,
                 type: file.mimeType,
@@ -184,21 +193,20 @@ export class NativeService {
     }
   }
 
-  async saveFileToFs(filename: string, text: string, mimeType?: string): Promise<string | false> {
-    const configs = useConfigStore.getState();
-    const result = await fs.StorageAccessFramework.requestDirectoryPermissionsAsync(configs.defaultDownloadLocation);
-    if (!result.granted) {
-      return false;
-    }
+  saveFileToFs(filename: string, text: string, _mimeType?: string): Promise<string | false> {
     try {
-      const fileUri = await fs.StorageAccessFramework.createFileAsync(result.directoryUri, filename, mimeType || '');
-      console.log(`File mimeType: ${mimeType} write to ${fileUri} content: ${text.length > 100 ? text.substring(0, 100) + '...' : text}`);
-      await fs.writeAsStringAsync(fileUri, text, { encoding: fs.EncodingType.UTF8 });
-      configs.set({ defaultDownloadLocation: result.directoryUri });
-      return fileUri;
+      // Save to /sdcard/Documents/TidGi/exports/ (requires MANAGE_EXTERNAL_STORAGE)
+      const exportDirectory = new Directory('file:///sdcard/Documents/TidGi/exports/');
+      if (!exportDirectory.exists) {
+        exportDirectory.create({ intermediates: true, idempotent: true });
+      }
+      const file = new File(exportDirectory, filename);
+      file.write(text);
+      console.log(`File saved to ${file.uri}`);
+      return Promise.resolve(file.uri);
     } catch (error) {
       console.error('Error saving file:', error);
-      return false;
+      return Promise.resolve(false);
     }
   }
 }

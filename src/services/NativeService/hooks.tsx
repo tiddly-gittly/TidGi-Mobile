@@ -34,6 +34,7 @@ export function useRegisterReceivingShareIntent() {
     </Snackbar>
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useShareIntent } = require('expo-share-intent') as { useShareIntent: typeof IUseShareIntent };
 
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
@@ -42,7 +43,7 @@ export function useRegisterReceivingShareIntent() {
   });
 
   useEffect(() => {
-    if (error !== undefined) {
+    if (error) {
       console.log(
         `Failed to get ShareIntent, This is normal if you are using Expo Go for dev. To debug sharing feature, create a dev build "pnpm start:devClient" instead. ${error}`,
       );

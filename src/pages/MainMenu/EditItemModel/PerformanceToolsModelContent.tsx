@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Switch, Text, TextInput } from 'react-native-paper';
+import { Button, Switch, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 
 import { FlexibleText, SwitchContainer } from '../../../components/PreferenceWidgets';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
-import { ImportBinary } from '../../Importer/ImportBinary';
 
 interface ModalProps {
   id: string | undefined;
@@ -19,7 +18,6 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
     id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
   );
   const updateWorkspace = useWorkspaceStore(state => state.update);
-  const [editedSelectiveSyncFilter, setEditedSelectiveSyncFilter] = useState(wiki?.selectiveSyncFilter ?? '');
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -32,13 +30,6 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
   return (
     <ModalContainer>
       <CloseButton mode='outlined' onPress={onClose}>{t('Menu.Close')}</CloseButton>
-      <SectionContainer>
-        <Text variant='titleLarge'>{t('AddWorkspace.ImportBinaryFiles')}</Text>
-        <ImportBinary wikiWorkspace={wiki} />
-      </SectionContainer>
-      <SectionContainer>
-        <StyledTextInput label={t('AddWorkspace.SelectiveSyncFilter')} value={editedSelectiveSyncFilter} onChangeText={setEditedSelectiveSyncFilter} multiline />
-      </SectionContainer>
       <SectionContainer>
         <Text variant='titleLarge'>{t('Preference.EnableQuickLoad')}</Text>
         <SwitchContainer>
@@ -68,7 +59,7 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
 }
 
 const ModalContainer = styled.View`
-  background-color: ${({ theme }) => theme.colors.background};
+  background-color: #fff;
   padding: 20px;
 `;
 const CloseButton = styled(Button)`
@@ -79,7 +70,4 @@ const SectionContainer = styled.View`
   justify-content: baseline;
   align-items: stretch;
   margin-top: 15px;
-`;
-const StyledTextInput = styled(TextInput)`
-  margin-bottom: 10px;
 `;

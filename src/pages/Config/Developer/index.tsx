@@ -1,29 +1,45 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
-
+import { LogViewerDialog } from '../../../components/LogViewerDialog';
 import { useClearAllWikiData } from './useClearAllWikiData';
-import { useOpenDirectory } from './useOpenDirectory';
 
 export function Developer(): JSX.Element {
   const { t } = useTranslation();
 
-  const { isOpeningDirectory, openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
   const { ClearAllWikiDataResultSnackBar, clearAllWikiData } = useClearAllWikiData();
+  const [logVisible, setLogVisible] = useState(false);
 
   return (
-    <>
-      <Text variant='titleLarge'>{t('Preference.RemoveAllWikiDataDetail')}</Text>
+    <View style={styles.container}>
+      <Text variant='titleLarge' style={styles.sectionTitle}>{t('Preference.RemoveAllWikiDataDetail')}</Text>
       <Button onPress={clearAllWikiData} mode='outlined'>{t('Preference.RemoveAllWikiData')}</Button>
-      {ClearAllWikiDataResultSnackBar}
       <Button
-        onPress={openDocumentDirectory}
-        disabled={isOpeningDirectory}
+        onPress={() => {
+          setLogVisible(true);
+        }}
         mode='outlined'
       >
-        <Text>{t('Preference.OpenWikisFolder')}</Text>
+        {t('Preference.ViewAppLog')}
       </Button>
-      {OpenDirectoryResultSnackBar}
-      {/* <CopyDebugInfoButton /> */}
-    </>
+      {ClearAllWikiDataResultSnackBar}
+      <LogViewerDialog
+        scope='app'
+        visible={logVisible}
+        onDismiss={() => {
+          setLogVisible(false);
+        }}
+      />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+});

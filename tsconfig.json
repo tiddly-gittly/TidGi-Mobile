@@ -2,8 +2,18 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "typeRoots" : ["node_modules/@types", "node_modules/tw5-typed"],
+    "skipLibCheck": true,
+    "typeRoots": [
+      "node_modules/@types",
+      "node_modules/tw5-typed",
+      "./src/types"
+    ],
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-  }
+    "experimentalDecorators": true
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "src/types/**/*.d.ts"
+  ]
 }

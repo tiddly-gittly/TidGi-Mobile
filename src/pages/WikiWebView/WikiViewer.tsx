@@ -6,7 +6,7 @@ import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-pos
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { detectedLanguage } from '../../i18n';
-import { backgroundSyncService } from '../../services/BackgroundSyncService';
+import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
 import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
@@ -59,6 +59,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
 
   const [loaded, setLoaded] = useState(false);
   const onLoadEnd = useCallback(() => {
+    console.log(`[WikiViewer] onLoadEnd fired, setting loaded=true`);
     setLoaded(true);
   }, []);
   const [rememberLastVisitState, preferredLanguage, androidHardwareAcceleration] = useConfigStore(
@@ -85,11 +86,11 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       triggerFullReload();
     }
   }, [triggerFullReload, webViewKeyToReloadAfterRecycleByOS]);
-  servicesOfWorkspace.current?.wikiHookService?.setLatestTriggerFullReloadCallback?.(triggerFullReload);
+  servicesOfWorkspace.current?.wikiHookService.setLatestTriggerFullReloadCallback(triggerFullReload);
   useEffect(() => {
     console.log('resetWebviewReceiverReady on webViewKeyToReloadAfterRecycleByOS and init');
-    servicesOfWorkspace.current?.wikiHookService?.resetWebviewReceiverReady?.();
-    void backgroundSyncService.updateServerOnlineStatus();
+    servicesOfWorkspace.current?.wikiHookService.resetWebviewReceiverReady();
+    void gitBackgroundSyncService.updateServerOnlineStatus();
   }, [servicesOfWorkspace, webViewKeyToReloadAfterRecycleByOS]);
   const { loadHtmlError, loading, streamChunksToWebViewPercentage } = useTiddlyWiki(
     wikiWorkspace,

@@ -1,14 +1,12 @@
+import { useIsFocused } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
-import * as Haptics from 'expo-haptics';
 import { FC, useState } from 'react';
-import { Modal, Portal, useTheme } from 'react-native-paper';
-import { styled, ThemeProvider } from 'styled-components/native';
+import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
-import { CreateWorkspaceButton, ImporterButton } from '../../components/NavigationButtons';
+import { CreateWorkspaceButton } from '../../components/NavigationButtons';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
-import { EditItemModel } from './EditItemModel';
 
 const Container = styled.View`
   flex: 1;
@@ -29,53 +27,41 @@ export interface MainMenuProps {
 }
 
 export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> = ({ navigation }) => {
-  const theme = useTheme();
+  const isFocused = useIsFocused();
+  const allWorkspaces = useWorkspaceStore(state => state.workspaces);
+  const workspaceIDSet = new Set(allWorkspaces.map(workspace => workspace.id));
 
-  // State variables for the modal
-  const [wikiModalVisible, setWikiModalVisible] = useState(false);
   const [justReordered, setJustReordered] = useState(false);
-  const [selectedWikiID, setSelectedWikiID] = useState<string | undefined>();
-  const preventAutoOpen = justReordered || wikiModalVisible;
+  const preventAutoOpen = justReordered;
   useAutoOpenDefaultWiki(preventAutoOpen);
 
   return (
-    <Container>
+    <Container testID='main-menu-screen'>
       <WorkspaceList
+        includeSubWikis={false}
+        isFocused={isFocused}
         onPress={(wiki) => {
+          if (wiki.type === 'wiki' && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
+            if (!workspaceIDSet.has(wiki.mainWikiID)) {
+              navigation.navigate('WorkspaceDetail', { id: wiki.id });
+              return;
+            }
+            navigation.navigate('WikiWebView', { id: wiki.mainWikiID });
+            return;
+          }
           navigation.navigate('WikiWebView', { id: wiki.id });
         }}
-        onPressQuickLoad={(wiki) => {
-          navigation.navigate('WikiWebView', { id: wiki.id, quickLoad: true });
-        }}
-        onLongPress={(wiki) => {
-          void Haptics.selectionAsync();
-          setSelectedWikiID(wiki.id);
-          setWikiModalVisible(true);
+        onPressSettings={(wiki) => {
+          if (wiki.type === 'wiki') {
+            navigation.navigate('WorkspaceDetail', { id: wiki.id });
+          }
         }}
         onReorderEnd={(workspaces) => {
           setJustReordered(true);
           useWorkspaceStore.setState({ workspaces });
         }}
       />
-      <Portal>
-        <ThemeProvider theme={theme}>
-          <Modal
-            visible={wikiModalVisible}
-            onDismiss={() => {
-              setWikiModalVisible(false);
-            }}
-          >
-            <EditItemModel
-              id={selectedWikiID}
-              onClose={() => {
-                setWikiModalVisible(false);
-              }}
-            />
-          </Modal>
-        </ThemeProvider>
-      </Portal>
       <ButtonButtonsContainer>
-        <ImporterButton />
         <CreateWorkspaceButton />
       </ButtonButtonsContainer>
     </Container>

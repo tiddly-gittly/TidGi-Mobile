@@ -43,7 +43,7 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
     setVisible(false);
   };
 
-  const fallbackUrls = item.fallbackUrls?.split?.(' ')?.filter?.(Boolean) ?? [];
+  const fallbackUrls = item.fallbackUrls ? item.fallbackUrls.split(' ').filter(Boolean) : [];
   const [selectedUrl, setSelectedUrl] = useState(item.url);
 
   const handleSelectUrl = useCallback((url: string) => {

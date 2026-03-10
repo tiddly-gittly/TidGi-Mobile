@@ -6,23 +6,36 @@ import { useTranslation } from 'react-i18next';
 import { RootStackParameterList } from '../../App';
 import { CreateFromTemplateTab } from './tabs/CreateFromTemplateTab';
 import { CreateWebpageShortcutTab } from './tabs/CreateWebpageShortcutTab';
+import { ScanQRCodeTab } from './tabs/ScanQRCodeTab';
 
-const Tab = createMaterialBottomTabNavigator();
+type CreateWorkspaceTabParameterList = {
+  ScanQRCode: undefined;
+  CreateFromTemplate: undefined;
+  CreateWebpageShortcut: undefined;
+};
 
-export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>> = ({ navigation }) => {
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+const Tab = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
+
+export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>> = ({ navigation: _navigation }) => {
   const { t } = useTranslation();
 
   return (
     <Tab.Navigator>
       <Tab.Screen
+        name='ScanQRCode'
+        component={ScanQRCodeTab}
+        options={{ title: t('AddWorkspace.ScanFromWiki'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='qr-code' color={color} size={26} /> }}
+      />
+      <Tab.Screen
         name='CreateFromTemplate'
         component={CreateFromTemplateTab}
-        options={{ title: t('AddWorkspace.CreateFromTemplate'), tabBarIcon: ({ color }) => <Ionicons name='copy' color={color} size={26} /> }}
+        options={{ title: t('AddWorkspace.CreateFromTemplate'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='copy' color={color} size={26} /> }}
       />
       <Tab.Screen
         name='CreateWebpageShortcut'
         component={CreateWebpageShortcutTab}
-        options={{ title: t('AddWorkspace.CreateWebpageShortcut'), tabBarIcon: ({ color }) => <Ionicons name='bookmark' color={color} size={26} /> }}
+        options={{ title: t('AddWorkspace.CreateWebpageShortcut'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='bookmark' color={color} size={26} /> }}
       />
     </Tab.Navigator>
   );

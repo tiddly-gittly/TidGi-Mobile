@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/require-await */
 import { backOff } from 'exponential-backoff';
-import { MutableRefObject } from 'react';
+import { RefObject } from 'react';
 import { WebView } from 'react-native-webview';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
@@ -11,7 +10,7 @@ export class WikiHookService {
   #triggerFullReloadCallback: () => void = () => {};
   /** value in this maybe outdated, use #wikiStore for latest data. */
   readonly #workspace: IWikiWorkspace;
-  #webViewReference?: MutableRefObject<WebView | null>;
+  #webViewReference?: RefObject<WebView | null>;
   readonly #wikiStore = useWorkspaceStore;
 
   constructor(workspace: IWikiWorkspace) {
@@ -22,7 +21,7 @@ export class WikiHookService {
     this.#triggerFullReloadCallback = triggerFullReloadCallback;
   }
 
-  public setLatestWebViewReference(webViewReference: MutableRefObject<WebView | null>) {
+  public setLatestWebViewReference(webViewReference: RefObject<WebView | null>) {
     this.#webViewReference = webViewReference;
   }
 
@@ -30,7 +29,7 @@ export class WikiHookService {
     if (this.#webViewReference?.current) {
       return this.#webViewReference;
     } else {
-      return await new Promise<MutableRefObject<WebView | null>>((resolve) => {
+      return await new Promise<RefObject<WebView | null>>((resolve) => {
         const interval = setInterval(() => {
           if (this.#webViewReference?.current) {
             clearInterval(interval);
@@ -46,7 +45,7 @@ export class WikiHookService {
     webViewReference.current?.injectJavaScript(wrapScriptToWaitTwReady(script));
   }
 
-  public async triggerFullReload() {
+  public triggerFullReload() {
     console.info(`triggerFullReload: ${this.#workspace.name} (${this.#workspace.id})`);
     this.#triggerFullReloadCallback();
   }
@@ -66,16 +65,16 @@ export class WikiHookService {
 
   public async waitForWebviewReceiverReady(tryGetReady: () => void): Promise<void> {
     await backOff(
-      async () => {
+      () => {
         console.log(`backoff retry waitForWebviewReceiverReady, #webViewReceiverReady: ${this.#webViewReceiverReady}`);
         if (this.#webViewReceiverReady) {
-          return true;
+          return Promise.resolve(true);
         } else {
           tryGetReady();
           throw new Error('Webview receiver not ready');
         }
       },
-      { numOfAttempts: 100, jitter: 'full' },
+      { numOfAttempts: 100, jitter: 'full', maxDelay: 5000 },
     );
   }
 }

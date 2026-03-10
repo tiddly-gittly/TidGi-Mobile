@@ -2,7 +2,7 @@ import { TFunction } from 'i18next';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
-import { backgroundSyncService } from '../services/BackgroundSyncService';
+import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 
 export interface ISyncIconButtonProps {
@@ -10,31 +10,40 @@ export interface ISyncIconButtonProps {
 }
 export function SyncIconButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
-  const wiki = useWorkspaceStore(state =>
-    workspaceID === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === workspaceID && (w.type === undefined || w.type === 'wiki'))
-  );
+  const wiki = useWorkspaceStore(state => state.workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined);
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const iconName = getSyncIconName(isSyncSucceed, isConnected, inSyncing);
+  // Dynamic testID encodes sync result so E2E tests can detect outcome without a toast:
+  //   sync-icon-button-{id}         → initial / syncing state
+  //   sync-result-success-{id}      → last sync succeeded
+  //   sync-result-failed-{id}       → last sync failed
+  const buttonTestID = isSyncSucceed === true
+    ? `sync-result-success-${workspaceID}`
+    : isSyncSucceed === false
+    ? `sync-result-failed-${workspaceID}`
+    : `sync-icon-button-${workspaceID}`;
 
   return (
     <IconButton
       {...props}
+      testID={buttonTestID}
+      accessibilityLabel='sync-icon-button'
       icon={iconName}
-      iconColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80)}
+      iconColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80) : undefined}
       onPress={async () => {
         if (wiki === undefined) return;
         setInSyncing(true);
         try {
-          await backgroundSyncService.updateServerOnlineStatus();
-          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+          await gitBackgroundSyncService.updateServerOnlineStatus();
+          const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
           if (server === undefined) {
             setIsConnected(false);
             return;
           }
-          setIsSyncSucceed(await backgroundSyncService.syncWikiWithServer(wiki, server));
+          setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {
@@ -48,21 +57,19 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
 export function SyncTextButton(props: ISyncIconButtonProps) {
   const { t } = useTranslation();
   const { workspaceID } = props;
-  const wiki = useWorkspaceStore(state =>
-    workspaceID === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === workspaceID && (w.type === undefined || w.type === 'wiki'))
-  );
+  const wiki = useWorkspaceStore(state => state.workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined);
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
-  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof backgroundSyncService.getOnlineServerForWiki>>>();
+  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof gitBackgroundSyncService.getOnlineServerForWiki>>>();
   useEffect(() => {
-    if (wiki === undefined) {
+    if (!wiki) {
       setIsConnected(false);
       return;
     }
-    void backgroundSyncService.updateServerOnlineStatus().then(() => {
-      const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+    void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
+      const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
       if (server === undefined) {
         setIsConnected(false);
       } else {
@@ -77,17 +84,17 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       mode='outlined'
       disabled={inSyncing}
       loading={inSyncing}
-      buttonColor={isSyncSucceed === undefined ? undefined : (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80)}
+      buttonColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80) : undefined}
       onPress={async () => {
         if (wiki === undefined) return;
         setInSyncing(true);
         try {
-          await backgroundSyncService.updateServerOnlineStatus();
-          const server = backgroundSyncService.getOnlineServerForWiki(wiki);
+          await gitBackgroundSyncService.updateServerOnlineStatus();
+          const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
           if (server === undefined) {
             throw new Error('No server available');
           }
-          setIsSyncSucceed(await backgroundSyncService.syncWikiWithServer(wiki, server));
+          setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {
@@ -116,7 +123,7 @@ export function SyncAllTextButton() {
       onPress={async () => {
         setInSyncing(true);
         try {
-          const { haveConnectedServer } = await backgroundSyncService.sync();
+          const { haveConnectedServer } = await gitBackgroundSyncService.sync();
           if (haveConnectedServer) {
             setIsSyncSucceed(true);
           } else {

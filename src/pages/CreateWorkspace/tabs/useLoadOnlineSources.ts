@@ -1,4 +1,4 @@
-import * as fs from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { flatten, uniqBy } from 'lodash';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -10,18 +10,19 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
   const fetchJSON = useCallback(async (sourceUrl: string) => {
     setLoading(true);
     try {
-      const result = await fs.downloadAsync(sourceUrl, temporaryFileLocation, {
+      const destinationFile = new File(temporaryFileLocation);
+      const file = await File.downloadFileAsync(sourceUrl, destinationFile, {
         headers: {
           'Content-Type': 'application/json',
         },
       });
-      if (result.status !== 200) {
-        // delete text file if have server error like 404
-        const content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
-        const errorMessage = `${content} Status: ${result.status}`;
-        await fs.deleteAsync(temporaryFileLocation);
-        throw new Error(errorMessage);
+      // Check if download was successful by checking if file exists
+      if (!file.exists) {
+        throw new Error('Download failed');
       }
+    } catch (error: unknown) {
+      console.warn('Failed to download online sources', error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -30,18 +31,19 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
     const loadOnlineSources = async () => {
       const fetchedLists = await Promise.all(onlineSourcesUrls.map(async (sourceUrl: string) => {
         try {
-          const { exists } = await fs.getInfoAsync(temporaryFileLocation);
+          const file = new File(temporaryFileLocation);
           let content: string;
-          if (exists) {
+          if (file.exists) {
             // try read from cache first
-            content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
+            content = await file.text();
             // stale while revalidate
-            void fetchJSON(sourceUrl).catch(error => {
+            void fetchJSON(sourceUrl).catch((error: unknown) => {
               console.warn('Failed to fetch online sources when swr in useLoadOnlineSources', error);
             });
           } else {
             await fetchJSON(sourceUrl);
-            content = await fs.readAsStringAsync(temporaryFileLocation, { encoding: 'utf8' });
+            const newFile = new File(temporaryFileLocation);
+            content = await newFile.text();
           }
           return JSON.parse(content) as ITemplateListItem[];
         } catch (error) {

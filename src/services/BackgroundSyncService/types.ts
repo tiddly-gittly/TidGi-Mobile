@@ -1,23 +1,8 @@
-import type { ITiddlerFieldsParam } from 'tiddlywiki';
-
 /**
- * Copy from $:/plugins/linonetwo/tw-mobile-sync 's src/tw-mobile-sync/types.ts
+ * Background sync service types
  */
-export interface ISyncEndPointRequest {
-  deleted?: string[];
-  lastSync: number | undefined;
-  tiddlers: Array<Partial<ITiddlerFieldsParam>>;
-}
-export interface ISyncEndPointResponse {
-  deletes: string[];
-  updates: ITiddlerFieldsParam[];
-}
-export interface ITiddlywikiServerStatus {
-  anonymous: boolean;
-  read_only: boolean;
-  space: {
-    recipe: string;
-  };
-  tiddlywiki_version: string;
-  username: string;
+
+export interface ISyncResult {
+  haveConnectedServer: boolean;
+  haveUpdate: boolean;
 }

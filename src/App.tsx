@@ -1,17 +1,16 @@
-/* eslint-disable react-native/no-inline-styles */
-
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { Buffer } from 'buffer';
 import i18n from 'i18next';
 import './i18n/index';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { HeaderBackButton } from '@react-navigation/elements';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
-import { ThemeProvider } from 'styled-components';
+import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
@@ -20,6 +19,27 @@ import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspac
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
+import {
+  WorkspaceAddServerPage,
+  WorkspaceChangesPage,
+  WorkspaceDetailPage,
+  WorkspacePerformancePage,
+  WorkspaceRoutingConfigPage,
+  WorkspaceServerEditPage,
+  WorkspaceSettingsPage,
+  WorkspaceSubWikiManagerPage,
+  WorkspaceSyncPage,
+} from './pages/Workspace';
+
+// Polyfill Buffer globally for isomorphic-git and other Node.js modules
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
+
+const SettingsIcon = styled(Ionicons)`
+  margin-right: 10px;
+`;
+import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
@@ -28,8 +48,17 @@ export type RootStackParameterList = {
   Config: undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
-  MainMenu: MainMenuProps;
+  MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
+  WorkspaceAddServer: { id: string };
+  WorkspaceChanges: { id: string };
+  WorkspaceDetail: { id: string };
+  WorkspacePerformance: { id: string };
+  WorkspaceRoutingConfig: { id: string };
+  WorkspaceServerEdit: { id: string; serverId: string };
+  WorkspaceSettingsPage: { id: string };
+  WorkspaceSubWikiManager: { id: string };
+  WorkspaceSync: { id: string };
   WikiWebView: WikiWebViewProps;
 };
 const Stack = createStackNavigator<RootStackParameterList>();
@@ -41,6 +70,10 @@ export const App: React.FC = () => {
   const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
   const [translucentStatusBar, hideStatusBar] = useConfigStore(useShallow(state => [state.translucentStatusBar, state.hideStatusBar]));
   const { importSuccessSnackBar } = useRegisterReceivingShareIntent();
+
+  useEffect(() => {
+    initializeMobileLogger();
+  }, []);
 
   return (
     <I18nextProvider i18n={i18n}>
@@ -67,11 +100,11 @@ export const App: React.FC = () => {
                   headerTitle: t('Sidebar.Main'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerRight: () => (
-                    <Ionicons
+                    <SettingsIcon
+                      testID='settings-icon-button'
                       name='settings'
                       size={32}
                       color={theme.colors.primary}
-                      style={{ marginRight: 10 }}
                       onPress={() => {
                         navigation.navigate('Config' as never);
                       }}
@@ -94,6 +127,51 @@ export const App: React.FC = () => {
                   headerTitleStyle: { color: theme.colors.primary },
                 })}
                 component={CreateWorkspace}
+              />
+              <Stack.Screen
+                name='WorkspaceDetail'
+                component={WorkspaceDetailPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceSync'
+                component={WorkspaceSyncPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceChanges'
+                component={WorkspaceChangesPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceSettingsPage'
+                component={WorkspaceSettingsPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceSubWikiManager'
+                component={WorkspaceSubWikiManagerPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspacePerformance'
+                component={WorkspacePerformancePage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceRoutingConfig'
+                component={WorkspaceRoutingConfigPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceServerEdit'
+                component={WorkspaceServerEditPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WorkspaceAddServer'
+                component={WorkspaceAddServerPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
               />
               <Stack.Screen
                 name='PreviewWebView'

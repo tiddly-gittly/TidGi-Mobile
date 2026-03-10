@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Metro: start dev-client",
+			"type": "shell",
+			"command": "npx expo start --port 8081 --dev-client",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

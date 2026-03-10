@@ -68,9 +68,8 @@ export const useServerStore = create<ServerState & ServerActions>()(
         },
         update: (newServer) => {
           set((state) => {
-            const oldServer = state.servers[newServer.id];
-            if (oldServer !== undefined) {
-              state.servers[newServer.id] = { ...oldServer, ...newServer };
+            if (newServer.id in state.servers) {
+              state.servers[newServer.id] = { ...state.servers[newServer.id], ...newServer };
             }
           });
         },

@@ -30,10 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v3
         with:
           version: 9
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.x
           cache: pnpm
@@ -82,7 +82,7 @@ jobs:
         run: |
           cd plugins && pnpm i && cd ..
           pnpm run build:plugin
-          pnpm run build:preload
+          pnpm run build:tw-assets
 
       - name: Build by eject eas and remove debug signing key for aab
         run: |

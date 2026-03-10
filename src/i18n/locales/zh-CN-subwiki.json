@@ -1,0 +1,31 @@
+{
+  "Common": {
+    "Cancel": "取消",
+    "Save": "保存",
+    "Delete": "删除",
+    "Edit": "编辑",
+    "Add": "添加"
+  },
+  "SubWiki": {
+    "SubWikis": "子维基",
+    "AddSubWiki": "添加子维基",
+    "EditSubWiki": "编辑子维基",
+    "ManageSubWikis": "管理子维基",
+    "Name": "名称",
+    "Path": "路径",
+    "NameAndPathRequired": "名称和路径不能为空",
+    "RoutingRules": "路由规则",
+    "Tags": "标签",
+    "AddTag": "添加标签",
+    "IncludeTagTree": "包含标签树",
+    "IncludeTagTreeDescription": "递归匹配标签层级关系",
+    "CustomFilters": "自定义过滤器",
+    "CustomFiltersDescription": "使用 TiddlyWiki 过滤器语法定义路由规则"
+  },
+  "WorkspaceSettings": {
+    "Title": "工作区设置"
+  },
+  "Sync": {
+    "CloningRepository": "正在克隆仓库"
+  }
+}

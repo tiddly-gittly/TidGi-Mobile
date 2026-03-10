@@ -64,7 +64,7 @@ jobs:
         run: |
           cd plugins && npm i && cd ..
           npm run build:plugin
-          npm run build:preload
+          npm run build:tw-assets
 
       - name: Build by eject eas and not remove debug signing key for apk
         run: npx expo prebuild -p android --clean

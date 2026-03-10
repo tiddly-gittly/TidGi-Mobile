@@ -1,31 +1,35 @@
 import { Asset } from 'expo-asset';
-import * as fs from 'expo-file-system';
-import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef, useState } from 'react';
+import { File } from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { Dispatch, RefObject, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { WebView } from 'react-native-webview';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
 import expoFileSystemSyncadaptorAssetID from '../../../assets/plugins/syncadaptor.html';
-import { getWikiFilePath } from '../../constants/paths';
+import tiddlywikiEmptyHtmlAssetID from '../../../assets/tiddlywiki/tiddlywiki-empty.html';
+import { getWikiTiddlerFolderPath } from '../../constants/paths';
 import { WikiHookService } from '../../services/WikiHookService';
-import { WikiStorageService } from '../../services/WikiStorageService';
-import { IWikiWorkspace } from '../../store/workspace';
+import { FileSystemWikiStorageService } from '../../services/WikiStorageService/FileSystemWikiStorageService';
+import { readTidgiConfig } from '../../services/WikiStorageService/tidgiConfigManager';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
-import { createSQLiteTiddlersReadStream, SQLiteTiddlersReadStream } from './useStreamChunksToWebView/SQLiteTiddlersReadStream';
+import { FileSystemTiddlersReadStream } from './useStreamChunksToWebView/FileSystemTiddlersReadStream';
 
 export interface IHtmlContent {
   html: string;
   setLoadHtmlError: Dispatch<SetStateAction<string>>;
-  tiddlersStream: SQLiteTiddlersReadStream;
+  tiddlersStream: FileSystemTiddlersReadStream;
 }
 export function useTiddlyWiki(
   workspace: IWikiWorkspace,
   loaded: boolean,
-  webViewReference: MutableRefObject<WebView | null>,
+  webViewReference: RefObject<WebView | null>,
   keyToTriggerReload: number,
   quickLoad: boolean,
-  servicesOfWorkspace: MutableRefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
+  servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
-  const tiddlersStreamReference = useRef<SQLiteTiddlersReadStream | undefined>();
+  const tiddlersStreamReference = useRef<FileSystemTiddlersReadStream | undefined>(undefined);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * This need to use with `webviewSideReceiver`.
@@ -36,73 +40,108 @@ export function useTiddlyWiki(
 
   const webviewLoaded = loaded && webViewReference.current !== null;
   useEffect(() => {
+    console.log(
+      `[useTiddlyWiki] effect fired: loaded=${String(loaded)}, webViewRef=${webViewReference.current !== null}, webviewLoaded=${
+        String(webviewLoaded)
+      }, workspaceId=${workspace.id}, wikiFolderLocation=${workspace.wikiFolderLocation}`,
+    );
     if (!webviewLoaded) return;
     void (async () => {
       try {
-        /**
-         * @url file:///data/user/0/host.exp.exponent/files/wikis/wiki/index.html or 'file:///data/user/0/host.exp.exponent/cache/ExponentAsset-8568a405f924c561e7d18846ddc10c97.html'
-         */
-        const html = `<!doctype html>${await fs.readAsStringAsync(getWikiFilePath(workspace))}`;
-        const pluginJSONStrings = await getTidGiMobilePlugins();
+        const { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi } = await loadBundledAssets();
+        console.log(`[useTiddlyWiki] assets loaded: html=${emptyHtml.length}, syncadaptor=${expoFileSystemSyncadaptor.length}`);
         if (tiddlersStreamReference.current !== undefined) {
           tiddlersStreamReference.current.destroy();
         }
-        const tiddlersStream = createSQLiteTiddlersReadStream(workspace, {
-          // inject tidgi syncadaptor plugins
-          additionalContent: [pluginJSONStrings.expoFileSystemSyncadaptor, pluginJSONStrings.expoFileSystemSyncadaptorUi],
+
+        // The HTML already contains $:/core + themes in its store area (rendered by $:/core/save/empty).
+        // We only stream syncadaptor plugins and user tiddlers from the filesystem.
+        const allWikiWorkspaces = useWorkspaceStore.getState().workspaces.filter((item): item is IWikiWorkspace => item.type === 'wiki');
+        const relatedSubWikis = allWikiWorkspaces.filter(item => item.isSubWiki === true && item.mainWikiID === workspace.id);
+        const mainConfig = await readTidgiConfig(workspace);
+        const subWikisFromConfig = Array.isArray(mainConfig.subWikis) ? mainConfig.subWikis : [];
+        const recoveredSubWikis = await Promise.all(relatedSubWikis.map(async (subWorkspace) => {
+          if (await isWikiFolderAvailable(subWorkspace)) {
+            return subWorkspace;
+          }
+          const matchedConfig = subWikisFromConfig.find((subWiki) =>
+            (typeof subWiki.id === 'string' && subWiki.id === subWorkspace.id) ||
+            (typeof subWiki.name === 'string' && subWiki.name === subWorkspace.name)
+          );
+          if (!matchedConfig || typeof matchedConfig.path !== 'string' || matchedConfig.path.length === 0) {
+            return undefined;
+          }
+          const resolvedPath = resolveSubWikiPath(workspace.wikiFolderLocation, matchedConfig.path);
+          const recoveredWorkspace = {
+            ...subWorkspace,
+            wikiFolderLocation: resolvedPath,
+          };
+          if (!(await isWikiFolderAvailable(recoveredWorkspace))) {
+            return undefined;
+          }
+          return recoveredWorkspace;
+        }));
+        const workspacesToLoad = [workspace, ...recoveredSubWikis.filter((item): item is IWikiWorkspace => item !== undefined)];
+        const tiddlersStream = new FileSystemTiddlersReadStream(workspacesToLoad, {
+          additionalContent: [expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi],
           quickLoad,
         });
+        tiddlersStream.init();
+
         tiddlersStreamReference.current = tiddlersStream;
-        await injectHtmlAndTiddlersStore({ html, tiddlersStream, setLoadHtmlError });
+        await injectHtmlAndTiddlersStore({ html: emptyHtml, tiddlersStream, setLoadHtmlError });
       } catch (error) {
-        console.error(error, (error as Error).stack);
+        console.error(`[useTiddlyWiki] FATAL error:`, error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);
       }
     })();
-    // React Hook useMemo has a missing dependency: 'injectHtmlAndTiddlersStore', 'quickLoad', and 'workspace'. Either include it or remove the dependency array.
-    // but workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
+    // workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
   }, [workspace.id, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError, loading, streamChunksToWebViewPercentage };
 }
 
-export interface ITidGiMobilePlugins {
+export interface IBundledAssets {
+  emptyHtml: string;
   expoFileSystemSyncadaptor: string;
   expoFileSystemSyncadaptorUi: string;
 }
-async function getTidGiMobilePlugins(): Promise<ITidGiMobilePlugins> {
-  const assets = await Asset.loadAsync([expoFileSystemSyncadaptorAssetID, expoFileSystemSyncadaptorUiAssetID]);
-  const expoFileSystemSyncadaptorFileUri = assets?.[0]?.localUri;
-  const expoFileSystemSyncadaptorUiFileUri = assets?.[1]?.localUri;
-  if (!expoFileSystemSyncadaptorFileUri) {
-    throw new Error(`expoFileSystemSyncadaptor plugin failed to load, ID: ${expoFileSystemSyncadaptorAssetID}`);
-  }
-  if (!expoFileSystemSyncadaptorUiFileUri) {
-    throw new Error(`expoFileSystemSyncadaptorUiAsset plugin failed to load, ID: ${expoFileSystemSyncadaptorUiAssetID}`);
-  }
-  const [expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all([
-    fs.readAsStringAsync(expoFileSystemSyncadaptorFileUri),
-    fs.readAsStringAsync(expoFileSystemSyncadaptorUiFileUri),
+
+/**
+ * Load bundled TiddlyWiki assets from the app bundle.
+ * The empty HTML (rendered from $:/core/save/empty) already contains $:/core + themes.
+ */
+async function loadBundledAssets(): Promise<IBundledAssets> {
+  const assets = await Asset.loadAsync([
+    tiddlywikiEmptyHtmlAssetID,
+    expoFileSystemSyncadaptorAssetID,
+    expoFileSystemSyncadaptorUiAssetID,
   ]);
-  return ({
-    expoFileSystemSyncadaptor,
-    expoFileSystemSyncadaptorUi,
-  });
+  const uris = assets.map(a => a.localUri);
+  for (let index = 0; index < uris.length; index++) {
+    if (!uris[index]) throw new Error(`Asset ${index} failed to load (localUri is null)`);
+  }
+  const [emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all(
+    uris.map(uri => new File(uri!).text()),
+  );
+  return { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi };
 }
 
-// export function useEmptyTiddlyWiki() {
-//   const [htmlContent, setHtmlContent] = useState('');
+function resolveSubWikiPath(mainWikiFolderLocation: string, subWikiPath: string): string {
+  if (subWikiPath.startsWith('file://')) {
+    return subWikiPath;
+  }
+  const mainPlainPath = toPlainPath(mainWikiFolderLocation);
+  const mainParentPath = mainPlainPath.slice(0, mainPlainPath.lastIndexOf('/'));
+  const normalizedSubPath = subWikiPath.replace(/^\/+/, '');
+  return `file://${mainParentPath}/${normalizedSubPath}`;
+}
 
-//   const [assets, error] = useAssets([emptyWikiAssetID]);
-//   useEffect(() => {
-//     const emptyWikiFileUri = assets?.[0]?.localUri;
-//     if (emptyWikiFileUri === undefined || emptyWikiFileUri === null) return;
-//     const fetchHTML = async () => {
-//       const content = await fs.readAsStringAsync(emptyWikiFileUri);
-//       const modifiedContent = content.replace('</body>', '<script>console.log("loaded")</script></body>');
-//       setHtmlContent(modifiedContent);
-//     };
-
-//     void fetchHTML();
-//   }, [assets]);
-//   return htmlContent;
-// }
+async function isWikiFolderAvailable(workspace: IWikiWorkspace): Promise<boolean> {
+  const tiddlerFolderPath = getWikiTiddlerFolderPath(workspace);
+  if (tiddlerFolderPath.includes('/storage/') || tiddlerFolderPath.includes('/sdcard/')) {
+    const info = await ExternalStorage.getInfo(toPlainPath(tiddlerFolderPath));
+    return info.exists && info.isDirectory;
+  }
+  const info = await FileSystemLegacy.getInfoAsync(tiddlerFolderPath);
+  return info.exists && info.isDirectory;
+}

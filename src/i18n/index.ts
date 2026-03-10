@@ -27,7 +27,7 @@ void i18n.use(initReactI18next).init({
       translation: zh_CN,
     },
   },
-  compatibilityJSON: 'v3',
+  compatibilityJSON: 'v4',
   // getState() only have value when it is in dev mode hot reload, will return default value on production, use `subscribe` as below to fix this.
   lng: useConfigStore.getState().preferredLanguage ?? detectedLanguage ?? defaultLanguage,
 });

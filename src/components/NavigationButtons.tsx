@@ -1,4 +1,3 @@
-/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +19,7 @@ export function ImporterButton() {
 
   return (
     <MainFeatureButton
+      testID='import-wiki-button'
       mode='outlined'
       onPress={() => {
         navigation.navigate('Importer', {});

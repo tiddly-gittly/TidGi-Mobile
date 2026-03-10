@@ -7,6 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "entryPoint": "./index.js",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -36,9 +37,12 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MANAGE_EXTERNAL_STORAGE"
       ],
-      "package": "ren.onetwo.tidgi.mobile"
+      "package": "ren.onetwo.tidgi.mobile.test"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -50,6 +54,7 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }
       ],
+      "expo-filesystem-android-external-storage",
       "./expo-plugins/trustHTTPRequests/trust-local-certs.js",
       [
         "expo-share-intent",
@@ -68,7 +73,8 @@
           }
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      "./expo-plugins/withDetox/with-detox.js"
     ],
     "extra": {
       "eas": {

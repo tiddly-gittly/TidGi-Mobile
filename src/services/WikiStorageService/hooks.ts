@@ -1,11 +1,17 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { IWikiWorkspace } from '../../store/workspace';
-import { WikiStorageService } from '.';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
+import { WikiStorageService } from './FileSystemWikiStorageService';
 
 export function useWikiStorageService(workspace: IWikiWorkspace) {
   const wikiStorageService = useMemo(() => new WikiStorageService(workspace), [workspace]);
+  // Build the file index (≈ desktop boot.files population) once after creation.
+  // Must complete before any save/delete. The indexReady promise gates those operations.
+  useEffect(() => {
+    const indexPromise = wikiStorageService.buildFileIndex();
+    wikiStorageService.indexReady = indexPromise;
+  }, [wikiStorageService]);
   const [webViewReference, onMessageReference] = useRegisterProxy(wikiStorageService, WikiStorageServiceIPCDescriptor);
   return [webViewReference, onMessageReference, wikiStorageService] as const;
 }
