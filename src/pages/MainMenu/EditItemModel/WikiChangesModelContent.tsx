@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { ActivityIndicator, Button, Card, List, Modal, Portal, Text } from 'react-native-paper';
+import { useShallow } from 'zustand/react/shallow';
 import { styled } from 'styled-components/native';
 import {
   gitDiffChangedFiles,
@@ -24,8 +25,11 @@ interface ModalProps {
 export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
 
-  const wiki = useWorkspaceStore(state =>
-    id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
+  // Use useShallow + useMemo to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  const wiki = useMemo(
+    () => id === undefined ? undefined : workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki')),
+    [id, workspaces],
   );
   const [commits, setCommits] = useState<IGitCommitInfo[]>([]);
   const [uncommittedChanges, setUncommittedChanges] = useState<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>>([]);
@@ -194,7 +198,14 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
               <Text variant='titleMedium'>{t('GitHistory.Files')}</Text>
               {loadingDetails && <Text>{t('Loading')}</Text>}
-              {!loadingDetails && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
+              {/* When a commit has parents but files is empty, it means the parent is not in
+                  the local repo (shallow clone with depth:1). Show an informational note. */}
+              {!loadingDetails && changedFiles.length === 0 && selectedCommit !== undefined && selectedCommit.parentOids.length > 0 && (
+                <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>
+              )}
+              {!loadingDetails && changedFiles.length === 0 && (selectedCommit === undefined || selectedCommit.parentOids.length === 0) && (
+                <Text>{t('GitHistory.NoFiles')}</Text>
+              )}
               <FilesList
                 data={changedFiles}
                 keyExtractor={(item) => `${item.type}-${item.path}`}

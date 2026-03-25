@@ -47,7 +47,6 @@ export function useGitImport() {
   const [batchCreatedWorkspaces, setBatchCreatedWorkspaces] = useState<IWikiWorkspace[]>([]);
 
   const addWiki = useWorkspaceStore(state => state.add);
-  const workspaceList = useWorkspaceStore(state => state.workspaces);
   const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWorkspace, setCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
 
@@ -74,7 +73,8 @@ export function useGitImport() {
 
     try {
       // 1. Create workspace
-      if (workspaceList.some(workspace => workspace.id === qrData.workspaceId)) {
+      // Use getState() to read live store state, avoiding stale closure from React hook snapshot
+      if (useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === qrData.workspaceId)) {
         throw new Error(`Workspace id already exists: ${qrData.workspaceId}`);
       }
       const newWorkspace = addWiki({
@@ -210,14 +210,23 @@ export function useGitImport() {
     let finishedCount = 0;
     let failedCount = 0;
 
-    for (const item of items) {
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
       setBatchProgress(previous => ({ ...previous, current: finishedCount }));
       try {
         const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
         created.push(workspace);
-        setBatchCreatedWorkspaces(previous => [...previous, workspace]);
-      } catch {
+      } catch (error) {
         failedCount += 1;
+        finishedCount += 1;
+        setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
+        // If the first item (main wiki) fails, abort the batch.
+        // Sub-wikis depend on the main wiki existing; importing them would create orphan workspaces.
+        if (index === 0) {
+          console.error('[batchImport] Main wiki import failed, aborting sub-wiki imports:', (error as Error).message);
+          break;
+        }
+        continue;
       }
       finishedCount += 1;
       setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
@@ -225,6 +234,8 @@ export function useGitImport() {
 
     // Only mark success after ALL items have been processed
     if (failedCount < items.length) {
+      // Set all created workspaces at once to avoid state update batching issues
+      setBatchCreatedWorkspaces(created);
       setStatus('success');
     }
     setIsBatchImporting(false);

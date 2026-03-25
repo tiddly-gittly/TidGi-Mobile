@@ -342,6 +342,7 @@
     "TokenDescription": "用于向Git服务器验证身份并同步内容的凭证，可通过登录在线存储服务（如Github）来取得，也可以手动获取「Personal Access Token」后填到这里。",
     "Shared": "分享",
     "Sync": "同步和备份",
+    "StorageLocation": "存储位置",
     "SyncInterval": "同步/备份间隔",
     "SyncIntervalDescription": "每经过这段长度的时间后，就会自动开始备份到 Github，如果工作区是本地工作区则会创建本地备份（重启后生效）",
     "General": "界面和交互",
@@ -547,7 +548,14 @@
     "QRCodeParseError": "无法解析二维码",
     "QRCodeInvalidFormat": "无效的二维码格式",
     "ServerTokenProtected": "Token 安全保护",
-    "ServerTokenProtectedMessage": "此服务器已启用 Token 认证保护，无法通过网络自动获取配置。请在太记桌面版扫描二维码进行安全导入。"
+    "ServerTokenProtectedMessage": "此服务器已启用 Token 认证保护，无法通过网络自动获取配置。请在太记桌面版扫描二维码进行安全导入。",
+    "Status": {
+      "Creating": "正在创建工作区..."
+    },
+    "Phase": {
+      "CreatingWorkTree": "正在将文件写入磁盘",
+      "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钒，请耐心等待。"
+    }
   },
   "ConfirmDelete": "是否删除？",
   "ConfirmDeleteDescription": "此操作无法撤销。",
@@ -603,6 +611,7 @@
     "FilePreview": "文件预览",
     "Files": "变更文件",
     "NoFiles": "没有文件变更",
+    "ShallowCloneSnapshot": "浅克隆快照 — 父提交不在本地，这是首次导入时的初始状态。",
     "DiscardChanges": "撤销变更"
   },
   "SubWiki": {

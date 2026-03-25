@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Switch, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 
 import { FlexibleText, SwitchContainer } from '../../../components/PreferenceWidgets';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
@@ -14,8 +15,11 @@ interface ModalProps {
 export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
 
-  const wiki = useWorkspaceStore(state =>
-    id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
+  // Use useShallow + useMemo to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  const wiki = useMemo(
+    () => id === undefined ? undefined : workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki')),
+    [id, workspaces],
   );
   const updateWorkspace = useWorkspaceStore(state => state.update);
 

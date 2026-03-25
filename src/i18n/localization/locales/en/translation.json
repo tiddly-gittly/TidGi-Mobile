@@ -566,7 +566,14 @@
     "QRCodeParseError": "Failed to parse QR code",
     "QRCodeInvalidFormat": "Invalid QR code format",
     "ServerTokenProtected": "Token Protected",
-    "ServerTokenProtectedMessage": "This server is protected by an authentication token. Please scan the QR code from TidGi Desktop to import securely."
+    "ServerTokenProtectedMessage": "This server is protected by an authentication token. Please scan the QR code from TidGi Desktop to import securely.",
+    "Status": {
+      "Creating": "Setting up workspace..."
+    },
+    "Phase": {
+      "CreatingWorkTree": "Writing files to disk",
+      "CreatingWorkTreeHint": "This may take several minutes for large wikis."
+    }
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -622,6 +629,7 @@
     "FilePreview": "File Preview",
     "Files": "Changed Files",
     "NoFiles": "No changed files",
+    "ShallowCloneSnapshot": "Shallow clone snapshot — parent commit not available locally. This is the initial import state.",
     "DiscardChanges": "Discard"
   },
   "SubWiki": {

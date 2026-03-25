@@ -427,16 +427,29 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             ? (
               <>
                 <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
-                <Text variant='bodySmall'>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
+                {cloneProgress.phase !== '' && (
+                  <Text variant='bodySmall'>
+                    {cloneProgress.phase === 'Creating work tree'
+                      ? t('Import.Phase.CreatingWorkTree')
+                      : cloneProgress.phase}
+                    {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
+                  </Text>
+                )}
+                {cloneProgress.phase === 'Creating work tree' && (
+                  <Text variant='bodySmall' style={{ opacity: 0.6 }}>
+                    {t('Import.Phase.CreatingWorkTreeHint')}
+                  </Text>
+                )}
                 <ProgressBar
                   animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+                  indeterminate={cloneProgress.total === 0}
                   color={MD3Colors.primary40}
                 />
               </>
             )
             : (
               <ImportStatusText>
-                <Text>{t('Loading')} {importStatus}</Text>
+                <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
               </ImportStatusText>
             )}
         </>

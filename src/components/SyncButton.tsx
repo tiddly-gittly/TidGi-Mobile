@@ -1,7 +1,8 @@
 import { TFunction } from 'i18next';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
+import { useShallow } from 'zustand/react/shallow';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 
@@ -10,7 +11,12 @@ export interface ISyncIconButtonProps {
 }
 export function SyncIconButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
-  const wiki = useWorkspaceStore(state => state.workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined);
+  // Use useShallow + useMemo to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  const wiki = useMemo(
+    () => workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined,
+    [workspaces, workspaceID],
+  );
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
@@ -57,7 +63,12 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
 export function SyncTextButton(props: ISyncIconButtonProps) {
   const { t } = useTranslation();
   const { workspaceID } = props;
-  const wiki = useWorkspaceStore(state => state.workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined);
+  // Use useShallow + useMemo to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  const wiki = useMemo(
+    () => workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined,
+    [workspaces, workspaceID],
+  );
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);

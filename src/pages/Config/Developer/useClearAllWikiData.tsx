@@ -43,8 +43,8 @@ export const deleteWikiFile = (wikiWorkspace: IWorkspace): void => {
 
 export function useClearAllWikiData() {
   const { t } = useTranslation();
-  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  const removeAllWiki = useWorkspaceStore(state => state.removeAll);
+  // Combine multiple selector calls into a single useShallow call
+  const [workspaces, removeAllWiki] = useWorkspaceStore(useShallow(state => [state.workspaces, state.removeAll]));
 
   const [clearDataSnackBarVisible, setClearDataSnackBarVisible] = useState(false);
   const [clearDataSnackBarErrorMessage, setClearDataSnackBarErrorMessage] = useState('');

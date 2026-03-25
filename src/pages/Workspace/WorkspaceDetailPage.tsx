@@ -26,8 +26,8 @@ const getUnsyncedCommitCount = gitGetUnsyncedCommitCount as (workspace: IWikiWor
 export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceDetail'>): JSX.Element {
   const { t } = useTranslation();
   const wiki = useWikiWorkspace(route.params.id);
-  const removeWorkspace = useWorkspaceStore(state => state.remove);
-  const setServerActive = useWorkspaceStore(state => state.setServerActive);
+  // Combine multiple selector calls into a single useShallow call
+  const [removeWorkspace, setServerActive] = useWorkspaceStore(useShallow(state => [state.remove, state.setServerActive]));
   const allWorkspaces = useWorkspaceStore(useShallow(state => state.workspaces));
   const [pendingCommitCount, setPendingCommitCount] = useState(0);
   const [expandServerList, setExpandServerList] = useState(false);

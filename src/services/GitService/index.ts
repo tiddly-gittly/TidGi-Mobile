@@ -702,10 +702,30 @@ export async function gitCommit(
   try {
     // Stage all changes using statusMatrix
     const status = await git.statusMatrix({ fs, dir: directory });
+
+    // Detect NFC/NFD Unicode normalization artifact pairs before staging.
+    // On Android (FAT32/ExFAT), filenames with Chinese/multi-byte characters may be
+    // transparently converted from NFC (git index) to NFD (filesystem), causing statusMatrix
+    // to report a spurious delete+add for the same logical file.
+    const deletesByNFC = new Map<string, string>(); // nfc → original filepath
+    const addsByNFC = new Map<string, string>();    // nfc → original filepath
+    for (const [filepath, headStatus, workdirStatus] of status) {
+      const nfcPath = filepath.normalize('NFC');
+      if (headStatus !== workdirStatus) {
+        if (workdirStatus === 0) deletesByNFC.set(nfcPath, filepath);
+        else if (headStatus === 0) addsByNFC.set(nfcPath, filepath);
+      }
+    }
+    const artifactNFCPaths = new Set([...deletesByNFC.keys()].filter(p => addsByNFC.has(p)));
+
     for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
       // headStatus: 0 = absent in HEAD, 1 = present in HEAD
       // workdirStatus: 0 = absent in workdir, 2 = present in workdir
       // stageStatus: 0 = absent in stage, 2 = present in stage, 3 = modified-and-staged
+      const nfcPath = filepath.normalize('NFC');
+
+      // Skip NFC/NFD normalization artifacts — the file hasn't actually changed
+      if (artifactNFCPaths.has(nfcPath)) continue;
 
       // Stage changes when workdir differs from HEAD or stage differs from HEAD
       if (headStatus !== workdirStatus || headStatus !== stageStatus) {
@@ -714,7 +734,7 @@ export async function gitCommit(
           await git.remove({ fs, dir: directory, filepath });
         } else {
           // File added or modified in workdir, stage addition/modification
-          await git.add({ fs, dir: directory, filepath });
+          await git.add({ fs, dir: directory, filepath: nfcPath });
         }
       }
     }
@@ -860,18 +880,31 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
   try {
     const status = await git.statusMatrix({ fs, dir: directory });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+    // Track deletes and adds by NFC-normalized path to detect Unicode normalization artifacts.
+    // On Android (FAT32/ExFAT), git checks out files with NFC paths but the filesystem may
+    // convert them to NFD, causing a spurious delete (NFC path gone) + add (NFD path new)
+    // for every file whose name contains multi-byte Unicode characters (e.g. Chinese).
+    const deletesByNFC = new Set<string>();
+    const addsByNFC = new Set<string>();
     for (const [filepath, headStatus, workdirStatus] of status) {
       if (headStatus !== workdirStatus) {
+        const nfcPath = filepath.normalize('NFC');
         if (workdirStatus === 0) {
-          changes.push({ path: filepath, type: 'delete' });
+          deletesByNFC.add(nfcPath);
+          changes.push({ path: nfcPath, type: 'delete' });
         } else if (headStatus === 0) {
-          changes.push({ path: filepath, type: 'add' });
+          addsByNFC.add(nfcPath);
+          changes.push({ path: nfcPath, type: 'add' });
         } else {
-          changes.push({ path: filepath, type: 'modify' });
+          changes.push({ path: nfcPath, type: 'modify' });
         }
       }
     }
-    return changes;
+    // Remove NFC/NFD artifact pairs: same NFC path appearing as both delete and add
+    // means the file itself is unchanged — only its Unicode normalization form differs.
+    const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
+    const deduped = changes.filter(c => !artifactPaths.has(c.path));
+    return deduped.sort((a, b) => a.path.localeCompare(b.path));
   } catch (error) {
     console.error(`Failed to diff: ${(error as Error).message}`);
     return [];
@@ -908,17 +941,24 @@ export async function gitGetChangedFilesForCommit(
   try {
     const currentFiles = new Set(await git.listFiles({ fs, dir: directory, ref: commitOid }));
     let previousFiles = new Set<string>();
+    let isShallowSnapshot = false;
     if (parentOid) {
       try {
         previousFiles = new Set(await git.listFiles({ fs, dir: directory, ref: parentOid }));
       } catch (error) {
         const message = (error as Error).message;
         if (message.includes('Could not find')) {
-          previousFiles = new Set<string>();
+          // Parent commit doesn't exist locally — this is a shallow clone snapshot.
+          // Return empty diff instead of treating all files as "added", which is misleading.
+          isShallowSnapshot = true;
         } else {
           throw error;
         }
       }
+    }
+
+    if (isShallowSnapshot) {
+      return [];
     }
 
     const allPaths = new Set<string>([...currentFiles, ...previousFiles]);

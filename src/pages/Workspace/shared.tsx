@@ -1,12 +1,19 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
 import { TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import type { RootStackParameterList } from '../../App';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 export function useWikiWorkspace(id: string): IWikiWorkspace | undefined {
-  return useWorkspaceStore(state => state.workspaces.find((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki' && workspace.id === id));
+  // Use useShallow + memoized selector to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  
+  return useMemo(
+    () => workspaces.find((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki' && workspace.id === id),
+    [workspaces, id],
+  );
 }
 
 export function useWorkspaceTitle(
