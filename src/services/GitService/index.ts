@@ -20,6 +20,44 @@ if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
 
+// ─── Runtime detection of new native streaming API ────────────────────
+// Added in expo-filesystem-android-external-storage@1.0.6
+interface HttpPostToFileResult {
+  statusCode: number;
+  headers: Record<string, string>;
+  bytesWritten: number;
+}
+
+interface ReadFileChunkResult {
+  data: string; // Base64
+  bytesRead: number;
+}
+
+interface IExternalStorageExtended {
+  httpPostToFile(
+    url: string,
+    headers: Record<string, string>,
+    bodyBase64: string,
+    destinationPath: string,
+    contentType: string,
+  ): Promise<HttpPostToFileResult>;
+  readFileChunk(path: string, offset: number, length: number): Promise<ReadFileChunkResult>;
+  deleteFile(path: string): Promise<void>;
+}
+
+/**
+ * Whether the native `ExternalStorage.httpPostToFile` streaming method is
+ * available.  On iOS or when the native module isn't linked this will be false
+ * and we fall back to the regular `fetch()` path (which may OOM on very large
+ * repos).
+ */
+const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).httpPostToFile === 'function' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function';
+
+/** 64 KB — chunk size for streaming a temp file back into JS. */
+const FILE_CHUNK_SIZE = 64 * 1024;
+
 /**
  * Whether a file:// URI (or plain path) points to external/shared storage
  * and needs to go through the raw native module instead of Expo FS.
@@ -44,6 +82,49 @@ function toFileUri(plainPath: string): string {
 const CHECKOUT_BATCH_SIZE = 200;
 const NATIVE_WRITE_BATCH_SIZE = 64;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
+
+// React Native's fetch (OkHttp) buffers the entire HTTP response in the JVM heap
+// before exposing it to JavaScript via JSI. On mid-range Android devices the Hermes
+// heap has ~80-100 MB available for a single allocation after app baseline usage.
+// Packs larger than this will cause an OOM crash during clone.
+const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
+
+/** Structured sentinels thrown by gitClone so callers can show targeted UI. */
+export const GIT_CLONE_ERROR_OOM = 'WIKI_OOM';
+export const GIT_CLONE_ERROR_TOO_LARGE_PREFIX = 'WIKI_TOO_LARGE:';
+
+// Detect Android/Hermes OOM patterns in error messages.
+function isOOMError(message: string): boolean {
+  return (
+    message.includes('Failed to allocate') ||
+    message.includes('OutOfMemoryError') ||
+    message.includes('growth limit') ||
+    /out of memory/i.test(message)
+  );
+}
+
+/**
+ * Query the TidGi Desktop optional pack-size endpoint before downloading.
+ * Returns estimated bytes, or null when the endpoint is not available
+ * (Desktop < the version that added this endpoint — silently skips).
+ */
+async function tryGetRemotePackSize(
+  repoUrl: string,
+  headers: Record<string, string>,
+): Promise<number | null> {
+  try {
+    const sizeUrl = `${repoUrl}/pack-size`;
+    const response = await pTimeout(fetch(sizeUrl, { method: 'GET', headers }), {
+      milliseconds: 5_000,
+      message: new Error('pack-size check timeout'),
+    });
+    if (!response.ok) return null; // endpoint not available yet
+    const data = (await response.json()) as { estimatedBytes?: number };
+    return typeof data.estimatedBytes === 'number' ? data.estimatedBytes : null;
+  } catch {
+    return null; // non-fatal, proceed with clone
+  }
+}
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
 
 interface INativeWriteTask {
@@ -53,20 +134,24 @@ interface INativeWriteTask {
   resolve: () => void;
 }
 
-let pendingNativeWriteTasks: INativeWriteTask[] = [];
+const pendingNativeWriteTasks: INativeWriteTask[] = [];
 let nativeWriteFlushScheduled = false;
 let nativeWriteFlushPromise: Promise<void> | undefined;
 
 function canUseAndroidNativeBatchWrite(filepath: string): boolean {
-  return Platform.OS === 'android'
-    && isExternalPath(filepath)
-    && typeof ExternalStorage.writeFilesBase64 === 'function';
+  return (
+    Platform.OS === 'android' &&
+    isExternalPath(filepath) &&
+    typeof ExternalStorage.writeFilesBase64 === 'function'
+  );
 }
 
 function scheduleNativeBatchWrite(path: string, base64Content: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     pendingNativeWriteTasks.push({ path, base64Content, resolve, reject });
-    if (nativeWriteFlushScheduled) return;
+    if (nativeWriteFlushScheduled) {
+      return;
+    }
     nativeWriteFlushScheduled = true;
     void Promise.resolve().then(() => {
       nativeWriteFlushScheduled = false;
@@ -87,9 +172,13 @@ async function flushPendingNativeWrites(): Promise<void> {
         batch.map(task => toPlainPath(task.path)),
         batch.map(task => task.base64Content),
       );
-      batch.forEach(task => task.resolve());
+      batch.forEach(task => {
+        task.resolve();
+      });
     } catch (error) {
-      batch.forEach(task => task.reject(error));
+      batch.forEach(task => {
+        task.reject(error);
+      });
     }
     await Promise.resolve();
   }
@@ -183,8 +272,8 @@ const fs = {
       const base64 = typeof data === 'string'
         ? Buffer.from(data, 'utf8').toString('base64')
         : Buffer.isBuffer(data)
-          ? data.toString('base64')
-          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+        ? data.toString('base64')
+        : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
 
       if (canUseAndroidNativeBatchWrite(filepath)) {
         return scheduleNativeBatchWrite(filepath, base64);
@@ -486,6 +575,21 @@ const httpWithLogging = {
     console.log('Git HTTP request:', { url, method, headers });
 
     try {
+      // ── Streaming path for large POST (git-upload-pack) ───────────
+      // Android OkHttp buffers the entire HTTP response in JVM heap before
+      // exposing it to JS.  For git-upload-pack this can easily be 100+ MB
+      // and triggers OOM.
+      //
+      // Solution: use a native Kotlin method that performs the POST and
+      // streams the response body directly to a temp file on disk using
+      // Okio, never holding more than 64 KB in memory.  JS then reads the
+      // temp file back in chunks via `readFileChunk`.
+      const isGitUploadPackPost = method === 'POST' && url.includes('git-upload-pack');
+      if (isGitUploadPackPost && hasNativeStreamingHttp) {
+        return await nativeStreamingPost(url, headers, body);
+      }
+
+      // ── Regular fetch path (GET, small POST) ─────────────────────
       const timeoutMs = method === 'POST' ? 120_000 : 30_000;
       let payload: ArrayBuffer | undefined;
 
@@ -532,6 +636,123 @@ const httpWithLogging = {
     }
   },
 };
+
+/**
+ * Perform an HTTP POST via the native OkHttp streaming path:
+ * 1. POST body is sent as-is.
+ * 2. Response body is streamed to a temp file (never fully in memory).
+ * 3. The temp file is read back as an async iterator of 64 KB chunks.
+ * 4. The temp file is deleted once fully consumed.
+ */
+async function nativeStreamingPost(
+  url: string,
+  headers: Record<string, string>,
+  body?: AsyncIterableIterator<Uint8Array> | Iterable<Uint8Array> | Uint8Array,
+): Promise<GitHttpResponse> {
+  // Collect the request body (git protocol payload, typically < 1 KB).
+  let bodyBytes: Uint8Array;
+  if (body === undefined) {
+    bodyBytes = new Uint8Array(0);
+  } else if (body instanceof Uint8Array) {
+    bodyBytes = body;
+  } else {
+    bodyBytes = await collect(body);
+  }
+
+  const bodyBase64 = Buffer.from(bodyBytes).toString('base64');
+  const contentType = Object.entries(headers)
+    .find(([key]) => key.toLowerCase() === 'content-type')?.[1] ?? 'application/x-git-upload-pack-request';
+
+  // Use the app's cache dir for the temp file (auto-cleaned by Android).
+  const cacheDirectory = FileSystemLegacy.cacheDirectory;
+  if (cacheDirectory === null) {
+    throw new Error('FileSystem cache directory unavailable');
+  }
+  const temporaryPath = `${toPlainPath(cacheDirectory)}/git-pack-${Date.now()}.tmp`;
+
+  console.log('Git HTTP (native streaming):', { url, temporaryPath });
+
+  const externalStorageExtension = ExternalStorage as unknown as IExternalStorageExtended;
+  const result = await externalStorageExtension.httpPostToFile(
+    url,
+    headers,
+    bodyBase64,
+    temporaryPath,
+    contentType,
+  );
+
+  console.log('Git HTTP response (native):', {
+    url,
+    statusCode: result.statusCode,
+    bytesWritten: result.bytesWritten,
+  });
+
+  // Create an async iterator that reads the temp file in 64 KB chunks,
+  // then deletes the file when done.
+  const responseBody = createFileChunkIterator(temporaryPath, result.bytesWritten);
+
+  return {
+    url,
+    method: 'POST',
+    statusCode: result.statusCode,
+    statusMessage: result.statusCode === 200 ? 'OK' : `HTTP ${result.statusCode}`,
+    body: responseBody,
+    headers: result.headers,
+  };
+}
+
+/**
+ * Async iterator that reads a file in chunks via the native module,
+ * yielding Uint8Array pieces and deleting the temp file when exhausted.
+ */
+function createFileChunkIterator(filePath: string, totalBytes: number): AsyncIterableIterator<Uint8Array> {
+  let offset = 0;
+  let iteratorDone = false;
+
+  const externalStorageExtension = ExternalStorage as unknown as IExternalStorageExtended;
+
+  return {
+    async next(): Promise<IteratorResult<Uint8Array>> {
+      if (iteratorDone || offset >= totalBytes) {
+        if (!iteratorDone) {
+          iteratorDone = true;
+          // Clean up temp file
+          try {
+            await externalStorageExtension.deleteFile(filePath);
+          } catch {
+            // non-fatal
+          }
+        }
+        return { done: true, value: undefined as unknown as Uint8Array };
+      }
+
+      const chunk = await externalStorageExtension.readFileChunk(filePath, offset, FILE_CHUNK_SIZE);
+      offset += chunk.bytesRead;
+
+      if (chunk.bytesRead === 0) {
+        iteratorDone = true;
+        try {
+          await externalStorageExtension.deleteFile(filePath);
+        } catch {
+          // non-fatal
+        }
+        return { done: true, value: undefined as unknown as Uint8Array };
+      }
+
+      const bytes = Buffer.from(chunk.data, 'base64');
+      return { done: false, value: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) };
+    },
+    return() {
+      iteratorDone = true;
+      // Best-effort cleanup
+      void externalStorageExtension.deleteFile(filePath).catch(() => {});
+      return Promise.resolve({ done: true, value: undefined as unknown as Uint8Array });
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+}
 
 /**
  * Create auth header for git operations
@@ -618,6 +839,20 @@ export async function gitClone(
 
   try {
     await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote)));
+
+    // Optional pre-download size check. Gracefully no-ops on Desktop versions
+    // that don't yet have the /pack-size endpoint.
+    const authHeaders = normalizeHeaders(createAuthHeader(remote));
+    const estimatedBytes = await tryGetRemotePackSize(url, authHeaders);
+    if (estimatedBytes !== null) {
+      const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
+      console.log(`Git clone estimated pack size: ${estimatedMB} MB`);
+      onProgress?.(`Estimated size: ${estimatedMB} MB`, 0, estimatedBytes);
+      if (estimatedBytes > MAX_SAFE_PACK_BYTES) {
+        throw new Error(`${GIT_CLONE_ERROR_TOO_LARGE_PREFIX}${estimatedMB}`);
+      }
+    }
+
     await git.clone({
       fs,
       http: httpWithLogging,
@@ -642,6 +877,20 @@ export async function gitClone(
     console.log(`Successfully cloned repository to ${directory}`);
   } catch (error) {
     const message = (error as Error).message;
+
+    // Re-throw structured sentinels as-is so callers can act on them.
+    if (message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) || message === GIT_CLONE_ERROR_OOM) {
+      throw error;
+    }
+
+    // Convert Android/Hermes OOM into a clean sentinel.
+    // React Native buffers the full response in the JVM heap; large packs exceed
+    // the per-app growth limit (~256 MB) after baseline JS heap usage.
+    if (isOOMError(message)) {
+      console.error(`Git clone OOM — mobile-side heap exhausted: ${message}`);
+      throw new Error(GIT_CLONE_ERROR_OOM);
+    }
+
     console.error(`Git clone failed: ${message}`);
     throw new Error(`Failed to clone repository: ${message}`);
   }
@@ -708,7 +957,7 @@ export async function gitCommit(
     // transparently converted from NFC (git index) to NFD (filesystem), causing statusMatrix
     // to report a spurious delete+add for the same logical file.
     const deletesByNFC = new Map<string, string>(); // nfc → original filepath
-    const addsByNFC = new Map<string, string>();    // nfc → original filepath
+    const addsByNFC = new Map<string, string>(); // nfc → original filepath
     for (const [filepath, headStatus, workdirStatus] of status) {
       const nfcPath = filepath.normalize('NFC');
       if (headStatus !== workdirStatus) {

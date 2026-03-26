@@ -41,7 +41,7 @@
     "expo-clipboard": "~8.0.8",
     "expo-device": "~8.0.10",
     "expo-file-system": "~19.0.21",
-    "expo-filesystem-android-external-storage": "^1.0.5",
+    "expo-filesystem-android-external-storage": "^1.0.6",
     "expo-haptics": "~15.0.8",
     "expo-intent-launcher": "^13.0.8",
     "expo-linking": "~8.0.11",

@@ -7,7 +7,7 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
-import { gitClone, IGitRemote } from '../../services/GitService';
+import { GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, gitClone, IGitRemote } from '../../services/GitService';
 import { logFor } from '../../services/LoggerService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
@@ -35,10 +35,13 @@ export interface IBatchImportItem {
 }
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
+/** Distinguishes known failure modes so the UI can show actionable guidance. */
+export type GitImportErrorKind = 'generic' | 'oom' | 'tooLarge';
 
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
   const [error, setError] = useState<string | undefined>();
+  const [errorKind, setErrorKind] = useState<GitImportErrorKind>('generic');
   const [cloneProgress, setCloneProgress] = useState({ phase: '', loaded: 0, total: 0 });
 
   // Batch import state
@@ -154,9 +157,22 @@ export function useGitImport() {
       setStatus('success');
       return newWorkspace;
     } catch (error) {
-      console.error('Git import failed:', (error as Error).message, (error as Error).stack);
+      const errorMessage = (error as Error).message;
+      console.error('Git import failed:', errorMessage, (error as Error).stack);
       workspaceLogger.error('Git import failed', error);
-      setError((error as Error).message);
+
+      // Classify error kind for targeted UI messaging.
+      if (errorMessage === GIT_CLONE_ERROR_OOM) {
+        setErrorKind('oom');
+        setError(undefined); // message comes from i18n
+      } else if (errorMessage.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX)) {
+        const mb = errorMessage.slice(GIT_CLONE_ERROR_TOO_LARGE_PREFIX.length);
+        setErrorKind('tooLarge');
+        setError(mb); // mb string, displayed by UI
+      } else {
+        setErrorKind('generic');
+        setError(errorMessage);
+      }
       setStatus('error');
 
       // Clean up on error: remove workspace entry and created folder
@@ -232,10 +248,17 @@ export function useGitImport() {
       setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
     }
 
-    // Only mark success after ALL items have been processed
-    if (failedCount < items.length) {
-      // Set all created workspaces at once to avoid state update batching issues
+    // Batch result state machine:
+    // - all failed: error
+    // - partially failed: error (do not show misleading success actions)
+    // - all succeeded: success
+    if (created.length > 0) {
       setBatchCreatedWorkspaces(created);
+    }
+    if (failedCount > 0) {
+      setStatus('error');
+      setError(previous => previous ?? 'One or more workspaces failed to import.');
+    } else {
       setStatus('success');
     }
     setIsBatchImporting(false);
@@ -245,6 +268,7 @@ export function useGitImport() {
   const resetState = () => {
     setStatus('idle');
     setError(undefined);
+    setErrorKind('generic');
     setCloneProgress({ phase: '', loaded: 0, total: 0 });
     setCreatedWorkspace(undefined);
     setBatchProgress({ current: 0, total: 0, failed: 0 });
@@ -258,6 +282,7 @@ export function useGitImport() {
     resetState,
     status,
     error,
+    errorKind,
     cloneProgress,
     createdWorkspace,
     batchProgress,

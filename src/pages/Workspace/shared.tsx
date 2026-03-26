@@ -9,7 +9,7 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 export function useWikiWorkspace(id: string): IWikiWorkspace | undefined {
   // Use useShallow + memoized selector to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  
+
   return useMemo(
     () => workspaces.find((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki' && workspace.id === id),
     [workspaces, id],

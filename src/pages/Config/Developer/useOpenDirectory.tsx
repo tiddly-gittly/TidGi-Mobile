@@ -48,8 +48,8 @@ export function useOpenDirectory() {
         try {
           // Only use toPlainPath if it looks like an external path
           if (normalizedDirectoryUri.startsWith('file://') || normalizedDirectoryUri.startsWith('/storage/')) {
-            plainPath = normalizedDirectoryUri.startsWith('file://') 
-              ? normalizedDirectoryUri.replace('file://', '') 
+            plainPath = normalizedDirectoryUri.startsWith('file://')
+              ? normalizedDirectoryUri.replace('file://', '')
               : normalizedDirectoryUri;
           } else {
             plainPath = toPlainPath(normalizedDirectoryUri);

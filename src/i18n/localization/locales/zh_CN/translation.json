@@ -549,10 +549,16 @@
     "QRCodeInvalidFormat": "无效的二维码格式",
     "ServerTokenProtected": "Token 安全保护",
     "ServerTokenProtectedMessage": "此服务器已启用 Token 认证保护，无法通过网络自动获取配置。请在太记桌面版扫描二维码进行安全导入。",
+    "Error": {
+      "OOM": "导入失败：Wiki 太大，超出了手机可用内存。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。如果 Wiki 包含大量附件，建议改用外链方式存储附件。",
+      "TooLarge": "导入失败：Wiki 预估大小为 {{mb}} MB，超过手机安全限制（约 80 MB）。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。"
+    },
     "Status": {
       "Creating": "正在创建工作区..."
     },
     "Phase": {
+      "Connecting": "正在连接仓库服务...",
+      "Downloading": "正在下载对象数据...",
       "CreatingWorkTree": "正在将文件写入磁盘",
       "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钒，请耐心等待。"
     }

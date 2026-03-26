@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList } from 'react-native';
 import { ActivityIndicator, Button, Card, List, Modal, Portal, Text } from 'react-native-paper';
-import { useShallow } from 'zustand/react/shallow';
 import { styled } from 'styled-components/native';
+import { useShallow } from 'zustand/react/shallow';
 import {
   gitDiffChangedFiles,
   gitDiscardFileChanges,
@@ -198,14 +198,14 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
               <Text variant='titleMedium'>{t('GitHistory.Files')}</Text>
               {loadingDetails && <Text>{t('Loading')}</Text>}
-              {/* When a commit has parents but files is empty, it means the parent is not in
-                  the local repo (shallow clone with depth:1). Show an informational note. */}
+              {
+                /* When a commit has parents but files is empty, it means the parent is not in
+                  the local repo (shallow clone with depth:1). Show an informational note. */
+              }
               {!loadingDetails && changedFiles.length === 0 && selectedCommit !== undefined && selectedCommit.parentOids.length > 0 && (
                 <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>
               )}
-              {!loadingDetails && changedFiles.length === 0 && (selectedCommit === undefined || selectedCommit.parentOids.length === 0) && (
-                <Text>{t('GitHistory.NoFiles')}</Text>
-              )}
+              {!loadingDetails && changedFiles.length === 0 && (selectedCommit === undefined || selectedCommit.parentOids.length === 0) && <Text>{t('GitHistory.NoFiles')}</Text>}
               <FilesList
                 data={changedFiles}
                 keyExtractor={(item) => `${item.type}-${item.path}`}
