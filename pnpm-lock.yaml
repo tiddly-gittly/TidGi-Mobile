@@ -69,8 +69,8 @@ importers:
         specifier: ~19.0.21
         version: 19.0.21(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))
       expo-filesystem-android-external-storage:
-        specifier: ^1.0.6
-        version: 1.0.6(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+        specifier: github:linonetwo/expo-filesystem-android-external-storage#v1.0.7
+        version: https://codeload.github.com/linonetwo/expo-filesystem-android-external-storage/tar.gz/64e87a33cca53798fa64a56136d8d7d38f0ffe45(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-haptics:
         specifier: ~15.0.8
         version: 15.0.8(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))
@@ -4394,8 +4394,9 @@ packages:
       expo: '*'
       react-native: '*'
 
-  expo-filesystem-android-external-storage@1.0.6:
-    resolution: {integrity: sha512-4JtejYFLf25MAJRDE6pRQFhbbuzPHczrHUayK0tyiFa2R4dGbB6Xh7ON7Mwr07+IQrpzXCr2UWyW6czcb5H5rA==}
+  expo-filesystem-android-external-storage@https://codeload.github.com/linonetwo/expo-filesystem-android-external-storage/tar.gz/64e87a33cca53798fa64a56136d8d7d38f0ffe45:
+    resolution: {tarball: https://codeload.github.com/linonetwo/expo-filesystem-android-external-storage/tar.gz/64e87a33cca53798fa64a56136d8d7d38f0ffe45}
+    version: 1.0.7
     peerDependencies:
       expo: '*'
       react: '*'
@@ -12752,7 +12753,7 @@ snapshots:
       expo: 54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       react-native: 0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0)
 
-  expo-filesystem-android-external-storage@1.0.6(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+  expo-filesystem-android-external-storage@https://codeload.github.com/linonetwo/expo-filesystem-android-external-storage/tar.gz/64e87a33cca53798fa64a56136d8d7d38f0ffe45(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
       '@expo/config-plugins': 54.0.4
       expo: 54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)

@@ -53,7 +53,8 @@ interface IExternalStorageExtended {
  */
 const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).httpPostToFile === 'function' &&
-  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function';
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).deleteFile === 'function';
 
 /** 64 KB — chunk size for streaming a temp file back into JS. */
 const FILE_CHUNK_SIZE = 64 * 1024;
@@ -745,7 +746,11 @@ function createFileChunkIterator(filePath: string, totalBytes: number): AsyncIte
     return() {
       iteratorDone = true;
       // Best-effort cleanup
-      void externalStorageExtension.deleteFile(filePath).catch(() => {});
+      try {
+        void externalStorageExtension.deleteFile(filePath).catch(() => {});
+      } catch {
+        // non-fatal
+      }
       return Promise.resolve({ done: true, value: undefined as unknown as Uint8Array });
     },
     [Symbol.asyncIterator]() {
@@ -983,7 +988,7 @@ export async function gitCommit(
           await git.remove({ fs, dir: directory, filepath });
         } else {
           // File added or modified in workdir, stage addition/modification
-          await git.add({ fs, dir: directory, filepath: nfcPath });
+          await git.add({ fs, dir: directory, filepath });
         }
       }
     }
@@ -1140,19 +1145,19 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
         const nfcPath = filepath.normalize('NFC');
         if (workdirStatus === 0) {
           deletesByNFC.add(nfcPath);
-          changes.push({ path: nfcPath, type: 'delete' });
+          changes.push({ path: filepath, type: 'delete' });
         } else if (headStatus === 0) {
           addsByNFC.add(nfcPath);
-          changes.push({ path: nfcPath, type: 'add' });
+          changes.push({ path: filepath, type: 'add' });
         } else {
-          changes.push({ path: nfcPath, type: 'modify' });
+          changes.push({ path: filepath, type: 'modify' });
         }
       }
     }
     // Remove NFC/NFD artifact pairs: same NFC path appearing as both delete and add
     // means the file itself is unchanged — only its Unicode normalization form differs.
     const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
-    const deduped = changes.filter(c => !artifactPaths.has(c.path));
+    const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
     return deduped.sort((a, b) => a.path.localeCompare(b.path));
   } catch (error) {
     console.error(`Failed to diff: ${(error as Error).message}`);
