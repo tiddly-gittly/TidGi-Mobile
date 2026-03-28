@@ -43,6 +43,7 @@ interface IExternalStorageExtended {
   ): Promise<HttpPostToFileResult>;
   readFileChunk(path: string, offset: number, length: number): Promise<ReadFileChunkResult>;
   deleteFile(path: string): Promise<void>;
+  appendFileBase64(path: string, base64Content: string, truncateFirst: boolean): Promise<void>;
 }
 
 /**
@@ -56,8 +57,24 @@ const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function' &&
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).deleteFile === 'function';
 
+/**
+ * Whether the native `ExternalStorage.appendFileBase64` chunked-write method
+ * is available.  When true we can stream large binary data to disk in small
+ * chunks without ever allocating the full base64 string or decoded byte array
+ * in the JVM heap — preventing OOM for 50+ MB git pack files.
+ */
+const hasNativeAppendFile: boolean = Platform.OS === 'android' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).appendFileBase64 === 'function';
+
 /** 64 KB — chunk size for streaming a temp file back into JS. */
 const FILE_CHUNK_SIZE = 64 * 1024;
+
+/**
+ * 2 MB — files larger than this threshold are written in chunks via
+ * `appendFileBase64` to avoid allocating the full base64 string + decoded
+ * byte array in JVM heap simultaneously (which causes OOM for 50+ MB files).
+ */
+const STREAMING_WRITE_THRESHOLD = 2 * 1024 * 1024;
 
 /**
  * Whether a file:// URI (or plain path) points to external/shared storage
@@ -140,9 +157,12 @@ let nativeWriteFlushScheduled = false;
 let nativeWriteFlushPromise: Promise<void> | undefined;
 
 function canUseAndroidNativeBatchWrite(filepath: string): boolean {
+  // Use native batch writes for ALL Android paths (internal + external).
+  // java.io.File can write to the app's own internal directory too, and
+  // routing through ExternalStorage avoids Expo FS's JVM-heap buffering.
+  void filepath; // kept for call-site clarity
   return (
     Platform.OS === 'android' &&
-    isExternalPath(filepath) &&
     typeof ExternalStorage.writeFilesBase64 === 'function'
   );
 }
@@ -245,6 +265,44 @@ const fs = {
         return Buffer.from(base64, 'base64');
       }
 
+      // ── Android internal path: chunked binary read for large files ──
+      // ExponentFileSystem.readAsStringAsync loads the entire file as a
+      // base64 string into JVM heap.  For 50+ MB pack files this causes
+      // OOM.  Use ExternalStorage.readFileChunk instead (java.io.File
+      // can read internal paths too).
+      if (encoding !== 'utf8' && hasNativeStreamingHttp) {
+        const plain = toPlainPath(filepath);
+        try {
+          const info = await ExternalStorage.getInfo(plain);
+          if (!info.exists) {
+            const enoentError = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
+            enoentError.code = 'ENOENT';
+            enoentError.errno = -2;
+            enoentError.path = filepath;
+            throw enoentError;
+          }
+          if (info.size > STREAMING_WRITE_THRESHOLD) {
+            // Large file — read in chunks to avoid JVM OOM
+            const ext = ExternalStorage as unknown as IExternalStorageExtended;
+            const buffers: Buffer[] = [];
+            let offset = 0;
+            while (offset < info.size) {
+              const chunk = await ext.readFileChunk(plain, offset, FILE_CHUNK_SIZE);
+              if (chunk.bytesRead === 0) break;
+              buffers.push(Buffer.from(chunk.data, 'base64'));
+              offset += chunk.bytesRead;
+            }
+            return Buffer.concat(buffers);
+          }
+          // Small file — single native read is fine
+          const base64 = await ExternalStorage.readFileBase64(plain);
+          return Buffer.from(base64, 'base64');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw error;
+          // Fall through to legacy Expo FS on unexpected native errors
+        }
+      }
+
       // Internal path — use legacy Expo FS
       try {
         if (encoding === 'utf8') {
@@ -270,6 +328,30 @@ const fs = {
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
+      // ── Android: chunked streaming for large binary data ──────────
+      // For files above STREAMING_WRITE_THRESHOLD, avoid converting the
+      // entire content to a single base64 string.  Instead, send it in
+      // small chunks via appendFileBase64.  This keeps JVM-heap peak to
+      // ~1 MB regardless of file size, preventing OOM on 50+ MB packs.
+      if (hasNativeAppendFile && typeof data !== 'string') {
+        const rawBytes = Buffer.isBuffer(data)
+          ? data
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+
+        if (rawBytes.byteLength > STREAMING_WRITE_THRESHOLD) {
+          const plain = toPlainPath(filepath);
+          const ext = ExternalStorage as unknown as IExternalStorageExtended;
+          const CHUNK = 512 * 1024; // 512 KB per round-trip
+          for (let offset = 0; offset < rawBytes.byteLength; offset += CHUNK) {
+            const end = Math.min(offset + CHUNK, rawBytes.byteLength);
+            const chunk = rawBytes.subarray(offset, end);
+            const chunkBase64 = chunk.toString('base64');
+            await ext.appendFileBase64(plain, chunkBase64, offset === 0);
+          }
+          return;
+        }
+      }
+
       const base64 = typeof data === 'string'
         ? Buffer.from(data, 'utf8').toString('base64')
         : Buffer.isBuffer(data)
