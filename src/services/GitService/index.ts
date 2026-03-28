@@ -344,8 +344,10 @@ const fs = {
           const CHUNK = 512 * 1024; // 512 KB per round-trip
           for (let offset = 0; offset < rawBytes.byteLength; offset += CHUNK) {
             const end = Math.min(offset + CHUNK, rawBytes.byteLength);
-            const chunk = rawBytes.subarray(offset, end);
-            const chunkBase64 = chunk.toString('base64');
+            // Buffer.subarray() returns a plain Uint8Array in the RN polyfill,
+            // whose toString('base64') produces decimal CSV instead of base64.
+            // Wrap with Buffer.from() to get a proper Buffer before encoding.
+            const chunkBase64 = Buffer.from(rawBytes.subarray(offset, end)).toString('base64');
             await ext.appendFileBase64(plain, chunkBase64, offset === 0);
           }
           return;
