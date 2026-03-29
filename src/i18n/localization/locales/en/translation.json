@@ -582,6 +582,8 @@
       "Downloading": "Downloading objects...",
       "ReceivingPackData": "Receiving pack data",
       "ReceivingPackDataHint": "Receiving full data from server, large wikis may take a while...",
+      "IndexingPack": "Processing pack data",
+      "IndexingPackHint": "Decompressing and indexing Git objects. This may take several minutes. The app may become less responsive.",
       "CreatingWorkTree": "Writing files to disk",
       "CreatingWorkTreeHint": "This may take several minutes for large wikis."
     }

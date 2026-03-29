@@ -562,6 +562,8 @@
       "Downloading": "正在下载对象数据...",
       "ReceivingPackData": "正在接收数据包",
       "ReceivingPackDataHint": "正在从服务器接收完整数据，大型 Wiki 可能需要较长时间...",
+      "IndexingPack": "正在处理数据包",
+      "IndexingPackHint": "正在解压和索引 Git 对象，这可能需要几分钟。应用可能会更新缓慢，请耐心等待。",
       "CreatingWorkTree": "正在将文件写入磁盘",
       "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钟，请耐心等待。"
     }

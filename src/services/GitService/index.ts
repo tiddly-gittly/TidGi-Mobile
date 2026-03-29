@@ -87,6 +87,14 @@ const STREAMING_WRITE_THRESHOLD = 2 * 1024 * 1024;
  * Whether a file:// URI (or plain path) points to external/shared storage
  * and needs to go through the raw native module instead of Expo FS.
  */
+/**
+ * Module-level hook called by readFile when a large binary file has been fully
+ * read (e.g. a git pack).  gitClone() sets this before cloning to inject a
+ * "processing pack" progress event before isomorphic-git's CPU-intensive
+ * synchronous pack indexing freezes the JS thread.
+ */
+let onLargeFileRead: ((filepath: string, sizeBytes: number) => void) | undefined;
+
 function isExternalPath(filepath: string): boolean {
   // path.join('file:///storage/...', 'x') collapses the triple slash to 'file:/storage/...'
   // so we also strip that single-slash variant.
@@ -303,7 +311,16 @@ const fs = {
                 await new Promise<void>(r => setTimeout(r, 0));
               }
             }
-            return Buffer.concat(buffers);
+            const result = Buffer.concat(buffers);
+            // For very large files (packs), fire the hook and yield so React
+            // can render the "Indexing pack" message *before* isomorphic-git
+            // starts CPU-intensive synchronous pack indexing (which will
+            // freeze the JS thread for minutes on large repos).
+            if (info.size > 10 * 1024 * 1024) {
+              onLargeFileRead?.(filepath, info.size);
+              await new Promise<void>(r => setTimeout(r, 100));
+            }
+            return result;
           }
           // Small file — single native read is fine
           const base64 = await ExternalStorage.readFileBase64(plain);
@@ -964,6 +981,14 @@ export async function gitClone(
     let lastPhase = '';
     let packDownloadReported = false;
 
+    // Set module-level hook so readFile can fire a progress event when a
+    // large pack file has been read — right before isomorphic-git's
+    // synchronous pack indexing freezes the JS thread.
+    onLargeFileRead = (_filepath, sizeBytes) => {
+      const mb = Math.round(sizeBytes / 1024 / 1024);
+      onProgress?.(`Indexing pack (${mb} MB)`, 0, 0);
+    };
+
     await git.clone({
       fs,
       http: httpWithLogging,
@@ -1013,6 +1038,9 @@ export async function gitClone(
 
     console.error(`Git clone failed: ${message}`);
     throw new Error(`Failed to clone repository: ${message}`);
+  } finally {
+    // Always clean up the module-level hook to avoid leaking closures.
+    onLargeFileRead = undefined;
   }
 }
 
