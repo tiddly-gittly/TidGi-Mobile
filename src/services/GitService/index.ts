@@ -290,11 +290,11 @@ const fs = {
           }
           if (info.size > STREAMING_WRITE_THRESHOLD) {
             // Large file — read in chunks to avoid JVM OOM
-            const ext = ExternalStorage as unknown as IExternalStorageExtended;
+            const extension = ExternalStorage as unknown as IExternalStorageExtended;
             const buffers: Buffer[] = [];
             let offset = 0;
             while (offset < info.size) {
-              const chunk = await ext.readFileChunk(plain, offset, LARGE_READ_CHUNK_SIZE);
+              const chunk = await extension.readFileChunk(plain, offset, LARGE_READ_CHUNK_SIZE);
               if (chunk.bytesRead === 0) break;
               buffers.push(Buffer.from(chunk.data, 'base64'));
               offset += chunk.bytesRead;
@@ -347,7 +347,7 @@ const fs = {
 
         if (rawBytes.byteLength > STREAMING_WRITE_THRESHOLD) {
           const plain = toPlainPath(filepath);
-          const ext = ExternalStorage as unknown as IExternalStorageExtended;
+          const extension = ExternalStorage as unknown as IExternalStorageExtended;
           const CHUNK = 512 * 1024; // 512 KB per round-trip
           for (let offset = 0; offset < rawBytes.byteLength; offset += CHUNK) {
             const end = Math.min(offset + CHUNK, rawBytes.byteLength);
@@ -355,7 +355,7 @@ const fs = {
             // whose toString('base64') produces decimal CSV instead of base64.
             // Wrap with Buffer.from() to get a proper Buffer before encoding.
             const chunkBase64 = Buffer.from(rawBytes.subarray(offset, end)).toString('base64');
-            await ext.appendFileBase64(plain, chunkBase64, offset === 0);
+            await extension.appendFileBase64(plain, chunkBase64, offset === 0);
           }
           return;
         }
