@@ -45,7 +45,7 @@ export function useGitImport() {
   const [cloneProgress, setCloneProgress] = useState({ phase: '', loaded: 0, total: 0 });
 
   // Batch import state
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; failed: number }>({ current: 0, total: 0, failed: 0 });
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; failed: number; currentName: string }>({ current: 0, total: 0, failed: 0, currentName: '' });
   const [isBatchImporting, setIsBatchImporting] = useState(false);
   const [batchCreatedWorkspaces, setBatchCreatedWorkspaces] = useState<IWikiWorkspace[]>([]);
 
@@ -218,24 +218,23 @@ export function useGitImport() {
    */
   const batchImportWikis = async (items: IBatchImportItem[]) => {
     setIsBatchImporting(true);
-    setBatchProgress({ current: 0, total: items.length, failed: 0 });
+    setBatchProgress({ current: 1, total: items.length, failed: 0, currentName: items[0]?.wikiName ?? '' });
     setBatchCreatedWorkspaces([]);
     setError(undefined);
 
     const created: IWikiWorkspace[] = [];
-    let finishedCount = 0;
     let failedCount = 0;
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
-      setBatchProgress(previous => ({ ...previous, current: finishedCount }));
+      // Show 1-based index of the item currently being imported + its name
+      setBatchProgress(previous => ({ ...previous, current: index + 1, currentName: item.wikiName }));
       try {
         const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
         created.push(workspace);
       } catch (error) {
         failedCount += 1;
-        finishedCount += 1;
-        setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
+        setBatchProgress(previous => ({ ...previous, failed: failedCount }));
         // If the first item (main wiki) fails, abort the batch.
         // Sub-wikis depend on the main wiki existing; importing them would create orphan workspaces.
         if (index === 0) {
@@ -244,8 +243,6 @@ export function useGitImport() {
         }
         continue;
       }
-      finishedCount += 1;
-      setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
     }
 
     // Batch result state machine:
@@ -272,7 +269,7 @@ export function useGitImport() {
     setErrorKind('generic');
     setCloneProgress({ phase: '', loaded: 0, total: 0 });
     setCreatedWorkspace(undefined);
-    setBatchProgress({ current: 0, total: 0, failed: 0 });
+    setBatchProgress({ current: 0, total: 0, failed: 0, currentName: '' });
     setBatchCreatedWorkspaces([]);
     setIsBatchImporting(false);
   };

@@ -419,6 +419,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <>
               <Text variant='titleSmall'>
                 {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
+                {batchProgress.currentName ? ` — ${batchProgress.currentName}` : ''}
               </Text>
               <ProgressBar
                 animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
@@ -435,14 +436,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                   <Text variant='bodySmall'>
                     {cloneProgress.phase === 'Creating work tree'
                       ? t('Import.Phase.CreatingWorkTree')
+                      : cloneProgress.phase === 'Receiving pack data'
+                      ? t('Import.Phase.ReceivingPackData')
                       : cloneProgress.phase}
                     {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
                   </Text>
                 )}
                 {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
-                {cloneProgress.phase !== '' && cloneProgress.total === 0 && cloneProgress.phase !== 'Creating work tree' && (
+                {cloneProgress.phase !== '' && cloneProgress.total === 0 && !['Creating work tree', 'Receiving pack data'].includes(cloneProgress.phase) && (
                   <HintText variant='bodySmall'>{t('Import.Phase.Downloading')}</HintText>
                 )}
+                {cloneProgress.phase === 'Receiving pack data' && <HintText variant='bodySmall'>{t('Import.Phase.ReceivingPackDataHint')}</HintText>}
                 {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
                 <ProgressBar
                   animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}

@@ -298,6 +298,10 @@ const fs = {
               if (chunk.bytesRead === 0) break;
               buffers.push(Buffer.from(chunk.data, 'base64'));
               offset += chunk.bytesRead;
+              // Yield to event loop every 8 MB to prevent UI freeze
+              if (buffers.length % 4 === 0) {
+                await new Promise<void>(r => setTimeout(r, 0));
+              }
             }
             return Buffer.concat(buffers);
           }
@@ -349,6 +353,7 @@ const fs = {
           const plain = toPlainPath(filepath);
           const extension = ExternalStorage as unknown as IExternalStorageExtended;
           const CHUNK = 512 * 1024; // 512 KB per round-trip
+          let chunkIndex = 0;
           for (let offset = 0; offset < rawBytes.byteLength; offset += CHUNK) {
             const end = Math.min(offset + CHUNK, rawBytes.byteLength);
             // Buffer.subarray() returns a plain Uint8Array in the RN polyfill,
@@ -356,6 +361,11 @@ const fs = {
             // Wrap with Buffer.from() to get a proper Buffer before encoding.
             const chunkBase64 = Buffer.from(rawBytes.subarray(offset, end)).toString('base64');
             await extension.appendFileBase64(plain, chunkBase64, offset === 0);
+            chunkIndex++;
+            // Yield to event loop every 4 MB to prevent UI freeze
+            if (chunkIndex % 8 === 0) {
+              await new Promise<void>(r => setTimeout(r, 0));
+            }
           }
           return;
         }
@@ -949,6 +959,11 @@ export async function gitClone(
       }
     }
 
+    // Track the last reported phase so we can detect "gaps" where
+    // isomorphic-git is busy processing the pack without emitting progress.
+    let lastPhase = '';
+    let packDownloadReported = false;
+
     await git.clone({
       fs,
       http: httpWithLogging,
@@ -962,11 +977,20 @@ export async function gitClone(
       headers: normalizeHeaders(createAuthHeader(remote)),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
-        onProgress?.(
-          typeof progress.phase === 'string' ? progress.phase : '',
-          toSafeNumber(progress.loaded, 0),
-          toSafeNumber(progress.total, 0),
-        );
+        const phase = typeof progress.phase === 'string' ? progress.phase : '';
+        const loaded = toSafeNumber(progress.loaded, 0);
+        const total = toSafeNumber(progress.total, 0);
+
+        // When transitioning from a server-side phase ("Compressing objects")
+        // to a client-side phase ("Receiving objects"), inject a bridging
+        // message so the user knows the app is still working.
+        if (!packDownloadReported && lastPhase.startsWith('Compressing') && !phase.startsWith('Compressing')) {
+          packDownloadReported = true;
+          onProgress?.('Receiving pack data', 0, 0);
+        }
+        lastPhase = phase;
+
+        onProgress?.(phase, loaded, total);
       },
     });
 
