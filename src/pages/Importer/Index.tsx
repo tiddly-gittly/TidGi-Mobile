@@ -47,6 +47,9 @@ const ImportStatusText = styled.Text`
   display: flex;
   flex-direction: row;
 `;
+const HintText = styled(Text)`
+  opacity: 0.65;
+`;
 const WorkspaceNameInput = styled(TextInput)`
   margin-top: 10px;
 `;
@@ -267,6 +270,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     resetState,
     status: importStatus,
     error: importError,
+    errorKind: importErrorKind,
     cloneProgress,
     createdWorkspace: createdWikiWorkspace,
     batchProgress,
@@ -427,26 +431,51 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             ? (
               <>
                 <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
-                <Text variant='bodySmall'>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
+                {cloneProgress.phase !== '' && (
+                  <Text variant='bodySmall'>
+                    {cloneProgress.phase === 'Creating work tree'
+                      ? t('Import.Phase.CreatingWorkTree')
+                      : cloneProgress.phase}
+                    {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
+                  </Text>
+                )}
+                {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
+                {cloneProgress.phase !== '' && cloneProgress.total === 0 && cloneProgress.phase !== 'Creating work tree' && (
+                  <HintText variant='bodySmall'>{t('Import.Phase.Downloading')}</HintText>
+                )}
+                {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
                 <ProgressBar
                   animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+                  indeterminate={cloneProgress.total === 0}
                   color={MD3Colors.primary40}
                 />
               </>
             )
             : (
               <ImportStatusText>
-                <Text>{t('Loading')} {importStatus}</Text>
+                <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
               </ImportStatusText>
             )}
         </>
       )}
       {importStatus === 'error' && (
         <>
-          <ImportStatusText style={{ color: MD3Colors.error50 }}>
-            <Text>{t('ErrorMessage')}{' '}</Text>
-            {importError}
-          </ImportStatusText>
+          {importErrorKind === 'oom' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.OOM')}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'tooLarge' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'generic' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('ErrorMessage')}{' '}</Text>
+              {importError}
+            </ImportStatusText>
+          )}
           <Button
             mode='elevated'
             onPress={resetState}

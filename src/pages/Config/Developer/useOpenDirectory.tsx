@@ -43,9 +43,22 @@ export function useOpenDirectory() {
       const normalizedDirectoryUri = normalizeDirectoryUri(directoryUri);
 
       if (Platform.OS === 'android') {
-        const plainPath = toPlainPath(normalizedDirectoryUri);
-        // Android 7+ forbids sharing file:// URIs via Intent (FileUriExposedException).
-        // Use DocumentsContract content:// URI which file managers understand.
+        // For Android, convert to plain path for file manager
+        let plainPath = normalizedDirectoryUri;
+        try {
+          // Only use toPlainPath if it looks like an external path
+          if (normalizedDirectoryUri.startsWith('file://') || normalizedDirectoryUri.startsWith('/storage/')) {
+            plainPath = normalizedDirectoryUri.startsWith('file://')
+              ? normalizedDirectoryUri.replace('file://', '')
+              : normalizedDirectoryUri;
+          } else {
+            plainPath = toPlainPath(normalizedDirectoryUri);
+          }
+        } catch {
+          plainPath = normalizedDirectoryUri;
+        }
+
+        // Try to open with DocumentsContract content URI
         try {
           const contentUri = toDocumentsProviderUri(plainPath);
           await startActivityAsync(
@@ -75,12 +88,24 @@ export function useOpenDirectory() {
         }
       }
 
+      // For non-Android platforms, try shareAsync for file:// URIs
+      if (normalizedDirectoryUri.startsWith('file://')) {
+        try {
+          await shareAsync(normalizedDirectoryUri, { dialogTitle: 'Open folder with...' });
+          return;
+        } catch {
+          // ignore and fall through
+        }
+      }
+
+      // Try Linking as fallback
       const canOpen = await Linking.canOpenURL(normalizedDirectoryUri);
       if (canOpen) {
         await Linking.openURL(normalizedDirectoryUri);
         return;
       }
 
+      // Final fallback: use shareAsync
       await shareAsync(
         normalizedDirectoryUri,
         { dialogTitle: 'Open folder with...' },

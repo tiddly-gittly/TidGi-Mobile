@@ -7,7 +7,7 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
-import { gitClone, IGitRemote } from '../../services/GitService';
+import { GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, gitClone, IGitRemote } from '../../services/GitService';
 import { logFor } from '../../services/LoggerService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
@@ -35,10 +35,13 @@ export interface IBatchImportItem {
 }
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
+/** Distinguishes known failure modes so the UI can show actionable guidance. */
+export type GitImportErrorKind = 'generic' | 'oom' | 'tooLarge';
 
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
   const [error, setError] = useState<string | undefined>();
+  const [errorKind, setErrorKind] = useState<GitImportErrorKind>('generic');
   const [cloneProgress, setCloneProgress] = useState({ phase: '', loaded: 0, total: 0 });
 
   // Batch import state
@@ -47,7 +50,6 @@ export function useGitImport() {
   const [batchCreatedWorkspaces, setBatchCreatedWorkspaces] = useState<IWikiWorkspace[]>([]);
 
   const addWiki = useWorkspaceStore(state => state.add);
-  const workspaceList = useWorkspaceStore(state => state.workspaces);
   const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWorkspace, setCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
 
@@ -74,7 +76,8 @@ export function useGitImport() {
 
     try {
       // 1. Create workspace
-      if (workspaceList.some(workspace => workspace.id === qrData.workspaceId)) {
+      // Use getState() to read live store state, avoiding stale closure from React hook snapshot
+      if (useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === qrData.workspaceId)) {
         throw new Error(`Workspace id already exists: ${qrData.workspaceId}`);
       }
       const newWorkspace = addWiki({
@@ -154,9 +157,22 @@ export function useGitImport() {
       setStatus('success');
       return newWorkspace;
     } catch (error) {
-      console.error('Git import failed:', (error as Error).message, (error as Error).stack);
+      const errorMessage = (error as Error).message;
+      console.error('Git import failed:', errorMessage, (error as Error).stack);
       workspaceLogger.error('Git import failed', error);
-      setError((error as Error).message);
+
+      // Classify error kind for targeted UI messaging.
+      if (errorMessage === GIT_CLONE_ERROR_OOM) {
+        setErrorKind('oom');
+        setError(undefined); // message comes from i18n
+      } else if (errorMessage.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX)) {
+        const mb = errorMessage.slice(GIT_CLONE_ERROR_TOO_LARGE_PREFIX.length);
+        setErrorKind('tooLarge');
+        setError(mb); // mb string, displayed by UI
+      } else {
+        setErrorKind('generic');
+        setError(errorMessage);
+      }
       setStatus('error');
 
       // Clean up on error: remove workspace entry and created folder
@@ -210,21 +226,40 @@ export function useGitImport() {
     let finishedCount = 0;
     let failedCount = 0;
 
-    for (const item of items) {
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
       setBatchProgress(previous => ({ ...previous, current: finishedCount }));
       try {
         const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
         created.push(workspace);
-        setBatchCreatedWorkspaces(previous => [...previous, workspace]);
-      } catch {
+      } catch (error) {
         failedCount += 1;
+        finishedCount += 1;
+        setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
+        // If the first item (main wiki) fails, abort the batch.
+        // Sub-wikis depend on the main wiki existing; importing them would create orphan workspaces.
+        if (index === 0) {
+          console.error('[batchImport] Main wiki import failed, aborting sub-wiki imports:', (error as Error).message);
+          break;
+        }
+        continue;
       }
       finishedCount += 1;
       setBatchProgress({ current: finishedCount, total: items.length, failed: failedCount });
     }
 
-    // Only mark success after ALL items have been processed
-    if (failedCount < items.length) {
+    // Batch result state machine:
+    // - all failed: error
+    // - partially failed: error (do not show misleading success actions)
+    // - all succeeded: success
+    if (created.length > 0) {
+      setBatchCreatedWorkspaces(created);
+    }
+    if (failedCount > 0) {
+      setStatus('error');
+      setErrorKind('generic');
+      setError(previous => previous ?? 'One or more workspaces failed to import.');
+    } else {
       setStatus('success');
     }
     setIsBatchImporting(false);
@@ -234,6 +269,7 @@ export function useGitImport() {
   const resetState = () => {
     setStatus('idle');
     setError(undefined);
+    setErrorKind('generic');
     setCloneProgress({ phase: '', loaded: 0, total: 0 });
     setCreatedWorkspace(undefined);
     setBatchProgress({ current: 0, total: 0, failed: 0 });
@@ -247,6 +283,7 @@ export function useGitImport() {
     resetState,
     status,
     error,
+    errorKind,
     cloneProgress,
     createdWorkspace,
     batchProgress,

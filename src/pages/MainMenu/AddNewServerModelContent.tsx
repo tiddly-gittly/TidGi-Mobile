@@ -26,8 +26,11 @@ const ScanQRButton = styled(Button)`
 
 export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWorkspaceStore(state =>
-    id === undefined ? undefined : state.workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki'))
+  // Use useShallow + useMemo to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  const wiki = useMemo(
+    () => id === undefined ? undefined : workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki')),
+    [id, workspaces],
   );
   const theme = useTheme();
   const [_hasPermission, setHasPermission] = useState<boolean | null>(null);

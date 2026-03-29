@@ -14,6 +14,10 @@ const LargeCameraView = styled(CameraView)`
 const ScanQRButton = styled(Button)`
   margin: 10px 0;
   min-height: 3em;
+  
+  /* Remove shadow when disabled to maintain consistent appearance during import */
+  elevation: ${props => props.disabled ? 0 : undefined};
+  shadow-color: ${props => props.disabled ? 'transparent' : undefined};
 `;
 
 const ButtonText = styled.Text`

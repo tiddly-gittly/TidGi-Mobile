@@ -20,6 +20,69 @@ if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
 
+// ─── Runtime detection of new native streaming API ────────────────────
+// Added in expo-filesystem-android-external-storage@1.0.6
+interface HttpPostToFileResult {
+  statusCode: number;
+  headers: Record<string, string>;
+  bytesWritten: number;
+}
+
+interface ReadFileChunkResult {
+  data: string; // Base64
+  bytesRead: number;
+}
+
+interface IExternalStorageExtended {
+  httpPostToFile(
+    url: string,
+    headers: Record<string, string>,
+    bodyBase64: string,
+    destinationPath: string,
+    contentType: string,
+  ): Promise<HttpPostToFileResult>;
+  readFileChunk(path: string, offset: number, length: number): Promise<ReadFileChunkResult>;
+  deleteFile(path: string): Promise<void>;
+  appendFileBase64(path: string, base64Content: string, truncateFirst: boolean): Promise<void>;
+}
+
+/**
+ * Whether the native `ExternalStorage.httpPostToFile` streaming method is
+ * available.  On iOS or when the native module isn't linked this will be false
+ * and we fall back to the regular `fetch()` path (which may OOM on very large
+ * repos).
+ */
+const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).httpPostToFile === 'function' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).deleteFile === 'function';
+
+/**
+ * Whether the native `ExternalStorage.appendFileBase64` chunked-write method
+ * is available.  When true we can stream large binary data to disk in small
+ * chunks without ever allocating the full base64 string or decoded byte array
+ * in the JVM heap — preventing OOM for 50+ MB git pack files.
+ */
+const hasNativeAppendFile: boolean = Platform.OS === 'android' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).appendFileBase64 === 'function';
+
+/** 64 KB — chunk size for streaming the HTTP temp file back into JS. */
+const FILE_CHUNK_SIZE = 64 * 1024;
+
+/**
+ * 2 MB — chunk size for reading large files (e.g. pack files) back into JS
+ * via readFileChunk.  Larger than FILE_CHUNK_SIZE to reduce bridge
+ * round-trips: 116 MB / 2 MB = 58 calls vs 116 MB / 64 KB = 1,812 calls.
+ */
+const LARGE_READ_CHUNK_SIZE = 2 * 1024 * 1024;
+
+/**
+ * 2 MB — files larger than this threshold are written in chunks via
+ * `appendFileBase64` to avoid allocating the full base64 string + decoded
+ * byte array in JVM heap simultaneously (which causes OOM for 50+ MB files).
+ */
+const STREAMING_WRITE_THRESHOLD = 2 * 1024 * 1024;
+
 /**
  * Whether a file:// URI (or plain path) points to external/shared storage
  * and needs to go through the raw native module instead of Expo FS.
@@ -44,6 +107,49 @@ function toFileUri(plainPath: string): string {
 const CHECKOUT_BATCH_SIZE = 200;
 const NATIVE_WRITE_BATCH_SIZE = 64;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
+
+// React Native's fetch (OkHttp) buffers the entire HTTP response in the JVM heap
+// before exposing it to JavaScript via JSI. On mid-range Android devices the Hermes
+// heap has ~80-100 MB available for a single allocation after app baseline usage.
+// Packs larger than this will cause an OOM crash during clone.
+const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
+
+/** Structured sentinels thrown by gitClone so callers can show targeted UI. */
+export const GIT_CLONE_ERROR_OOM = 'WIKI_OOM';
+export const GIT_CLONE_ERROR_TOO_LARGE_PREFIX = 'WIKI_TOO_LARGE:';
+
+// Detect Android/Hermes OOM patterns in error messages.
+function isOOMError(message: string): boolean {
+  return (
+    message.includes('Failed to allocate') ||
+    message.includes('OutOfMemoryError') ||
+    message.includes('growth limit') ||
+    /out of memory/i.test(message)
+  );
+}
+
+/**
+ * Query the TidGi Desktop optional pack-size endpoint before downloading.
+ * Returns estimated bytes, or null when the endpoint is not available
+ * (Desktop < the version that added this endpoint — silently skips).
+ */
+async function tryGetRemotePackSize(
+  repoUrl: string,
+  headers: Record<string, string>,
+): Promise<number | null> {
+  try {
+    const sizeUrl = `${repoUrl}/pack-size`;
+    const response = await pTimeout(fetch(sizeUrl, { method: 'GET', headers }), {
+      milliseconds: 5_000,
+      message: new Error('pack-size check timeout'),
+    });
+    if (!response.ok) return null; // endpoint not available yet
+    const data = (await response.json()) as { estimatedBytes?: number };
+    return typeof data.estimatedBytes === 'number' ? data.estimatedBytes : null;
+  } catch {
+    return null; // non-fatal, proceed with clone
+  }
+}
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
 
 interface INativeWriteTask {
@@ -53,20 +159,27 @@ interface INativeWriteTask {
   resolve: () => void;
 }
 
-let pendingNativeWriteTasks: INativeWriteTask[] = [];
+const pendingNativeWriteTasks: INativeWriteTask[] = [];
 let nativeWriteFlushScheduled = false;
 let nativeWriteFlushPromise: Promise<void> | undefined;
 
 function canUseAndroidNativeBatchWrite(filepath: string): boolean {
-  return Platform.OS === 'android'
-    && isExternalPath(filepath)
-    && typeof ExternalStorage.writeFilesBase64 === 'function';
+  // Use native batch writes for ALL Android paths (internal + external).
+  // java.io.File can write to the app's own internal directory too, and
+  // routing through ExternalStorage avoids Expo FS's JVM-heap buffering.
+  void filepath; // kept for call-site clarity
+  return (
+    Platform.OS === 'android' &&
+    typeof ExternalStorage.writeFilesBase64 === 'function'
+  );
 }
 
 function scheduleNativeBatchWrite(path: string, base64Content: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     pendingNativeWriteTasks.push({ path, base64Content, resolve, reject });
-    if (nativeWriteFlushScheduled) return;
+    if (nativeWriteFlushScheduled) {
+      return;
+    }
     nativeWriteFlushScheduled = true;
     void Promise.resolve().then(() => {
       nativeWriteFlushScheduled = false;
@@ -87,9 +200,13 @@ async function flushPendingNativeWrites(): Promise<void> {
         batch.map(task => toPlainPath(task.path)),
         batch.map(task => task.base64Content),
       );
-      batch.forEach(task => task.resolve());
+      batch.forEach(task => {
+        task.resolve();
+      });
     } catch (error) {
-      batch.forEach(task => task.reject(error));
+      batch.forEach(task => {
+        task.reject(error);
+      });
     }
     await Promise.resolve();
   }
@@ -155,6 +272,44 @@ const fs = {
         return Buffer.from(base64, 'base64');
       }
 
+      // ── Android internal path: chunked binary read for large files ──
+      // ExponentFileSystem.readAsStringAsync loads the entire file as a
+      // base64 string into JVM heap.  For 50+ MB pack files this causes
+      // OOM.  Use ExternalStorage.readFileChunk instead (java.io.File
+      // can read internal paths too).
+      if (encoding !== 'utf8' && hasNativeStreamingHttp) {
+        const plain = toPlainPath(filepath);
+        try {
+          const info = await ExternalStorage.getInfo(plain);
+          if (!info.exists) {
+            const enoentError = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
+            enoentError.code = 'ENOENT';
+            enoentError.errno = -2;
+            enoentError.path = filepath;
+            throw enoentError;
+          }
+          if (info.size > STREAMING_WRITE_THRESHOLD) {
+            // Large file — read in chunks to avoid JVM OOM
+            const ext = ExternalStorage as unknown as IExternalStorageExtended;
+            const buffers: Buffer[] = [];
+            let offset = 0;
+            while (offset < info.size) {
+              const chunk = await ext.readFileChunk(plain, offset, LARGE_READ_CHUNK_SIZE);
+              if (chunk.bytesRead === 0) break;
+              buffers.push(Buffer.from(chunk.data, 'base64'));
+              offset += chunk.bytesRead;
+            }
+            return Buffer.concat(buffers);
+          }
+          // Small file — single native read is fine
+          const base64 = await ExternalStorage.readFileBase64(plain);
+          return Buffer.from(base64, 'base64');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw error;
+          // Fall through to legacy Expo FS on unexpected native errors
+        }
+      }
+
       // Internal path — use legacy Expo FS
       try {
         if (encoding === 'utf8') {
@@ -180,11 +335,37 @@ const fs = {
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
+      // ── Android: chunked streaming for large binary data ──────────
+      // For files above STREAMING_WRITE_THRESHOLD, avoid converting the
+      // entire content to a single base64 string.  Instead, send it in
+      // small chunks via appendFileBase64.  This keeps JVM-heap peak to
+      // ~1 MB regardless of file size, preventing OOM on 50+ MB packs.
+      if (hasNativeAppendFile && typeof data !== 'string') {
+        const rawBytes = Buffer.isBuffer(data)
+          ? data
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+
+        if (rawBytes.byteLength > STREAMING_WRITE_THRESHOLD) {
+          const plain = toPlainPath(filepath);
+          const ext = ExternalStorage as unknown as IExternalStorageExtended;
+          const CHUNK = 512 * 1024; // 512 KB per round-trip
+          for (let offset = 0; offset < rawBytes.byteLength; offset += CHUNK) {
+            const end = Math.min(offset + CHUNK, rawBytes.byteLength);
+            // Buffer.subarray() returns a plain Uint8Array in the RN polyfill,
+            // whose toString('base64') produces decimal CSV instead of base64.
+            // Wrap with Buffer.from() to get a proper Buffer before encoding.
+            const chunkBase64 = Buffer.from(rawBytes.subarray(offset, end)).toString('base64');
+            await ext.appendFileBase64(plain, chunkBase64, offset === 0);
+          }
+          return;
+        }
+      }
+
       const base64 = typeof data === 'string'
         ? Buffer.from(data, 'utf8').toString('base64')
         : Buffer.isBuffer(data)
-          ? data.toString('base64')
-          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+        ? data.toString('base64')
+        : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
 
       if (canUseAndroidNativeBatchWrite(filepath)) {
         return scheduleNativeBatchWrite(filepath, base64);
@@ -486,6 +667,21 @@ const httpWithLogging = {
     console.log('Git HTTP request:', { url, method, headers });
 
     try {
+      // ── Streaming path for large POST (git-upload-pack) ───────────
+      // Android OkHttp buffers the entire HTTP response in JVM heap before
+      // exposing it to JS.  For git-upload-pack this can easily be 100+ MB
+      // and triggers OOM.
+      //
+      // Solution: use a native Kotlin method that performs the POST and
+      // streams the response body directly to a temp file on disk using
+      // Okio, never holding more than 64 KB in memory.  JS then reads the
+      // temp file back in chunks via `readFileChunk`.
+      const isGitUploadPackPost = method === 'POST' && url.includes('git-upload-pack');
+      if (isGitUploadPackPost && hasNativeStreamingHttp) {
+        return await nativeStreamingPost(url, headers, body);
+      }
+
+      // ── Regular fetch path (GET, small POST) ─────────────────────
       const timeoutMs = method === 'POST' ? 120_000 : 30_000;
       let payload: ArrayBuffer | undefined;
 
@@ -532,6 +728,127 @@ const httpWithLogging = {
     }
   },
 };
+
+/**
+ * Perform an HTTP POST via the native OkHttp streaming path:
+ * 1. POST body is sent as-is.
+ * 2. Response body is streamed to a temp file (never fully in memory).
+ * 3. The temp file is read back as an async iterator of 64 KB chunks.
+ * 4. The temp file is deleted once fully consumed.
+ */
+async function nativeStreamingPost(
+  url: string,
+  headers: Record<string, string>,
+  body?: AsyncIterableIterator<Uint8Array> | Iterable<Uint8Array> | Uint8Array,
+): Promise<GitHttpResponse> {
+  // Collect the request body (git protocol payload, typically < 1 KB).
+  let bodyBytes: Uint8Array;
+  if (body === undefined) {
+    bodyBytes = new Uint8Array(0);
+  } else if (body instanceof Uint8Array) {
+    bodyBytes = body;
+  } else {
+    bodyBytes = await collect(body);
+  }
+
+  const bodyBase64 = Buffer.from(bodyBytes).toString('base64');
+  const contentType = Object.entries(headers)
+    .find(([key]) => key.toLowerCase() === 'content-type')?.[1] ?? 'application/x-git-upload-pack-request';
+
+  // Use the app's cache dir for the temp file (auto-cleaned by Android).
+  const cacheDirectory = FileSystemLegacy.cacheDirectory;
+  if (cacheDirectory === null) {
+    throw new Error('FileSystem cache directory unavailable');
+  }
+  const temporaryPath = `${toPlainPath(cacheDirectory)}/git-pack-${Date.now()}.tmp`;
+
+  console.log('Git HTTP (native streaming):', { url, temporaryPath });
+
+  const externalStorageExtension = ExternalStorage as unknown as IExternalStorageExtended;
+  const result = await externalStorageExtension.httpPostToFile(
+    url,
+    headers,
+    bodyBase64,
+    temporaryPath,
+    contentType,
+  );
+
+  console.log('Git HTTP response (native):', {
+    url,
+    statusCode: result.statusCode,
+    bytesWritten: result.bytesWritten,
+  });
+
+  // Create an async iterator that reads the temp file in 64 KB chunks,
+  // then deletes the file when done.
+  const responseBody = createFileChunkIterator(temporaryPath, result.bytesWritten);
+
+  return {
+    url,
+    method: 'POST',
+    statusCode: result.statusCode,
+    statusMessage: result.statusCode === 200 ? 'OK' : `HTTP ${result.statusCode}`,
+    body: responseBody,
+    headers: result.headers,
+  };
+}
+
+/**
+ * Async iterator that reads a file in chunks via the native module,
+ * yielding Uint8Array pieces and deleting the temp file when exhausted.
+ */
+function createFileChunkIterator(filePath: string, totalBytes: number): AsyncIterableIterator<Uint8Array> {
+  let offset = 0;
+  let iteratorDone = false;
+
+  const externalStorageExtension = ExternalStorage as unknown as IExternalStorageExtended;
+
+  return {
+    async next(): Promise<IteratorResult<Uint8Array>> {
+      if (iteratorDone || offset >= totalBytes) {
+        if (!iteratorDone) {
+          iteratorDone = true;
+          // Clean up temp file
+          try {
+            await externalStorageExtension.deleteFile(filePath);
+          } catch {
+            // non-fatal
+          }
+        }
+        return { done: true, value: undefined as unknown as Uint8Array };
+      }
+
+      const chunk = await externalStorageExtension.readFileChunk(filePath, offset, FILE_CHUNK_SIZE);
+      offset += chunk.bytesRead;
+
+      if (chunk.bytesRead === 0) {
+        iteratorDone = true;
+        try {
+          await externalStorageExtension.deleteFile(filePath);
+        } catch {
+          // non-fatal
+        }
+        return { done: true, value: undefined as unknown as Uint8Array };
+      }
+
+      const bytes = Buffer.from(chunk.data, 'base64');
+      return { done: false, value: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) };
+    },
+    return() {
+      iteratorDone = true;
+      // Best-effort cleanup
+      try {
+        void externalStorageExtension.deleteFile(filePath).catch(() => {});
+      } catch {
+        // non-fatal
+      }
+      return Promise.resolve({ done: true, value: undefined as unknown as Uint8Array });
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+}
 
 /**
  * Create auth header for git operations
@@ -618,6 +935,20 @@ export async function gitClone(
 
   try {
     await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote)));
+
+    // Optional pre-download size check. Gracefully no-ops on Desktop versions
+    // that don't yet have the /pack-size endpoint.
+    const authHeaders = normalizeHeaders(createAuthHeader(remote));
+    const estimatedBytes = await tryGetRemotePackSize(url, authHeaders);
+    if (estimatedBytes !== null) {
+      const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
+      console.log(`Git clone estimated pack size: ${estimatedMB} MB`);
+      onProgress?.(`Estimated size: ${estimatedMB} MB`, 0, estimatedBytes);
+      if (estimatedBytes > MAX_SAFE_PACK_BYTES) {
+        throw new Error(`${GIT_CLONE_ERROR_TOO_LARGE_PREFIX}${estimatedMB}`);
+      }
+    }
+
     await git.clone({
       fs,
       http: httpWithLogging,
@@ -642,6 +973,20 @@ export async function gitClone(
     console.log(`Successfully cloned repository to ${directory}`);
   } catch (error) {
     const message = (error as Error).message;
+
+    // Re-throw structured sentinels as-is so callers can act on them.
+    if (message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) || message === GIT_CLONE_ERROR_OOM) {
+      throw error;
+    }
+
+    // Convert Android/Hermes OOM into a clean sentinel.
+    // React Native buffers the full response in the JVM heap; large packs exceed
+    // the per-app growth limit (~256 MB) after baseline JS heap usage.
+    if (isOOMError(message)) {
+      console.error(`Git clone OOM — mobile-side heap exhausted: ${message}`);
+      throw new Error(GIT_CLONE_ERROR_OOM);
+    }
+
     console.error(`Git clone failed: ${message}`);
     throw new Error(`Failed to clone repository: ${message}`);
   }
@@ -702,10 +1047,30 @@ export async function gitCommit(
   try {
     // Stage all changes using statusMatrix
     const status = await git.statusMatrix({ fs, dir: directory });
+
+    // Detect NFC/NFD Unicode normalization artifact pairs before staging.
+    // On Android (FAT32/ExFAT), filenames with Chinese/multi-byte characters may be
+    // transparently converted from NFC (git index) to NFD (filesystem), causing statusMatrix
+    // to report a spurious delete+add for the same logical file.
+    const deletesByNFC = new Map<string, string>(); // nfc → original filepath
+    const addsByNFC = new Map<string, string>(); // nfc → original filepath
+    for (const [filepath, headStatus, workdirStatus] of status) {
+      const nfcPath = filepath.normalize('NFC');
+      if (headStatus !== workdirStatus) {
+        if (workdirStatus === 0) deletesByNFC.set(nfcPath, filepath);
+        else if (headStatus === 0) addsByNFC.set(nfcPath, filepath);
+      }
+    }
+    const artifactNFCPaths = new Set([...deletesByNFC.keys()].filter(p => addsByNFC.has(p)));
+
     for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
       // headStatus: 0 = absent in HEAD, 1 = present in HEAD
       // workdirStatus: 0 = absent in workdir, 2 = present in workdir
       // stageStatus: 0 = absent in stage, 2 = present in stage, 3 = modified-and-staged
+      const nfcPath = filepath.normalize('NFC');
+
+      // Skip NFC/NFD normalization artifacts — the file hasn't actually changed
+      if (artifactNFCPaths.has(nfcPath)) continue;
 
       // Stage changes when workdir differs from HEAD or stage differs from HEAD
       if (headStatus !== workdirStatus || headStatus !== stageStatus) {
@@ -860,18 +1225,31 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
   try {
     const status = await git.statusMatrix({ fs, dir: directory });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+    // Track deletes and adds by NFC-normalized path to detect Unicode normalization artifacts.
+    // On Android (FAT32/ExFAT), git checks out files with NFC paths but the filesystem may
+    // convert them to NFD, causing a spurious delete (NFC path gone) + add (NFD path new)
+    // for every file whose name contains multi-byte Unicode characters (e.g. Chinese).
+    const deletesByNFC = new Set<string>();
+    const addsByNFC = new Set<string>();
     for (const [filepath, headStatus, workdirStatus] of status) {
       if (headStatus !== workdirStatus) {
+        const nfcPath = filepath.normalize('NFC');
         if (workdirStatus === 0) {
+          deletesByNFC.add(nfcPath);
           changes.push({ path: filepath, type: 'delete' });
         } else if (headStatus === 0) {
+          addsByNFC.add(nfcPath);
           changes.push({ path: filepath, type: 'add' });
         } else {
           changes.push({ path: filepath, type: 'modify' });
         }
       }
     }
-    return changes;
+    // Remove NFC/NFD artifact pairs: same NFC path appearing as both delete and add
+    // means the file itself is unchanged — only its Unicode normalization form differs.
+    const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
+    const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+    return deduped.sort((a, b) => a.path.localeCompare(b.path));
   } catch (error) {
     console.error(`Failed to diff: ${(error as Error).message}`);
     return [];
@@ -908,17 +1286,24 @@ export async function gitGetChangedFilesForCommit(
   try {
     const currentFiles = new Set(await git.listFiles({ fs, dir: directory, ref: commitOid }));
     let previousFiles = new Set<string>();
+    let isShallowSnapshot = false;
     if (parentOid) {
       try {
         previousFiles = new Set(await git.listFiles({ fs, dir: directory, ref: parentOid }));
       } catch (error) {
         const message = (error as Error).message;
         if (message.includes('Could not find')) {
-          previousFiles = new Set<string>();
+          // Parent commit doesn't exist locally — this is a shallow clone snapshot.
+          // Return empty diff instead of treating all files as "added", which is misleading.
+          isShallowSnapshot = true;
         } else {
           throw error;
         }
       }
+    }
+
+    if (isShallowSnapshot) {
+      return [];
     }
 
     const allPaths = new Set<string>([...currentFiles, ...previousFiles]);
