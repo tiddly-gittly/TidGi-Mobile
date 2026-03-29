@@ -257,6 +257,7 @@ export function useGitImport() {
     }
     if (failedCount > 0) {
       setStatus('error');
+      setErrorKind('generic');
       setError(previous => previous ?? 'One or more workspaces failed to import.');
     } else {
       setStatus('success');

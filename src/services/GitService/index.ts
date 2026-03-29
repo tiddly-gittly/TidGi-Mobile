@@ -66,8 +66,15 @@ const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
 const hasNativeAppendFile: boolean = Platform.OS === 'android' &&
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).appendFileBase64 === 'function';
 
-/** 64 KB — chunk size for streaming a temp file back into JS. */
+/** 64 KB — chunk size for streaming the HTTP temp file back into JS. */
 const FILE_CHUNK_SIZE = 64 * 1024;
+
+/**
+ * 2 MB — chunk size for reading large files (e.g. pack files) back into JS
+ * via readFileChunk.  Larger than FILE_CHUNK_SIZE to reduce bridge
+ * round-trips: 116 MB / 2 MB = 58 calls vs 116 MB / 64 KB = 1,812 calls.
+ */
+const LARGE_READ_CHUNK_SIZE = 2 * 1024 * 1024;
 
 /**
  * 2 MB — files larger than this threshold are written in chunks via
@@ -287,7 +294,7 @@ const fs = {
             const buffers: Buffer[] = [];
             let offset = 0;
             while (offset < info.size) {
-              const chunk = await ext.readFileChunk(plain, offset, FILE_CHUNK_SIZE);
+              const chunk = await ext.readFileChunk(plain, offset, LARGE_READ_CHUNK_SIZE);
               if (chunk.bytesRead === 0) break;
               buffers.push(Buffer.from(chunk.data, 'base64'));
               offset += chunk.bytesRead;
