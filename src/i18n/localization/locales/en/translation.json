@@ -446,7 +446,8 @@
     "HideStatusBar": "Hide Status Bar",
     "HideStatusBarDescription": "Completely hide the status bar, more display space is available when hidden, but opening the status bar may require additional action. Does not take effect on bangs screen dig hole screen.",
     "AndroidHardwareAcceleration": "Android Hardware Acceleration",
-    "AndroidHardwareAccelerationDescription": "Enabling it may potentially solve the issues of white screens on some device models or page crashes after being left in the background for a long time. However, it will reduce performance and cause videos to fail to load."
+    "AndroidHardwareAccelerationDescription": "Enabling it may potentially solve the issues of white screens on some device models or page crashes after being left in the background for a long time. However, it will reduce performance and cause videos to fail to load.",
+    "SearchSettings": "Search settings..."
   },
   "GitHistory": {
     "Refresh": "Refresh Git History",
@@ -537,7 +538,9 @@
     "TagForSharedContent": "Tag for shared content",
     "Clipped": "Clipped",
     "FastImport": "Fast Import",
-    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in “Recent”."
+    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in \u201cRecent\u201d.",
+    "SaveMediaAsAttachment": "Save Media as Attachment",
+    "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content."
   },
   "Description": "Description",
   "Tags": "Tags",
