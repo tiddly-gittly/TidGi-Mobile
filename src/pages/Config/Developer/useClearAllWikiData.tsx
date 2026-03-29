@@ -1,9 +1,5 @@
 import { Directory, File } from 'expo-file-system';
-import { useCallback, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Snackbar } from 'react-native-paper';
-import { useShallow } from 'zustand/react/shallow';
-import { IWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { IWorkspace } from '../../../store/workspace';
 
 /**
  * Recursively delete a directory by first deleting all files,
@@ -40,40 +36,3 @@ export const deleteWikiFile = (wikiWorkspace: IWorkspace): void => {
     }
   }
 };
-
-export function useClearAllWikiData() {
-  const { t } = useTranslation();
-  // Combine multiple selector calls into a single useShallow call
-  const [workspaces, removeAllWiki] = useWorkspaceStore(useShallow(state => [state.workspaces, state.removeAll]));
-
-  const [clearDataSnackBarVisible, setClearDataSnackBarVisible] = useState(false);
-  const [clearDataSnackBarErrorMessage, setClearDataSnackBarErrorMessage] = useState('');
-  const clearAllWikiData = useCallback(() => {
-    try {
-      for (const workspace of workspaces) {
-        deleteWikiFile(workspace);
-      }
-      removeAllWiki();
-      setClearDataSnackBarVisible(true);
-    } catch (error) {
-      setClearDataSnackBarVisible(true);
-      setClearDataSnackBarErrorMessage((error as Error).message);
-    }
-  }, [removeAllWiki, workspaces]);
-
-  const ClearAllWikiDataResultSnackBar = (
-    <Snackbar
-      visible={clearDataSnackBarVisible}
-      onDismiss={() => {
-        setClearDataSnackBarVisible(false);
-      }}
-    >
-      {clearDataSnackBarErrorMessage || t('Preference.RemoveAllWikiDataDone')}
-    </Snackbar>
-  );
-
-  return {
-    clearAllWikiData,
-    ClearAllWikiDataResultSnackBar,
-  };
-}
