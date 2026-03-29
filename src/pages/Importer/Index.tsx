@@ -436,6 +436,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                   <Text variant='bodySmall'>
                     {cloneProgress.phase === 'Creating work tree'
                       ? t('Import.Phase.CreatingWorkTree')
+                      : cloneProgress.phase === 'Downloading pack'
+                      ? t('Import.Phase.DownloadingPack')
                       : cloneProgress.phase === 'Receiving pack data'
                       ? t('Import.Phase.ReceivingPackData')
                       : cloneProgress.phase.startsWith('Indexing pack')
@@ -445,12 +447,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                   </Text>
                 )}
                 {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
-                {cloneProgress.phase !== '' && cloneProgress.total === 0
-                  && !['Creating work tree', 'Receiving pack data'].includes(cloneProgress.phase)
-                  && !cloneProgress.phase.startsWith('Indexing pack') && (
-                  <HintText variant='bodySmall'>{t('Import.Phase.Downloading')}</HintText>
-                )}
-                {cloneProgress.phase === 'Receiving pack data' && <HintText variant='bodySmall'>{t('Import.Phase.ReceivingPackDataHint')}</HintText>}
+                {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
                 {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
                 {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
                 <ProgressBar

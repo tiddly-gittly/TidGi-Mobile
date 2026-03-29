@@ -580,6 +580,8 @@
     "Phase": {
       "Connecting": "Connecting to repository service...",
       "Downloading": "Downloading objects...",
+      "DownloadingPack": "Downloading pack data",
+      "DownloadingPackHint": "Downloading full data from server, large wikis may take a while...",
       "ReceivingPackData": "Receiving pack data",
       "ReceivingPackDataHint": "Receiving full data from server, large wikis may take a while...",
       "IndexingPack": "Processing pack data",

@@ -560,6 +560,8 @@
     "Phase": {
       "Connecting": "正在连接仓库服务...",
       "Downloading": "正在下载对象数据...",
+      "DownloadingPack": "正在下载数据包",
+      "DownloadingPackHint": "正在从服务器下载完整数据，大型 Wiki 可能需要较长时间...",
       "ReceivingPackData": "正在接收数据包",
       "ReceivingPackDataHint": "正在从服务器接收完整数据，大型 Wiki 可能需要较长时间...",
       "IndexingPack": "正在处理数据包",

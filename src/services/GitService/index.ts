@@ -88,12 +88,16 @@ const STREAMING_WRITE_THRESHOLD = 2 * 1024 * 1024;
  * and needs to go through the raw native module instead of Expo FS.
  */
 /**
- * Module-level hook called by readFile when a large binary file has been fully
- * read (e.g. a git pack).  gitClone() sets this before cloning to inject a
- * "processing pack" progress event before isomorphic-git's CPU-intensive
- * synchronous pack indexing freezes the JS thread.
+ * Module-level hooks for progress reporting during git clone.
+ *
+ * - `onLargeFileRead`: called by readFile when a large binary file finishes
+ *   reading (for pack files stored on disk).
+ * - `onPackStreamConsumed`: called by the file chunk iterator when all HTTP
+ *   response data has been read.  This is the LAST async point before
+ *   isomorphic-git starts CPU-intensive synchronous pack indexing.
  */
 let onLargeFileRead: ((filepath: string, sizeBytes: number) => void) | undefined;
+let onPackStreamConsumed: ((totalBytes: number) => void) | undefined;
 
 function isExternalPath(filepath: string): boolean {
   // path.join('file:///storage/...', 'x') collapses the triple slash to 'file:/storage/...'
@@ -835,6 +839,14 @@ function createFileChunkIterator(filePath: string, totalBytes: number): AsyncIte
       if (iteratorDone || offset >= totalBytes) {
         if (!iteratorDone) {
           iteratorDone = true;
+          // Fire the hook BEFORE cleanup — this is the last async point
+          // before isomorphic-git's synchronous pack processing.
+          if (totalBytes > 1024 * 1024) {
+            onPackStreamConsumed?.(totalBytes);
+            // Yield 200ms so React can render the progress message
+            // before the JS thread gets blocked by pack indexing.
+            await new Promise<void>(r => setTimeout(r, 200));
+          }
           // Clean up temp file
           try {
             await externalStorageExtension.deleteFile(filePath);
@@ -981,13 +993,20 @@ export async function gitClone(
     let lastPhase = '';
     let packDownloadReported = false;
 
-    // Set module-level hook so readFile can fire a progress event when a
-    // large pack file has been read — right before isomorphic-git's
-    // synchronous pack indexing freezes the JS thread.
+    // Set module-level hooks so the FS layer can fire progress events at
+    // key moments that isomorphic-git doesn't expose via onProgress.
     onLargeFileRead = (_filepath, sizeBytes) => {
       const mb = Math.round(sizeBytes / 1024 / 1024);
       onProgress?.(`Indexing pack (${mb} MB)`, 0, 0);
     };
+    onPackStreamConsumed = (totalBytes) => {
+      const mb = Math.round(totalBytes / 1024 / 1024);
+      console.log(`Pack stream fully consumed: ${mb} MB — indexing will start`);
+      onProgress?.(`Indexing pack (${mb} MB)`, 0, 0);
+    };
+
+    // Tell the UI the download is starting (native HTTP has no JS progress).
+    onProgress?.('Downloading pack', 0, 0);
 
     await git.clone({
       fs,
@@ -1039,8 +1058,9 @@ export async function gitClone(
     console.error(`Git clone failed: ${message}`);
     throw new Error(`Failed to clone repository: ${message}`);
   } finally {
-    // Always clean up the module-level hook to avoid leaking closures.
+    // Always clean up module-level hooks to avoid leaking closures.
     onLargeFileRead = undefined;
+    onPackStreamConsumed = undefined;
   }
 }
 
