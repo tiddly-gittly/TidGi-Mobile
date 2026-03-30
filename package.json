@@ -114,5 +114,10 @@
     "tw5-typed": "^1.1.4",
     "typescript": "~5.9.3",
     "zx": "^8.4.1"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "isomorphic-git": "patches/isomorphic-git.patch"
+    }
   }
 }
