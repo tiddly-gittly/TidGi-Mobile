@@ -8,6 +8,7 @@ onlyBuiltDependencies:
   - dprint
   - dtrace-provider
   - esbuild
+  - expo-filesystem-android-external-storage
   - less
   - svelte-preprocess
   - unrs-resolver
