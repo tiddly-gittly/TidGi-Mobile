@@ -7,7 +7,7 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
 import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
-import { GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, gitClone, IGitRemote } from '../../services/GitService';
+import { GIT_CLONE_ERROR_CONNECTION_ABORT, GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, gitClone, IGitRemote } from '../../services/GitService';
 import { logFor } from '../../services/LoggerService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
@@ -36,7 +36,7 @@ export interface IBatchImportItem {
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
 /** Distinguishes known failure modes so the UI can show actionable guidance. */
-export type GitImportErrorKind = 'generic' | 'oom' | 'tooLarge';
+export type GitImportErrorKind = 'generic' | 'oom' | 'tooLarge' | 'connectionAbort';
 
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
@@ -169,6 +169,9 @@ export function useGitImport() {
         const mb = errorMessage.slice(GIT_CLONE_ERROR_TOO_LARGE_PREFIX.length);
         setErrorKind('tooLarge');
         setError(mb); // mb string, displayed by UI
+      } else if (errorMessage === GIT_CLONE_ERROR_CONNECTION_ABORT) {
+        setErrorKind('connectionAbort');
+        setError(undefined); // message comes from i18n
       } else {
         setErrorKind('generic');
         setError(errorMessage);

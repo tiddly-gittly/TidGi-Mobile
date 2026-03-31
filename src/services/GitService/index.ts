@@ -141,6 +141,29 @@ function isOOMError(message: string): boolean {
 }
 
 /**
+ * Detect connection-abort errors typically caused by Android suspending the app
+ * (user switches to another app, screen off, etc.) which kills the TCP socket.
+ */
+export const GIT_CLONE_ERROR_CONNECTION_ABORT = 'WIKI_CONNECTION_ABORT';
+function isConnectionAbortError(message: string): boolean {
+  return (
+    message.includes('SocketException') ||
+    message.includes('connection abort') ||
+    message.includes('Connection reset') ||
+    message.includes('Software caused connection abort') ||
+    message.includes('network request failed') ||
+    message.includes('ECONNRESET') ||
+    message.includes('ECONNABORTED') ||
+    message.includes('The Internet connection appears to be offline')
+  );
+}
+
+/** Maximum number of automatic retries for connection-abort during clone. */
+const CLONE_MAX_RETRIES = 2;
+/** Delay (ms) before retrying clone after a connection abort. */
+const CLONE_RETRY_DELAY_MS = 3_000;
+
+/**
  * Query the TidGi Desktop optional pack-size endpoint before downloading.
  * Returns estimated bytes, or null when the endpoint is not available
  * (Desktop < the version that added this endpoint — silently skips).
@@ -694,7 +717,12 @@ function toArrayBuffer(data: Uint8Array) {
 // Keep HTTP diagnostics centralized to debug mobile sync connectivity issues.
 const httpWithLogging = {
   async request(request: GitHttpRequest): Promise<GitHttpResponse> {
-    const { url, method = 'GET', headers = {}, body } = request;
+    const { url, method = 'GET', body } = request;
+    // Tell the server we prefer no compression.  On LAN this saves mobile CPU
+    // (gzip decompression of large packs is expensive on Hermes) while adding
+    // negligible transfer overhead.  OkHttp normally adds "Accept-Encoding: gzip"
+    // automatically; setting "identity" overrides that.
+    const headers: Record<string, string> = { ...request.headers, 'Accept-Encoding': 'identity' };
     console.log('Git HTTP request:', { url, method, headers });
 
     try {
@@ -953,7 +981,10 @@ async function preflightInfoReferences(url: string, headers: Record<string, stri
 }
 
 /**
- * Clone a git repository
+ * Clone a git repository.
+ * Automatically retries up to {@link CLONE_MAX_RETRIES} times when the
+ * failure looks like a connection abort (e.g. user switched apps on Android
+ * and the OS killed the TCP socket).
  */
 export async function gitClone(
   workspace: IWikiWorkspace,
@@ -972,6 +1003,58 @@ export async function gitClone(
   console.log('Git clone remote:', JSON.stringify(remote, null, 2));
   console.log('Git clone strategy:', { depth: 1, noTags: true, singleBranch: true });
 
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= CLONE_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      console.log(`[gitClone] Retry attempt ${attempt}/${CLONE_MAX_RETRIES} after connection abort`);
+      onProgress?.('Reconnecting…', attempt, CLONE_MAX_RETRIES);
+      await new Promise<void>(resolve => setTimeout(resolve, CLONE_RETRY_DELAY_MS));
+
+      // Clean the directory before retry — partial clone data is unusable.
+      try {
+        if (isExternalPath(directory)) {
+          const info = await ExternalStorage.getInfo(toPlainPath(directory));
+          if (info.exists) await ExternalStorage.rmdir(toPlainPath(directory));
+          await ExternalStorage.mkdir(toPlainPath(directory));
+        } else {
+          await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+          await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+        }
+      } catch (cleanupError) {
+        console.warn('[gitClone] Failed to clean directory before retry:', cleanupError);
+      }
+    }
+
+    try {
+      await gitCloneOnce(workspace, remote, url, directory, onProgress);
+      return; // success
+    } catch (error) {
+      lastError = error as Error;
+      const message = lastError.message;
+
+      // Only retry on connection-abort; other errors are not transient.
+      if (isConnectionAbortError(message) && attempt < CLONE_MAX_RETRIES) {
+        console.warn(`[gitClone] Connection aborted (attempt ${attempt + 1}), will retry: ${message}`);
+        continue;
+      }
+
+      // Not retryable or retries exhausted — propagate.
+      throw error;
+    }
+  }
+
+  // Should not reach here, but just in case.
+  throw lastError ?? new Error('Git clone failed');
+}
+
+/** Single clone attempt (extracted for retry wrapper). */
+async function gitCloneOnce(
+  _workspace: IWikiWorkspace,
+  remote: IGitRemote,
+  url: string,
+  directory: string,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<void> {
   try {
     await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote)));
 
@@ -1053,6 +1136,12 @@ export async function gitClone(
     if (isOOMError(message)) {
       console.error(`Git clone OOM — mobile-side heap exhausted: ${message}`);
       throw new Error(GIT_CLONE_ERROR_OOM);
+    }
+
+    // Tag connection-abort errors so the UI can show a specific message.
+    if (isConnectionAbortError(message)) {
+      console.error(`Git clone connection aborted: ${message}`);
+      throw new Error(GIT_CLONE_ERROR_CONNECTION_ABORT);
     }
 
     console.error(`Git clone failed: ${message}`);

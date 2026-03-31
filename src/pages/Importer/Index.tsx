@@ -1,8 +1,9 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
+import * as Clipboard from 'expo-clipboard';
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert } from 'react-native';
+import { Alert, Pressable } from 'react-native';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -442,6 +443,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                       ? t('Import.Phase.ReceivingPackData')
                       : cloneProgress.phase.startsWith('Indexing pack')
                       ? t('Import.Phase.IndexingPack')
+                      : cloneProgress.phase.startsWith('Reconnecting')
+                      ? t('Import.Phase.Reconnecting')
                       : cloneProgress.phase}
                     {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
                   </Text>
@@ -476,11 +479,24 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
             </ImportStatusText>
           )}
-          {importErrorKind === 'generic' && (
+          {importErrorKind === 'connectionAbort' && (
             <ImportStatusText style={{ color: MD3Colors.error50 }}>
-              <Text>{t('ErrorMessage')}{' '}</Text>
-              {importError}
+              <Text>{t('Import.Error.ConnectionAbort')}</Text>
             </ImportStatusText>
+          )}
+          {importErrorKind === 'generic' && (
+            <Pressable
+              onLongPress={() => {
+                if (importError) {
+                  void Clipboard.setStringAsync(importError);
+                  Alert.alert(t('Import.Error.CopiedToClipboard'));
+                }
+              }}
+            >
+              <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                <Text selectable>{t('ErrorMessage')} {importError}</Text>
+              </ImportStatusText>
+            </Pressable>
           )}
           <Button
             mode='elevated'

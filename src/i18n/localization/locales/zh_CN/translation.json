@@ -552,7 +552,9 @@
     "ServerTokenProtectedMessage": "此服务器已启用 Token 认证保护，无法通过网络自动获取配置。请在太记桌面版扫描二维码进行安全导入。",
     "Error": {
       "OOM": "导入失败：Wiki 太大，超出了手机可用内存。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。如果 Wiki 包含大量附件，建议改用外链方式存储附件。",
-      "TooLarge": "导入失败：Wiki 预估大小为 {{mb}} MB，超过手机安全限制（约 80 MB）。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。"
+      "TooLarge": "导入失败：Wiki 预估大小为 {{mb}} MB，超过手机安全限制（约 80 MB）。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。",
+      "ConnectionAbort": "导入失败：网络连接被中断，可能是因为应用被切换到后台。\n\n请在导入过程中保持应用在前台，然后重试。",
+      "CopiedToClipboard": "错误信息已复制到剪贴板"
     },
     "Status": {
       "Creating": "正在创建工作区..."
@@ -567,7 +569,8 @@
       "IndexingPack": "正在处理数据包",
       "IndexingPackHint": "正在解压和索引 Git 对象，这可能需要几分钟。应用可能会更新缓慢，请耐心等待。",
       "CreatingWorkTree": "正在将文件写入磁盘",
-      "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钟，请耐心等待。"
+      "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钟，请耐心等待。",
+      "Reconnecting": "连接中断，正在重新连接"
     }
   },
   "ConfirmDelete": "是否删除？",

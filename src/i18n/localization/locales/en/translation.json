@@ -572,7 +572,9 @@
     "ServerTokenProtectedMessage": "This server is protected by an authentication token. Please scan the QR code from TidGi Desktop to import securely.",
     "Error": {
       "OOM": "Import failed: Wiki is too large for this device's available memory.\n\nPlease remove large image attachments or binary files on Desktop, then try again. Consider using external links for large attachments.",
-      "TooLarge": "Import failed: Wiki estimated size is {{mb}} MB, which exceeds the safe limit (~80 MB).\n\nPlease remove large image attachments or binary files on Desktop, then try again."
+      "TooLarge": "Import failed: Wiki estimated size is {{mb}} MB, which exceeds the safe limit (~80 MB).\n\nPlease remove large image attachments or binary files on Desktop, then try again.",
+      "ConnectionAbort": "Import failed: The network connection was interrupted, possibly because the app was moved to the background.\n\nPlease keep the app in the foreground during import and try again.",
+      "CopiedToClipboard": "Error message copied to clipboard"
     },
     "Status": {
       "Creating": "Setting up workspace..."
@@ -587,7 +589,8 @@
       "IndexingPack": "Processing pack data",
       "IndexingPackHint": "Decompressing and indexing Git objects. This may take several minutes. The app may become less responsive.",
       "CreatingWorkTree": "Writing files to disk",
-      "CreatingWorkTreeHint": "This may take several minutes for large wikis."
+      "CreatingWorkTreeHint": "This may take several minutes for large wikis.",
+      "Reconnecting": "Reconnecting after interruption"
     }
   },
   "ConfirmDelete": "Really want to delete?",
