@@ -570,7 +570,12 @@
       "IndexingPackHint": "正在解压和索引 Git 对象，这可能需要几分钟。应用可能会更新缓慢，请耐心等待。",
       "CreatingWorkTree": "正在将文件写入磁盘",
       "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钟，请耐心等待。",
-      "Reconnecting": "连接中断，正在重新连接"
+      "Reconnecting": "连接中断，正在重新连接",
+      "CheckingCapabilities": "正在检查服务器功能",
+      "DownloadingArchive": "正在下载归档文件",
+      "DownloadingArchiveHint": "正在以归档格式下载完整 Wiki，这比 git clone 快得多。如果中断可以自动恢复。",
+      "ExtractingFiles": "正在解压文件",
+      "ExtractingFilesHint": "正在将归档解压到磁盘。大多数 Wiki 只需几秒。"
     }
   },
   "ConfirmDelete": "是否删除？",

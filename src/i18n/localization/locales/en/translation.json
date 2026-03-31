@@ -590,7 +590,12 @@
       "IndexingPackHint": "Decompressing and indexing Git objects. This may take several minutes. The app may become less responsive.",
       "CreatingWorkTree": "Writing files to disk",
       "CreatingWorkTreeHint": "This may take several minutes for large wikis.",
-      "Reconnecting": "Reconnecting after interruption"
+      "Reconnecting": "Reconnecting after interruption",
+      "CheckingCapabilities": "Checking server capabilities",
+      "DownloadingArchive": "Downloading archive",
+      "DownloadingArchiveHint": "Downloading the complete wiki as an archive. This is much faster than git clone. Supports resume if interrupted.",
+      "ExtractingFiles": "Extracting files",
+      "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis."
     }
   },
   "ConfirmDelete": "Really want to delete?",

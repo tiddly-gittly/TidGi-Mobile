@@ -445,6 +445,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                       ? t('Import.Phase.IndexingPack')
                       : cloneProgress.phase.startsWith('Reconnecting')
                       ? t('Import.Phase.Reconnecting')
+                      : cloneProgress.phase.startsWith('Checking server')
+                      ? t('Import.Phase.CheckingCapabilities')
+                      : cloneProgress.phase.startsWith('Downloading archive')
+                      ? t('Import.Phase.DownloadingArchive')
+                      : cloneProgress.phase.startsWith('Extracting')
+                      ? t('Import.Phase.ExtractingFiles')
                       : cloneProgress.phase}
                     {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
                   </Text>
@@ -453,6 +459,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
                 {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
                 {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
+                {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
+                {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
                 <ProgressBar
                   animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
                   indeterminate={cloneProgress.total === 0}
