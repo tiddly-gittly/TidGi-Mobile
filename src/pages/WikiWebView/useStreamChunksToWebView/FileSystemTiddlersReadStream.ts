@@ -282,17 +282,26 @@ export class FileSystemTiddlersReadStream extends Readable {
           return null;
         }
       } else if (filename.endsWith('.meta')) {
-        // .meta file accompanies a binary file; load metadata and set _canonical_uri
+        // .meta file accompanies another file; load metadata from .meta
         const metaContent = await readText(filePath);
         const metaFields = parseMetadataFile(metaContent);
-        const binaryPath = filePath.replace(/\.meta$/, '');
+        const companionPath = filePath.replace(/\.meta$/, '');
         if (!metaFields.title) {
           metaFields.title = getTitleFromFilename(filename.replace(/\.meta$/, ''));
         }
-        if (await fileExists(binaryPath)) {
-          // Set canonical URI so WebView knows where to find the binary
-          const workspaceBase = workspace.wikiFolderLocation;
-          metaFields._canonical_uri = binaryPath.replace(workspaceBase + '/', '');
+        if (await fileExists(companionPath)) {
+          if (companionPath.endsWith('.json')) {
+            // .meta + .json pair: the .json IS the text content (e.g. plugin bundles).
+            // Must include text so the tiddler is complete — otherwise it will
+            // overwrite the preloaded HTML version with an empty shell, causing
+            // "Cannot read properties of undefined (reading 'name')" in boot.js.
+            const jsonContent = await readText(companionPath);
+            metaFields.text = jsonContent;
+          } else {
+            // .meta + binary file pair: set canonical URI for lazy loading
+            const workspaceBase = workspace.wikiFolderLocation;
+            metaFields._canonical_uri = companionPath.replace(workspaceBase + '/', '');
+          }
         }
         if (!metaFields.title) {
           throw new Error('.meta file must have a title');

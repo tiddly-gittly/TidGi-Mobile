@@ -266,6 +266,13 @@ export function shouldSaveFullTiddler(fields: ITiddlerFields, estimatedTextLengt
     return true;
   }
 
+  // Module tiddlers — TiddlyWiki boot.js will execute these as JS modules.
+  // If text is stripped, $tw.modules.execute() returns undefined and causes
+  // "Cannot read properties of undefined (reading 'name')" crash.
+  if ((fields as Record<string, unknown>)['module-type']) {
+    return true;
+  }
+
   // Small tiddlers (less than 10KB)
   const textLength = estimatedTextLength ?? (fields.text || '').length;
   if (textLength < 10000) {
