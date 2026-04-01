@@ -3,10 +3,16 @@
  * Replaces SQLiteTiddlersReadStream for git-based workspace storage
  *
  * Purpose: Read .tid/.meta files from filesystem and stream them as JSON chunks to WebView
+ *
+ * Performance: When the native `batchParseTidFiles` method is available
+ * (expo-tiddlywiki-filesystem-android-external-storage ≥ 2.0.0), a single
+ * bridge call parses the entire batch in Kotlin using coroutine parallelism.
+ * This eliminates 100+ per-file round-trips and avoids JSON re-serialization.
  */
 
 import { Directory, File } from 'expo-file-system';
 import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { Platform } from 'react-native';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
 import { getWikiTiddlerFolderPath } from '../../../constants/paths';
@@ -18,6 +24,19 @@ import {
   shouldSaveFullTiddler,
 } from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
+
+/**
+ * Runtime check for the native batch parser.
+ * Returns the batchParseTidFiles function if available, else undefined.
+ */
+const getNativeBatchParser = (): ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined => {
+  if (Platform.OS !== 'android') return undefined;
+  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+  if (typeof nativeModule.batchParseTidFiles === 'function') {
+    return nativeModule.batchParseTidFiles as (filePaths: string[], quickLoadMode: boolean) => Promise<string>;
+  }
+  return undefined;
+};
 
 /**
  * Whether a path points to external/shared storage.
@@ -52,7 +71,10 @@ export class FileSystemTiddlersReadStream extends Readable {
   constructor(workspace: IWikiWorkspace | IWikiWorkspace[], options?: IFileSystemTiddlersReadStreamOptions) {
     super({ encoding: 'utf8' });
     this.workspaces = Array.isArray(workspace) ? workspace : [workspace];
-    this.chunkSize = options?.chunkSize ?? 100;
+    // With native batch parsing, a single bridge call handles the entire batch,
+    // so larger batches are more efficient. With JS fallback, 100 is reasonable.
+    const defaultChunkSize = getNativeBatchParser() !== undefined ? 500 : 100;
+    this.chunkSize = options?.chunkSize ?? defaultChunkSize;
     this.additionalContent = options?.additionalContent;
     this.quickLoadMode = options?.quickLoad === true;
   }
@@ -189,26 +211,56 @@ export class FileSystemTiddlersReadStream extends Readable {
         }
 
         // Read and process a chunk of tiddlers
-        const chunk: Array<Record<string, string | string[]>> = [];
         const endIndex = Math.min(this.currentIndex + this.chunkSize, this.tiddlerFiles.length);
         const limitedEndIndex = endIndex;
-
-        // Read files in parallel batches for much faster throughput.
-        // Each readTiddlerFromFile is I/O-bound (native bridge call), so running
-        // them concurrently saturates the native thread pool instead of waiting
-        // for each one sequentially.
         const batch = this.tiddlerFiles.slice(this.currentIndex, limitedEndIndex);
-        const results = await Promise.all(
-          batch.map(({ filePath, workspace }) => this.readTiddlerFromFile(filePath, workspace)),
-        );
-        for (const result of results) {
-          if (result) {
-            const tiddlers = Array.isArray(result) ? result : [result];
-            for (const tiddler of tiddlers) {
-              const tiddlerToSave = shouldSaveFullTiddler(tiddler) ? tiddler : makeSkinnyTiddler(tiddler);
-              chunk.push(tiddlerToSave as Record<string, string | string[]>);
-              this.tiddlerCount++;
+
+        // Try native batch parsing first (single bridge call for entire batch).
+        // Falls back to JS-side parallel parsing if native method unavailable.
+        const nativeBatch = getNativeBatchParser();
+        let chunkJson: string | undefined;
+
+        if (nativeBatch !== undefined) {
+          // Native path: Kotlin reads all files in parallel, parses headers,
+          // applies skinny logic, and returns a serialized JSON array string.
+          // This eliminates per-file bridge calls AND JS JSON.stringify overhead.
+          const paths = batch.map(({ filePath }) => toPlainPath(filePath));
+          const jsonArrayString = await nativeBatch(paths, this.quickLoadMode);
+          // jsonArrayString is "[{...},{...},...]" — strip outer brackets to get
+          // comma-separated objects that we can splice into our streaming array.
+          const inner = jsonArrayString.length > 2 ? jsonArrayString.slice(1, -1) : '';
+          if (inner.length > 0) {
+            chunkJson = inner;
+            // Count tiddlers (approximate — count top-level objects)
+            // Each object starts with { at depth 0
+            let objectCount = 0;
+            let depth = 0;
+            for (let charIndex = 0; charIndex < inner.length; charIndex++) {
+              const character = inner[charIndex];
+              if (character === '{' && depth === 0) objectCount++;
+              if (character === '{' || character === '[') depth++;
+              if (character === '}' || character === ']') depth--;
             }
+            this.tiddlerCount += objectCount;
+          }
+        } else {
+          // JS fallback: read files in parallel batches via individual bridge calls.
+          const chunk: Array<Record<string, string | string[]>> = [];
+          const results = await Promise.all(
+            batch.map(({ filePath, workspace }) => this.readTiddlerFromFile(filePath, workspace)),
+          );
+          for (const result of results) {
+            if (result) {
+              const tiddlers = Array.isArray(result) ? result : [result];
+              for (const tiddler of tiddlers) {
+                const tiddlerToSave = shouldSaveFullTiddler(tiddler) ? tiddler : makeSkinnyTiddler(tiddler);
+                chunk.push(tiddlerToSave as Record<string, string | string[]>);
+                this.tiddlerCount++;
+              }
+            }
+          }
+          if (chunk.length > 0) {
+            chunkJson = chunk.map(t => JSON.stringify(t)).join(',');
           }
         }
 
@@ -220,8 +272,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         }
 
         // Convert chunk to JSON and push
-        if (chunk.length > 0) {
-          const chunkJson = chunk.map(t => JSON.stringify(t)).join(',');
+        if (chunkJson !== undefined && chunkJson.length > 0) {
           this.push(chunkJson);
 
           // Add comma if not the last chunk
