@@ -188,7 +188,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         // First chunk: output array opening bracket
         if (!this.hasStarted) {
           this.hasStarted = true;
-          console.log(`[FileSystemTiddlersReadStream] _read: starting stream, totalFiles=${this.tiddlerFiles.length}`);
+          console.log(`[FileSystemTiddlersReadStream] _read: starting stream, totalFiles=${this.tiddlerFiles.length}, chunkSize=${this.chunkSize}, nativeBatch=${getNativeBatchParser() !== undefined}`);
           this.push('[');
 
           // Add additional content if provided
@@ -220,12 +220,16 @@ export class FileSystemTiddlersReadStream extends Readable {
         const nativeBatch = getNativeBatchParser();
         let chunkJson: string | undefined;
 
+        const batchStart = Date.now();
+
         if (nativeBatch !== undefined) {
           // Native path: Kotlin reads all files in parallel, parses headers,
           // applies skinny logic, and returns a serialized JSON array string.
           // This eliminates per-file bridge calls AND JS JSON.stringify overhead.
           const paths = batch.map(({ filePath }) => toPlainPath(filePath));
+          console.log(`[FileSystemTiddlersReadStream] native batch: ${paths.length} files, index=${this.currentIndex}`);
           const jsonArrayString = await nativeBatch(paths, this.quickLoadMode);
+          console.log(`[FileSystemTiddlersReadStream] native batch done: ${jsonArrayString.length} chars in ${Date.now() - batchStart}ms`);
           // jsonArrayString is "[{...},{...},...]" — strip outer brackets to get
           // comma-separated objects that we can splice into our streaming array.
           const inner = jsonArrayString.length > 2 ? jsonArrayString.slice(1, -1) : '';
@@ -244,6 +248,7 @@ export class FileSystemTiddlersReadStream extends Readable {
             this.tiddlerCount += objectCount;
           }
         } else {
+          console.log(`[FileSystemTiddlersReadStream] JS fallback batch: ${batch.length} files, index=${this.currentIndex}`);
           // JS fallback: read files in parallel batches via individual bridge calls.
           const chunk: Array<Record<string, string | string[]>> = [];
           const results = await Promise.all(
