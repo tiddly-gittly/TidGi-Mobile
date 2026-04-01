@@ -1752,7 +1752,13 @@ export async function gitGetFileContentAtReference(
 }
 
 /**
- * Check if repository has uncommitted changes
+ * Check if repository has uncommitted changes.
+ *
+ * NOTE: isomorphic-git's statusMatrix stats every tracked file individually,
+ * which is very slow on large repos (26K+ files = 30s+ on Android).
+ * If any file triggers ENOENT (e.g. filenames with special characters), we
+ * conservatively return true so the caller commits — a no-op commit is safe,
+ * but missing a dirty commit could lose data.
  */
 export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
@@ -1761,9 +1767,16 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
     const status = await git.statusMatrix({ fs, dir: directory });
     return status.some(([_filepath, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
   } catch (error) {
-    console.error(`Failed to check git status: ${(error as Error).message}`);
-    // Throw error to caller instead of silently returning false to prevent potential data loss
-    throw new Error(`Cannot determine git status: ${(error as Error).message}`);
+    const message = (error as Error).message;
+    // ENOENT during statusMatrix is usually caused by filenames with special
+    // characters that the expo file-system URI doesn't handle. This is not a
+    // fatal error — conservatively assume changes exist so commit proceeds.
+    if (message.includes('ENOENT')) {
+      console.warn(`[gitHasChanges] ENOENT during statusMatrix, assuming changes exist: ${message}`);
+      return true;
+    }
+    console.error(`Failed to check git status: ${message}`);
+    throw new Error(`Cannot determine git status: ${message}`);
   }
 }
 

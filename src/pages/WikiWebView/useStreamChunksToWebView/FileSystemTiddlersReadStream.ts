@@ -193,9 +193,15 @@ export class FileSystemTiddlersReadStream extends Readable {
         const endIndex = Math.min(this.currentIndex + this.chunkSize, this.tiddlerFiles.length);
         const limitedEndIndex = endIndex;
 
-        for (let index = this.currentIndex; index < limitedEndIndex; index++) {
-          const { filePath, workspace } = this.tiddlerFiles[index];
-          const result = await this.readTiddlerFromFile(filePath, workspace);
+        // Read files in parallel batches for much faster throughput.
+        // Each readTiddlerFromFile is I/O-bound (native bridge call), so running
+        // them concurrently saturates the native thread pool instead of waiting
+        // for each one sequentially.
+        const batch = this.tiddlerFiles.slice(this.currentIndex, limitedEndIndex);
+        const results = await Promise.all(
+          batch.map(({ filePath, workspace }) => this.readTiddlerFromFile(filePath, workspace)),
+        );
+        for (const result of results) {
           if (result) {
             const tiddlers = Array.isArray(result) ? result : [result];
             for (const tiddler of tiddlers) {
