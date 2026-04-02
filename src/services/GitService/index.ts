@@ -112,8 +112,12 @@ function isExternalPath(filepath: string): boolean {
  * re-add the scheme before calling any FileSystemLegacy API.
  */
 function toFileUri(plainPath: string): string {
-  if (plainPath.startsWith('file://')) return plainPath;
-  return `file://${plainPath}`;
+  const uri = plainPath.startsWith('file://') ? plainPath : `file://${plainPath}`;
+  try {
+    return encodeURI(decodeURI(uri));
+  } catch {
+    return encodeURI(uri);
+  }
 }
 
 const CHECKOUT_BATCH_SIZE = 200;
@@ -274,8 +278,52 @@ export interface IGitCommitInfo {
  * happens when HEAD is detached.
  */
 async function getCurrentBranch(directory: string): Promise<string> {
-  const branch = await git.currentBranch({ fs, dir: directory, fullname: false });
-  return typeof branch === 'string' ? branch : 'main';
+  const hasLocalBranch = async (branch: string): Promise<boolean> => {
+    try {
+      await git.resolveRef({ fs, dir: directory, ref: `refs/heads/${branch}` });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const hasRemoteBranch = async (branch: string): Promise<boolean> => {
+    try {
+      await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  try {
+    const branch = await git.currentBranch({ fs, dir: directory, fullname: false });
+    if (typeof branch === 'string' && branch.length > 0 && (await hasLocalBranch(branch) || await hasRemoteBranch(branch))) {
+      return branch;
+    }
+  } catch {
+    // Fall through to branch enumeration below.
+  }
+
+  try {
+    const branches = await git.listBranches({ fs, dir: directory, remote: undefined });
+    if (branches.includes('main')) return 'main';
+    if (branches.includes('master')) return 'master';
+    if (branches.length > 0) return branches[0];
+  } catch {
+    // Fall back to the modern default below.
+  }
+
+  try {
+    const remoteBranches = await git.listBranches({ fs, dir: directory, remote: 'origin' });
+    if (remoteBranches.includes('main')) return 'main';
+    if (remoteBranches.includes('master')) return 'master';
+    if (remoteBranches.length > 0) return remoteBranches[0];
+  } catch {
+    // Fall back to the modern default below.
+  }
+
+  return 'main';
 }
 
 export interface IGitFileContent {
@@ -564,6 +612,40 @@ const fs = {
       }
 
       // Internal path
+      const plainInternalPath = toPlainPath(filepath);
+      if (plainInternalPath.startsWith('/')) {
+        try {
+          const nativeInfo = await ExternalStorage.getInfo(plainInternalPath);
+          if (nativeInfo.exists) {
+            const isDirectory = nativeInfo.isDirectory;
+            const fileSize = toSafeNumber(nativeInfo.size, 0);
+            const modifiedTimeMs = toSafeNumber(nativeInfo.modificationTime, Date.now());
+
+            return {
+              isFile: () => !isDirectory,
+              isDirectory: () => isDirectory,
+              isSymbolicLink: () => false,
+              dev: 0,
+              ino: 0,
+              mode: isDirectory ? 0o755 : 0o644,
+              nlink: 1,
+              uid: 0,
+              gid: 0,
+              rdev: 0,
+              size: fileSize,
+              blksize: 4096,
+              blocks: Math.ceil(fileSize / 512),
+              atimeMs: modifiedTimeMs,
+              mtimeMs: modifiedTimeMs,
+              ctimeMs: modifiedTimeMs,
+              birthtimeMs: modifiedTimeMs,
+            };
+          }
+        } catch {
+          // Fall back to Expo legacy FS below.
+        }
+      }
+
       const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath));
       if (!info.exists) {
         const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
@@ -1094,31 +1176,9 @@ async function tryArchiveClone(
   // Add Accept-Encoding: identity to skip gzip (saves CPU on mobile for LAN)
   headers['Accept-Encoding'] = 'identity';
 
-  // Probe the endpoint with a HEAD request first to avoid downloading
-  // if the endpoint doesn't exist.
-  console.log('[archiveClone] Probing endpoint:', archiveUrl);
-  onProgress?.('Checking server capabilities…', 0, 0);
-  try {
-    const probeResponse = await pTimeout(
-      fetch(archiveUrl, { method: 'HEAD', headers }),
-      { milliseconds: 10_000, message: new Error('archive probe timeout') },
-    );
-    if (probeResponse.status === 404) {
-      console.log('[archiveClone] full-archive endpoint not available (404)');
-      return false;
-    }
-    if (!probeResponse.ok) {
-      console.warn('[archiveClone] probe returned', probeResponse.status);
-      return false;
-    }
-  } catch (error) {
-    console.warn('[archiveClone] probe failed:', (error as Error).message);
-    return false;
-  }
-
   // Download the tar file with native resumable download
   const tarPath = `${directory}.tar`;
-  console.log('[archiveClone] Downloading archive to:', tarPath);
+  console.log('[archiveClone] Attempting full-archive download:', archiveUrl);
   onProgress?.('Downloading archive…', 0, 0);
 
   // Use the native module for resumable download
@@ -1134,6 +1194,16 @@ async function tryArchiveClone(
 
   const downloadResult = await externalStorageExtended.downloadFileResumable(archiveUrl, headers, tarPath);
   console.log('[archiveClone] Download result:', downloadResult);
+
+  if (downloadResult.statusCode === 404) {
+    console.log('[archiveClone] full-archive endpoint not available (404)');
+    try {
+      await ExternalStorage.deleteFile(tarPath);
+    } catch {
+      // ignore cleanup failure
+    }
+    return false;
+  }
 
   if (downloadResult.statusCode !== 200 && downloadResult.statusCode !== 206) {
     console.warn('[archiveClone] Download failed with status:', downloadResult.statusCode);
@@ -1787,9 +1857,18 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
 export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Promise<number> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
+  if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) {
+    return 0;
+  }
+
   try {
     const branch = await getCurrentBranch(directory);
-    const localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+    let localCommits: Array<{ oid: string }> = [];
+    try {
+      localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+    } catch {
+      localCommits = await git.log({ fs, dir: directory, ref: 'HEAD', depth: 300 });
+    }
 
     let remoteCommits: Array<{ oid: string }> = [];
     try {

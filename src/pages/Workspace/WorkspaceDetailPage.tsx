@@ -40,7 +40,12 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const wikiId = wiki?.id;
   useEffect(() => {
     if (wikiId === undefined) return;
-    void getUnsyncedCommitCount(wiki!).then(setPendingCommitCount);
+    const timeout = setTimeout(() => {
+      void getUnsyncedCommitCount(wiki!).then(setPendingCommitCount);
+    }, 500);
+    return () => {
+      clearTimeout(timeout);
+    };
   }, [wikiId]);
 
   if (!wiki) {

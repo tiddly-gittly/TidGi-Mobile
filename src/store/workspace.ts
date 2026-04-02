@@ -11,6 +11,11 @@ export interface IWikiWorkspace {
    */
   allowReadFileAttachment?: boolean;
   /**
+   * Defer expensive git status scans until this timestamp.
+   * Used right after import/clone so the main menu can stay responsive.
+   */
+  deferStatusScanUntil?: number;
+  /**
    * Enable quick load button on workspace list.
    * When click on button, will only load recent tiddlers, speed up loading time for huge wiki.
    */

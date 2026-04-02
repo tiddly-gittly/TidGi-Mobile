@@ -38,6 +38,8 @@ type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
 /** Distinguishes known failure modes so the UI can show actionable guidance. */
 export type GitImportErrorKind = 'generic' | 'oom' | 'tooLarge' | 'connectionAbort';
 
+const DEFER_STATUS_SCAN_AFTER_IMPORT_MS = 60_000;
+
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
   const [error, setError] = useState<string | undefined>();
@@ -84,6 +86,7 @@ export function useGitImport() {
         type: 'wiki',
         id: qrData.workspaceId,
         name: wikiName,
+        deferStatusScanUntil: Date.now() + DEFER_STATUS_SCAN_AFTER_IMPORT_MS,
         isSubWiki: qrData.isSubWiki === true,
         mainWikiID: qrData.mainWikiID ?? null,
         syncedServers: [{

@@ -125,7 +125,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
   const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, number>>({});
 
   const subWikisByMainWikiID = useMemo(() => {
-    const accumulator: Record<string, IWikiWorkspace[]> = {};
+    const accumulator: Partial<Record<string, IWikiWorkspace[]>> = {};
     for (const workspace of allWorkspacesList) {
       if (workspace.type !== 'wiki' || workspace.isSubWiki !== true || typeof workspace.mainWikiID !== 'string') continue;
       const list = accumulator[workspace.mainWikiID] ?? [];
@@ -137,30 +137,44 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
   useEffect(() => {
     if (!isFocused) return;
+    const cancellationState = { cancelled: false };
+    const isCancelled = () => cancellationState.cancelled;
+
     const run = () => {
-      void Promise.all(workspacesList.map(async (workspace) => {
-        if (workspace.type !== 'wiki') return { id: workspace.id, count: 0 };
+      void (async () => {
+        const nextMap: Record<string, number> = {};
 
-        const relatedWikis = [workspace, ...(subWikisByMainWikiID[workspace.id] ?? [])];
-        const counts = await Promise.all(relatedWikis.map(async (wikiWorkspace) => {
-          return await getUnsyncedCommitCount(wikiWorkspace);
-        }));
+        for (const workspace of workspacesList) {
+          if (isCancelled()) return;
+          if (workspace.type !== 'wiki') {
+            nextMap[workspace.id] = 0;
+            continue;
+          }
 
-        const totalChangesCount = counts.reduce((sum, value) => sum + value, 0);
-        return { id: workspace.id, count: totalChangesCount };
-      })).then((results) => {
-        const nextMap = results.reduce<Record<string, number>>((accumulator, item) => {
-          accumulator[item.id] = item.count;
-          return accumulator;
-        }, {});
-        setPendingChangesCountMap(nextMap);
-      });
+          const relatedWikis = [workspace, ...(subWikisByMainWikiID[workspace.id] ?? [])];
+          let totalChangesCount = 0;
+          for (const wikiWorkspace of relatedWikis) {
+            if (isCancelled()) return;
+            totalChangesCount += await getUnsyncedCommitCount(wikiWorkspace);
+            await new Promise<void>(resolve => setTimeout(resolve, 0));
+          }
+
+          nextMap[workspace.id] = totalChangesCount;
+          setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: totalChangesCount }));
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+        }
+
+        if (!isCancelled()) {
+          setPendingChangesCountMap(nextMap);
+        }
+      })();
     };
 
     const idleTask = globalThis.requestIdleCallback;
     if (typeof idleTask === 'function') {
       const idleHandle = idleTask(run);
       return () => {
+        cancellationState.cancelled = true;
         if (typeof globalThis.cancelIdleCallback === 'function') {
           globalThis.cancelIdleCallback(idleHandle);
         }
@@ -172,6 +186,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
     // keep Espresso in "not idle" state and prevent any Detox interaction).
     const timeout = setTimeout(run, 5_000);
     return () => {
+      cancellationState.cancelled = true;
       clearTimeout(timeout);
     };
   }, [isFocused, subWikisByMainWikiID, workspacesList]);

@@ -1,4 +1,4 @@
-import { Dispatch, RefObject, SetStateAction, useCallback, useMemo, useState } from 'react';
+import { Dispatch, RefObject, SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { WebViewStreamSender } from 'react-native-webview-stream-chunks';
 import { Writable } from 'readable-stream';
@@ -23,6 +23,7 @@ export function useStreamChunksToWebView(
   servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
 ) {
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
+  const activeInjectionIdReference = useRef(0);
 
   const sender = useMemo(() =>
     new WebViewStreamSender((messageType, data) => {
@@ -46,6 +47,7 @@ export function useStreamChunksToWebView(
    * Inject HTML and tiddlers store
    */
   const injectHtmlAndTiddlersStore = useCallback(async ({ html, tiddlersStream, setLoadHtmlError }: IHtmlContent) => {
+    const injectionId = ++activeInjectionIdReference.current;
     console.log(`[injectHtmlAndTiddlersStore] called, webViewRef=${webViewReference.current !== null}, servicesReady=${servicesOfWorkspace.current !== undefined}`);
     // start using `window.onStreamChunksToWebView` only when webviewLoaded, which means preload script is loaded.
     if (webViewReference.current !== null && servicesOfWorkspace.current !== undefined) {
@@ -57,6 +59,10 @@ export function useStreamChunksToWebView(
         await servicesOfWorkspace.current.wikiHookService.waitForWebviewReceiverReady(() => {
           sender.checkReceiverReady();
         });
+        if (injectionId !== activeInjectionIdReference.current) {
+          console.log(`[injectHtmlAndTiddlersStore] stale injection ignored before HTML send: ${String(injectionId)}`);
+          return;
+        }
         console.log(`[injectHtmlAndTiddlersStore] webview receiver ready, sending HTML (length=${html.length})...`);
         /**
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
@@ -67,7 +73,9 @@ export function useStreamChunksToWebView(
          * Sending tiddlers store to WebView, this might be very big, up to 20MB (239998203 chars from string length)
          */
         tiddlersStream.on('progress', (percentage: number) => {
-          setStreamChunksToWebViewPercentage(percentage);
+          if (injectionId === activeInjectionIdReference.current) {
+            setStreamChunksToWebViewPercentage(percentage);
+          }
         });
         const webviewSendDataWriteStream = new Writable({
           objectMode: true,
@@ -88,33 +96,46 @@ export function useStreamChunksToWebView(
           // wait for stream to finish before exit the transaction
           let readEnded = false;
           let writeEnded = false;
-          tiddlersStream.on('end', () => {
+          let settled = false;
+          const resolveOnce = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+          };
+          const rejectOnce = (error: Error) => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+          };
+          tiddlersStream.once('end', () => {
             console.log(`[injectHtmlAndTiddlersStore] tiddlersStream ended`);
-            sender.finalizePayload({
-              scriptType: 'application/json',
-              scriptClassName: 'tiddlywiki-tiddler-store',
-              scriptTagName: 'tidgi-tiddlers-store',
-              anchorSelector: '#styleArea',
-            });
-            sender.reexecuteScripts();
-            setStreamChunksToWebViewPercentage(1);
+            if (injectionId === activeInjectionIdReference.current) {
+              sender.finalizePayload({
+                scriptType: 'application/json',
+                scriptClassName: 'tiddlywiki-tiddler-store',
+                scriptTagName: 'tidgi-tiddlers-store',
+                anchorSelector: 'script.tiddlywiki-tiddler-store',
+              });
+              sender.reexecuteScripts();
+              setStreamChunksToWebViewPercentage(1);
+            }
             readEnded = true;
-            if (writeEnded) resolve();
+            if (writeEnded) resolveOnce();
           });
-          webviewSendDataWriteStream.on('finish', () => {
+          webviewSendDataWriteStream.once('finish', () => {
             console.log(`[injectHtmlAndTiddlersStore] writeStream finished`);
             writeEnded = true;
-            if (readEnded) resolve();
+            if (readEnded) resolveOnce();
           });
-          tiddlersStream.on('error', (error: Error) => {
+          tiddlersStream.once('error', (error: Error) => {
             console.error(`[injectHtmlAndTiddlersStore] tiddlersStream error:`, error.message);
             setLoadHtmlError(`injectHtmlAndTiddlersStore Stream error: ${error.message}`);
-            reject(error);
+            rejectOnce(error);
           });
-          webviewSendDataWriteStream.on('error', (error: Error) => {
+          webviewSendDataWriteStream.once('error', (error: Error) => {
             console.error(`[injectHtmlAndTiddlersStore] writeStream error:`, error.message);
             setLoadHtmlError(`injectHtmlAndTiddlersStore WriteStream error: ${error.message}`);
-            reject(error);
+            rejectOnce(error);
           });
         });
         console.log(`[injectHtmlAndTiddlersStore] stream completed successfully`);

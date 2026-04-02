@@ -15,6 +15,8 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { FileSystemTiddlersReadStream } from './useStreamChunksToWebView/FileSystemTiddlersReadStream';
 
+const timestamp = () => new Date().toISOString();
+
 export interface IHtmlContent {
   html: string;
   setLoadHtmlError: Dispatch<SetStateAction<string>>;
@@ -30,6 +32,7 @@ export function useTiddlyWiki(
 ) {
   const [loadHtmlError, setLoadHtmlError] = useState('');
   const tiddlersStreamReference = useRef<FileSystemTiddlersReadStream | undefined>(undefined);
+  const loadRunIdReference = useRef(0);
   /**
    * Webview can't load html larger than 20M, we stream the html to webview, and set innerHTML in webview using preloadScript.
    * This need to use with `webviewSideReceiver`.
@@ -46,11 +49,14 @@ export function useTiddlyWiki(
       }, workspaceId=${workspace.id}, wikiFolderLocation=${workspace.wikiFolderLocation}`,
     );
     if (!webviewLoaded) return;
+    const loadRunId = ++loadRunIdReference.current;
     void (async () => {
       try {
         const { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi } = await loadBundledAssets();
-        console.log(`[useTiddlyWiki] assets loaded: html=${emptyHtml.length}, syncadaptor=${expoFileSystemSyncadaptor.length}`);
+        if (loadRunId !== loadRunIdReference.current) return;
+        console.log(`${timestamp()} [useTiddlyWiki] assets loaded: html=${emptyHtml.length}, syncadaptor=${expoFileSystemSyncadaptor.length}`);
         if (tiddlersStreamReference.current !== undefined) {
+          tiddlersStreamReference.current.removeAllListeners();
           tiddlersStreamReference.current.destroy();
         }
 
@@ -81,6 +87,7 @@ export function useTiddlyWiki(
           }
           return recoveredWorkspace;
         }));
+        if (loadRunId !== loadRunIdReference.current) return;
         const workspacesToLoad = [workspace, ...recoveredSubWikis.filter((item): item is IWikiWorkspace => item !== undefined)];
         const tiddlersStream = new FileSystemTiddlersReadStream(workspacesToLoad, {
           additionalContent: [expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi],
@@ -89,13 +96,46 @@ export function useTiddlyWiki(
         tiddlersStream.init();
 
         tiddlersStreamReference.current = tiddlersStream;
+        if (loadRunId !== loadRunIdReference.current) {
+          tiddlersStream.removeAllListeners();
+          tiddlersStream.destroy();
+          return;
+        }
         await injectHtmlAndTiddlersStore({ html: emptyHtml, tiddlersStream, setLoadHtmlError });
+        if (loadRunId !== loadRunIdReference.current) return;
+        await servicesOfWorkspace.current?.wikiHookService.executeAfterTwReady(`
+          try {
+            const inspectTitles = ['$:/SiteTitle', '$:/DefaultTiddlers', '$:/build'];
+            const result = inspectTitles.map(title => {
+              const tiddler = $tw.wiki.getTiddler(title);
+              return {
+                title,
+                exists: !!tiddler,
+                type: tiddler?.fields?.type,
+                textPreview: typeof tiddler?.fields?.text === 'string' ? tiddler.fields.text.slice(0, 80) : undefined,
+              };
+            });
+            console.log('${timestamp()} [useTiddlyWiki] post-boot system tiddler probe', JSON.stringify(result));
+          } catch (error) {
+            console.error('${timestamp()} [useTiddlyWiki] post-boot system tiddler probe failed', error);
+          }
+        `);
       } catch (error) {
+        if (loadRunId !== loadRunIdReference.current) return;
         console.error(`[useTiddlyWiki] FATAL error:`, error, (error as Error).stack);
         setLoadHtmlError((error as Error).message);
       }
     })();
     // workspace and injectHtmlAndTiddlersStore reference may change multiple times, causing rerender
+    return () => {
+      if (loadRunIdReference.current === loadRunId) {
+        loadRunIdReference.current += 1;
+      }
+      if (tiddlersStreamReference.current !== undefined) {
+        tiddlersStreamReference.current.removeAllListeners();
+        tiddlersStreamReference.current.destroy();
+      }
+    };
   }, [workspace.id, webviewLoaded, keyToTriggerReload]);
   return { loadHtmlError, loading, streamChunksToWebViewPercentage };
 }

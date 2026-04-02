@@ -25,6 +25,8 @@ import {
 } from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
 
+const timestamp = () => new Date().toISOString();
+
 /**
  * Runtime check for the native batch parser.
  * Returns the batchParseTidFiles function if available, else undefined.
@@ -37,6 +39,18 @@ const getNativeBatchParser = (): ((filePaths: string[], quickLoadMode: boolean) 
   }
   return undefined;
 };
+
+function safeDecodePath(path: string): string {
+  try {
+    return decodeURI(path);
+  } catch {
+    return path;
+  }
+}
+
+function toInternalFileUri(path: string): string {
+  return path.startsWith('file://') ? path : `file://${path}`;
+}
 
 /**
  * Whether a path points to external/shared storage.
@@ -67,6 +81,7 @@ export class FileSystemTiddlersReadStream extends Readable {
   private hasStarted = false;
   private tiddlerCount = 0;
   private initDone = false;
+  private nativeSystemProbeDone = false;
 
   constructor(workspace: IWikiWorkspace | IWikiWorkspace[], options?: IFileSystemTiddlersReadStreamOptions) {
     super({ encoding: 'utf8' });
@@ -87,15 +102,19 @@ export class FileSystemTiddlersReadStream extends Readable {
 
   private async initAsync(): Promise<void> {
     try {
+      const initStartedAt = Date.now();
       this.tiddlerFiles = [];
       for (const workspace of this.workspaces) {
+        const workspaceStartedAt = Date.now();
         const tiddlerFolderPath = getWikiTiddlerFolderPath(workspace);
-        console.log(`[FileSystemTiddlersReadStream] init workspace ${workspace.id}: tiddlerFolderPath=${tiddlerFolderPath}`);
+        console.log(`${timestamp()} [FileSystemTiddlersReadStream] init workspace ${workspace.id}: tiddlerFolderPath=${tiddlerFolderPath}`);
 
-        if (isExternalPath(tiddlerFolderPath)) {
-          const plainPath = toPlainPath(tiddlerFolderPath);
+        if (Platform.OS === 'android' || isExternalPath(tiddlerFolderPath)) {
+          const plainPath = safeDecodePath(toPlainPath(tiddlerFolderPath));
           const info = await ExternalStorage.getInfo(plainPath);
-          console.log(`[FileSystemTiddlersReadStream] (external) folder exists=${String(info.exists)}, isDirectory=${String(info.isDirectory)}, path=${plainPath}`);
+          console.log(
+            `${timestamp()} [FileSystemTiddlersReadStream] (native scan) folder exists=${String(info.exists)}, isDirectory=${String(info.isDirectory)}, path=${plainPath}`,
+          );
           if (info.exists && info.isDirectory) {
             const relativePaths = await ExternalStorage.readDirRecursive(plainPath);
             this.tiddlerFiles.push(
@@ -109,17 +128,33 @@ export class FileSystemTiddlersReadStream extends Readable {
           }
         } else {
           const folder = new Directory(tiddlerFolderPath);
-          console.log(`[FileSystemTiddlersReadStream] (internal) folder.exists=${String(folder.exists)}, folder.uri=${folder.uri}`);
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] (internal) folder.exists=${String(folder.exists)}, folder.uri=${folder.uri}`);
           if (folder.exists) {
             this.tiddlerFiles.push(...this.collectTiddlerFiles(folder, workspace));
           }
         }
+
+        console.log(`${timestamp()} [FileSystemTiddlersReadStream] workspace ${workspace.id} scan finished in ${Date.now() - workspaceStartedAt}ms`);
       }
 
-      console.log(`[FileSystemTiddlersReadStream] Found ${this.tiddlerFiles.length} tiddler files`);
+      console.log(`${timestamp()} [FileSystemTiddlersReadStream] Found ${this.tiddlerFiles.length} tiddler files in ${Date.now() - initStartedAt}ms`);
       if (this.tiddlerFiles.length > 0) {
-        console.log(`[FileSystemTiddlersReadStream] First few files: ${this.tiddlerFiles.slice(0, 5).map(file => file.filePath).join(', ')}`);
+        console.log(`${timestamp()} [FileSystemTiddlersReadStream] First few files: ${this.tiddlerFiles.slice(0, 5).map(file => file.filePath).join(', ')}`);
       }
+
+      if (!this.nativeSystemProbeDone) {
+        const nativeBatch = getNativeBatchParser();
+        const probeCandidates = this.tiddlerFiles
+          .map(file => file.filePath)
+          .filter(filePath => /\/system\/\$__(?:SiteTitle|DefaultTiddlers|build)\.tid$/i.test(safeDecodePath(toPlainPath(filePath)).replace(/\\/g, '/')))
+          .slice(0, 3);
+        if (nativeBatch !== undefined && probeCandidates.length > 0) {
+          this.nativeSystemProbeDone = true;
+          const probedJson = await nativeBatch(probeCandidates.map(path => safeDecodePath(toPlainPath(path))), false);
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] native system probe ${probedJson}`);
+        }
+      }
+
       this.initDone = true;
     } catch (error) {
       console.error(`[FileSystemTiddlersReadStream] init error: ${(error as Error).message}`, (error as Error).stack);
@@ -188,7 +223,11 @@ export class FileSystemTiddlersReadStream extends Readable {
         // First chunk: output array opening bracket
         if (!this.hasStarted) {
           this.hasStarted = true;
-          console.log(`[FileSystemTiddlersReadStream] _read: starting stream, totalFiles=${this.tiddlerFiles.length}, chunkSize=${this.chunkSize}, nativeBatch=${getNativeBatchParser() !== undefined}`);
+          console.log(
+            `${timestamp()} [FileSystemTiddlersReadStream] _read: starting stream, totalFiles=${this.tiddlerFiles.length}, chunkSize=${this.chunkSize}, nativeBatch=${
+              getNativeBatchParser() !== undefined
+            }`,
+          );
           this.push('[');
 
           // Add additional content if provided
@@ -204,7 +243,7 @@ export class FileSystemTiddlersReadStream extends Readable {
 
         // Check if we've reached the end
         if (this.currentIndex >= this.tiddlerFiles.length) {
-          console.log(`[FileSystemTiddlersReadStream] _read: end of files (index=${this.currentIndex}, total=${this.tiddlerFiles.length})`);
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] _read: end of files (index=${this.currentIndex}, total=${this.tiddlerFiles.length})`);
           this.push(']'); // Close the JSON array
           this.push(null); // Signal end of stream
           return;
@@ -226,17 +265,13 @@ export class FileSystemTiddlersReadStream extends Readable {
           // Native path: Kotlin reads all files in parallel, parses headers,
           // applies skinny logic, and returns a serialized JSON array string.
           // This eliminates per-file bridge calls AND JS JSON.stringify overhead.
-          const paths = batch.map(({ filePath }) => toPlainPath(filePath));
-          console.log(`[FileSystemTiddlersReadStream] native batch: ${paths.length} files, index=${this.currentIndex}`);
+          const paths = batch.map(({ filePath }) => safeDecodePath(toPlainPath(filePath)));
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] native batch: ${paths.length} files, index=${this.currentIndex}`);
           const jsonArrayString = await nativeBatch(paths, this.quickLoadMode);
-          console.log(`[FileSystemTiddlersReadStream] native batch done: ${jsonArrayString.length} chars in ${Date.now() - batchStart}ms`);
-          // jsonArrayString is "[{...},{...},...]" — strip outer brackets to get
-          // comma-separated objects that we can splice into our streaming array.
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] native batch done: ${jsonArrayString.length} chars in ${Date.now() - batchStart}ms`);
           const inner = jsonArrayString.length > 2 ? jsonArrayString.slice(1, -1) : '';
           if (inner.length > 0) {
             chunkJson = inner;
-            // Count tiddlers (approximate — count top-level objects)
-            // Each object starts with { at depth 0
             let objectCount = 0;
             let depth = 0;
             for (let charIndex = 0; charIndex < inner.length; charIndex++) {
@@ -248,7 +283,7 @@ export class FileSystemTiddlersReadStream extends Readable {
             this.tiddlerCount += objectCount;
           }
         } else {
-          console.log(`[FileSystemTiddlersReadStream] JS fallback batch: ${batch.length} files, index=${this.currentIndex}`);
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] JS fallback batch: ${batch.length} files, index=${this.currentIndex}`);
           // JS fallback: read files in parallel batches via individual bridge calls.
           const chunk: Array<Record<string, string | string[]>> = [];
           const results = await Promise.all(
@@ -284,6 +319,15 @@ export class FileSystemTiddlersReadStream extends Readable {
           if (this.currentIndex < this.tiddlerFiles.length) {
             this.push(',');
           }
+        } else if (this.currentIndex < this.tiddlerFiles.length) {
+          // Some batches legitimately parse to [] (for example plugin bundle
+          // .json files that are loaded via their companion .meta file). If we
+          // don't push anything here, Node's Readable stays waiting forever and
+          // the whole WebView load stalls around the first empty batch.
+          console.log(`${timestamp()} [FileSystemTiddlersReadStream] empty batch skipped at index=${this.currentIndex}, continuing`);
+          setTimeout(() => {
+            this._read();
+          }, 0);
         }
       } catch (error) {
         console.error(`[FileSystemTiddlersReadStream] _read error at index ${this.currentIndex}: ${(error as Error).message}`, (error as Error).stack);
@@ -299,14 +343,14 @@ export class FileSystemTiddlersReadStream extends Readable {
    */
   private async readTiddlerFromFile(filePath: string, workspace: IWikiWorkspace): Promise<ITiddlerFields | ITiddlerFields[] | null> {
     try {
-      const filename = filePath.split('/').pop() ?? '';
+      const filename = safeDecodePath(filePath.split('/').pop() ?? '');
       const external = isExternalPath(filePath);
 
       const readText = async (path: string): Promise<string> => {
         if (external) {
           return ExternalStorage.readFileUtf8(toPlainPath(path));
         }
-        const file = new File(path);
+        const file = new File(toInternalFileUri(path));
         return file.text();
       };
 
@@ -314,28 +358,48 @@ export class FileSystemTiddlersReadStream extends Readable {
         if (external) {
           return ExternalStorage.exists(toPlainPath(path));
         }
-        const file = new File(path);
+        const file = new File(toInternalFileUri(path));
         return file.exists;
       };
 
       if (filename.endsWith('.json')) {
         // JSON tiddler file (e.g., plugin.info, or tiddler-as-json)
         const content = await readText(filePath);
+        const fallbackTitle = getTitleFromFilename(filename);
         try {
-          const parsed = JSON.parse(content) as Record<string, unknown>;
+          const parsed = JSON.parse(content) as unknown;
           // JSON may be a single tiddler or an array of tiddlers
           if (Array.isArray(parsed)) {
             const results = parsed
               .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object' && 'title' in item)
               .map(item => item as unknown as ITiddlerFields);
-            return results.length > 0 ? results : null;
+            if (results.length > 0) {
+              return results;
+            }
+            return {
+              title: fallbackTitle,
+              type: 'application/json',
+              text: content,
+            } as ITiddlerFields;
           }
-          if (parsed.title) {
+          if (parsed !== null && typeof parsed === 'object' && 'title' in parsed && typeof parsed.title === 'string') {
             return parsed as unknown as ITiddlerFields;
           }
-          return null;
+          if (parsed !== null && typeof parsed === 'object' && 'tiddlers' in parsed) {
+            // Plugin bundle format is loaded via its .meta companion file.
+            return null;
+          }
+          return {
+            title: fallbackTitle,
+            type: 'application/json',
+            text: content,
+          } as ITiddlerFields;
         } catch {
-          return null;
+          return {
+            title: fallbackTitle,
+            type: 'application/json',
+            text: content,
+          } as ITiddlerFields;
         }
       } else if (filename.endsWith('.meta')) {
         // .meta file accompanies another file; load metadata from .meta
