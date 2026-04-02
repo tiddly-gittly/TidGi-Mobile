@@ -49,6 +49,8 @@ For dev-client builds, use CI artifacts from the `Build Dev Client APK` workflow
 
 For tagged release builds, follow the repository release workflow and let GitHub Actions produce the artifacts from tags instead of running local EAS builds.
 
+Agent should use Github CLI to wait for CI completion or fail, in a blocking way.
+
 ## Debug after build
 
 ```sh
