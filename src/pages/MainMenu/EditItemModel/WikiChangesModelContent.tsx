@@ -315,18 +315,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 )}
               />
             </Card.Content>
-            <Card.Actions>
-              <Button
-                onPress={() => {
-                  setSelectedCommit(undefined);
-                  setChangedFiles([]);
-                  setIsShallowSnapshot(false);
-                  setDetailsError(undefined);
-                }}
-              >
-                {t('Close')}
-              </Button>
-            </Card.Actions>
           </DetailsCard>
         </Modal>
         <Modal
@@ -351,16 +339,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 />
               )}
             </Card.Content>
-            <Card.Actions>
-              <Button
-                onPress={() => {
-                  setFilePreviewVisible(false);
-                  setSelectedFilePath(undefined);
-                }}
-              >
-                {t('Close')}
-              </Button>
-            </Card.Actions>
           </DetailsCard>
         </Modal>
       </Portal>

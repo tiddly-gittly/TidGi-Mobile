@@ -101,8 +101,8 @@ importers:
         specifier: ~14.0.9
         version: 14.0.9(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))
       expo-tiddlywiki-filesystem-android-external-storage:
-        specifier: 2.0.2
-        version: 2.0.2(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+        specifier: 2.1.0
+        version: 2.1.0(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       exponential-backoff:
         specifier: ^3.1.2
         version: 3.1.2
@@ -2722,6 +2722,10 @@ packages:
     resolution: {integrity: sha512-jr/swrr2aRmUAUjW5/zQHbMaui//vQlsZcJKijZf3M26bnmLj8LyZUpj8/Rd6uzaek06OWsqdofN/Thenm5O8A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@typescript-eslint/types@8.58.0':
+    resolution: {integrity: sha512-O9CjxypDT89fbHxRfETNoAnHj/i6IpRK0CvbVN3qibxlLdo5p5hcLmUuCCrHMpxiWSwKyI8mCP7qRNYuOJ0Uww==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
   '@typescript-eslint/typescript-estree@5.62.0':
     resolution: {integrity: sha512-CmcQ6uY7b9y694lKdRB8FEel7JbU/40iSAPomu++SjLMntB+2Leay2LO6i8VnJk58MtE9/nQSFIH6jpyRWyYzA==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
@@ -2912,6 +2916,7 @@ packages:
   '@xmldom/xmldom@0.8.10':
     resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -3767,8 +3772,8 @@ packages:
       jest:
         optional: true
 
-  devalue@5.6.3:
-    resolution: {integrity: sha512-nc7XjUU/2Lb+SvEFVGcWLiKkzfw8+qHI7zn8WYXKkLMgfGSHbgCEaR6bJpev8Cm6Rmrb19Gfd/tZvGqx9is3wg==}
+  devalue@5.6.4:
+    resolution: {integrity: sha512-Gp6rDldRsFh/7XuouDbxMH3Mx8GMCcgzIb1pDTvNyn8pZGQ22u+Wa+lGV9dQCltFQ7uVw0MhRyb8XDskNFOReA==}
 
   didyoumean@1.2.2:
     resolution: {integrity: sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==}
@@ -4273,8 +4278,8 @@ packages:
     resolution: {integrity: sha512-Ap6G0WQwcU/LHsvLwON1fAQX9Zp0A2Y6Y/cJBl9r/JbW90Zyg4/zbG6zzKa2OTALELarYHmKu0GhpM5EO+7T0g==}
     engines: {node: '>=0.10'}
 
-  esrap@2.2.3:
-    resolution: {integrity: sha512-8fOS+GIGCQZl/ZIlhl59htOlms6U8NvX6ZYgYHpRU/b6tVSh3uHkOHZikl3D4cMbYM0JlpBe+p/BkZEi8J9XIQ==}
+  esrap@2.2.4:
+    resolution: {integrity: sha512-suICpxAmZ9A8bzJjEl/+rLJiDKC0X4gYWUxT6URAWBLvlXmtbZd5ySMu/N2ZGEtMCAmflUDPSehrP9BQcsGcSg==}
 
   esrecurse@4.3.0:
     resolution: {integrity: sha512-KmfKL3b6G+RXvP8N1vr3Tq1kL/oCFgn2NYXEtqP8/L3pKapUA4G8cFVaoF3SU323CD4XypR/ffioHmkti6/Tag==}
@@ -4489,8 +4494,8 @@ packages:
       expo: '*'
       react-native: '*'
 
-  expo-tiddlywiki-filesystem-android-external-storage@2.0.2:
-    resolution: {integrity: sha512-3T41+OMX2S92FgIg/t3CaSdrIJiGGcD+rrJOzrGJZG2tJBXwaJ75SLLbt34tfiP9rqEoI1tugIo+FrtruOLlvg==}
+  expo-tiddlywiki-filesystem-android-external-storage@2.1.0:
+    resolution: {integrity: sha512-PqZVkAG3qkWybhfpA3fMFS1CAQj1J+bHPZ5JSr4xJtEp97NRaitQRijbSka9v0+vR5qUa+emXDrxMPaa2p6waw==}
     peerDependencies:
       expo: '*'
       react: '*'
@@ -7346,7 +7351,6 @@ packages:
     resolution: {integrity: sha512-T25acZfdhAX/lUVPY/9SXo7bMJKgSaMs5PDOb83S2WKbTCD7DnOUQ4aC3qDy0j5XqlCn4ih3mzMWct3xnQx+Mw==}
     engines: {node: '>=0.8.2'}
     hasBin: true
-    bundledDependencies: []
 
   tiny-case@1.0.3:
     resolution: {integrity: sha512-Eet/eeMhkO6TX8mnUteS9zgPbUMQa4I6Kkp5ORiBD5476/m+PIRiumP5tmh5ioJpH7k51Kehawy2UDfsnxxY8Q==}
@@ -10615,6 +10619,8 @@ snapshots:
 
   '@typescript-eslint/types@8.53.1': {}
 
+  '@typescript-eslint/types@8.58.0': {}
+
   '@typescript-eslint/typescript-estree@5.62.0(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/types': 5.62.0
@@ -11788,7 +11794,7 @@ snapshots:
       - jest-environment-node
       - utf-8-validate
 
-  devalue@5.6.3: {}
+  devalue@5.6.4: {}
 
   didyoumean@1.2.2: {}
 
@@ -12628,9 +12634,10 @@ snapshots:
     dependencies:
       estraverse: 5.3.0
 
-  esrap@2.2.3:
+  esrap@2.2.4:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+      '@typescript-eslint/types': 8.58.0
 
   esrecurse@4.3.0:
     dependencies:
@@ -12862,7 +12869,7 @@ snapshots:
       react-native: 0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0)
       unimodules-app-loader: 6.0.8
 
-  expo-tiddlywiki-filesystem-android-external-storage@2.0.2(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+  expo-tiddlywiki-filesystem-android-external-storage@2.1.0(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
       '@expo/config-plugins': 54.0.4
       expo: 54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -16064,9 +16071,9 @@ snapshots:
       aria-query: 5.3.2
       axobject-query: 4.1.0
       clsx: 2.1.1
-      devalue: 5.6.3
+      devalue: 5.6.4
       esm-env: 1.2.2
-      esrap: 2.2.3
+      esrap: 2.2.4
       is-reference: 3.0.3
       locate-character: 3.0.0
       magic-string: 0.30.21

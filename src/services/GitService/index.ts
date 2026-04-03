@@ -1628,29 +1628,55 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
     const startedAt = Date.now();
-    // Use the `filter` callback to skip non-tiddler paths early, avoiding
-    // expensive SHA-1 hashing for irrelevant files (git objects, pack data,
-    // node_modules, binary caches, etc.).
+
+    // Try the native Kotlin gitStatus first — it parses .git/index directly
+    // and uses stat-cache (size+mtime) comparison instead of SHA-1 re-hashing,
+    // making it orders of magnitude faster than isomorphic-git's statusMatrix.
+    const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+    if (Platform.OS === 'android' && typeof nativeModule.gitStatus === 'function') {
+      const nativeGitStatus = nativeModule.gitStatus as (dir: string) => Promise<string>;
+      const jsonString = await nativeGitStatus(directory);
+      const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+
+      // Apply NFC/NFD deduplication (same logic as before)
+      const deletesByNFC = new Set<string>();
+      const addsByNFC = new Set<string>();
+      const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+      for (const change of rawChanges) {
+        const nfcPath = change.path.normalize('NFC');
+        if (change.type === 'delete') {
+          deletesByNFC.add(nfcPath);
+        } else if (change.type === 'add') {
+          addsByNFC.add(nfcPath);
+        }
+        changes.push(change);
+      }
+      const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
+      const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+
+      const elapsedMs = Date.now() - startedAt;
+      console.log(
+        `${new Date().toISOString()} [GitService] gitDiffChangedFiles (native) for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
+          deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
+        }`,
+      );
+      return deduped.sort((a, b) => a.path.localeCompare(b.path));
+    }
+
+    // Fallback: isomorphic-git statusMatrix (JS-side, slower)
+    console.log(`${new Date().toISOString()} [GitService] gitDiffChangedFiles falling back to JS statusMatrix for ${workspace.id}`);
     const status = await git.statusMatrix({
       fs,
       dir: directory,
       filter: (f: string) => {
-        // Skip hidden/dot folders contents (but keep .tid files at root)
         if (f.startsWith('.git/') || f.startsWith('.git\\')) return false;
-        // Skip non-tiddler files by extension — only process .tid, .json, .meta, .txt, .css, .js, .html
         const ext = f.slice(f.lastIndexOf('.'));
         if (['.tid', '.json', '.meta', '.txt', '.css', '.js', '.html', '.svg', '.md'].includes(ext)) return true;
-        // Also include extensionless paths and directories
         if (!ext || ext === f) return true;
-        // Skip binary / git object / cache files (.data, .pack, .idx, .png, .jpg, etc.)
         return false;
       },
     });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
-    // Track deletes and adds by NFC-normalized path to detect Unicode normalization artifacts.
-    // On Android (FAT32/ExFAT), git checks out files with NFC paths but the filesystem may
-    // convert them to NFD, causing a spurious delete (NFC path gone) + add (NFD path new)
-    // for every file whose name contains multi-byte Unicode characters (e.g. Chinese).
     const deletesByNFC = new Set<string>();
     const addsByNFC = new Set<string>();
     for (const [filepath, headStatus, workdirStatus] of status) {
@@ -1667,14 +1693,12 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
         }
       }
     }
-    // Remove NFC/NFD artifact pairs: same NFC path appearing as both delete and add
-    // means the file itself is unchanged — only its Unicode normalization form differs.
     const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
     const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
     const elapsedMs = Date.now() - startedAt;
     if (deduped.length > 0 || elapsedMs > 5_000) {
       console.log(
-        `${new Date().toISOString()} [GitService] gitDiffChangedFiles for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
+        `${new Date().toISOString()} [GitService] gitDiffChangedFiles (JS fallback) for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
           deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
         }`,
       );
