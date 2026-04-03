@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, StyleSheet } from 'react-native';
+import { FlatList, ScrollView, StyleSheet } from 'react-native';
 import { ActivityIndicator, Button, Card, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -72,17 +72,15 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id} across ${relatedWikisForUncommitted.map(item => item.id).join(',')}`);
 
     // All sub-wikis share the same git repo as the main wiki.
-    // Calling statusMatrix for each workspace is redundant and extremely slow
-    // (82 s per call).  Instead, call it ONCE on the main wiki, then classify
-    // the changed paths by which workspace they belong to.
-    const mainWiki = relatedWikisForUncommitted.find(w => w.id === wiki.id) ?? wiki;
+    // We must call gitDiffChangedFiles on the MAIN wiki (which is the git root),
+    // not on sub-wikis (which are subdirectories without their own .git/).
+    // Find the main wiki: it's the one that is NOT a sub-wiki.
+    const mainWiki = relatedWikisForUncommitted.find(w => w.isSubWiki !== true) ?? wiki;
     const allChanges = await gitDiffChangedFiles(mainWiki);
 
     // Classify each changed path into the most specific workspace it belongs to.
     const uncommitted: IUncommittedChangeItem[] = [];
     for (const change of allChanges) {
-      // Find the workspace whose folder path best matches this file.
-      // Sub-wikis are subdirectories, so longer matches win.
       let bestMatch = mainWiki;
       for (const workspace of relatedWikisForUncommitted) {
         if (workspace.id === mainWiki.id) continue;
@@ -286,6 +284,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         >
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.CommitDetails')} />
+            <ScrollView>
             <Card.Content>
               <Text>{selectedCommit?.message}</Text>
               <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
@@ -315,6 +314,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 )}
               />
             </Card.Content>
+            </ScrollView>
           </DetailsCard>
         </Modal>
         <Modal
@@ -327,6 +327,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         >
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.FilePreview')} />
+            <ScrollView>
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
               {!loadingFilePreview && selectedFilePath && (
@@ -339,6 +340,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 />
               )}
             </Card.Content>
+            </ScrollView>
           </DetailsCard>
         </Modal>
       </Portal>
