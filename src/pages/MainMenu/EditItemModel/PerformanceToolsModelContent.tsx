@@ -63,7 +63,7 @@ export function PerformanceToolsModelContent({ id, onClose }: ModalProps): JSX.E
 }
 
 const ModalContainer = styled.View`
-  background-color: #fff;
+  background-color: ${({ theme }) => theme.colors.background};
   padding: 20px;
 `;
 const CloseButton = styled(Button)`

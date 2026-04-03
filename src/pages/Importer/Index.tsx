@@ -282,6 +282,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
 
+    setManualEdit(false);
+    setShowSavedServers(false);
+    setQrScannerOpen(false);
+
     if (addAsServer) {
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
 
@@ -391,7 +395,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   return (
     <Container testID='importer-screen'>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
-      {autoStartImport !== true && serverConfigs}
+      {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
       {importStatus === 'idle' && !qrScannerOpen && qrData && (
         <>
           <WorkspaceNameInput

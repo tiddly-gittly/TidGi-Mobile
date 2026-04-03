@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList } from 'react-native';
-import { ActivityIndicator, Button, Card, List, Modal, Portal, Text } from 'react-native-paper';
+import { FlatList, StyleSheet } from 'react-native';
+import { ActivityIndicator, Button, Card, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -12,6 +12,7 @@ import {
   gitGetCommitHistory,
   gitGetFileContentAtReference,
   gitResolveReference,
+  IGitCommitFileDiffResult,
   IGitCommitInfo,
   IGitFileContent,
 } from '../../../services/GitService';
@@ -24,6 +25,7 @@ interface ModalProps {
 
 export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
+  const theme = useTheme();
 
   // Use useShallow + useMemo to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
@@ -37,18 +39,26 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [filePreviewVisible, setFilePreviewVisible] = useState(false);
   const [changedFiles, setChangedFiles] = useState<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>>([]);
+  const [isShallowSnapshot, setIsShallowSnapshot] = useState(false);
   const [beforeContent, setBeforeContent] = useState<IGitFileContent>({ kind: 'missing' });
   const [afterContent, setAfterContent] = useState<IGitFileContent>({ kind: 'missing' });
   const [contentMode, setContentMode] = useState<'diff' | 'full'>('diff');
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingUncommitted, setLoadingUncommitted] = useState(false);
   const [loadingFilePreview, setLoadingFilePreview] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | undefined>();
   const [discardingFile, setDiscardingFile] = useState<string | undefined>();
 
   const refreshUncommitted = async () => {
     if (wiki === undefined) return;
+    const uncommittedStartAt = Date.now();
+    setLoadingUncommitted(true);
+    console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id}`);
     const uncommitted = await gitDiffChangedFiles(wiki);
     setUncommittedChanges(uncommitted);
+    setLoadingUncommitted(false);
+    console.log(`${new Date().toISOString()} [WikiChanges] uncommitted changes loaded in ${Date.now() - uncommittedStartAt}ms, count=${uncommitted.length}`);
   };
 
   useEffect(() => {
@@ -57,12 +67,13 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       return;
     }
     void (async () => {
+      const historyStartAt = Date.now();
       setLoadingHistory(true);
+      console.log(`${new Date().toISOString()} [WikiChanges] loading commit history for ${wiki.id}`);
       const result = await gitGetCommitHistory(wiki, 120);
       setCommits(result);
-      const uncommitted = await gitDiffChangedFiles(wiki);
-      setUncommittedChanges(uncommitted);
       setLoadingHistory(false);
+      console.log(`${new Date().toISOString()} [WikiChanges] commit history loaded in ${Date.now() - historyStartAt}ms, count=${result.length}`);
     })();
   }, [wiki?.id]);
 
@@ -102,20 +113,30 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         mode='outlined'
         onPress={() => {
           void (async () => {
+            const historyStartAt = Date.now();
             setLoadingHistory(true);
+            console.log(`${new Date().toISOString()} [WikiChanges] refreshing commit history for ${wiki.id}`);
             const result = await gitGetCommitHistory(wiki, 120);
             setCommits(result);
-            const uncommitted = await gitDiffChangedFiles(wiki);
-            setUncommittedChanges(uncommitted);
             setLoadingHistory(false);
+            console.log(`${new Date().toISOString()} [WikiChanges] commit history refreshed in ${Date.now() - historyStartAt}ms, count=${result.length}`);
           })();
         }}
       >
         {t('GitHistory.Refresh')}
       </Button>
+      <Button
+        mode='outlined'
+        onPress={() => {
+          void refreshUncommitted();
+        }}
+      >
+        {t('GitHistory.LoadUncommitted')}
+      </Button>
       {loadingHistory && <LoadingIndicator />}
 
       <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
+      {loadingUncommitted && <Text variant='bodySmall'>{t('Loading')}</Text>}
       <FilesList
         data={uncommittedChanges}
         keyExtractor={(item) => `uncommitted-${item.type}-${item.path}`}
@@ -157,16 +178,36 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
       <FlatList
         data={commits}
+        initialNumToRender={20}
         keyExtractor={(item) => item.oid}
+        maxToRenderPerBatch={20}
+        removeClippedSubviews
         renderItem={({ item }) => (
           <HistoryCard
             onPress={() => {
               setSelectedCommit(item);
               setLoadingDetails(true);
+              setDetailsError(undefined);
+              setIsShallowSnapshot(false);
               void (async () => {
-                const files = await gitGetChangedFilesForCommit(wiki, item.oid, item.parentOids[0]);
-                setChangedFiles(files);
-                setLoadingDetails(false);
+                const detailsStartAt = Date.now();
+                console.log(`${new Date().toISOString()} [WikiChanges] loading changed files for ${item.oid}`);
+                try {
+                  const diffResult: IGitCommitFileDiffResult = await gitGetChangedFilesForCommit(wiki, item.oid, item.parentOids[0]);
+                  setChangedFiles(diffResult.files);
+                  setIsShallowSnapshot(diffResult.isShallowSnapshot);
+                  console.log(
+                    `${new Date().toISOString()} [WikiChanges] changed files loaded in ${Date.now() - detailsStartAt}ms, count=${diffResult.files.length}, shallow=${
+                      String(diffResult.isShallowSnapshot)
+                    }`,
+                  );
+                } catch (error) {
+                  setChangedFiles([]);
+                  setIsShallowSnapshot(false);
+                  setDetailsError((error as Error).message);
+                } finally {
+                  setLoadingDetails(false);
+                }
               })();
             }}
           >
@@ -180,16 +221,20 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             </Card.Content>
           </HistoryCard>
         )}
+        windowSize={5}
       />
       <Portal>
         <Modal
+          contentContainerStyle={styles.modalContentContainer}
           visible={selectedCommit !== undefined}
           onDismiss={() => {
             setSelectedCommit(undefined);
             setChangedFiles([]);
+            setIsShallowSnapshot(false);
+            setDetailsError(undefined);
           }}
         >
-          <DetailsCard>
+          <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.CommitDetails')} />
             <Card.Content>
               <Text>{selectedCommit?.message}</Text>
@@ -198,14 +243,13 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
               <Text variant='titleMedium'>{t('GitHistory.Files')}</Text>
               {loadingDetails && <Text>{t('Loading')}</Text>}
+              {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
               {
                 /* When a commit has parents but files is empty, it means the parent is not in
                   the local repo (shallow clone with depth:1). Show an informational note. */
               }
-              {!loadingDetails && changedFiles.length === 0 && selectedCommit !== undefined && selectedCommit.parentOids.length > 0 && (
-                <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>
-              )}
-              {!loadingDetails && changedFiles.length === 0 && (selectedCommit === undefined || selectedCommit.parentOids.length === 0) && <Text>{t('GitHistory.NoFiles')}</Text>}
+              {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
+              {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
               <FilesList
                 data={changedFiles}
                 keyExtractor={(item) => `${item.type}-${item.path}`}
@@ -226,6 +270,8 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 onPress={() => {
                   setSelectedCommit(undefined);
                   setChangedFiles([]);
+                  setIsShallowSnapshot(false);
+                  setDetailsError(undefined);
                 }}
               >
                 {t('Close')}
@@ -234,13 +280,14 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           </DetailsCard>
         </Modal>
         <Modal
+          contentContainerStyle={styles.modalContentContainer}
           visible={filePreviewVisible}
           onDismiss={() => {
             setFilePreviewVisible(false);
             setSelectedFilePath(undefined);
           }}
         >
-          <DetailsCard>
+          <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
@@ -272,7 +319,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
 }
 
 const ModalContainer = styled.View`
-  background-color: #fff;
+  background-color: ${({ theme }) => theme.colors.background};
   padding: 20px;
   height: 100%;
 `;
@@ -283,7 +330,6 @@ const HistoryCard = styled(Card)`
   margin-top: 8px;
 `;
 const DetailsCard = styled(Card)`
-  margin: 16px;
   max-height: 85%;
 `;
 const FilesList = styled(FlatList)`
@@ -293,3 +339,9 @@ const FilesList = styled(FlatList)`
 const LoadingIndicator = styled(ActivityIndicator)`
   margin-top: 10px;
 `;
+
+const styles = StyleSheet.create({
+  modalContentContainer: {
+    padding: 16,
+  },
+});

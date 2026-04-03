@@ -156,7 +156,7 @@
     "ServerList": "Server List",
     "ToggleServerList": "Toggle Server List",
     "ToggleQRCodeScanner": "Toggle QRCode Scanner",
-    "OpenChangeLogList": "Open Change Log List",
+    "OpenChangeLogList": "Open Commit History",
     "PageUrl": "Page Url",
     "AddWebPageWorkspace": "Add WebPage Workspace",
     "Reset": "Reset",
@@ -451,6 +451,7 @@
   },
   "GitHistory": {
     "Refresh": "Refresh Git History",
+    "LoadUncommitted": "Load Uncommitted Changes",
     "Uncommitted": "Uncommitted Changes",
     "Commits": "Commits",
     "CommitDetails": "Commit Details",

@@ -272,6 +272,11 @@ export interface IGitCommitInfo {
   timestamp: number;
 }
 
+export interface IGitCommitFileDiffResult {
+  files: Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+  isShallowSnapshot: boolean;
+}
+
 /**
  * Helper: get current branch name, defaulting to 'main'.
  * `git.currentBranch()` returns `string | void`; the `void` case
@@ -1622,6 +1627,7 @@ export async function gitResolveReference(workspace: IWikiWorkspace, reference: 
 export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
+    const startedAt = Date.now();
     const status = await git.statusMatrix({ fs, dir: directory });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
     // Track deletes and adds by NFC-normalized path to detect Unicode normalization artifacts.
@@ -1648,6 +1654,14 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
     // means the file itself is unchanged — only its Unicode normalization form differs.
     const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
     const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+    const elapsedMs = Date.now() - startedAt;
+    if (deduped.length > 0 || elapsedMs > 5_000) {
+      console.log(
+        `${new Date().toISOString()} [GitService] gitDiffChangedFiles for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
+          deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
+        }`,
+      );
+    }
     return deduped.sort((a, b) => a.path.localeCompare(b.path));
   } catch (error) {
     console.error(`Failed to diff: ${(error as Error).message}`);
@@ -1676,53 +1690,188 @@ export async function gitGetCommitHistory(workspace: IWikiWorkspace, depth = 100
   }
 }
 
+export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise<number> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+
+  if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) {
+    return 0;
+  }
+
+  try {
+    const branch = await getCurrentBranch(directory);
+    let localCommits: Array<{ oid: string }> = [];
+    try {
+      localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+    } catch {
+      localCommits = await git.log({ fs, dir: directory, ref: 'HEAD', depth: 300 });
+    }
+
+    let remoteCommits: Array<{ oid: string }> = [];
+    try {
+      remoteCommits = await git.log({ fs, dir: directory, ref: `origin/${branch}`, depth: 300 });
+    } catch {
+      remoteCommits = [];
+    }
+
+    const remoteCommitOids = new Set(remoteCommits.map(commit => commit.oid));
+    let aheadCount = 0;
+    for (const commit of localCommits) {
+      if (remoteCommitOids.has(commit.oid)) {
+        break;
+      }
+      aheadCount += 1;
+    }
+
+    return aheadCount;
+  } catch (error) {
+    console.error(`Failed to get ahead commit count: ${(error as Error).message}`);
+    return 0;
+  }
+}
+
 export async function gitGetChangedFilesForCommit(
   workspace: IWikiWorkspace,
   commitOid: string,
   parentOid?: string,
-): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+): Promise<IGitCommitFileDiffResult> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
-    const currentFiles = new Set(await git.listFiles({ fs, dir: directory, ref: commitOid }));
-    let previousFiles = new Set<string>();
-    let isShallowSnapshot = false;
-    if (parentOid) {
-      try {
-        previousFiles = new Set(await git.listFiles({ fs, dir: directory, ref: parentOid }));
-      } catch (error) {
-        const message = (error as Error).message;
-        if (message.includes('Could not find')) {
-          // Parent commit doesn't exist locally — this is a shallow clone snapshot.
-          // Return empty diff instead of treating all files as "added", which is misleading.
-          isShallowSnapshot = true;
-        } else {
-          throw error;
-        }
-      }
+    if (!parentOid) {
+      return { files: [], isShallowSnapshot: false };
     }
 
-    if (isShallowSnapshot) {
-      return [];
-    }
-
-    const allPaths = new Set<string>([...currentFiles, ...previousFiles]);
-    const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
-    for (const path of allPaths) {
-      const inCurrent = currentFiles.has(path);
-      const inPrevious = previousFiles.has(path);
-      if (inCurrent && !inPrevious) {
-        result.push({ path, type: 'add' });
-      } else if (!inCurrent && inPrevious) {
-        result.push({ path, type: 'delete' });
-      } else if (inCurrent && inPrevious) {
-        result.push({ path, type: 'modify' });
+    try {
+      await git.resolveRef({ fs, dir: directory, ref: parentOid });
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message.includes('Could not find')) {
+        return { files: [], isShallowSnapshot: true };
       }
+      throw error;
     }
-    return result.sort((left, right) => left.path.localeCompare(right.path));
+    const result = await diffCommitTrees(directory, parentOid, commitOid);
+
+    return {
+      files: result.sort((left, right) => left.path.localeCompare(right.path)),
+      isShallowSnapshot: false,
+    };
   } catch (error) {
     console.warn(`Failed to read changed files for commit ${commitOid}: ${(error as Error).message}`);
-    return [];
+    throw error;
   }
+}
+
+type GitTreeEntry = {
+  mode: string;
+  oid: string;
+  path: string;
+  type: 'blob' | 'commit' | 'tree';
+};
+
+function joinGitPath(parentPath: string, childPath: string): string {
+  return parentPath.length > 0 ? `${parentPath}/${childPath}` : childPath;
+}
+
+async function readTreeEntries(directory: string, oid: string, filepath = ''): Promise<GitTreeEntry[]> {
+  const result = await git.readTree({
+    fs,
+    dir: directory,
+    oid,
+    ...(filepath.length > 0 ? { filepath } : {}),
+  });
+  return result.tree as GitTreeEntry[];
+}
+
+async function collectTreeFiles(
+  directory: string,
+  oid: string,
+  filepath: string,
+  type: 'add' | 'delete',
+): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+  const entries = await readTreeEntries(directory, oid, filepath);
+  const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+  for (const entry of entries) {
+    const fullPath = joinGitPath(filepath, entry.path);
+    if (entry.type === 'tree') {
+      result.push(...await collectTreeFiles(directory, oid, fullPath, type));
+    } else {
+      result.push({ path: fullPath, type });
+    }
+  }
+  return result;
+}
+
+async function diffCommitTrees(
+  directory: string,
+  beforeOid: string,
+  afterOid: string,
+  filepath = '',
+): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+  const [beforeEntries, afterEntries] = await Promise.all([
+    readTreeEntries(directory, beforeOid, filepath),
+    readTreeEntries(directory, afterOid, filepath),
+  ]);
+
+  const beforeMap = new Map(beforeEntries.map(entry => [entry.path, entry]));
+  const afterMap = new Map(afterEntries.map(entry => [entry.path, entry]));
+  const entryNames = new Set([...beforeMap.keys(), ...afterMap.keys()]);
+  const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+
+  for (const entryName of entryNames) {
+    const beforeEntry = beforeMap.get(entryName);
+    const afterEntry = afterMap.get(entryName);
+    const fullPath = joinGitPath(filepath, entryName);
+
+    if (beforeEntry === undefined && afterEntry !== undefined) {
+      if (afterEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, afterOid, fullPath, 'add'));
+      } else {
+        result.push({ path: fullPath, type: 'add' });
+      }
+      continue;
+    }
+
+    if (beforeEntry !== undefined && afterEntry === undefined) {
+      if (beforeEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, beforeOid, fullPath, 'delete'));
+      } else {
+        result.push({ path: fullPath, type: 'delete' });
+      }
+      continue;
+    }
+
+    if (beforeEntry === undefined || afterEntry === undefined) {
+      continue;
+    }
+
+    if (beforeEntry.type === 'tree' && afterEntry.type === 'tree') {
+      if (beforeEntry.oid !== afterEntry.oid) {
+        result.push(...await diffCommitTrees(directory, beforeOid, afterOid, fullPath));
+      }
+      continue;
+    }
+
+    if (beforeEntry.type !== afterEntry.type) {
+      if (beforeEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, beforeOid, fullPath, 'delete'));
+      } else {
+        result.push({ path: fullPath, type: 'delete' });
+      }
+
+      if (afterEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, afterOid, fullPath, 'add'));
+      } else {
+        result.push({ path: fullPath, type: 'add' });
+      }
+      continue;
+    }
+
+    if (beforeEntry.oid !== afterEntry.oid || beforeEntry.mode !== afterEntry.mode) {
+      result.push({ path: fullPath, type: 'modify' });
+    }
+  }
+
+  return result;
 }
 
 const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);

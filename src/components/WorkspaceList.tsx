@@ -3,16 +3,16 @@ import * as Haptics from 'expo-haptics';
 import { compact } from 'lodash';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList } from 'react-native';
+import { FlatList, Pressable, StyleSheet } from 'react-native';
 import { Card, useTheme } from 'react-native-paper';
 import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
-import { gitGetUnsyncedCommitCount } from '../services/GitService';
+import { gitGetAheadCommitCount } from '../services/GitService';
 import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
 
-const getUnsyncedCommitCount = gitGetUnsyncedCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
+const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
 
 interface WorkspaceListProps {
   includeSubWikis?: boolean;
@@ -57,24 +57,30 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
       }}
     >
       <Card.Title
+        rightStyle={styles.cardTitleRight}
+        style={styles.cardTitle}
         title={title}
         subtitle={item.type === 'wiki' ? t('Sync.UnsyncedCommitCount', { count: pendingChangesCount }) : undefined}
         right={(props) => (
           <RightButtonsContainer>
             {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
-            <ItemRightIconButton
-              {...props}
+            <ItemRightButton
               testID={`workspace-settings-icon-${item.id}`}
               accessibilityLabel='workspace-settings-icon'
-              name='reorder-three-sharp'
-              color={theme.colors.onSecondaryContainer}
               onPress={() => {
                 onPressSettings?.(item);
               }}
               onLongPress={() => {
                 onReorderPress?.();
               }}
-            />
+            >
+              <Ionicons
+                {...props}
+                name='reorder-three-sharp'
+                size={24}
+                color={theme.colors.onSecondaryContainer}
+              />
+            </ItemRightButton>
           </RightButtonsContainer>
         )}
       />
@@ -155,7 +161,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
           let totalChangesCount = 0;
           for (const wikiWorkspace of relatedWikis) {
             if (isCancelled()) return;
-            totalChangesCount += await getUnsyncedCommitCount(wikiWorkspace);
+            totalChangesCount += await getAheadCommitCount(wikiWorkspace);
             await new Promise<void>(resolve => setTimeout(resolve, 0));
           }
 
@@ -234,17 +240,17 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
 const WorkspaceCard = styled(Card)`
   margin: 8px;
-  padding: 8px;
   background-color: ${({ theme }) => theme.colors.secondaryContainer};
   color: ${({ theme }) => theme.colors.onSecondaryContainer};
 `;
-const ItemRightIconButton = styled(Ionicons)`
+const ItemRightButton = styled(Pressable)`
+  min-height: 48px;
+  min-width: 48px;
   padding: 10px;
   margin-right: 10px;
+  align-items: center;
+  justify-content: center;
 `;
-ItemRightIconButton.defaultProps = {
-  size: 24,
-};
 const ListContainer = styled.View`
   display: flex;
   flex: 1;
@@ -255,3 +261,14 @@ const RightButtonsContainer = styled.View`
   justify-content: flex-end;
   align-items: center;
 `;
+
+const styles = StyleSheet.create({
+  cardTitle: {
+    minHeight: 72,
+  },
+  cardTitleRight: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    marginRight: 0,
+  },
+});

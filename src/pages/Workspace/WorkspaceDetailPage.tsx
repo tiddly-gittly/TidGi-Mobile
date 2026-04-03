@@ -10,7 +10,7 @@ import type { RootStackParameterList } from '../../App';
 import { LogViewerDialog } from '../../components/LogViewerDialog';
 import { ServerList } from '../../components/ServerList';
 import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
-import { gitGetUnsyncedCommitCount } from '../../services/GitService';
+import { gitGetAheadCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
@@ -21,7 +21,7 @@ const ActionButton = styled(Button)`
   border-radius: 8px;
 `;
 
-const getUnsyncedCommitCount = gitGetUnsyncedCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
+const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
 
 export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceDetail'>): JSX.Element {
   const { t } = useTranslation();
@@ -41,8 +41,8 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   useEffect(() => {
     if (wikiId === undefined) return;
     const timeout = setTimeout(() => {
-      void getUnsyncedCommitCount(wiki!).then(setPendingCommitCount);
-    }, 500);
+      void getAheadCommitCount(wiki!).then(setPendingCommitCount);
+    }, 1_500);
     return () => {
       clearTimeout(timeout);
     };
