@@ -16,10 +16,6 @@ const ScanQRButton = styled(Button)`
   min-height: 3em;
 `;
 
-const ButtonText = styled.Text`
-  height: 30px;
-`;
-
 const QRScannedTitle = styled(Text)`
   margin-top: 10px;
 `;
@@ -102,10 +98,10 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
         labelStyle={{ padding: ButtonLabelPadding }}
         onPress={onToggleScanner}
       >
-        <ButtonText>{t('AddWorkspace.ToggleQRCodeScanner')}</ButtonText>
+        {t('AddWorkspace.ToggleQRCodeScanner')}
       </ScanQRButton>
 
-      {qrData && (
+      {qrData && importStatus === 'idle' && (
         <>
           <QRScannedTitle variant='titleMedium'>
             {t('Import.QRCodeScanned')}

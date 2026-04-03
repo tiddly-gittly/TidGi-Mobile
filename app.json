@@ -54,7 +54,7 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to Scan QR code."
         }
       ],
-      "expo-filesystem-android-external-storage",
+      "expo-tiddlywiki-filesystem-android-external-storage",
       "./expo-plugins/trustHTTPRequests/trust-local-certs.js",
       [
         "expo-share-intent",

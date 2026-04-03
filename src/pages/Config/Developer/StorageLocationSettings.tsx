@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { Alert, AppState, type AppStateStatus, Platform, StyleSheet, View } from 'react-native';
 import { Button, Card, Text, useTheme } from 'react-native-paper';
+import { useShallow } from 'zustand/react/shallow';
 import { WIKI_FOLDER_PATH } from '../../../constants/paths';
 import {
   checkStorageWriteAccessAsync,
@@ -23,8 +24,8 @@ import { useOpenDirectory } from './useOpenDirectory';
 export function StorageLocationSettings() {
   const { t } = useTranslation();
   const theme = useTheme();
-  const customWikiFolderPath = useWorkspaceStore((state) => state.customWikiFolderPath);
-  const setCustomWikiFolderPath = useWorkspaceStore((state) => state.setCustomWikiFolderPath);
+  // Combine multiple selector calls into a single useShallow call
+  const [customWikiFolderPath, setCustomWikiFolderPath] = useWorkspaceStore(useShallow((state) => [state.customWikiFolderPath, state.setCustomWikiFolderPath]));
   const { openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
   const effectivePath = customWikiFolderPath ?? WIKI_FOLDER_PATH;
   const isUsingExternal = customWikiFolderPath !== null;

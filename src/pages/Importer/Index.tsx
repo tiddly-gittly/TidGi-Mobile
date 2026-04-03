@@ -1,8 +1,9 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
+import * as Clipboard from 'expo-clipboard';
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert } from 'react-native';
+import { Alert, Pressable } from 'react-native';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -46,6 +47,9 @@ const ImportStatusText = styled.Text`
   width: 100%;
   display: flex;
   flex-direction: row;
+`;
+const HintText = styled(Text)`
+  opacity: 0.65;
 `;
 const WorkspaceNameInput = styled(TextInput)`
   margin-top: 10px;
@@ -267,6 +271,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     resetState,
     status: importStatus,
     error: importError,
+    errorKind: importErrorKind,
     cloneProgress,
     createdWorkspace: createdWikiWorkspace,
     batchProgress,
@@ -276,6 +281,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
+
+    setManualEdit(false);
+    setShowSavedServers(false);
+    setQrScannerOpen(false);
 
     if (addAsServer) {
       const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
@@ -386,7 +395,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   return (
     <Container testID='importer-screen'>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
-      {autoStartImport !== true && serverConfigs}
+      {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
       {importStatus === 'idle' && !qrScannerOpen && qrData && (
         <>
           <WorkspaceNameInput
@@ -415,6 +424,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <>
               <Text variant='titleSmall'>
                 {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
+                {batchProgress.currentName ? ` — ${batchProgress.currentName}` : ''}
               </Text>
               <ProgressBar
                 animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
@@ -427,26 +437,79 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             ? (
               <>
                 <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
-                <Text variant='bodySmall'>{cloneProgress.phase}: {cloneProgress.loaded} / {cloneProgress.total}</Text>
+                {cloneProgress.phase !== '' && (
+                  <Text variant='bodySmall'>
+                    {cloneProgress.phase === 'Creating work tree'
+                      ? t('Import.Phase.CreatingWorkTree')
+                      : cloneProgress.phase === 'Downloading pack'
+                      ? t('Import.Phase.DownloadingPack')
+                      : cloneProgress.phase === 'Receiving pack data'
+                      ? t('Import.Phase.ReceivingPackData')
+                      : cloneProgress.phase.startsWith('Indexing pack')
+                      ? t('Import.Phase.IndexingPack')
+                      : cloneProgress.phase.startsWith('Reconnecting')
+                      ? t('Import.Phase.Reconnecting')
+                      : cloneProgress.phase.startsWith('Checking server')
+                      ? t('Import.Phase.CheckingCapabilities')
+                      : cloneProgress.phase.startsWith('Downloading archive')
+                      ? t('Import.Phase.DownloadingArchive')
+                      : cloneProgress.phase.startsWith('Extracting')
+                      ? t('Import.Phase.ExtractingFiles')
+                      : cloneProgress.phase}
+                    {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
+                  </Text>
+                )}
+                {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
+                {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
+                {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
+                {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
+                {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
+                {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
                 <ProgressBar
                   animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+                  indeterminate={cloneProgress.total === 0}
                   color={MD3Colors.primary40}
                 />
               </>
             )
             : (
               <ImportStatusText>
-                <Text>{t('Loading')} {importStatus}</Text>
+                <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
               </ImportStatusText>
             )}
         </>
       )}
       {importStatus === 'error' && (
         <>
-          <ImportStatusText style={{ color: MD3Colors.error50 }}>
-            <Text>{t('ErrorMessage')}{' '}</Text>
-            {importError}
-          </ImportStatusText>
+          {importErrorKind === 'oom' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.OOM')}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'tooLarge' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'connectionAbort' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.ConnectionAbort')}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'generic' && (
+            <Pressable
+              onLongPress={() => {
+                if (importError) {
+                  void Clipboard.setStringAsync(importError);
+                  Alert.alert(t('Import.Error.CopiedToClipboard'));
+                }
+              }}
+            >
+              <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                <Text selectable>{t('ErrorMessage')} {importError}</Text>
+              </ImportStatusText>
+            </Pressable>
+          )}
           <Button
             mode='elevated'
             onPress={resetState}

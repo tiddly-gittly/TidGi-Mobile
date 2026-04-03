@@ -10,7 +10,7 @@ import type { RootStackParameterList } from '../../App';
 import { LogViewerDialog } from '../../components/LogViewerDialog';
 import { ServerList } from '../../components/ServerList';
 import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
-import { gitGetUnsyncedCommitCount } from '../../services/GitService';
+import { gitGetAheadCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
@@ -21,13 +21,13 @@ const ActionButton = styled(Button)`
   border-radius: 8px;
 `;
 
-const getUnsyncedCommitCount = gitGetUnsyncedCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
+const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
 
 export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceDetail'>): JSX.Element {
   const { t } = useTranslation();
   const wiki = useWikiWorkspace(route.params.id);
-  const removeWorkspace = useWorkspaceStore(state => state.remove);
-  const setServerActive = useWorkspaceStore(state => state.setServerActive);
+  // Combine multiple selector calls into a single useShallow call
+  const [removeWorkspace, setServerActive] = useWorkspaceStore(useShallow(state => [state.remove, state.setServerActive]));
   const allWorkspaces = useWorkspaceStore(useShallow(state => state.workspaces));
   const [pendingCommitCount, setPendingCommitCount] = useState(0);
   const [expandServerList, setExpandServerList] = useState(false);
@@ -40,7 +40,12 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const wikiId = wiki?.id;
   useEffect(() => {
     if (wikiId === undefined) return;
-    void getUnsyncedCommitCount(wiki!).then(setPendingCommitCount);
+    const timeout = setTimeout(() => {
+      void getAheadCommitCount(wiki!).then(setPendingCommitCount);
+    }, 1_500);
+    return () => {
+      clearTimeout(timeout);
+    };
   }, [wikiId]);
 
   if (!wiki) {

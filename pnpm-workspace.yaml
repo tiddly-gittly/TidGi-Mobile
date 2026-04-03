@@ -8,6 +8,10 @@ onlyBuiltDependencies:
   - dprint
   - dtrace-provider
   - esbuild
+  - expo-tiddlywiki-filesystem-android-external-storage
   - less
   - svelte-preprocess
   - unrs-resolver
+
+patchedDependencies:
+  isomorphic-git: patches/isomorphic-git.patch

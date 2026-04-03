@@ -171,7 +171,7 @@
     "ServerList": "服务器列表",
     "ToggleServerList": "服务器列表",
     "ToggleQRCodeScanner": "二维码扫描器开关",
-    "OpenChangeLogList": "打开变更记录列表",
+    "OpenChangeLogList": "打开提交历史",
     "PageUrl": "页面地址",
     "AddWebPageWorkspace": "新增网页工作区",
     "Reset": "重置",
@@ -342,6 +342,7 @@
     "TokenDescription": "用于向Git服务器验证身份并同步内容的凭证，可通过登录在线存储服务（如Github）来取得，也可以手动获取「Personal Access Token」后填到这里。",
     "Shared": "分享",
     "Sync": "同步和备份",
+    "StorageLocation": "存储位置",
     "SyncInterval": "同步/备份间隔",
     "SyncIntervalDescription": "每经过这段长度的时间后，就会自动开始备份到 Github，如果工作区是本地工作区则会创建本地备份（重启后生效）",
     "General": "界面和交互",
@@ -472,7 +473,8 @@
     "HideStatusBar": "隐藏状态栏",
     "HideStatusBarDescription": "完全隐藏状态栏，隐藏后可以获得更多展示空间，但打开状态栏可能需要额外操作。在刘海屏挖孔屏上不生效。",
     "AndroidHardwareAcceleration": "安卓硬件加速",
-    "AndroidHardwareAccelerationDescription": "开启后可能可以解决有的机型上白屏或后台放久了页面崩溃的问题，但会降低性能并导致无法加载视频。"
+    "AndroidHardwareAccelerationDescription": "开启后可能可以解决有的机型上白屏或后台放久了页面崩溃的问题，但会降低性能并导致无法加载视频。",
+    "SearchSettings": "搜索设置..."
   },
   "Error": {
     "InitWikiGitError": "E-1 笔记仓库初始化失败错误",
@@ -547,7 +549,34 @@
     "QRCodeParseError": "无法解析二维码",
     "QRCodeInvalidFormat": "无效的二维码格式",
     "ServerTokenProtected": "Token 安全保护",
-    "ServerTokenProtectedMessage": "此服务器已启用 Token 认证保护，无法通过网络自动获取配置。请在太记桌面版扫描二维码进行安全导入。"
+    "ServerTokenProtectedMessage": "此服务器已启用 Token 认证保护，无法通过网络自动获取配置。请在太记桌面版扫描二维码进行安全导入。",
+    "Error": {
+      "OOM": "导入失败：Wiki 太大，超出了手机可用内存。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。如果 Wiki 包含大量附件，建议改用外链方式存储附件。",
+      "TooLarge": "导入失败：Wiki 预估大小为 {{mb}} MB，超过手机安全限制（约 80 MB）。\n\n请在桌面端删除大型图片附件或二进制文件后再尝试导入。",
+      "ConnectionAbort": "导入失败：网络连接被中断，可能是因为应用被切换到后台。\n\n请在导入过程中保持应用在前台，然后重试。",
+      "CopiedToClipboard": "错误信息已复制到剪贴板"
+    },
+    "Status": {
+      "Creating": "正在创建工作区..."
+    },
+    "Phase": {
+      "Connecting": "正在连接仓库服务...",
+      "Downloading": "正在下载对象数据...",
+      "DownloadingPack": "正在下载数据包",
+      "DownloadingPackHint": "正在从服务器下载完整数据，大型 Wiki 可能需要较长时间...",
+      "ReceivingPackData": "正在接收数据包",
+      "ReceivingPackDataHint": "正在从服务器接收完整数据，大型 Wiki 可能需要较长时间...",
+      "IndexingPack": "正在处理数据包",
+      "IndexingPackHint": "正在解压和索引 Git 对象，这可能需要几分钟。应用可能会更新缓慢，请耐心等待。",
+      "CreatingWorkTree": "正在将文件写入磁盘",
+      "CreatingWorkTreeHint": "大型 Wiki 可能需要几分钟，请耐心等待。",
+      "Reconnecting": "连接中断，正在重新连接",
+      "CheckingCapabilities": "正在检查服务器功能",
+      "DownloadingArchive": "正在下载归档文件",
+      "DownloadingArchiveHint": "正在以归档格式下载完整 Wiki，这比 git clone 快得多。如果中断可以自动恢复。",
+      "ExtractingFiles": "正在解压文件",
+      "ExtractingFilesHint": "正在将归档解压到磁盘。大多数 Wiki 只需几秒。"
+    }
   },
   "ConfirmDelete": "是否删除？",
   "ConfirmDeleteDescription": "此操作无法撤销。",
@@ -597,12 +626,14 @@
   },
   "GitHistory": {
     "Refresh": "刷新 Git 历史",
+    "LoadUncommitted": "加载未提交变更",
     "Uncommitted": "未提交变更",
     "Commits": "提交历史",
     "CommitDetails": "提交详情",
     "FilePreview": "文件预览",
     "Files": "变更文件",
     "NoFiles": "没有文件变更",
+    "ShallowCloneSnapshot": "浅克隆快照 — 父提交不在本地，这是首次导入时的初始状态。",
     "DiscardChanges": "撤销变更"
   },
   "SubWiki": {

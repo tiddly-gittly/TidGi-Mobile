@@ -1,0 +1,46 @@
+diff --git a/index.cjs b/index.cjs
+index 1427f0d6bb5bda6e78f08881ba9dc30e97872e2d..3bdfe1a70d1def98323a19e6562b2c76b990c662 100644
+--- a/index.cjs
++++ b/index.cjs
+@@ -3110,6 +3110,8 @@ class GitPackIndex {
+             total: totalObjectCount,
+           });
+         }
++        // Yield to the event loop every 1% to keep the UI responsive.
++        await new Promise(resolve => setTimeout(resolve, 0));
+       }
+       lastPercent = percent;
+       // Change type from a number to a meaningful string
+@@ -3169,6 +3171,9 @@ class GitPackIndex {
+             total: totalObjectCount,
+           });
+         }
++        // Yield to the event loop every 1% to keep the UI responsive
++        // on mobile devices where this loop can take minutes.
++        await new Promise(resolve => setTimeout(resolve, 0));
+       }
+       count++;
+       lastPercent = percent;
+diff --git a/index.js b/index.js
+index cc837e41581f6e24f76d3d31a38ebbb986ec04bc..2336870075c5e7fd4e9316d53c92b01829ed876c 100644
+--- a/index.js
++++ b/index.js
+@@ -3104,6 +3104,8 @@ class GitPackIndex {
+             total: totalObjectCount,
+           });
+         }
++        // Yield to the event loop every 1% to keep the UI responsive.
++        await new Promise(resolve => setTimeout(resolve, 0));
+       }
+       lastPercent = percent;
+       // Change type from a number to a meaningful string
+@@ -3163,6 +3165,9 @@ class GitPackIndex {
+             total: totalObjectCount,
+           });
+         }
++        // Yield to the event loop every 1% to keep the UI responsive
++        // on mobile devices where this loop can take minutes.
++        await new Promise(resolve => setTimeout(resolve, 0));
+       }
+       count++;
+       lastPercent = percent;

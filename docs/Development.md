@@ -22,11 +22,20 @@ The development App is Expo Go, so it won't overwrite your production TidGi-Mobi
 
 ### Dev app with native features
 
-```sh
-pnpm build:expo-sdk
-```
+Native changes are not built locally with EAS anymore.
 
-This will use EAS to create an Expo Go that has our native features.
+Use the GitHub Actions workflow at [.github/workflows/build-dev-client.yml](.github/workflows/build-dev-client.yml):
+
+1. Push a branch and open a PR against `master` or `main`, or push a `v*.*.*` tag.
+2. Wait for the `Build Dev Client APK` workflow to finish.
+3. Download the dev-client APKs from the workflow artifact named `dev-client-apks-...`.
+
+The uploaded artifact contains:
+
+- `app-release-dev-client.apk`
+- `app-debug-androidTest.apk`
+
+Install the dev-client APK on the device before starting Metro if you need native-module changes.
 
 ### Update build-in tiddlywiki plugins
 
@@ -36,17 +45,11 @@ The generated `.html` file should be commit to the git.
 
 ## Release
 
-Update version number in `app.json`, and tag commit with `eas-vx.x.x`, then it will use eas cli to ask EAS to build the apk.
+For dev-client builds, use CI artifacts from the `Build Dev Client APK` workflow.
 
-You cal also run this locally to test it.
+For tagged release builds, follow the repository release workflow and let GitHub Actions produce the artifacts from tags instead of running local EAS builds.
 
-```sh
-pnpm build:android-apk
-```
-
-This will use Expo's EAS to build. It only have limited free tries, so be sure tested locally before run this. But this needs secrets like `./@tiddly-gittly__tidgi-mobile.jks`, that only exists in maintainer's side.
-
-Build the api in the github action can be triggered by tagging `fdroid-v*.*.*`, but this is still a WIP.
+Agent should use Github CLI to wait for CI completion or fail, in a blocking way.
 
 ## Debug after build
 

@@ -38,8 +38,11 @@ export interface IWorkspaceSettingsProps {
 
 export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) => {
   const { t } = useTranslation();
-  const [config, setConfig] = useState<ITidgiConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [config, setConfig] = useState<ITidgiConfig>({
+    name: workspace.name,
+    tagNames: [],
+    includeTagTree: false,
+  });
   const { openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
 
   // Load config
@@ -50,14 +53,6 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
         setConfig(loadedConfig);
       } catch (error) {
         console.error('Failed to load tidgi.config.json:', error);
-        // Initialize with defaults
-        setConfig({
-          name: workspace.name,
-          tagNames: [],
-          includeTagTree: false,
-        });
-      } finally {
-        setLoading(false);
       }
     };
     void loadConfig();
@@ -65,8 +60,6 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
 
   // Save config
   const handleSave = useCallback(async () => {
-    if (config === null) return;
-
     try {
       await writeTidgiConfig(workspace, {
         name: config.name,
@@ -83,14 +76,6 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
       alert(t('Settings.SaveFailed'));
     }
   }, [config, workspace, t]);
-
-  if (loading || config === null) {
-    return (
-      <Container>
-        <Text>{t('Loading')}</Text>
-      </Container>
-    );
-  }
 
   return (
     <Container>

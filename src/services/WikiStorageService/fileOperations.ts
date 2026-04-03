@@ -8,7 +8,7 @@
  */
 
 import { Directory, File } from 'expo-file-system';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 
 function isExternalPath(filepath: string): boolean {
   const plain = toPlainPath(filepath);

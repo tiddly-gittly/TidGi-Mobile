@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
@@ -14,7 +14,12 @@ interface ModalProps {
 
 export function WebPageEditModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
-  const page = useWorkspaceStore(state => id === undefined ? undefined : state.workspaces.find((w): w is IPageWorkspace => w.id === id && w.type === 'webpage'));
+  // Use useShallow + useMemo to avoid re-renders from .find() recreation
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+  const page = useMemo(
+    () => id === undefined ? undefined : workspaces.find((w): w is IPageWorkspace => w.id === id && w.type === 'webpage'),
+    [id, workspaces],
+  );
   const [updatePage, deletePage] = useWorkspaceStore(useShallow(state => [state.update, state.remove]));
   const [editedName, setEditedName] = useState(page?.name ?? '');
   const [editedUri, setEditedUri] = useState(page?.uri ?? '');

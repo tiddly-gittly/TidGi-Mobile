@@ -87,10 +87,20 @@ export const App: React.FC = () => {
                 name='Config'
                 component={Config}
                 options={({ navigation }) => ({
-                  presentation: 'modal' as const,
                   headerTitle: t('Preference.Title'),
                   headerTitleStyle: { color: theme.colors.primary },
-                  headerLeft: () => <HeaderBackButton label={t('Menu.Back')} onPress={navigation.goBack} />,
+                  headerLeft: () => (
+                    <HeaderBackButton
+                      label={t('Menu.Back')}
+                      onPress={() => {
+                        if (navigation.canGoBack()) {
+                          navigation.goBack();
+                          return;
+                        }
+                        navigation.navigate('MainMenu');
+                      }}
+                    />
+                  ),
                 })}
               />
               <Stack.Screen

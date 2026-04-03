@@ -156,7 +156,7 @@
     "ServerList": "Server List",
     "ToggleServerList": "Toggle Server List",
     "ToggleQRCodeScanner": "Toggle QRCode Scanner",
-    "OpenChangeLogList": "Open Change Log List",
+    "OpenChangeLogList": "Open Commit History",
     "PageUrl": "Page Url",
     "AddWebPageWorkspace": "Add WebPage Workspace",
     "Reset": "Reset",
@@ -446,10 +446,12 @@
     "HideStatusBar": "Hide Status Bar",
     "HideStatusBarDescription": "Completely hide the status bar, more display space is available when hidden, but opening the status bar may require additional action. Does not take effect on bangs screen dig hole screen.",
     "AndroidHardwareAcceleration": "Android Hardware Acceleration",
-    "AndroidHardwareAccelerationDescription": "Enabling it may potentially solve the issues of white screens on some device models or page crashes after being left in the background for a long time. However, it will reduce performance and cause videos to fail to load."
+    "AndroidHardwareAccelerationDescription": "Enabling it may potentially solve the issues of white screens on some device models or page crashes after being left in the background for a long time. However, it will reduce performance and cause videos to fail to load.",
+    "SearchSettings": "Search settings..."
   },
   "GitHistory": {
     "Refresh": "Refresh Git History",
+    "LoadUncommitted": "Load Uncommitted Changes",
     "Uncommitted": "Uncommitted Changes",
     "Commits": "Commits",
     "CommitDetails": "Commit Details",
@@ -537,7 +539,9 @@
     "TagForSharedContent": "Tag for shared content",
     "Clipped": "Clipped",
     "FastImport": "Fast Import",
-    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in “Recent”."
+    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in \u201cRecent\u201d.",
+    "SaveMediaAsAttachment": "Save Media as Attachment",
+    "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content."
   },
   "Description": "Description",
   "Tags": "Tags",
@@ -566,7 +570,34 @@
     "QRCodeParseError": "Failed to parse QR code",
     "QRCodeInvalidFormat": "Invalid QR code format",
     "ServerTokenProtected": "Token Protected",
-    "ServerTokenProtectedMessage": "This server is protected by an authentication token. Please scan the QR code from TidGi Desktop to import securely."
+    "ServerTokenProtectedMessage": "This server is protected by an authentication token. Please scan the QR code from TidGi Desktop to import securely.",
+    "Error": {
+      "OOM": "Import failed: Wiki is too large for this device's available memory.\n\nPlease remove large image attachments or binary files on Desktop, then try again. Consider using external links for large attachments.",
+      "TooLarge": "Import failed: Wiki estimated size is {{mb}} MB, which exceeds the safe limit (~80 MB).\n\nPlease remove large image attachments or binary files on Desktop, then try again.",
+      "ConnectionAbort": "Import failed: The network connection was interrupted, possibly because the app was moved to the background.\n\nPlease keep the app in the foreground during import and try again.",
+      "CopiedToClipboard": "Error message copied to clipboard"
+    },
+    "Status": {
+      "Creating": "Setting up workspace..."
+    },
+    "Phase": {
+      "Connecting": "Connecting to repository service...",
+      "Downloading": "Downloading objects...",
+      "DownloadingPack": "Downloading pack data",
+      "DownloadingPackHint": "Downloading full data from server, large wikis may take a while...",
+      "ReceivingPackData": "Receiving pack data",
+      "ReceivingPackDataHint": "Receiving full data from server, large wikis may take a while...",
+      "IndexingPack": "Processing pack data",
+      "IndexingPackHint": "Decompressing and indexing Git objects. This may take several minutes. The app may become less responsive.",
+      "CreatingWorkTree": "Writing files to disk",
+      "CreatingWorkTreeHint": "This may take several minutes for large wikis.",
+      "Reconnecting": "Reconnecting after interruption",
+      "CheckingCapabilities": "Checking server capabilities",
+      "DownloadingArchive": "Downloading archive",
+      "DownloadingArchiveHint": "Downloading the complete wiki as an archive. This is much faster than git clone. Supports resume if interrupted.",
+      "ExtractingFiles": "Extracting files",
+      "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis."
+    }
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -622,6 +653,7 @@
     "FilePreview": "File Preview",
     "Files": "Changed Files",
     "NoFiles": "No changed files",
+    "ShallowCloneSnapshot": "Shallow clone snapshot — parent commit not available locally. This is the initial import state.",
     "DiscardChanges": "Discard"
   },
   "SubWiki": {

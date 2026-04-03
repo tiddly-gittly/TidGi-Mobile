@@ -3,16 +3,16 @@ import * as Haptics from 'expo-haptics';
 import { compact } from 'lodash';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList } from 'react-native';
+import { FlatList, Pressable, StyleSheet } from 'react-native';
 import { Card, useTheme } from 'react-native-paper';
 import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
-import { gitGetUnsyncedCommitCount } from '../services/GitService';
+import { gitGetAheadCommitCount } from '../services/GitService';
 import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
 
-const getUnsyncedCommitCount = gitGetUnsyncedCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
+const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
 
 interface WorkspaceListProps {
   includeSubWikis?: boolean;
@@ -57,24 +57,30 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
       }}
     >
       <Card.Title
+        rightStyle={styles.cardTitleRight}
+        style={styles.cardTitle}
         title={title}
         subtitle={item.type === 'wiki' ? t('Sync.UnsyncedCommitCount', { count: pendingChangesCount }) : undefined}
         right={(props) => (
           <RightButtonsContainer>
             {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
-            <ItemRightIconButton
-              {...props}
+            <ItemRightButton
               testID={`workspace-settings-icon-${item.id}`}
               accessibilityLabel='workspace-settings-icon'
-              name='reorder-three-sharp'
-              color={theme.colors.onSecondaryContainer}
               onPress={() => {
                 onPressSettings?.(item);
               }}
               onLongPress={() => {
                 onReorderPress?.();
               }}
-            />
+            >
+              <Ionicons
+                {...props}
+                name='reorder-three-sharp'
+                size={24}
+                color={theme.colors.onSecondaryContainer}
+              />
+            </ItemRightButton>
           </RightButtonsContainer>
         )}
       />
@@ -125,7 +131,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
   const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, number>>({});
 
   const subWikisByMainWikiID = useMemo(() => {
-    const accumulator: Record<string, IWikiWorkspace[]> = {};
+    const accumulator: Partial<Record<string, IWikiWorkspace[]>> = {};
     for (const workspace of allWorkspacesList) {
       if (workspace.type !== 'wiki' || workspace.isSubWiki !== true || typeof workspace.mainWikiID !== 'string') continue;
       const list = accumulator[workspace.mainWikiID] ?? [];
@@ -137,30 +143,44 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
   useEffect(() => {
     if (!isFocused) return;
+    const cancellationState = { cancelled: false };
+    const isCancelled = () => cancellationState.cancelled;
+
     const run = () => {
-      void Promise.all(workspacesList.map(async (workspace) => {
-        if (workspace.type !== 'wiki') return { id: workspace.id, count: 0 };
+      void (async () => {
+        const nextMap: Record<string, number> = {};
 
-        const relatedWikis = [workspace, ...(subWikisByMainWikiID[workspace.id] ?? [])];
-        const counts = await Promise.all(relatedWikis.map(async (wikiWorkspace) => {
-          return await getUnsyncedCommitCount(wikiWorkspace);
-        }));
+        for (const workspace of workspacesList) {
+          if (isCancelled()) return;
+          if (workspace.type !== 'wiki') {
+            nextMap[workspace.id] = 0;
+            continue;
+          }
 
-        const totalChangesCount = counts.reduce((sum, value) => sum + value, 0);
-        return { id: workspace.id, count: totalChangesCount };
-      })).then((results) => {
-        const nextMap = results.reduce<Record<string, number>>((accumulator, item) => {
-          accumulator[item.id] = item.count;
-          return accumulator;
-        }, {});
-        setPendingChangesCountMap(nextMap);
-      });
+          const relatedWikis = [workspace, ...(subWikisByMainWikiID[workspace.id] ?? [])];
+          let totalChangesCount = 0;
+          for (const wikiWorkspace of relatedWikis) {
+            if (isCancelled()) return;
+            totalChangesCount += await getAheadCommitCount(wikiWorkspace);
+            await new Promise<void>(resolve => setTimeout(resolve, 0));
+          }
+
+          nextMap[workspace.id] = totalChangesCount;
+          setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: totalChangesCount }));
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+        }
+
+        if (!isCancelled()) {
+          setPendingChangesCountMap(nextMap);
+        }
+      })();
     };
 
     const idleTask = globalThis.requestIdleCallback;
     if (typeof idleTask === 'function') {
       const idleHandle = idleTask(run);
       return () => {
+        cancellationState.cancelled = true;
         if (typeof globalThis.cancelIdleCallback === 'function') {
           globalThis.cancelIdleCallback(idleHandle);
         }
@@ -172,6 +192,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
     // keep Espresso in "not idle" state and prevent any Detox interaction).
     const timeout = setTimeout(run, 5_000);
     return () => {
+      cancellationState.cancelled = true;
       clearTimeout(timeout);
     };
   }, [isFocused, subWikisByMainWikiID, workspacesList]);
@@ -219,17 +240,17 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
 const WorkspaceCard = styled(Card)`
   margin: 8px;
-  padding: 8px;
   background-color: ${({ theme }) => theme.colors.secondaryContainer};
   color: ${({ theme }) => theme.colors.onSecondaryContainer};
 `;
-const ItemRightIconButton = styled(Ionicons)`
+const ItemRightButton = styled(Pressable)`
+  min-height: 48px;
+  min-width: 48px;
   padding: 10px;
   margin-right: 10px;
+  align-items: center;
+  justify-content: center;
 `;
-ItemRightIconButton.defaultProps = {
-  size: 24,
-};
 const ListContainer = styled.View`
   display: flex;
   flex: 1;
@@ -240,3 +261,14 @@ const RightButtonsContainer = styled.View`
   justify-content: flex-end;
   align-items: center;
 `;
+
+const styles = StyleSheet.create({
+  cardTitle: {
+    minHeight: 72,
+  },
+  cardTitleRight: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    marginRight: 0,
+  },
+});

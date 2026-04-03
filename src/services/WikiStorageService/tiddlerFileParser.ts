@@ -247,22 +247,36 @@ export function makeSkinnyTiddler(fields: ITiddlerFields): Omit<ITiddlerFields, 
 }
 
 /**
+ * Tiddlers that must keep full text even during quick load, otherwise boot can
+ * end up with empty module registrations or missing startup state.
+ */
+export function shouldPreserveFullTextInQuickLoad(fields: ITiddlerFields): boolean {
+  const title = fields.title;
+  const type = fields.type;
+
+  if (title.startsWith('$:/')) {
+    return true;
+  }
+
+  if (type === 'application/json' && fields['plugin-type']) {
+    return true;
+  }
+
+  if ((fields as Record<string, unknown>)['module-type']) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Check if tiddler should be saved with full text in the initial boot store.
  * System tiddlers, plugins, and small tiddlers should include text.
  * `estimatedTextLength` can be provided from header-only parsing to avoid
  * reading the full body just to measure its size.
  */
 export function shouldSaveFullTiddler(fields: ITiddlerFields, estimatedTextLength?: number): boolean {
-  const title = fields.title;
-  const type = fields.type;
-
-  // System tiddlers
-  if (title.startsWith('$:/')) {
-    return true;
-  }
-
-  // Plugins
-  if (type === 'application/json' && fields['plugin-type']) {
+  if (shouldPreserveFullTextInQuickLoad(fields)) {
     return true;
   }
 

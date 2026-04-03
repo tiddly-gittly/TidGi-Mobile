@@ -5,7 +5,7 @@
 
 import { Buffer } from 'buffer';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import git from 'isomorphic-git';
 import pTimeout from 'p-timeout';
 import { Platform } from 'react-native';
@@ -20,10 +20,85 @@ if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
 
+// ─── Runtime detection of new native streaming API ────────────────────
+// Added in expo-tiddlywiki-filesystem-android-external-storage@1.0.6
+interface HttpPostToFileResult {
+  statusCode: number;
+  headers: Record<string, string>;
+  bytesWritten: number;
+}
+
+interface ReadFileChunkResult {
+  data: string; // Base64
+  bytesRead: number;
+}
+
+interface IExternalStorageExtended {
+  httpPostToFile(
+    url: string,
+    headers: Record<string, string>,
+    bodyBase64: string,
+    destinationPath: string,
+    contentType: string,
+  ): Promise<HttpPostToFileResult>;
+  readFileChunk(path: string, offset: number, length: number): Promise<ReadFileChunkResult>;
+  deleteFile(path: string): Promise<void>;
+  appendFileBase64(path: string, base64Content: string, truncateFirst: boolean): Promise<void>;
+}
+
+/**
+ * Whether the native `ExternalStorage.httpPostToFile` streaming method is
+ * available.  On iOS or when the native module isn't linked this will be false
+ * and we fall back to the regular `fetch()` path (which may OOM on very large
+ * repos).
+ */
+const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).httpPostToFile === 'function' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).deleteFile === 'function';
+
+/**
+ * Whether the native `ExternalStorage.appendFileBase64` chunked-write method
+ * is available.  When true we can stream large binary data to disk in small
+ * chunks without ever allocating the full base64 string or decoded byte array
+ * in the JVM heap — preventing OOM for 50+ MB git pack files.
+ */
+const hasNativeAppendFile: boolean = Platform.OS === 'android' &&
+  typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).appendFileBase64 === 'function';
+
+/** 64 KB — chunk size for streaming the HTTP temp file back into JS. */
+const FILE_CHUNK_SIZE = 64 * 1024;
+
+/**
+ * 2 MB — chunk size for reading large files (e.g. pack files) back into JS
+ * via readFileChunk.  Larger than FILE_CHUNK_SIZE to reduce bridge
+ * round-trips: 116 MB / 2 MB = 58 calls vs 116 MB / 64 KB = 1,812 calls.
+ */
+const LARGE_READ_CHUNK_SIZE = 2 * 1024 * 1024;
+
+/**
+ * 2 MB — files larger than this threshold are written in chunks via
+ * `appendFileBase64` to avoid allocating the full base64 string + decoded
+ * byte array in JVM heap simultaneously (which causes OOM for 50+ MB files).
+ */
+const STREAMING_WRITE_THRESHOLD = 2 * 1024 * 1024;
+
 /**
  * Whether a file:// URI (or plain path) points to external/shared storage
  * and needs to go through the raw native module instead of Expo FS.
  */
+/**
+ * Module-level hooks for progress reporting during git clone.
+ *
+ * - `onLargeFileRead`: called by readFile when a large binary file finishes
+ *   reading (for pack files stored on disk).
+ * - `onPackStreamConsumed`: called by the file chunk iterator when all HTTP
+ *   response data has been read.  This is the LAST async point before
+ *   isomorphic-git starts CPU-intensive synchronous pack indexing.
+ */
+let onLargeFileRead: ((filepath: string, sizeBytes: number) => void) | undefined;
+let onPackStreamConsumed: ((totalBytes: number) => void) | undefined;
+
 function isExternalPath(filepath: string): boolean {
   // path.join('file:///storage/...', 'x') collapses the triple slash to 'file:/storage/...'
   // so we also strip that single-slash variant.
@@ -37,13 +112,83 @@ function isExternalPath(filepath: string): boolean {
  * re-add the scheme before calling any FileSystemLegacy API.
  */
 function toFileUri(plainPath: string): string {
-  if (plainPath.startsWith('file://')) return plainPath;
-  return `file://${plainPath}`;
+  const uri = plainPath.startsWith('file://') ? plainPath : `file://${plainPath}`;
+  try {
+    return encodeURI(decodeURI(uri));
+  } catch {
+    return encodeURI(uri);
+  }
 }
 
 const CHECKOUT_BATCH_SIZE = 200;
 const NATIVE_WRITE_BATCH_SIZE = 64;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
+
+// React Native's fetch (OkHttp) buffers the entire HTTP response in the JVM heap
+// before exposing it to JavaScript via JSI. On mid-range Android devices the Hermes
+// heap has ~80-100 MB available for a single allocation after app baseline usage.
+// Packs larger than this will cause an OOM crash during clone.
+const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
+
+/** Structured sentinels thrown by gitClone so callers can show targeted UI. */
+export const GIT_CLONE_ERROR_OOM = 'WIKI_OOM';
+export const GIT_CLONE_ERROR_TOO_LARGE_PREFIX = 'WIKI_TOO_LARGE:';
+
+// Detect Android/Hermes OOM patterns in error messages.
+function isOOMError(message: string): boolean {
+  return (
+    message.includes('Failed to allocate') ||
+    message.includes('OutOfMemoryError') ||
+    message.includes('growth limit') ||
+    /out of memory/i.test(message)
+  );
+}
+
+/**
+ * Detect connection-abort errors typically caused by Android suspending the app
+ * (user switches to another app, screen off, etc.) which kills the TCP socket.
+ */
+export const GIT_CLONE_ERROR_CONNECTION_ABORT = 'WIKI_CONNECTION_ABORT';
+function isConnectionAbortError(message: string): boolean {
+  return (
+    message.includes('SocketException') ||
+    message.includes('connection abort') ||
+    message.includes('Connection reset') ||
+    message.includes('Software caused connection abort') ||
+    message.includes('network request failed') ||
+    message.includes('ECONNRESET') ||
+    message.includes('ECONNABORTED') ||
+    message.includes('The Internet connection appears to be offline')
+  );
+}
+
+/** Maximum number of automatic retries for connection-abort during clone. */
+const CLONE_MAX_RETRIES = 2;
+/** Delay (ms) before retrying clone after a connection abort. */
+const CLONE_RETRY_DELAY_MS = 3_000;
+
+/**
+ * Query the TidGi Desktop optional pack-size endpoint before downloading.
+ * Returns estimated bytes, or null when the endpoint is not available
+ * (Desktop < the version that added this endpoint — silently skips).
+ */
+async function tryGetRemotePackSize(
+  repoUrl: string,
+  headers: Record<string, string>,
+): Promise<number | null> {
+  try {
+    const sizeUrl = `${repoUrl}/pack-size`;
+    const response = await pTimeout(fetch(sizeUrl, { method: 'GET', headers }), {
+      milliseconds: 5_000,
+      message: new Error('pack-size check timeout'),
+    });
+    if (!response.ok) return null; // endpoint not available yet
+    const data = (await response.json()) as { estimatedBytes?: number };
+    return typeof data.estimatedBytes === 'number' ? data.estimatedBytes : null;
+  } catch {
+    return null; // non-fatal, proceed with clone
+  }
+}
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
 
 interface INativeWriteTask {
@@ -53,20 +198,27 @@ interface INativeWriteTask {
   resolve: () => void;
 }
 
-let pendingNativeWriteTasks: INativeWriteTask[] = [];
+const pendingNativeWriteTasks: INativeWriteTask[] = [];
 let nativeWriteFlushScheduled = false;
 let nativeWriteFlushPromise: Promise<void> | undefined;
 
 function canUseAndroidNativeBatchWrite(filepath: string): boolean {
-  return Platform.OS === 'android'
-    && isExternalPath(filepath)
-    && typeof ExternalStorage.writeFilesBase64 === 'function';
+  // Use native batch writes for ALL Android paths (internal + external).
+  // java.io.File can write to the app's own internal directory too, and
+  // routing through ExternalStorage avoids Expo FS's JVM-heap buffering.
+  void filepath; // kept for call-site clarity
+  return (
+    Platform.OS === 'android' &&
+    typeof ExternalStorage.writeFilesBase64 === 'function'
+  );
 }
 
 function scheduleNativeBatchWrite(path: string, base64Content: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     pendingNativeWriteTasks.push({ path, base64Content, resolve, reject });
-    if (nativeWriteFlushScheduled) return;
+    if (nativeWriteFlushScheduled) {
+      return;
+    }
     nativeWriteFlushScheduled = true;
     void Promise.resolve().then(() => {
       nativeWriteFlushScheduled = false;
@@ -87,9 +239,13 @@ async function flushPendingNativeWrites(): Promise<void> {
         batch.map(task => toPlainPath(task.path)),
         batch.map(task => task.base64Content),
       );
-      batch.forEach(task => task.resolve());
+      batch.forEach(task => {
+        task.resolve();
+      });
     } catch (error) {
-      batch.forEach(task => task.reject(error));
+      batch.forEach(task => {
+        task.reject(error);
+      });
     }
     await Promise.resolve();
   }
@@ -116,14 +272,63 @@ export interface IGitCommitInfo {
   timestamp: number;
 }
 
+export interface IGitCommitFileDiffResult {
+  files: Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+  isShallowSnapshot: boolean;
+}
+
 /**
  * Helper: get current branch name, defaulting to 'main'.
  * `git.currentBranch()` returns `string | void`; the `void` case
  * happens when HEAD is detached.
  */
 async function getCurrentBranch(directory: string): Promise<string> {
-  const branch = await git.currentBranch({ fs, dir: directory, fullname: false });
-  return typeof branch === 'string' ? branch : 'main';
+  const hasLocalBranch = async (branch: string): Promise<boolean> => {
+    try {
+      await git.resolveRef({ fs, dir: directory, ref: `refs/heads/${branch}` });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const hasRemoteBranch = async (branch: string): Promise<boolean> => {
+    try {
+      await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  try {
+    const branch = await git.currentBranch({ fs, dir: directory, fullname: false });
+    if (typeof branch === 'string' && branch.length > 0 && (await hasLocalBranch(branch) || await hasRemoteBranch(branch))) {
+      return branch;
+    }
+  } catch {
+    // Fall through to branch enumeration below.
+  }
+
+  try {
+    const branches = await git.listBranches({ fs, dir: directory, remote: undefined });
+    if (branches.includes('main')) return 'main';
+    if (branches.includes('master')) return 'master';
+    if (branches.length > 0) return branches[0];
+  } catch {
+    // Fall back to the modern default below.
+  }
+
+  try {
+    const remoteBranches = await git.listBranches({ fs, dir: directory, remote: 'origin' });
+    if (remoteBranches.includes('main')) return 'main';
+    if (remoteBranches.includes('master')) return 'master';
+    if (remoteBranches.length > 0) return remoteBranches[0];
+  } catch {
+    // Fall back to the modern default below.
+  }
+
+  return 'main';
 }
 
 export interface IGitFileContent {
@@ -155,6 +360,57 @@ const fs = {
         return Buffer.from(base64, 'base64');
       }
 
+      // ── Android internal path: chunked binary read for large files ──
+      // ExponentFileSystem.readAsStringAsync loads the entire file as a
+      // base64 string into JVM heap.  For 50+ MB pack files this causes
+      // OOM.  Use ExternalStorage.readFileChunk instead (java.io.File
+      // can read internal paths too).
+      if (encoding !== 'utf8' && hasNativeStreamingHttp) {
+        const plain = toPlainPath(filepath);
+        try {
+          const info = await ExternalStorage.getInfo(plain);
+          if (!info.exists) {
+            const enoentError = new Error(`ENOENT: no such file or directory, open '${filepath}'`) as NodeJS.ErrnoException;
+            enoentError.code = 'ENOENT';
+            enoentError.errno = -2;
+            enoentError.path = filepath;
+            throw enoentError;
+          }
+          if (info.size > STREAMING_WRITE_THRESHOLD) {
+            // Large file — read in chunks to avoid JVM OOM
+            const extension = ExternalStorage as unknown as IExternalStorageExtended;
+            const buffers: Buffer[] = [];
+            let offset = 0;
+            while (offset < info.size) {
+              const chunk = await extension.readFileChunk(plain, offset, LARGE_READ_CHUNK_SIZE);
+              if (chunk.bytesRead === 0) break;
+              buffers.push(Buffer.from(chunk.data, 'base64'));
+              offset += chunk.bytesRead;
+              // Yield to event loop every 8 MB to prevent UI freeze
+              if (buffers.length % 4 === 0) {
+                await new Promise<void>(r => setTimeout(r, 0));
+              }
+            }
+            const result = Buffer.concat(buffers);
+            // For very large files (packs), fire the hook and yield so React
+            // can render the "Indexing pack" message *before* isomorphic-git
+            // starts CPU-intensive synchronous pack indexing (which will
+            // freeze the JS thread for minutes on large repos).
+            if (info.size > 10 * 1024 * 1024) {
+              onLargeFileRead?.(filepath, info.size);
+              await new Promise<void>(r => setTimeout(r, 100));
+            }
+            return result;
+          }
+          // Small file — single native read is fine
+          const base64 = await ExternalStorage.readFileBase64(plain);
+          return Buffer.from(base64, 'base64');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw error;
+          // Fall through to legacy Expo FS on unexpected native errors
+        }
+      }
+
       // Internal path — use legacy Expo FS
       try {
         if (encoding === 'utf8') {
@@ -180,11 +436,43 @@ const fs = {
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
+      // ── Android: chunked streaming for large binary data ──────────
+      // For files above STREAMING_WRITE_THRESHOLD, avoid converting the
+      // entire content to a single base64 string.  Instead, send it in
+      // small chunks via appendFileBase64.  This keeps JVM-heap peak to
+      // ~1 MB regardless of file size, preventing OOM on 50+ MB packs.
+      if (hasNativeAppendFile && typeof data !== 'string') {
+        const rawBytes = Buffer.isBuffer(data)
+          ? data
+          : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+
+        if (rawBytes.byteLength > STREAMING_WRITE_THRESHOLD) {
+          const plain = toPlainPath(filepath);
+          const extension = ExternalStorage as unknown as IExternalStorageExtended;
+          const CHUNK = 512 * 1024; // 512 KB per round-trip
+          let chunkIndex = 0;
+          for (let offset = 0; offset < rawBytes.byteLength; offset += CHUNK) {
+            const end = Math.min(offset + CHUNK, rawBytes.byteLength);
+            // Buffer.subarray() returns a plain Uint8Array in the RN polyfill,
+            // whose toString('base64') produces decimal CSV instead of base64.
+            // Wrap with Buffer.from() to get a proper Buffer before encoding.
+            const chunkBase64 = Buffer.from(rawBytes.subarray(offset, end)).toString('base64');
+            await extension.appendFileBase64(plain, chunkBase64, offset === 0);
+            chunkIndex++;
+            // Yield to event loop every 4 MB to prevent UI freeze
+            if (chunkIndex % 8 === 0) {
+              await new Promise<void>(r => setTimeout(r, 0));
+            }
+          }
+          return;
+        }
+      }
+
       const base64 = typeof data === 'string'
         ? Buffer.from(data, 'utf8').toString('base64')
         : Buffer.isBuffer(data)
-          ? data.toString('base64')
-          : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+        ? data.toString('base64')
+        : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
 
       if (canUseAndroidNativeBatchWrite(filepath)) {
         return scheduleNativeBatchWrite(filepath, base64);
@@ -329,6 +617,40 @@ const fs = {
       }
 
       // Internal path
+      const plainInternalPath = toPlainPath(filepath);
+      if (plainInternalPath.startsWith('/')) {
+        try {
+          const nativeInfo = await ExternalStorage.getInfo(plainInternalPath);
+          if (nativeInfo.exists) {
+            const isDirectory = nativeInfo.isDirectory;
+            const fileSize = toSafeNumber(nativeInfo.size, 0);
+            const modifiedTimeMs = toSafeNumber(nativeInfo.modificationTime, Date.now());
+
+            return {
+              isFile: () => !isDirectory,
+              isDirectory: () => isDirectory,
+              isSymbolicLink: () => false,
+              dev: 0,
+              ino: 0,
+              mode: isDirectory ? 0o755 : 0o644,
+              nlink: 1,
+              uid: 0,
+              gid: 0,
+              rdev: 0,
+              size: fileSize,
+              blksize: 4096,
+              blocks: Math.ceil(fileSize / 512),
+              atimeMs: modifiedTimeMs,
+              mtimeMs: modifiedTimeMs,
+              ctimeMs: modifiedTimeMs,
+              birthtimeMs: modifiedTimeMs,
+            };
+          }
+        } catch {
+          // Fall back to Expo legacy FS below.
+        }
+      }
+
       const info = await FileSystemLegacy.getInfoAsync(toFileUri(filepath));
       if (!info.exists) {
         const error = new Error(`ENOENT: no such file or directory, stat '${filepath}'`) as NodeJS.ErrnoException;
@@ -482,10 +804,30 @@ function toArrayBuffer(data: Uint8Array) {
 // Keep HTTP diagnostics centralized to debug mobile sync connectivity issues.
 const httpWithLogging = {
   async request(request: GitHttpRequest): Promise<GitHttpResponse> {
-    const { url, method = 'GET', headers = {}, body } = request;
+    const { url, method = 'GET', body } = request;
+    // Tell the server we prefer no compression.  On LAN this saves mobile CPU
+    // (gzip decompression of large packs is expensive on Hermes) while adding
+    // negligible transfer overhead.  OkHttp normally adds "Accept-Encoding: gzip"
+    // automatically; setting "identity" overrides that.
+    const headers: Record<string, string> = { ...request.headers, 'Accept-Encoding': 'identity' };
     console.log('Git HTTP request:', { url, method, headers });
 
     try {
+      // ── Streaming path for large POST (git-upload-pack) ───────────
+      // Android OkHttp buffers the entire HTTP response in JVM heap before
+      // exposing it to JS.  For git-upload-pack this can easily be 100+ MB
+      // and triggers OOM.
+      //
+      // Solution: use a native Kotlin method that performs the POST and
+      // streams the response body directly to a temp file on disk using
+      // Okio, never holding more than 64 KB in memory.  JS then reads the
+      // temp file back in chunks via `readFileChunk`.
+      const isGitUploadPackPost = method === 'POST' && url.includes('git-upload-pack');
+      if (isGitUploadPackPost && hasNativeStreamingHttp) {
+        return await nativeStreamingPost(url, headers, body);
+      }
+
+      // ── Regular fetch path (GET, small POST) ─────────────────────
       const timeoutMs = method === 'POST' ? 120_000 : 30_000;
       let payload: ArrayBuffer | undefined;
 
@@ -532,6 +874,135 @@ const httpWithLogging = {
     }
   },
 };
+
+/**
+ * Perform an HTTP POST via the native OkHttp streaming path:
+ * 1. POST body is sent as-is.
+ * 2. Response body is streamed to a temp file (never fully in memory).
+ * 3. The temp file is read back as an async iterator of 64 KB chunks.
+ * 4. The temp file is deleted once fully consumed.
+ */
+async function nativeStreamingPost(
+  url: string,
+  headers: Record<string, string>,
+  body?: AsyncIterableIterator<Uint8Array> | Iterable<Uint8Array> | Uint8Array,
+): Promise<GitHttpResponse> {
+  // Collect the request body (git protocol payload, typically < 1 KB).
+  let bodyBytes: Uint8Array;
+  if (body === undefined) {
+    bodyBytes = new Uint8Array(0);
+  } else if (body instanceof Uint8Array) {
+    bodyBytes = body;
+  } else {
+    bodyBytes = await collect(body);
+  }
+
+  const bodyBase64 = Buffer.from(bodyBytes).toString('base64');
+  const contentType = Object.entries(headers)
+    .find(([key]) => key.toLowerCase() === 'content-type')?.[1] ?? 'application/x-git-upload-pack-request';
+
+  // Use the app's cache dir for the temp file (auto-cleaned by Android).
+  const cacheDirectory = FileSystemLegacy.cacheDirectory;
+  if (cacheDirectory === null) {
+    throw new Error('FileSystem cache directory unavailable');
+  }
+  const temporaryPath = `${toPlainPath(cacheDirectory)}/git-pack-${Date.now()}.tmp`;
+
+  console.log('Git HTTP (native streaming):', { url, temporaryPath });
+
+  const externalStorageExtension = ExternalStorage as unknown as IExternalStorageExtended;
+  const result = await externalStorageExtension.httpPostToFile(
+    url,
+    headers,
+    bodyBase64,
+    temporaryPath,
+    contentType,
+  );
+
+  console.log('Git HTTP response (native):', {
+    url,
+    statusCode: result.statusCode,
+    bytesWritten: result.bytesWritten,
+  });
+
+  // Create an async iterator that reads the temp file in 64 KB chunks,
+  // then deletes the file when done.
+  const responseBody = createFileChunkIterator(temporaryPath, result.bytesWritten);
+
+  return {
+    url,
+    method: 'POST',
+    statusCode: result.statusCode,
+    statusMessage: result.statusCode === 200 ? 'OK' : `HTTP ${result.statusCode}`,
+    body: responseBody,
+    headers: result.headers,
+  };
+}
+
+/**
+ * Async iterator that reads a file in chunks via the native module,
+ * yielding Uint8Array pieces and deleting the temp file when exhausted.
+ */
+function createFileChunkIterator(filePath: string, totalBytes: number): AsyncIterableIterator<Uint8Array> {
+  let offset = 0;
+  let iteratorDone = false;
+
+  const externalStorageExtension = ExternalStorage as unknown as IExternalStorageExtended;
+
+  return {
+    async next(): Promise<IteratorResult<Uint8Array>> {
+      if (iteratorDone || offset >= totalBytes) {
+        if (!iteratorDone) {
+          iteratorDone = true;
+          // Fire the hook BEFORE cleanup — this is the last async point
+          // before isomorphic-git's synchronous pack processing.
+          if (totalBytes > 1024 * 1024) {
+            onPackStreamConsumed?.(totalBytes);
+            // Yield 200ms so React can render the progress message
+            // before the JS thread gets blocked by pack indexing.
+            await new Promise<void>(r => setTimeout(r, 200));
+          }
+          // Clean up temp file
+          try {
+            await externalStorageExtension.deleteFile(filePath);
+          } catch {
+            // non-fatal
+          }
+        }
+        return { done: true, value: undefined as unknown as Uint8Array };
+      }
+
+      const chunk = await externalStorageExtension.readFileChunk(filePath, offset, FILE_CHUNK_SIZE);
+      offset += chunk.bytesRead;
+
+      if (chunk.bytesRead === 0) {
+        iteratorDone = true;
+        try {
+          await externalStorageExtension.deleteFile(filePath);
+        } catch {
+          // non-fatal
+        }
+        return { done: true, value: undefined as unknown as Uint8Array };
+      }
+
+      const bytes = Buffer.from(chunk.data, 'base64');
+      return { done: false, value: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) };
+    },
+    return() {
+      iteratorDone = true;
+      // Best-effort cleanup
+      try {
+        void externalStorageExtension.deleteFile(filePath).catch(() => {});
+      } catch {
+        // non-fatal
+      }
+      return Promise.resolve({ done: true, value: undefined as unknown as Uint8Array });
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+}
 
 /**
  * Create auth header for git operations
@@ -597,7 +1068,14 @@ async function preflightInfoReferences(url: string, headers: Record<string, stri
 }
 
 /**
- * Clone a git repository
+ * Clone a git repository.
+ *
+ * Strategy:
+ * 1. Try the TidGi Desktop "full-archive" endpoint (tar download + native extract).
+ *    This is ~10-50x faster than git protocol because it skips delta resolution
+ *    and JS→Native file-by-file checkout.  Supports resumable download.
+ * 2. If the endpoint returns 404 (not TidGi Desktop / old version / GitHub),
+ *    fall back to standard isomorphic-git clone.
  */
 export async function gitClone(
   workspace: IWikiWorkspace,
@@ -607,17 +1085,255 @@ export async function gitClone(
   // Remove trailing slash from baseUrl to avoid double slashes
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
-  // isomorphic-git uses path.join(dir, ...) internally which mangles file:// URIs,
-  // so always pass a plain filesystem path.
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
   console.log('Git clone remote:', JSON.stringify(remote, null, 2));
+
+  // ── Fast path: tar archive download (TidGi Desktop only) ──────────
+  if (Platform.OS === 'android') {
+    try {
+      const didArchive = await tryArchiveClone(remote, url, directory, onProgress);
+      if (didArchive) {
+        console.log('[gitClone] Fast archive clone succeeded');
+        return;
+      }
+      // didArchive === false means endpoint not available → fall through
+    } catch (error) {
+      const message = (error as Error).message;
+      // Connection aborts during archive download are retryable on next attempt
+      if (isConnectionAbortError(message)) {
+        console.warn('[gitClone] Archive download interrupted, will retry:', message);
+        // Fall through to retry with archive again below
+      } else {
+        console.warn('[gitClone] Archive clone failed, falling back to git protocol:', message);
+        // Non-retryable archive errors → fall through to git protocol
+      }
+    }
+  }
+
+  // ── Standard path: isomorphic-git clone (works with any git server) ──
   console.log('Git clone strategy:', { depth: 1, noTags: true, singleBranch: true });
 
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= CLONE_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      console.log(`[gitClone] Retry attempt ${attempt}/${CLONE_MAX_RETRIES} after connection abort`);
+      onProgress?.('Reconnecting…', attempt, CLONE_MAX_RETRIES);
+      await new Promise<void>(resolve => setTimeout(resolve, CLONE_RETRY_DELAY_MS));
+
+      // Clean the directory before retry — partial clone data is unusable.
+      try {
+        if (isExternalPath(directory)) {
+          const info = await ExternalStorage.getInfo(toPlainPath(directory));
+          if (info.exists) await ExternalStorage.rmdir(toPlainPath(directory));
+          await ExternalStorage.mkdir(toPlainPath(directory));
+        } else {
+          await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+          await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+        }
+      } catch (cleanupError) {
+        console.warn('[gitClone] Failed to clean directory before retry:', cleanupError);
+      }
+    }
+
+    try {
+      await gitCloneOnce(workspace, remote, url, directory, onProgress);
+      return; // success
+    } catch (error) {
+      lastError = error as Error;
+      const message = lastError.message;
+
+      // Only retry on connection-abort; other errors are not transient.
+      if (isConnectionAbortError(message) && attempt < CLONE_MAX_RETRIES) {
+        console.warn(`[gitClone] Connection aborted (attempt ${attempt + 1}), will retry: ${message}`);
+        continue;
+      }
+
+      // Not retryable or retries exhausted — propagate.
+      throw error;
+    }
+  }
+
+  // Should not reach here, but just in case.
+  throw lastError ?? new Error('Git clone failed');
+}
+
+// ── Fast archive clone ─────────────────────────────────────────────────
+
+/**
+ * Try to clone via the TidGi Desktop full-archive endpoint.
+ *
+ * Returns `true` if the archive was downloaded and extracted successfully.
+ * Returns `false` if the endpoint is not available (404) — caller should
+ * fall back to git protocol.
+ * Throws on download/extraction errors.
+ */
+async function tryArchiveClone(
+  remote: IGitRemote,
+  gitUrl: string,
+  directory: string,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<boolean> {
+  const archiveUrl = `${gitUrl}/full-archive`;
+  const headers = normalizeHeaders(createAuthHeader(remote));
+  // Add Accept-Encoding: identity to skip gzip (saves CPU on mobile for LAN)
+  headers['Accept-Encoding'] = 'identity';
+
+  // Download the tar file with native resumable download
+  const tarPath = `${directory}.tar`;
+  console.log('[archiveClone] Attempting full-archive download:', archiveUrl);
+  onProgress?.('Downloading archive…', 0, 0);
+
+  // Use the native module for resumable download
+  const externalStorageExtended = ExternalStorage as unknown as {
+    downloadFileResumable?: (url: string, headers: Record<string, string>, destinationPath: string) => Promise<{ statusCode: number; totalBytes: number; resumed: boolean }>;
+    extractTar?: (tarPath: string, destinationDirectory: string) => Promise<{ filesExtracted: number }>;
+  };
+
+  if (typeof externalStorageExtended.downloadFileResumable !== 'function' || typeof externalStorageExtended.extractTar !== 'function') {
+    console.log('[archiveClone] Native downloadFileResumable/extractTar not available');
+    return false;
+  }
+
+  const downloadResult = await externalStorageExtended.downloadFileResumable(archiveUrl, headers, tarPath);
+  console.log('[archiveClone] Download result:', downloadResult);
+
+  if (downloadResult.statusCode === 404) {
+    console.log('[archiveClone] full-archive endpoint not available (404)');
+    try {
+      await ExternalStorage.deleteFile(tarPath);
+    } catch {
+      // ignore cleanup failure
+    }
+    return false;
+  }
+
+  if (downloadResult.statusCode !== 200 && downloadResult.statusCode !== 206) {
+    console.warn('[archiveClone] Download failed with status:', downloadResult.statusCode);
+    // Clean up partial tar
+    try {
+      await ExternalStorage.deleteFile(tarPath);
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  // Extract the tar archive
+  console.log('[archiveClone] Extracting archive…');
+  onProgress?.('Extracting files…', 0, 0);
+
+  // Ensure the directory exists and is empty
+  try {
+    if (isExternalPath(directory)) {
+      const info = await ExternalStorage.getInfo(directory);
+      if (info.exists) await ExternalStorage.rmdir(directory);
+      await ExternalStorage.mkdir(directory);
+    } else {
+      await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+      await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+    }
+  } catch { /* directory might not exist yet, that's fine */ }
+
+  const extractResult = await externalStorageExtended.extractTar(tarPath, directory);
+  console.log('[archiveClone] Extracted', extractResult.filesExtracted, 'files');
+  onProgress?.('Extracted files', extractResult.filesExtracted, extractResult.filesExtracted);
+
+  // Clean up the tar file
+  try {
+    await ExternalStorage.deleteFile(tarPath);
+  } catch { /* ignore */ }
+
+  // Configure git remote URL so future push/fetch works
+  await configureGitRemote(directory, remote);
+
+  return true;
+}
+
+/**
+ * After extracting the tar archive, configure the git remote URL
+ * so that subsequent push/fetch operations work correctly.
+ * The archive contains a placeholder remote URL that we need to replace.
+ */
+async function configureGitRemote(directory: string, remote: IGitRemote): Promise<void> {
+  const baseUrl = remote.baseUrl.replace(/\/$/, '');
+  const remoteUrl = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+
+  try {
+    // Use isomorphic-git to set the remote URL
+    await git.setConfig({
+      fs,
+      dir: directory,
+      path: 'remote.origin.url',
+      value: remoteUrl,
+    });
+    console.log('[configureGitRemote] Set remote origin to:', remoteUrl);
+  } catch (error) {
+    console.warn('[configureGitRemote] Failed to set remote, writing config directly:', (error as Error).message);
+    // Fallback: write the config file directly
+    const configPath = `${directory}/.git/config`;
+    const configContent = [
+      '[core]',
+      '\trepositoryformatversion = 0',
+      '\tfilemode = false',
+      '\tbare = false',
+      '[remote "origin"]',
+      `\turl = ${remoteUrl}`,
+      '\tfetch = +refs/heads/*:refs/remotes/origin/*',
+      '',
+    ].join('\n');
+    if (isExternalPath(directory)) {
+      await ExternalStorage.writeFileUtf8(configPath, configContent);
+    } else {
+      await FileSystemLegacy.writeAsStringAsync(toFileUri(configPath), configContent);
+    }
+  }
+}
+
+/** Single clone attempt (extracted for retry wrapper). */
+async function gitCloneOnce(
+  _workspace: IWikiWorkspace,
+  remote: IGitRemote,
+  url: string,
+  directory: string,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<void> {
   try {
     await preflightInfoReferences(url, normalizeHeaders(createAuthHeader(remote)));
+
+    // Optional pre-download size check. Gracefully no-ops on Desktop versions
+    // that don't yet have the /pack-size endpoint.
+    const authHeaders = normalizeHeaders(createAuthHeader(remote));
+    const estimatedBytes = await tryGetRemotePackSize(url, authHeaders);
+    if (estimatedBytes !== null) {
+      const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
+      console.log(`Git clone estimated pack size: ${estimatedMB} MB`);
+      onProgress?.(`Estimated size: ${estimatedMB} MB`, 0, estimatedBytes);
+      if (estimatedBytes > MAX_SAFE_PACK_BYTES) {
+        throw new Error(`${GIT_CLONE_ERROR_TOO_LARGE_PREFIX}${estimatedMB}`);
+      }
+    }
+
+    // Track the last reported phase so we can detect "gaps" where
+    // isomorphic-git is busy processing the pack without emitting progress.
+    let lastPhase = '';
+    let packDownloadReported = false;
+
+    // Set module-level hooks so the FS layer can fire progress events at
+    // key moments that isomorphic-git doesn't expose via onProgress.
+    onLargeFileRead = (_filepath, sizeBytes) => {
+      const mb = Math.round(sizeBytes / 1024 / 1024);
+      onProgress?.(`Indexing pack (${mb} MB)`, 0, 0);
+    };
+    onPackStreamConsumed = (totalBytes) => {
+      const mb = Math.round(totalBytes / 1024 / 1024);
+      console.log(`Pack stream fully consumed: ${mb} MB — indexing will start`);
+      onProgress?.(`Indexing pack (${mb} MB)`, 0, 0);
+    };
+
+    // Tell the UI the download is starting (native HTTP has no JS progress).
+    onProgress?.('Downloading pack', 0, 0);
+
     await git.clone({
       fs,
       http: httpWithLogging,
@@ -631,19 +1347,52 @@ export async function gitClone(
       headers: normalizeHeaders(createAuthHeader(remote)),
       ...createAuthCallbacks(remote.token),
       onProgress: (progress) => {
-        onProgress?.(
-          typeof progress.phase === 'string' ? progress.phase : '',
-          toSafeNumber(progress.loaded, 0),
-          toSafeNumber(progress.total, 0),
-        );
+        const phase = typeof progress.phase === 'string' ? progress.phase : '';
+        const loaded = toSafeNumber(progress.loaded, 0);
+        const total = toSafeNumber(progress.total, 0);
+
+        // When transitioning from a server-side phase ("Compressing objects")
+        // to a client-side phase ("Receiving objects"), inject a bridging
+        // message so the user knows the app is still working.
+        if (!packDownloadReported && lastPhase.startsWith('Compressing') && !phase.startsWith('Compressing')) {
+          packDownloadReported = true;
+          onProgress?.('Receiving pack data', 0, 0);
+        }
+        lastPhase = phase;
+
+        onProgress?.(phase, loaded, total);
       },
     });
 
     console.log(`Successfully cloned repository to ${directory}`);
   } catch (error) {
     const message = (error as Error).message;
+
+    // Re-throw structured sentinels as-is so callers can act on them.
+    if (message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) || message === GIT_CLONE_ERROR_OOM) {
+      throw error;
+    }
+
+    // Convert Android/Hermes OOM into a clean sentinel.
+    // React Native buffers the full response in the JVM heap; large packs exceed
+    // the per-app growth limit (~256 MB) after baseline JS heap usage.
+    if (isOOMError(message)) {
+      console.error(`Git clone OOM — mobile-side heap exhausted: ${message}`);
+      throw new Error(GIT_CLONE_ERROR_OOM);
+    }
+
+    // Tag connection-abort errors so the UI can show a specific message.
+    if (isConnectionAbortError(message)) {
+      console.error(`Git clone connection aborted: ${message}`);
+      throw new Error(GIT_CLONE_ERROR_CONNECTION_ABORT);
+    }
+
     console.error(`Git clone failed: ${message}`);
     throw new Error(`Failed to clone repository: ${message}`);
+  } finally {
+    // Always clean up module-level hooks to avoid leaking closures.
+    onLargeFileRead = undefined;
+    onPackStreamConsumed = undefined;
   }
 }
 
@@ -702,10 +1451,30 @@ export async function gitCommit(
   try {
     // Stage all changes using statusMatrix
     const status = await git.statusMatrix({ fs, dir: directory });
+
+    // Detect NFC/NFD Unicode normalization artifact pairs before staging.
+    // On Android (FAT32/ExFAT), filenames with Chinese/multi-byte characters may be
+    // transparently converted from NFC (git index) to NFD (filesystem), causing statusMatrix
+    // to report a spurious delete+add for the same logical file.
+    const deletesByNFC = new Map<string, string>(); // nfc → original filepath
+    const addsByNFC = new Map<string, string>(); // nfc → original filepath
+    for (const [filepath, headStatus, workdirStatus] of status) {
+      const nfcPath = filepath.normalize('NFC');
+      if (headStatus !== workdirStatus) {
+        if (workdirStatus === 0) deletesByNFC.set(nfcPath, filepath);
+        else if (headStatus === 0) addsByNFC.set(nfcPath, filepath);
+      }
+    }
+    const artifactNFCPaths = new Set([...deletesByNFC.keys()].filter(p => addsByNFC.has(p)));
+
     for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
       // headStatus: 0 = absent in HEAD, 1 = present in HEAD
       // workdirStatus: 0 = absent in workdir, 2 = present in workdir
       // stageStatus: 0 = absent in stage, 2 = present in stage, 3 = modified-and-staged
+      const nfcPath = filepath.normalize('NFC');
+
+      // Skip NFC/NFD normalization artifacts — the file hasn't actually changed
+      if (artifactNFCPaths.has(nfcPath)) continue;
 
       // Stage changes when workdir differs from HEAD or stage differs from HEAD
       if (headStatus !== workdirStatus || headStatus !== stageStatus) {
@@ -858,20 +1627,42 @@ export async function gitResolveReference(workspace: IWikiWorkspace, reference: 
 export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
+    const startedAt = Date.now();
     const status = await git.statusMatrix({ fs, dir: directory });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+    // Track deletes and adds by NFC-normalized path to detect Unicode normalization artifacts.
+    // On Android (FAT32/ExFAT), git checks out files with NFC paths but the filesystem may
+    // convert them to NFD, causing a spurious delete (NFC path gone) + add (NFD path new)
+    // for every file whose name contains multi-byte Unicode characters (e.g. Chinese).
+    const deletesByNFC = new Set<string>();
+    const addsByNFC = new Set<string>();
     for (const [filepath, headStatus, workdirStatus] of status) {
       if (headStatus !== workdirStatus) {
+        const nfcPath = filepath.normalize('NFC');
         if (workdirStatus === 0) {
+          deletesByNFC.add(nfcPath);
           changes.push({ path: filepath, type: 'delete' });
         } else if (headStatus === 0) {
+          addsByNFC.add(nfcPath);
           changes.push({ path: filepath, type: 'add' });
         } else {
           changes.push({ path: filepath, type: 'modify' });
         }
       }
     }
-    return changes;
+    // Remove NFC/NFD artifact pairs: same NFC path appearing as both delete and add
+    // means the file itself is unchanged — only its Unicode normalization form differs.
+    const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
+    const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+    const elapsedMs = Date.now() - startedAt;
+    if (deduped.length > 0 || elapsedMs > 5_000) {
+      console.log(
+        `${new Date().toISOString()} [GitService] gitDiffChangedFiles for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
+          deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
+        }`,
+      );
+    }
+    return deduped.sort((a, b) => a.path.localeCompare(b.path));
   } catch (error) {
     console.error(`Failed to diff: ${(error as Error).message}`);
     return [];
@@ -899,46 +1690,188 @@ export async function gitGetCommitHistory(workspace: IWikiWorkspace, depth = 100
   }
 }
 
+export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise<number> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+
+  if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) {
+    return 0;
+  }
+
+  try {
+    const branch = await getCurrentBranch(directory);
+    let localCommits: Array<{ oid: string }> = [];
+    try {
+      localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+    } catch {
+      localCommits = await git.log({ fs, dir: directory, ref: 'HEAD', depth: 300 });
+    }
+
+    let remoteCommits: Array<{ oid: string }> = [];
+    try {
+      remoteCommits = await git.log({ fs, dir: directory, ref: `origin/${branch}`, depth: 300 });
+    } catch {
+      remoteCommits = [];
+    }
+
+    const remoteCommitOids = new Set(remoteCommits.map(commit => commit.oid));
+    let aheadCount = 0;
+    for (const commit of localCommits) {
+      if (remoteCommitOids.has(commit.oid)) {
+        break;
+      }
+      aheadCount += 1;
+    }
+
+    return aheadCount;
+  } catch (error) {
+    console.error(`Failed to get ahead commit count: ${(error as Error).message}`);
+    return 0;
+  }
+}
+
 export async function gitGetChangedFilesForCommit(
   workspace: IWikiWorkspace,
   commitOid: string,
   parentOid?: string,
-): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+): Promise<IGitCommitFileDiffResult> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
-    const currentFiles = new Set(await git.listFiles({ fs, dir: directory, ref: commitOid }));
-    let previousFiles = new Set<string>();
-    if (parentOid) {
-      try {
-        previousFiles = new Set(await git.listFiles({ fs, dir: directory, ref: parentOid }));
-      } catch (error) {
-        const message = (error as Error).message;
-        if (message.includes('Could not find')) {
-          previousFiles = new Set<string>();
-        } else {
-          throw error;
-        }
-      }
+    if (!parentOid) {
+      return { files: [], isShallowSnapshot: false };
     }
 
-    const allPaths = new Set<string>([...currentFiles, ...previousFiles]);
-    const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
-    for (const path of allPaths) {
-      const inCurrent = currentFiles.has(path);
-      const inPrevious = previousFiles.has(path);
-      if (inCurrent && !inPrevious) {
-        result.push({ path, type: 'add' });
-      } else if (!inCurrent && inPrevious) {
-        result.push({ path, type: 'delete' });
-      } else if (inCurrent && inPrevious) {
-        result.push({ path, type: 'modify' });
+    try {
+      await git.resolveRef({ fs, dir: directory, ref: parentOid });
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message.includes('Could not find')) {
+        return { files: [], isShallowSnapshot: true };
       }
+      throw error;
     }
-    return result.sort((left, right) => left.path.localeCompare(right.path));
+    const result = await diffCommitTrees(directory, parentOid, commitOid);
+
+    return {
+      files: result.sort((left, right) => left.path.localeCompare(right.path)),
+      isShallowSnapshot: false,
+    };
   } catch (error) {
     console.warn(`Failed to read changed files for commit ${commitOid}: ${(error as Error).message}`);
-    return [];
+    throw error;
   }
+}
+
+type GitTreeEntry = {
+  mode: string;
+  oid: string;
+  path: string;
+  type: 'blob' | 'commit' | 'tree';
+};
+
+function joinGitPath(parentPath: string, childPath: string): string {
+  return parentPath.length > 0 ? `${parentPath}/${childPath}` : childPath;
+}
+
+async function readTreeEntries(directory: string, oid: string, filepath = ''): Promise<GitTreeEntry[]> {
+  const result = await git.readTree({
+    fs,
+    dir: directory,
+    oid,
+    ...(filepath.length > 0 ? { filepath } : {}),
+  });
+  return result.tree as GitTreeEntry[];
+}
+
+async function collectTreeFiles(
+  directory: string,
+  oid: string,
+  filepath: string,
+  type: 'add' | 'delete',
+): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+  const entries = await readTreeEntries(directory, oid, filepath);
+  const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+  for (const entry of entries) {
+    const fullPath = joinGitPath(filepath, entry.path);
+    if (entry.type === 'tree') {
+      result.push(...await collectTreeFiles(directory, oid, fullPath, type));
+    } else {
+      result.push({ path: fullPath, type });
+    }
+  }
+  return result;
+}
+
+async function diffCommitTrees(
+  directory: string,
+  beforeOid: string,
+  afterOid: string,
+  filepath = '',
+): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
+  const [beforeEntries, afterEntries] = await Promise.all([
+    readTreeEntries(directory, beforeOid, filepath),
+    readTreeEntries(directory, afterOid, filepath),
+  ]);
+
+  const beforeMap = new Map(beforeEntries.map(entry => [entry.path, entry]));
+  const afterMap = new Map(afterEntries.map(entry => [entry.path, entry]));
+  const entryNames = new Set([...beforeMap.keys(), ...afterMap.keys()]);
+  const result: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+
+  for (const entryName of entryNames) {
+    const beforeEntry = beforeMap.get(entryName);
+    const afterEntry = afterMap.get(entryName);
+    const fullPath = joinGitPath(filepath, entryName);
+
+    if (beforeEntry === undefined && afterEntry !== undefined) {
+      if (afterEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, afterOid, fullPath, 'add'));
+      } else {
+        result.push({ path: fullPath, type: 'add' });
+      }
+      continue;
+    }
+
+    if (beforeEntry !== undefined && afterEntry === undefined) {
+      if (beforeEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, beforeOid, fullPath, 'delete'));
+      } else {
+        result.push({ path: fullPath, type: 'delete' });
+      }
+      continue;
+    }
+
+    if (beforeEntry === undefined || afterEntry === undefined) {
+      continue;
+    }
+
+    if (beforeEntry.type === 'tree' && afterEntry.type === 'tree') {
+      if (beforeEntry.oid !== afterEntry.oid) {
+        result.push(...await diffCommitTrees(directory, beforeOid, afterOid, fullPath));
+      }
+      continue;
+    }
+
+    if (beforeEntry.type !== afterEntry.type) {
+      if (beforeEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, beforeOid, fullPath, 'delete'));
+      } else {
+        result.push({ path: fullPath, type: 'delete' });
+      }
+
+      if (afterEntry.type === 'tree') {
+        result.push(...await collectTreeFiles(directory, afterOid, fullPath, 'add'));
+      } else {
+        result.push({ path: fullPath, type: 'add' });
+      }
+      continue;
+    }
+
+    if (beforeEntry.oid !== afterEntry.oid || beforeEntry.mode !== afterEntry.mode) {
+      result.push({ path: fullPath, type: 'modify' });
+    }
+  }
+
+  return result;
 }
 
 const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
@@ -1038,7 +1971,13 @@ export async function gitGetFileContentAtReference(
 }
 
 /**
- * Check if repository has uncommitted changes
+ * Check if repository has uncommitted changes.
+ *
+ * NOTE: isomorphic-git's statusMatrix stats every tracked file individually,
+ * which is very slow on large repos (26K+ files = 30s+ on Android).
+ * If any file triggers ENOENT (e.g. filenames with special characters), we
+ * conservatively return true so the caller commits — a no-op commit is safe,
+ * but missing a dirty commit could lose data.
  */
 export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
@@ -1047,9 +1986,16 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
     const status = await git.statusMatrix({ fs, dir: directory });
     return status.some(([_filepath, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
   } catch (error) {
-    console.error(`Failed to check git status: ${(error as Error).message}`);
-    // Throw error to caller instead of silently returning false to prevent potential data loss
-    throw new Error(`Cannot determine git status: ${(error as Error).message}`);
+    const message = (error as Error).message;
+    // ENOENT during statusMatrix is usually caused by filenames with special
+    // characters that the expo file-system URI doesn't handle. This is not a
+    // fatal error — conservatively assume changes exist so commit proceeds.
+    if (message.includes('ENOENT')) {
+      console.warn(`[gitHasChanges] ENOENT during statusMatrix, assuming changes exist: ${message}`);
+      return true;
+    }
+    console.error(`Failed to check git status: ${message}`);
+    throw new Error(`Cannot determine git status: ${message}`);
   }
 }
 
@@ -1060,9 +2006,18 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
 export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Promise<number> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
+  if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) {
+    return 0;
+  }
+
   try {
     const branch = await getCurrentBranch(directory);
-    const localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+    let localCommits: Array<{ oid: string }> = [];
+    try {
+      localCommits = await git.log({ fs, dir: directory, ref: branch, depth: 300 });
+    } catch {
+      localCommits = await git.log({ fs, dir: directory, ref: 'HEAD', depth: 300 });
+    }
 
     let remoteCommits: Array<{ oid: string }> = [];
     try {

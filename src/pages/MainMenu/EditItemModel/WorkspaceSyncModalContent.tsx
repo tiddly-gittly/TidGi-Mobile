@@ -53,7 +53,7 @@ export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton 
 }
 
 const Container = styled.View`
-  background-color: #fff;
+  background-color: ${({ theme }) => theme.colors.background};
   margin: 16px;
   padding: 16px;
   max-height: 92%;
