@@ -15,7 +15,7 @@
  *   - Registry empty → tiddler was never on disk → succeed silently
  */
 
-import { toPlainPath } from 'expo-filesystem-android-external-storage';
+import { toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParameter } from 'tiddlywiki';
 import { getWikiTiddlerFolderPath } from '../../constants/paths';
@@ -210,6 +210,7 @@ export class FileSystemWikiStorageService {
 
       const targetWorkspace = this.#resolveTargetWorkspace(targetWorkspaceId);
       const targetDirectory = targetWorkspace.wikiFolderLocation;
+      this.#logger.log(`saveTiddler "${title}" target workspace=${targetWorkspace.id}`);
 
       // ─── Desktop getTiddlerFileInfo equivalent ───────────────────────
       // Check if the existing file is already in the correct target directory.

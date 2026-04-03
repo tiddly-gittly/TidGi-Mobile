@@ -4,7 +4,7 @@
  */
 
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { GIT_CLONE_ERROR_CONNECTION_ABORT, GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, gitClone, IGitRemote } from '../../services/GitService';

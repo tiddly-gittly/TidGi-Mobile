@@ -5,7 +5,7 @@
 
 import { Buffer } from 'buffer';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import git from 'isomorphic-git';
 import pTimeout from 'p-timeout';
 import { Platform } from 'react-native';
@@ -21,7 +21,7 @@ if (typeof global.Buffer === 'undefined') {
 }
 
 // ─── Runtime detection of new native streaming API ────────────────────
-// Added in expo-filesystem-android-external-storage@1.0.6
+// Added in expo-tiddlywiki-filesystem-android-external-storage@1.0.6
 interface HttpPostToFileResult {
   statusCode: number;
   headers: Record<string, string>;

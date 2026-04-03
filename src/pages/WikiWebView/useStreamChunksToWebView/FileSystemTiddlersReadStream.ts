@@ -11,7 +11,7 @@
  */
 
 import { Directory, File } from 'expo-file-system';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { Platform } from 'react-native';
 import { Readable } from 'readable-stream';
 import type { ITiddlerFields } from 'tiddlywiki';
@@ -21,6 +21,7 @@ import {
   makeSkinnyTiddler,
   parseMetadataFile,
   parseTiddlerFileHeaderOnly,
+  shouldPreserveFullTextInQuickLoad,
   shouldSaveFullTiddler,
 } from '../../../services/WikiStorageService/tiddlerFileParser';
 import { IWikiWorkspace } from '../../../store/workspace';
@@ -140,19 +141,6 @@ export class FileSystemTiddlersReadStream extends Readable {
       console.log(`${timestamp()} [FileSystemTiddlersReadStream] Found ${this.tiddlerFiles.length} tiddler files in ${Date.now() - initStartedAt}ms`);
       if (this.tiddlerFiles.length > 0) {
         console.log(`${timestamp()} [FileSystemTiddlersReadStream] First few files: ${this.tiddlerFiles.slice(0, 5).map(file => file.filePath).join(', ')}`);
-      }
-
-      if (!this.nativeSystemProbeDone) {
-        const nativeBatch = getNativeBatchParser();
-        const probeCandidates = this.tiddlerFiles
-          .map(file => file.filePath)
-          .filter(filePath => /\/system\/\$__(?:SiteTitle|DefaultTiddlers|build)\.tid$/i.test(safeDecodePath(toPlainPath(filePath)).replace(/\\/g, '/')))
-          .slice(0, 3);
-        if (nativeBatch !== undefined && probeCandidates.length > 0) {
-          this.nativeSystemProbeDone = true;
-          const probedJson = await nativeBatch(probeCandidates.map(path => safeDecodePath(toPlainPath(path))), false);
-          console.log(`${timestamp()} [FileSystemTiddlersReadStream] native system probe ${probedJson}`);
-        }
       }
 
       this.initDone = true;
@@ -434,7 +422,11 @@ export class FileSystemTiddlersReadStream extends Readable {
         const fallbackTitle = getTitleFromFilename(filename);
         const { fields: headerFields, bodyOffset, estimatedBodyLength } = parseTiddlerFileHeaderOnly(content, { title: fallbackTitle });
 
-        if (!this.quickLoadMode && shouldSaveFullTiddler(headerFields, estimatedBodyLength)) {
+        const shouldIncludeFullText = this.quickLoadMode
+          ? shouldPreserveFullTextInQuickLoad(headerFields)
+          : shouldSaveFullTiddler(headerFields, estimatedBodyLength);
+
+        if (shouldIncludeFullText) {
           // Need full text — parse the body
           if (bodyOffset >= 0 && estimatedBodyLength > 0) {
             (headerFields as Record<string, string>).text = content.substring(bodyOffset);

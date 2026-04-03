@@ -168,7 +168,10 @@ class TidGiMobileFileSystemSyncAdaptor {
   }
 
   getUpdatedTiddlers(_syncer: Syncer, callback: (error: Error | null | undefined, changes: { deletions: string[]; modifications: string[] }) => void): void {
-    this.logger.log('getUpdatedTiddlers');
+    this.logger.log('getUpdatedTiddlers', {
+      deletions: this.updatedTiddlers.deletions.length,
+      modifications: this.updatedTiddlers.modifications.length,
+    });
     callback(null, this.updatedTiddlers);
   }
 
@@ -267,6 +270,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
       const targetWorkspaceId = await this.routeTiddlerToWorkspace(tiddler);
+      this.logger.log('saveTiddler routing', { title, targetWorkspaceId });
       const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings(), targetWorkspaceId);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined
       if (etag === undefined) {
@@ -284,6 +288,7 @@ class TidGiMobileFileSystemSyncAdaptor {
           if (typeof trackedFilePath === 'string' && trackedFilePath.length > 0) {
             this.filePathCache.set(title, trackedFilePath);
           }
+          this.logger.log('saveTiddler tracked path', { title, trackedFilePath, targetWorkspaceId });
           // Invoke the callback
           callback(null, {
             bag: etagInfo.bag,
@@ -506,23 +511,28 @@ class TidGiMobileFileSystemSyncAdaptor {
 
     for (const workspaceConfig of sortedConfigs) {
       if (this.matchesDirectTag(tiddlerTitle, tiddlerTags, workspaceConfig.tagNames)) {
+        this.logger.log('routeTiddlerToWorkspace matched direct tag', { title: tiddlerTitle, workspaceId: workspaceConfig.id });
         return workspaceConfig.id;
       }
 
       if (workspaceConfig.includeTagTree && workspaceConfig.tagNames.length > 0) {
         if (this.matchesTagTree(tiddlerTitle, workspaceConfig.tagNames)) {
+          this.logger.log('routeTiddlerToWorkspace matched tag tree', { title: tiddlerTitle, workspaceId: workspaceConfig.id });
           return workspaceConfig.id;
         }
       }
 
       if (workspaceConfig.fileSystemPathFilterEnable && typeof workspaceConfig.fileSystemPathFilter === 'string' && workspaceConfig.fileSystemPathFilter.length > 0) {
         if (this.matchesCustomFilter(tiddlerTitle, workspaceConfig.fileSystemPathFilter)) {
+          this.logger.log('routeTiddlerToWorkspace matched custom filter', { title: tiddlerTitle, workspaceId: workspaceConfig.id });
           return workspaceConfig.id;
         }
       }
     }
 
-    return sortedConfigs.find(workspaceConfig => !workspaceConfig.isSubWiki)?.id;
+    const fallbackWorkspaceId = sortedConfigs.find(workspaceConfig => !workspaceConfig.isSubWiki)?.id;
+    this.logger.log('routeTiddlerToWorkspace defaulted to main workspace', { title: tiddlerTitle, workspaceId: fallbackWorkspaceId });
+    return fallbackWorkspaceId;
   }
 }
 

@@ -1,7 +1,7 @@
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { ExternalStorage, toPlainPath } from 'expo-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { Dispatch, RefObject, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { WebView } from 'react-native-webview';
 import expoFileSystemSyncadaptorUiAssetID from '../../../assets/plugins/syncadaptor-ui.html';
@@ -103,23 +103,6 @@ export function useTiddlyWiki(
         }
         await injectHtmlAndTiddlersStore({ html: emptyHtml, tiddlersStream, setLoadHtmlError });
         if (loadRunId !== loadRunIdReference.current) return;
-        await servicesOfWorkspace.current?.wikiHookService.executeAfterTwReady(`
-          try {
-            const inspectTitles = ['$:/SiteTitle', '$:/DefaultTiddlers', '$:/build'];
-            const result = inspectTitles.map(title => {
-              const tiddler = $tw.wiki.getTiddler(title);
-              return {
-                title,
-                exists: !!tiddler,
-                type: tiddler?.fields?.type,
-                textPreview: typeof tiddler?.fields?.text === 'string' ? tiddler.fields.text.slice(0, 80) : undefined,
-              };
-            });
-            console.log('${timestamp()} [useTiddlyWiki] post-boot system tiddler probe', JSON.stringify(result));
-          } catch (error) {
-            console.error('${timestamp()} [useTiddlyWiki] post-boot system tiddler probe failed', error);
-          }
-        `);
       } catch (error) {
         if (loadRunId !== loadRunIdReference.current) return;
         console.error(`[useTiddlyWiki] FATAL error:`, error, (error as Error).stack);

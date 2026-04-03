@@ -142,7 +142,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   id,
                   wikiFolderLocation,
                   allowReadFileAttachment: true,
-                  enableQuickLoad: true,
+                  enableQuickLoad: false,
                   syncIncludeSubWikis: true,
                 } satisfies IWikiWorkspace;
                 state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];

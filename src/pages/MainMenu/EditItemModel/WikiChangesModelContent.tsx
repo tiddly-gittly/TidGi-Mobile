@@ -23,6 +23,12 @@ interface ModalProps {
   onClose: () => void;
 }
 
+interface IUncommittedChangeItem {
+  path: string;
+  type: 'add' | 'modify' | 'delete';
+  workspace: IWikiWorkspace;
+}
+
 export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -34,7 +40,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     [id, workspaces],
   );
   const [commits, setCommits] = useState<IGitCommitInfo[]>([]);
-  const [uncommittedChanges, setUncommittedChanges] = useState<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>>([]);
+  const [uncommittedChanges, setUncommittedChanges] = useState<IUncommittedChangeItem[]>([]);
   const [selectedCommit, setSelectedCommit] = useState<IGitCommitInfo | undefined>();
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [filePreviewVisible, setFilePreviewVisible] = useState(false);
@@ -50,12 +56,26 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [detailsError, setDetailsError] = useState<string | undefined>();
   const [discardingFile, setDiscardingFile] = useState<string | undefined>();
 
+  const relatedWikisForUncommitted = useMemo(() => {
+    if (wiki === undefined) return [] as IWikiWorkspace[];
+    if (wiki.isSubWiki === true || wiki.syncIncludeSubWikis === false) return [wiki];
+    return workspaces.filter((workspace): workspace is IWikiWorkspace =>
+      (workspace.type === undefined || workspace.type === 'wiki') &&
+      (workspace.id === wiki.id || workspace.mainWikiID === wiki.id)
+    );
+  }, [wiki, workspaces]);
+
   const refreshUncommitted = async () => {
     if (wiki === undefined) return;
     const uncommittedStartAt = Date.now();
     setLoadingUncommitted(true);
-    console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id}`);
-    const uncommitted = await gitDiffChangedFiles(wiki);
+    console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id} across ${relatedWikisForUncommitted.map(item => item.id).join(',')}`);
+    const uncommitted = (await Promise.all(
+      relatedWikisForUncommitted.map(async (workspace) => {
+        const changes = await gitDiffChangedFiles(workspace);
+        return changes.map(change => ({ ...change, workspace }));
+      }),
+    )).flat();
     setUncommittedChanges(uncommitted);
     setLoadingUncommitted(false);
     console.log(`${new Date().toISOString()} [WikiChanges] uncommitted changes loaded in ${Date.now() - uncommittedStartAt}ms, count=${uncommitted.length}`);
@@ -77,21 +97,27 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     })();
   }, [wiki?.id]);
 
-  const openFilePreview = async (filePath: string, type: 'add' | 'modify' | 'delete', commit?: IGitCommitInfo) => {
-    if (wiki === undefined) return;
+  const openFilePreview = async (
+    filePath: string,
+    type: 'add' | 'modify' | 'delete',
+    commit?: IGitCommitInfo,
+    targetWorkspace?: IWikiWorkspace,
+  ) => {
+    const workspaceForFile = targetWorkspace ?? wiki;
+    if (workspaceForFile === undefined) return;
     setSelectedFilePath(filePath);
     setFilePreviewVisible(true);
     setLoadingFilePreview(true);
     if (commit) {
       const parentReference = commit.parentOids[0];
-      const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(wiki, filePath, parentReference);
-      const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(wiki, filePath, commit.oid);
+      const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, parentReference);
+      const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, commit.oid);
       setBeforeContent(before);
       setAfterContent(after);
     } else {
-      const headReference = await gitResolveReference(wiki, 'HEAD');
-      const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(wiki, filePath, headReference);
-      const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(wiki, filePath, undefined);
+      const headReference = await gitResolveReference(workspaceForFile, 'HEAD');
+      const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, headReference);
+      const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, undefined);
       setBeforeContent(before);
       setAfterContent(after);
     }
@@ -139,23 +165,23 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       {loadingUncommitted && <Text variant='bodySmall'>{t('Loading')}</Text>}
       <FilesList
         data={uncommittedChanges}
-        keyExtractor={(item) => `uncommitted-${item.type}-${item.path}`}
+        keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
         renderItem={({ item }) => (
           <List.Item
-            title={item.path}
-            description={item.type.toUpperCase()}
+            title={relatedWikisForUncommitted.length > 1 ? `[${item.workspace.name}] ${item.path}` : item.path}
+            description={`${item.type.toUpperCase()} · ${item.workspace.name}`}
             left={(props) => <List.Icon {...props} icon='source-commit-local' />}
             right={(props) => (
               <Button
                 {...props}
                 mode='text'
                 compact
-                loading={discardingFile === item.path}
+                loading={discardingFile === `${item.workspace.id}:${item.path}`}
                 disabled={discardingFile !== undefined}
                 icon='undo-variant'
                 onPress={() => {
-                  setDiscardingFile(item.path);
-                  void gitDiscardFileChanges(wiki, item.path)
+                  setDiscardingFile(`${item.workspace.id}:${item.path}`);
+                  void gitDiscardFileChanges(item.workspace, item.path)
                     .then(() => refreshUncommitted())
                     .catch((error: unknown) => {
                       console.error('Discard failed:', error);
@@ -169,7 +195,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               </Button>
             )}
             onPress={() => {
-              void openFilePreview(item.path, item.type);
+              void openFilePreview(item.path, item.type, undefined, item.workspace);
             }}
           />
         )}
