@@ -70,12 +70,16 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     const uncommittedStartAt = Date.now();
     setLoadingUncommitted(true);
     console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id} across ${relatedWikisForUncommitted.map(item => item.id).join(',')}`);
-    const uncommitted = (await Promise.all(
-      relatedWikisForUncommitted.map(async (workspace) => {
-        const changes = await gitDiffChangedFiles(workspace);
-        return changes.map(change => ({ ...change, workspace }));
-      }),
-    )).flat();
+    // Process workspaces sequentially to avoid blocking the JS thread with
+    // multiple concurrent statusMatrix scans.  Yield between workspaces so
+    // that UI interactions (scroll, back-navigation) stay responsive.
+    const uncommitted: IUncommittedChangeItem[] = [];
+    for (const workspace of relatedWikisForUncommitted) {
+      // Yield to the event loop so pending UI events can be processed.
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      const changes = await gitDiffChangedFiles(workspace);
+      uncommitted.push(...changes.map(change => ({ ...change, workspace })));
+    }
     setUncommittedChanges(uncommitted);
     setLoadingUncommitted(false);
     console.log(`${new Date().toISOString()} [WikiChanges] uncommitted changes loaded in ${Date.now() - uncommittedStartAt}ms, count=${uncommitted.length}`);
@@ -151,18 +155,21 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       >
         {t('GitHistory.Refresh')}
       </Button>
-      <Button
-        mode='outlined'
-        onPress={() => {
-          void refreshUncommitted();
-        }}
-      >
-        {t('GitHistory.LoadUncommitted')}
-      </Button>
       {loadingHistory && <LoadingIndicator />}
 
-      <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
-      {loadingUncommitted && <Text variant='bodySmall'>{t('Loading')}</Text>}
+      <UncommittedHeader>
+        <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
+        <Button
+          mode='outlined'
+          compact
+          loading={loadingUncommitted}
+          onPress={() => {
+            void refreshUncommitted();
+          }}
+        >
+          {t('GitHistory.LoadUncommitted')}
+        </Button>
+      </UncommittedHeader>
       <FilesList
         data={uncommittedChanges}
         keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
@@ -351,6 +358,13 @@ const ModalContainer = styled.View`
 `;
 const CloseButton = styled(Button)`
   margin-bottom: 10px;
+`;
+const UncommittedHeader = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  margin-bottom: 4px;
 `;
 const HistoryCard = styled(Card)`
   margin-top: 8px;

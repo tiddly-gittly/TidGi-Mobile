@@ -1362,6 +1362,10 @@ $tw.modules.getModulesByTypeAsHashmap = function(moduleType,nameField) {
 	nameField = nameField || "name";
 	var results = Object.create(null);
 	$tw.modules.forEachModuleOfType(moduleType,function(title,module) {
+		if(module === undefined || module === null) {
+			console.warn("[TW boot] module.execute returned undefined for '" + title + "' (moduleType=" + moduleType + "), skipping");
+			return;
+		}
 		results[module[nameField]] = module;
 	});
 	return results;
@@ -1375,6 +1379,9 @@ $tw.modules.applyMethods = function(moduleType,targetObject) {
 		targetObject = Object.create(null);
 	}
 	$tw.modules.forEachModuleOfType(moduleType,function(title,module) {
+		if(module === undefined || module === null) {
+			return;
+		}
 		$tw.utils.each(module,function(element,title,object) {
 			targetObject[title] = module[title];
 		});
