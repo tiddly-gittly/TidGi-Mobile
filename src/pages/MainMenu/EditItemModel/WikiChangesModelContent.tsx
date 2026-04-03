@@ -70,16 +70,33 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     const uncommittedStartAt = Date.now();
     setLoadingUncommitted(true);
     console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id} across ${relatedWikisForUncommitted.map(item => item.id).join(',')}`);
-    // Process workspaces sequentially to avoid blocking the JS thread with
-    // multiple concurrent statusMatrix scans.  Yield between workspaces so
-    // that UI interactions (scroll, back-navigation) stay responsive.
+
+    // All sub-wikis share the same git repo as the main wiki.
+    // Calling statusMatrix for each workspace is redundant and extremely slow
+    // (82 s per call).  Instead, call it ONCE on the main wiki, then classify
+    // the changed paths by which workspace they belong to.
+    const mainWiki = relatedWikisForUncommitted.find(w => w.id === wiki.id) ?? wiki;
+    const allChanges = await gitDiffChangedFiles(mainWiki);
+
+    // Classify each changed path into the most specific workspace it belongs to.
     const uncommitted: IUncommittedChangeItem[] = [];
-    for (const workspace of relatedWikisForUncommitted) {
-      // Yield to the event loop so pending UI events can be processed.
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-      const changes = await gitDiffChangedFiles(workspace);
-      uncommitted.push(...changes.map(change => ({ ...change, workspace })));
+    for (const change of allChanges) {
+      // Find the workspace whose folder path best matches this file.
+      // Sub-wikis are subdirectories, so longer matches win.
+      let bestMatch = mainWiki;
+      for (const workspace of relatedWikisForUncommitted) {
+        if (workspace.id === mainWiki.id) continue;
+        // Sub-wiki tiddlers are under tiddlers/<subwiki-folder>/
+        // The change.path is relative to the git root (= main wiki dir)
+        const subFolderName = workspace.wikiFolderLocation.split('/').pop();
+        if (subFolderName && change.path.startsWith(`tiddlers/${subFolderName}/`)) {
+          bestMatch = workspace;
+          break;
+        }
+      }
+      uncommitted.push({ ...change, workspace: bestMatch });
     }
+
     setUncommittedChanges(uncommitted);
     setLoadingUncommitted(false);
     console.log(`${new Date().toISOString()} [WikiChanges] uncommitted changes loaded in ${Date.now() - uncommittedStartAt}ms, count=${uncommitted.length}`);
@@ -155,7 +172,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       >
         {t('GitHistory.Refresh')}
       </Button>
-      {loadingHistory && <LoadingIndicator />}
 
       <UncommittedHeader>
         <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
@@ -209,6 +225,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       />
 
       <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
+      {loadingHistory && <LoadingIndicator />}
       <FlatList
         data={commits}
         initialNumToRender={20}

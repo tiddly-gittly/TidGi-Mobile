@@ -1628,7 +1628,24 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
     const startedAt = Date.now();
-    const status = await git.statusMatrix({ fs, dir: directory });
+    // Use the `filter` callback to skip non-tiddler paths early, avoiding
+    // expensive SHA-1 hashing for irrelevant files (git objects, pack data,
+    // node_modules, binary caches, etc.).
+    const status = await git.statusMatrix({
+      fs,
+      dir: directory,
+      filter: (f: string) => {
+        // Skip hidden/dot folders contents (but keep .tid files at root)
+        if (f.startsWith('.git/') || f.startsWith('.git\\')) return false;
+        // Skip non-tiddler files by extension — only process .tid, .json, .meta, .txt, .css, .js, .html
+        const ext = f.slice(f.lastIndexOf('.'));
+        if (['.tid', '.json', '.meta', '.txt', '.css', '.js', '.html', '.svg', '.md'].includes(ext)) return true;
+        // Also include extensionless paths and directories
+        if (!ext || ext === f) return true;
+        // Skip binary / git object / cache files (.data, .pack, .idx, .png, .jpg, etc.)
+        return false;
+      },
+    });
     const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
     // Track deletes and adds by NFC-normalized path to detect Unicode normalization artifacts.
     // On Android (FAT32/ExFAT), git checks out files with NFC paths but the filesystem may
