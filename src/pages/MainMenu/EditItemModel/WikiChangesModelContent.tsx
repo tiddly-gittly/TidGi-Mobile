@@ -76,6 +76,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     // not on sub-wikis (which are subdirectories without their own .git/).
     // Find the main wiki: it's the one that is NOT a sub-wiki.
     const mainWiki = relatedWikisForUncommitted.find(w => w.isSubWiki !== true) ?? wiki;
+    console.log(`${new Date().toISOString()} [WikiChanges] using mainWiki=${mainWiki.id} (isSubWiki=${mainWiki.isSubWiki ?? false}) path=${mainWiki.wikiFolderLocation}`);
     const allChanges = await gitDiffChangedFiles(mainWiki);
 
     // Classify each changed path into the most specific workspace it belongs to.
@@ -284,7 +285,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         >
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.CommitDetails')} />
-            <ScrollView>
             <Card.Content>
               <Text>{selectedCommit?.message}</Text>
               <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
@@ -299,7 +299,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               }
               {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
               {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
-              <FilesList
+              <ModalFilesList
                 data={changedFiles}
                 keyExtractor={(item) => `${item.type}-${item.path}`}
                 renderItem={({ item }) => (
@@ -314,7 +314,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 )}
               />
             </Card.Content>
-            </ScrollView>
           </DetailsCard>
         </Modal>
         <Modal
@@ -328,18 +327,18 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <ScrollView>
-            <Card.Content>
-              {loadingFilePreview && <LoadingIndicator />}
-              {!loadingFilePreview && selectedFilePath && (
-                <GitFilePreviewModal
-                  filePath={selectedFilePath}
-                  beforeContent={beforeContent}
-                  afterContent={afterContent}
-                  mode={contentMode}
-                  onModeChange={setContentMode}
-                />
-              )}
-            </Card.Content>
+              <Card.Content>
+                {loadingFilePreview && <LoadingIndicator />}
+                {!loadingFilePreview && selectedFilePath && (
+                  <GitFilePreviewModal
+                    filePath={selectedFilePath}
+                    beforeContent={beforeContent}
+                    afterContent={afterContent}
+                    mode={contentMode}
+                    onModeChange={setContentMode}
+                  />
+                )}
+              </Card.Content>
             </ScrollView>
           </DetailsCard>
         </Modal>
@@ -371,6 +370,9 @@ const DetailsCard = styled(Card)`
 `;
 const FilesList = styled(FlatList)`
   max-height: 220px;
+` as typeof FlatList;
+const ModalFilesList = styled(FlatList)`
+  max-height: 400px;
 ` as typeof FlatList;
 
 const LoadingIndicator = styled(ActivityIndicator)`

@@ -1626,6 +1626,7 @@ export async function gitResolveReference(workspace: IWikiWorkspace, reference: 
  */
 export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Array<{ path: string; type: 'add' | 'modify' | 'delete' }>> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
+  console.log(`${new Date().toISOString()} [GitService] gitDiffChangedFiles starting for ${workspace.id}, dir=${directory}, isSubWiki=${workspace.isSubWiki ?? false}`);
   try {
     const startedAt = Date.now();
 
@@ -1637,6 +1638,7 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       const nativeGitStatus = nativeModule.gitStatus as (dir: string) => Promise<string>;
       const jsonString = await nativeGitStatus(directory);
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+      console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}`);
 
       // Apply NFC/NFD deduplication (same logic as before)
       const deletesByNFC = new Set<string>();
@@ -1653,6 +1655,7 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       }
       const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
       const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+      console.log(`${new Date().toISOString()} [GitService] after NFC dedup: ${rawChanges.length} → ${deduped.length}, removed ${artifactPaths.size} NFC/NFD pairs`);
 
       const elapsedMs = Date.now() - startedAt;
       console.log(
