@@ -367,12 +367,14 @@ const HistoryCard = styled(Card)`
 `;
 const DetailsCard = styled(Card)`
   max-height: 85%;
+  overflow: hidden;
 `;
 const FilesList = styled(FlatList)`
   max-height: 220px;
 ` as typeof FlatList;
 const ModalFilesList = styled(FlatList)`
-  max-height: 400px;
+  max-height: 450px;
+  flex-shrink: 1;
 ` as typeof FlatList;
 
 const LoadingIndicator = styled(ActivityIndicator)`
@@ -382,5 +384,6 @@ const LoadingIndicator = styled(ActivityIndicator)`
 const styles = StyleSheet.create({
   modalContentContainer: {
     padding: 16,
+    justifyContent: 'center',
   },
 });

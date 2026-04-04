@@ -87,6 +87,8 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
     // React-Native don't have fs monitor, so no SSE on mobile
     // this.setupSSE();
+    // Still configure syncer to reduce polling overhead — mobile uses manual sync.
+    this.configSyncer();
   }
 
   setupSSE() {
@@ -164,7 +166,14 @@ class TidGiMobileFileSystemSyncAdaptor {
       console.error('Syncer is undefined in TidGiMobileFileSystemSyncAdaptor. Abort the configSyncer.');
       return;
     }
+    // Disable polling — mobile uses SSE or manual sync only
     $tw.syncer.pollTimerInterval = 2_147_483_647;
+    // Increase the throttle interval for saving tasks.
+    // Default is 1000ms; on mobile with IPC overhead, 2s is more appropriate.
+    // This reduces how often getSyncedTiddlers (O(n) filter) runs.
+    $tw.syncer.throttleInterval = 2000;
+    // Increase task timer interval to reduce CPU usage during bulk changes
+    $tw.syncer.taskTimerInterval = 2000;
   }
 
   getUpdatedTiddlers(_syncer: Syncer, callback: (error: Error | null | undefined, changes: { deletions: string[]; modifications: string[] }) => void): void {
