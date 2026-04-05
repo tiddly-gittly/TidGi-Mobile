@@ -1640,11 +1640,18 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
       console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}, dir=${directory}`);
 
-      // If native returns 0, always fall back to isomorphic-git.
-      // Native stat-cache (mtime/size) comparison has proven unreliable — the git index
-      // mtime values written by isomorphic-git can get refreshed by statusMatrix's own
-      // cache-update mechanism, causing native to see no changes even when files differ.
+      // If native returns 0, run diagnostic and fall back to isomorphic-git.
       if (rawChanges.length === 0) {
+        // Call native debug function if available
+        const nativeDebug = nativeModule.gitStatusDebug as ((dir: string) => Promise<string>) | undefined;
+        if (typeof nativeDebug === 'function') {
+          try {
+            const debugJson = await nativeDebug(directory);
+            console.log(`${new Date().toISOString()} [GitService] native gitStatusDebug: ${debugJson}`);
+          } catch (debugError) {
+            console.log(`${new Date().toISOString()} [GitService] gitStatusDebug error: ${(debugError as Error).message}`);
+          }
+        }
         console.log(`${new Date().toISOString()} [GitService] native gitStatus returned 0, falling back to isomorphic-git for reliability`);
         // Fall through to the isomorphic-git fallback below
       } else {
