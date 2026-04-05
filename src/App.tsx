@@ -1,5 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, type StackScreenProps } from '@react-navigation/stack';
 import { Buffer } from 'buffer';
 import i18n from 'i18next';
 import './i18n/index';
@@ -23,6 +23,8 @@ import { AuthScreen } from './pages/Auth';
 import { SubscriptionScreen } from './pages/Subscription';
 import { TaskMonitor } from './pages/TaskMonitor';
 import { TerminalViewer } from './pages/Terminal';
+import { PromptEditor } from './pages/AgentManagement/PromptEditor';
+import { WikiManagement } from './pages/WikiManagement';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import {
   WorkspaceAddServerPage,
@@ -55,9 +57,11 @@ export type RootStackParameterList = {
   Importer: ImporterProps;
   MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
+  PromptEditor: { definitionId?: string };
   Subscription: undefined;
   TaskMonitor: undefined;
   Terminal: undefined;
+  WikiManagement: undefined;
   WorkspaceAddServer: { id: string };
   WorkspaceChanges: { id: string };
   WorkspaceDetail: { id: string };
@@ -70,6 +74,10 @@ export type RootStackParameterList = {
   WikiWebView: WikiWebViewProps;
 };
 const Stack = createStackNavigator<RootStackParameterList>();
+
+function PromptEditorScreen({ route, navigation }: StackScreenProps<RootStackParameterList, 'PromptEditor'>): React.JSX.Element {
+  return <PromptEditor definitionId={route.params?.definitionId} onBack={() => navigation.goBack()} onSave={() => navigation.goBack()} />;
+}
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
@@ -209,6 +217,16 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='Terminal'
                 component={TerminalViewer}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name='PromptEditor'
+                component={PromptEditorScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name='WikiManagement'
+                component={WikiManagement}
                 options={{ headerShown: false }}
               />
             </Stack.Navigator>
