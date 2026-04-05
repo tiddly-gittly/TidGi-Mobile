@@ -1732,8 +1732,6 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
         } catch { /* ignore — keep original results */ }
       }
     }
-      }
-    }
 
     const elapsedMs = Date.now() - startedAt;
     if (deduped.length > 0 || elapsedMs > 5_000) {
