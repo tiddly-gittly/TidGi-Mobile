@@ -132,12 +132,14 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       const parentReference = commit.parentOids[0];
       const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, parentReference);
       const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, commit.oid);
+      console.log(`[FilePreview] commit ${commit.oid?.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${'text' in after ? after.text?.length : 'N/A'}`);
       setBeforeContent(before);
       setAfterContent(after);
     } else {
       const headReference = await gitResolveReference(workspaceForFile, 'HEAD');
       const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, headReference);
       const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, undefined);
+      console.log(`[FilePreview] uncommitted file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${'text' in after ? after.text?.length : 'N/A'}`);
       setBeforeContent(before);
       setAfterContent(after);
     }

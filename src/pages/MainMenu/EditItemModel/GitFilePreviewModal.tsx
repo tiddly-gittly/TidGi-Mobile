@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { Image, ScrollView } from 'react-native';
 import { SegmentedButtons, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IGitFileContent } from '../../../services/GitService';
@@ -60,27 +60,25 @@ export function GitFilePreviewModal({
         ]}
       />
 
-      <View style={{ maxHeight: 500, flex: 1 }}>
-        <ScrollView nestedScrollEnabled>
-          {mode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
+      <ScrollView style={{ maxHeight: 500 }} nestedScrollEnabled>
+        {mode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
 
-          {mode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
+        {mode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
 
-          {mode === 'full' && afterContent.kind === 'image' && afterContent.dataUri && <PreviewImage source={{ uri: afterContent.dataUri }} />}
+        {mode === 'full' && afterContent.kind === 'image' && afterContent.dataUri && <PreviewImage source={{ uri: afterContent.dataUri }} />}
 
-          {mode === 'diff' && (beforeContent.kind === 'image' || afterContent.kind === 'image') && (
-            <>
-              <Text variant='labelLarge'>Before</Text>
-              {beforeContent.kind === 'image' && beforeContent.dataUri ? <PreviewImage source={{ uri: beforeContent.dataUri }} /> : <Text>(missing)</Text>}
-              <Text variant='labelLarge'>After</Text>
-              {afterContent.kind === 'image' && afterContent.dataUri ? <PreviewImage source={{ uri: afterContent.dataUri }} /> : <Text>(missing)</Text>}
-            </>
-          )}
+        {mode === 'diff' && (beforeContent.kind === 'image' || afterContent.kind === 'image') && (
+          <>
+            <Text variant='labelLarge'>Before</Text>
+            {beforeContent.kind === 'image' && beforeContent.dataUri ? <PreviewImage source={{ uri: beforeContent.dataUri }} /> : <Text>(missing)</Text>}
+            <Text variant='labelLarge'>After</Text>
+            {afterContent.kind === 'image' && afterContent.dataUri ? <PreviewImage source={{ uri: afterContent.dataUri }} /> : <Text>(missing)</Text>}
+          </>
+        )}
 
-          {afterContent.kind === 'binary' && <Text>Binary content preview is not supported.</Text>}
-          {afterContent.kind === 'missing' && beforeContent.kind === 'missing' && <Text>File content is not available.</Text>}
-        </ScrollView>
-      </View>
+        {afterContent.kind === 'binary' && <Text>Binary content preview is not supported.</Text>}
+        {afterContent.kind === 'missing' && beforeContent.kind === 'missing' && <Text>File content is not available.</Text>}
+      </ScrollView>
     </Container>
   );
 }
