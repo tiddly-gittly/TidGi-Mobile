@@ -16,9 +16,9 @@
  */
 
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
+import { Platform } from 'react-native';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParameter } from 'tiddlywiki';
-import { Platform } from 'react-native';
 import { getWikiTiddlerFolderPath } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
@@ -84,8 +84,7 @@ export class FileSystemWikiStorageService {
     // files in parallel using Java ForkJoinPool, ~100x faster than per-file
     // JS reads through the bridge.
     const nativeBatchParser = Platform.OS === 'android'
-      ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as
-        ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
+      ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
       : undefined;
 
     for (const workspace of workspaces) {
@@ -119,26 +118,22 @@ export class FileSystemWikiStorageService {
       if (!info.exists || !info.isDirectory) return;
 
       const relativePaths = await ExternalStorage.readDirRecursive(plainFolderPath);
-      const tidFiles = relativePaths.filter((p: string) =>
-        p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'),
-      );
-      const absolutePaths = tidFiles.map((p: string) =>
-        `${plainFolderPath}${plainFolderPath.endsWith('/') ? '' : '/'}${p}`,
-      );
+      const tidFiles = relativePaths.filter((p: string) => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'));
+      const absolutePaths = tidFiles.map((p: string) => `${plainFolderPath}${plainFolderPath.endsWith('/') ? '' : '/'}${p}`);
 
       if (absolutePaths.length === 0) return;
 
       // Parse in quickLoadMode to skip text content — we only need titles.
       // Process in batches of 500 to avoid a single enormous bridge call.
       const BATCH_SIZE = 500;
-      for (let i = 0; i < absolutePaths.length; i += BATCH_SIZE) {
-        const batch = absolutePaths.slice(i, i + BATCH_SIZE);
+      for (let index = 0; index < absolutePaths.length; index += BATCH_SIZE) {
+        const batch = absolutePaths.slice(index, index + BATCH_SIZE);
         const jsonString = await batchParser(batch, true);
         const tiddlers = JSON.parse(jsonString) as Array<{ title?: string; [key: string]: unknown }>;
-        for (let j = 0; j < tiddlers.length; j++) {
-          const title = tiddlers[j].title;
+        for (let index = 0; index < tiddlers.length; index++) {
+          const title = tiddlers[index].title;
           if (typeof title === 'string' && title.length > 0) {
-            const filePath = batch[j];
+            const filePath = batch[index];
             // For .meta files, register the companion path (without .meta suffix)
             // since the tiddler content lives in the companion file.
             // But keep the .meta path in the index for save/delete operations.

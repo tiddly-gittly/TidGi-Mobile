@@ -1635,18 +1635,22 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
     // making it orders of magnitude faster than isomorphic-git's statusMatrix.
     const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
     if (Platform.OS === 'android' && typeof nativeModule.gitStatus === 'function') {
-      const nativeGitStatus = nativeModule.gitStatus as (dir: string) => Promise<string>;
+      const nativeGitStatus = nativeModule.gitStatus as (directory: string) => Promise<string>;
       const jsonString = await nativeGitStatus(directory);
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
       console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}, dir=${directory}`);
 
       // If native returns 0, log some diagnostics to help debug false-negatives
       if (rawChanges.length === 0) {
-        const nativeReadDir = nativeModule.readDirRecursive as ((dir: string) => Promise<string[]>) | undefined;
-        if (nativeReadDir !== undefined) {
-          const allFiles = await nativeReadDir(directory);
+        const nativeReadDirectory = nativeModule.readDirRecursive as ((directory: string) => Promise<string[]>) | undefined;
+        if (nativeReadDirectory !== undefined) {
+          const allFiles = await nativeReadDirectory(directory);
           const tiddlerFiles = allFiles.filter((f: string) => f.startsWith('tiddlers/'));
-          console.log(`${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${tiddlerFiles.slice(0, 5).join(', ')}`);
+          console.log(
+            `${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${
+              tiddlerFiles.slice(0, 5).join(', ')
+            }`,
+          );
         }
       }
 
@@ -1683,9 +1687,9 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       dir: directory,
       filter: (f: string) => {
         if (f.startsWith('.git/') || f.startsWith('.git\\')) return false;
-        const ext = f.slice(f.lastIndexOf('.'));
-        if (['.tid', '.json', '.meta', '.txt', '.css', '.js', '.html', '.svg', '.md'].includes(ext)) return true;
-        if (!ext || ext === f) return true;
+        const extension = f.slice(f.lastIndexOf('.'));
+        if (['.tid', '.json', '.meta', '.txt', '.css', '.js', '.html', '.svg', '.md'].includes(extension)) return true;
+        if (!extension || extension === f) return true;
         return false;
       },
     });

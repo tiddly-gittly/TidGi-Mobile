@@ -283,44 +283,47 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             setDetailsError(undefined);
           }}
         >
-          <Pressable style={styles.modalDismissArea} onPress={() => {
-            setSelectedCommit(undefined);
-            setChangedFiles([]);
-            setIsShallowSnapshot(false);
-            setDetailsError(undefined);
-          }}>
+          <Pressable
+            style={styles.modalDismissArea}
+            onPress={() => {
+              setSelectedCommit(undefined);
+              setChangedFiles([]);
+              setIsShallowSnapshot(false);
+              setDetailsError(undefined);
+            }}
+          >
             <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.CommitDetails')} />
               <Card.Content style={{ paddingTop: 4 }}>
-              <Text>{selectedCommit?.message}</Text>
-              <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
-              <Text variant='bodySmall'>{selectedCommit ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
-              <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
-              <Text variant='titleMedium' style={{ marginTop: 8 }}>{t('GitHistory.Files')}</Text>
-              {loadingDetails && <Text>{t('Loading')}</Text>}
-              {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
-              {
-                /* When a commit has parents but files is empty, it means the parent is not in
+                <Text>{selectedCommit?.message}</Text>
+                <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
+                <Text variant='bodySmall'>{selectedCommit ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
+                <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
+                <Text variant='titleMedium' style={{ marginTop: 8 }}>{t('GitHistory.Files')}</Text>
+                {loadingDetails && <Text>{t('Loading')}</Text>}
+                {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
+                {
+                  /* When a commit has parents but files is empty, it means the parent is not in
                   the local repo (shallow clone with depth:1). Show an informational note. */
-              }
-              {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
-              {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
-              <ModalFilesList
-                data={changedFiles}
-                keyExtractor={(item) => `${item.type}-${item.path}`}
-                renderItem={({ item }) => (
-                  <List.Item
-                    title={item.path}
-                    description={item.type.toUpperCase()}
-                    left={(props) => <List.Icon {...props} icon='file-document-outline' />}
-                    onPress={() => {
-                      void openFilePreview(item.path, item.type, selectedCommit);
-                    }}
-                  />
-                )}
-              />
-            </Card.Content>
-          </DetailsCard>
+                }
+                {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
+                {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
+                <ModalFilesList
+                  data={changedFiles}
+                  keyExtractor={(item) => `${item.type}-${item.path}`}
+                  renderItem={({ item }) => (
+                    <List.Item
+                      title={item.path}
+                      description={item.type.toUpperCase()}
+                      left={(props) => <List.Icon {...props} icon='file-document-outline' />}
+                      onPress={() => {
+                        void openFilePreview(item.path, item.type, selectedCommit);
+                      }}
+                    />
+                  )}
+                />
+              </Card.Content>
+            </DetailsCard>
           </Pressable>
         </Modal>
         <Modal
@@ -331,10 +334,13 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             setSelectedFilePath(undefined);
           }}
         >
-          <Pressable style={styles.modalDismissArea} onPress={() => {
-            setFilePreviewVisible(false);
-            setSelectedFilePath(undefined);
-          }}>
+          <Pressable
+            style={styles.modalDismissArea}
+            onPress={() => {
+              setFilePreviewVisible(false);
+              setSelectedFilePath(undefined);
+            }}
+          >
             <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.FilePreview')} />
               <Card.Content style={{ flex: 1 }}>
@@ -351,7 +357,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                   )}
                 </ScrollView>
               </Card.Content>
-              </ScrollView>
             </DetailsCard>
           </Pressable>
         </Modal>
