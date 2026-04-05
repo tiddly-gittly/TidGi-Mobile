@@ -11,6 +11,7 @@
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { mkdirSync, writeFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
@@ -59,10 +60,10 @@ console.log(`Rendered $:/core/save/empty: ${(emptyHtml.length / 1024).toFixed(1)
 
 // Write the single HTML asset
 const outDir = resolve(projectRoot, 'assets', 'tiddlywiki');
-fs.mkdirpSync(outDir);
+mkdirSync(outDir, { recursive: true });
 
 const htmlPath = resolve(outDir, 'tiddlywiki-empty.html');
-fs.writeFileSync(htmlPath, emptyHtml, 'utf8');
+writeFileSync(htmlPath, emptyHtml, 'utf8');
 console.log(`Wrote ${htmlPath} (${(emptyHtml.length / 1024 / 1024).toFixed(2)} MB)`);
 
 // Write version info for CopyDebugInfoButton
@@ -71,7 +72,7 @@ const versionInfo = {
   buildDate: new Date().toISOString(),
 };
 const versionPath = resolve(outDir, 'version.json');
-fs.writeFileSync(versionPath, JSON.stringify(versionInfo, null, 2), 'utf8');
+writeFileSync(versionPath, JSON.stringify(versionInfo, null, 2), 'utf8');
 console.log(`Wrote ${versionPath}`);
 
 console.log('Done!');

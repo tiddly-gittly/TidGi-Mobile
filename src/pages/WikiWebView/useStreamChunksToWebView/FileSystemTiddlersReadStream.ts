@@ -398,15 +398,35 @@ export class FileSystemTiddlersReadStream extends Readable {
           metaFields.title = getTitleFromFilename(filename.replace(/\.meta$/, ''));
         }
         if (await fileExists(companionPath)) {
-          if (companionPath.endsWith('.json')) {
-            // .meta + .json pair: the .json IS the text content (e.g. plugin bundles).
-            // Must include text so the tiddler is complete — otherwise it will
-            // overwrite the preloaded HTML version with an empty shell, causing
-            // "Cannot read properties of undefined (reading 'name')" in boot.js.
-            const jsonContent = await readText(companionPath);
-            metaFields.text = jsonContent;
+          const tiddlerType = (metaFields as Record<string, string>).type ?? 'text/vnd.tiddlywiki';
+          // Determine if the companion is a text-based file whose content should
+          // be loaded as the tiddler's "text" field. JS modules (.js), stylesheets
+          // (.css), JSON (.json), and other text formats must have their content
+          // included — otherwise boot.js cannot execute them as modules.
+          // Binary companions (images, pdfs) use _canonical_uri for lazy loading.
+          const isTextCompanion = companionPath.endsWith('.json')
+            || companionPath.endsWith('.js')
+            || companionPath.endsWith('.css')
+            || companionPath.endsWith('.svg')
+            || companionPath.endsWith('.txt')
+            || companionPath.endsWith('.html')
+            || companionPath.endsWith('.htm')
+            || tiddlerType.startsWith('text/')
+            || tiddlerType === 'application/javascript'
+            || tiddlerType === 'application/json'
+            || tiddlerType === 'application/x-tiddler-dictionary';
+
+          if (isTextCompanion) {
+            const textContent = await readText(companionPath);
+            // For skinny loading, only include text for boot-critical tiddlers
+            const headerFields = metaFields as Record<string, unknown>;
+            if (this.quickLoadMode && !shouldPreserveFullTextInQuickLoad(headerFields)) {
+              (metaFields as Record<string, string>)._is_skinny = 'yes';
+            } else {
+              metaFields.text = textContent;
+            }
           } else {
-            // .meta + binary file pair: set canonical URI for lazy loading
+            // Binary companion: set canonical URI for lazy loading
             const workspaceBase = workspace.wikiFolderLocation;
             metaFields._canonical_uri = companionPath.replace(workspaceBase + '/', '');
           }

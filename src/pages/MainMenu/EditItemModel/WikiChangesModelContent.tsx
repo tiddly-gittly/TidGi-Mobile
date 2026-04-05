@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, StyleSheet } from 'react-native';
+import { FlatList, ScrollView, StyleSheet } from 'react-native';
 import { ActivityIndicator, Button, Card, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -70,12 +70,32 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     const uncommittedStartAt = Date.now();
     setLoadingUncommitted(true);
     console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id} across ${relatedWikisForUncommitted.map(item => item.id).join(',')}`);
-    const uncommitted = (await Promise.all(
-      relatedWikisForUncommitted.map(async (workspace) => {
-        const changes = await gitDiffChangedFiles(workspace);
-        return changes.map(change => ({ ...change, workspace }));
-      }),
-    )).flat();
+
+    // All sub-wikis share the same git repo as the main wiki.
+    // We must call gitDiffChangedFiles on the MAIN wiki (which is the git root),
+    // not on sub-wikis (which are subdirectories without their own .git/).
+    // Find the main wiki: it's the one that is NOT a sub-wiki.
+    const mainWiki = relatedWikisForUncommitted.find(w => w.isSubWiki !== true) ?? wiki;
+    console.log(`${new Date().toISOString()} [WikiChanges] using mainWiki=${mainWiki.id} (isSubWiki=${mainWiki.isSubWiki ?? false}) path=${mainWiki.wikiFolderLocation}`);
+    const allChanges = await gitDiffChangedFiles(mainWiki);
+
+    // Classify each changed path into the most specific workspace it belongs to.
+    const uncommitted: IUncommittedChangeItem[] = [];
+    for (const change of allChanges) {
+      let bestMatch = mainWiki;
+      for (const workspace of relatedWikisForUncommitted) {
+        if (workspace.id === mainWiki.id) continue;
+        // Sub-wiki tiddlers are under tiddlers/<subwiki-folder>/
+        // The change.path is relative to the git root (= main wiki dir)
+        const subFolderName = workspace.wikiFolderLocation.split('/').pop();
+        if (subFolderName && change.path.startsWith(`tiddlers/${subFolderName}/`)) {
+          bestMatch = workspace;
+          break;
+        }
+      }
+      uncommitted.push({ ...change, workspace: bestMatch });
+    }
+
     setUncommittedChanges(uncommitted);
     setLoadingUncommitted(false);
     console.log(`${new Date().toISOString()} [WikiChanges] uncommitted changes loaded in ${Date.now() - uncommittedStartAt}ms, count=${uncommitted.length}`);
@@ -151,18 +171,20 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       >
         {t('GitHistory.Refresh')}
       </Button>
-      <Button
-        mode='outlined'
-        onPress={() => {
-          void refreshUncommitted();
-        }}
-      >
-        {t('GitHistory.LoadUncommitted')}
-      </Button>
-      {loadingHistory && <LoadingIndicator />}
 
-      <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
-      {loadingUncommitted && <Text variant='bodySmall'>{t('Loading')}</Text>}
+      <UncommittedHeader>
+        <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
+        <Button
+          mode='outlined'
+          compact
+          loading={loadingUncommitted}
+          onPress={() => {
+            void refreshUncommitted();
+          }}
+        >
+          {t('GitHistory.LoadUncommitted')}
+        </Button>
+      </UncommittedHeader>
       <FilesList
         data={uncommittedChanges}
         keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
@@ -202,6 +224,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       />
 
       <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
+      {loadingHistory && <LoadingIndicator />}
       <FlatList
         data={commits}
         initialNumToRender={20}
@@ -276,7 +299,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               }
               {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
               {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
-              <FilesList
+              <ModalFilesList
                 data={changedFiles}
                 keyExtractor={(item) => `${item.type}-${item.path}`}
                 renderItem={({ item }) => (
@@ -291,18 +314,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 )}
               />
             </Card.Content>
-            <Card.Actions>
-              <Button
-                onPress={() => {
-                  setSelectedCommit(undefined);
-                  setChangedFiles([]);
-                  setIsShallowSnapshot(false);
-                  setDetailsError(undefined);
-                }}
-              >
-                {t('Close')}
-              </Button>
-            </Card.Actions>
           </DetailsCard>
         </Modal>
         <Modal
@@ -315,28 +326,20 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         >
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.FilePreview')} />
-            <Card.Content>
-              {loadingFilePreview && <LoadingIndicator />}
-              {!loadingFilePreview && selectedFilePath && (
-                <GitFilePreviewModal
-                  filePath={selectedFilePath}
-                  beforeContent={beforeContent}
-                  afterContent={afterContent}
-                  mode={contentMode}
-                  onModeChange={setContentMode}
-                />
-              )}
-            </Card.Content>
-            <Card.Actions>
-              <Button
-                onPress={() => {
-                  setFilePreviewVisible(false);
-                  setSelectedFilePath(undefined);
-                }}
-              >
-                {t('Close')}
-              </Button>
-            </Card.Actions>
+            <ScrollView>
+              <Card.Content>
+                {loadingFilePreview && <LoadingIndicator />}
+                {!loadingFilePreview && selectedFilePath && (
+                  <GitFilePreviewModal
+                    filePath={selectedFilePath}
+                    beforeContent={beforeContent}
+                    afterContent={afterContent}
+                    mode={contentMode}
+                    onModeChange={setContentMode}
+                  />
+                )}
+              </Card.Content>
+            </ScrollView>
           </DetailsCard>
         </Modal>
       </Portal>
@@ -352,14 +355,26 @@ const ModalContainer = styled.View`
 const CloseButton = styled(Button)`
   margin-bottom: 10px;
 `;
+const UncommittedHeader = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  margin-bottom: 4px;
+`;
 const HistoryCard = styled(Card)`
   margin-top: 8px;
 `;
 const DetailsCard = styled(Card)`
   max-height: 85%;
+  overflow: hidden;
 `;
 const FilesList = styled(FlatList)`
   max-height: 220px;
+` as typeof FlatList;
+const ModalFilesList = styled(FlatList)`
+  max-height: 450px;
+  flex-shrink: 1;
 ` as typeof FlatList;
 
 const LoadingIndicator = styled(ActivityIndicator)`
@@ -369,5 +384,6 @@ const LoadingIndicator = styled(ActivityIndicator)`
 const styles = StyleSheet.create({
   modalContentContainer: {
     padding: 16,
+    justifyContent: 'center',
   },
 });
