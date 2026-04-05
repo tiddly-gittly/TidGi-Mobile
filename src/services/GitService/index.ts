@@ -1084,7 +1084,7 @@ export async function gitClone(
 ): Promise<void> {
   // Remove trailing slash from baseUrl to avoid double slashes
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
-  const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+  const url = `${baseUrl}/git/${remote.workspaceId}`;
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   console.log('Git clone URL:', url);
@@ -1257,7 +1257,7 @@ async function tryArchiveClone(
  */
 async function configureGitRemote(directory: string, remote: IGitRemote): Promise<void> {
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
-  const remoteUrl = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+  const remoteUrl = `${baseUrl}/git/${remote.workspaceId}`;
 
   try {
     // Use isomorphic-git to set the remote URL
@@ -1548,7 +1548,7 @@ export async function gitPushToIncoming(
 export async function triggerDesktopMerge(
   remote: IGitRemote,
 ): Promise<void> {
-  const url = `${remote.baseUrl.replace(/\/$/, '')}/tw-mobile-sync/git/${remote.workspaceId}/merge-incoming`;
+  const url = `${remote.baseUrl.replace(/\/$/, '')}/git/${remote.workspaceId}/merge-incoming`;
   const headers = normalizeHeaders(createAuthHeader(remote));
 
   const response = await fetch(url, { method: 'POST', headers });
@@ -2093,7 +2093,7 @@ export async function gitAddRemote(
   remote: IGitRemote,
 ): Promise<void> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
-  const url = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+  const url = `${remote.baseUrl}/git/${remote.workspaceId}`;
 
   try {
     await git.addRemote({

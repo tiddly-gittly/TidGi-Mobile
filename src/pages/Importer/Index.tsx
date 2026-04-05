@@ -190,7 +190,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
     try {
-      const endpoint = `${server.uri.replace(/\/$/, '')}/tw-mobile-sync/git/mobile-sync-info`;
+      const endpoint = `${server.uri.replace(/\/$/, '')}/git/mobile-sync-info`;
       const response = await fetch(endpoint);
       if (response.status === 403) {
         // Server has token protection — user must scan QR code instead
