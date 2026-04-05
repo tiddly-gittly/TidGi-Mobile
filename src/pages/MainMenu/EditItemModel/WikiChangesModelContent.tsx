@@ -337,28 +337,27 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           }}
         >
           <Pressable
-            style={styles.modalDismissArea}
+            style={StyleSheet.absoluteFill}
             onPress={() => {
               setFilePreviewVisible(false);
               setSelectedFilePath(undefined);
             }}
-          >
-            <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
-              <Card.Title title={t('GitHistory.FilePreview')} />
-              <Card.Content>
-                {loadingFilePreview && <LoadingIndicator />}
-                {!loadingFilePreview && selectedFilePath && (
-                  <GitFilePreviewModal
-                    filePath={selectedFilePath}
-                    beforeContent={beforeContent}
-                    afterContent={afterContent}
-                    mode={contentMode}
-                    onModeChange={setContentMode}
-                  />
-                )}
-              </Card.Content>
-            </DetailsCard>
-          </Pressable>
+          />
+          <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2, alignSelf: 'center', width: '92%' }} pointerEvents='box-none'>
+            <Card.Title title={t('GitHistory.FilePreview')} />
+            <Card.Content>
+              {loadingFilePreview && <LoadingIndicator />}
+              {!loadingFilePreview && selectedFilePath && (
+                <GitFilePreviewModal
+                  filePath={selectedFilePath}
+                  beforeContent={beforeContent}
+                  afterContent={afterContent}
+                  mode={contentMode}
+                  onModeChange={setContentMode}
+                />
+              )}
+            </Card.Content>
+          </DetailsCard>
         </Modal>
       </Portal>
     </ModalContainer>

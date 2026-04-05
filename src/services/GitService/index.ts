@@ -1711,23 +1711,27 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
     // Post-filter: verify "delete" entries actually don't exist on disk.
     // isomorphic-git may false-positive report deletes when fs.lstat() fails
     // for files with very long names or special characters.
-    if (Platform.OS === 'android' && deduped.some(c => c.type === 'delete')) {
-      const nativeReadDir = (ExternalStorage as unknown as Record<string, unknown>).readDirRecursive as ((dir: string) => Promise<string[]>) | undefined;
-      if (nativeReadDir !== undefined) {
+    const deletesToVerify = deduped.filter(c => c.type === 'delete');
+    if (Platform.OS === 'android' && deletesToVerify.length > 0) {
+      const nativeGetInfo = (ExternalStorage as unknown as Record<string, unknown>).getInfo as ((path: string) => Promise<{ exists: boolean }>) | undefined;
+      if (nativeGetInfo !== undefined) {
         try {
-          const diskFiles = new Set(await nativeReadDir(directory));
-          const beforeCount = deduped.length;
-          deduped = deduped.filter(c => {
-            if (c.type === 'delete' && diskFiles.has(c.path)) {
-              // File exists on disk but isogit thinks it's deleted — false positive
-              return false;
+          const falsePositives = new Set<string>();
+          for (const del of deletesToVerify) {
+            const fullPath = `${directory}/${del.path}`;
+            const info = await nativeGetInfo(fullPath);
+            if (info.exists) {
+              falsePositives.add(del.path);
             }
-            return true;
-          });
-          if (deduped.length !== beforeCount) {
-            console.log(`${new Date().toISOString()} [GitService] filtered ${beforeCount - deduped.length} false-positive deletes (files exist on disk)`);
+          }
+          if (falsePositives.size > 0) {
+            const beforeCount = deduped.length;
+            deduped = deduped.filter(c => !falsePositives.has(c.path));
+            console.log(`${new Date().toISOString()} [GitService] filtered ${beforeCount - deduped.length} false-positive deletes (files exist on disk via native getInfo)`);
           }
         } catch { /* ignore — keep original results */ }
+      }
+    }
       }
     }
 
