@@ -64,6 +64,12 @@ export function SettingsTab({ rootNavigation }: SettingsTabProps): React.JSX.Ele
           />
           <Divider />
           <List.Item
+            title={t('WikiManagement.Title')}
+            left={(props) => <List.Icon {...props} icon="notebook-multiple" />}
+            onPress={() => rootNavigation.navigate('WikiManagement')}
+          />
+          <Divider />
+          <List.Item
             title={t('Preference.Title')}
             left={(props) => <List.Icon {...props} icon="cog" />}
             onPress={() => rootNavigation.navigate('Config')}
