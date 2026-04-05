@@ -345,7 +345,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           >
             <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.FilePreview')} />
-              <Card.Content style={{ flex: 1 }}>
+              <Card.Content>
                 {loadingFilePreview && <LoadingIndicator />}
                 {!loadingFilePreview && selectedFilePath && (
                   <GitFilePreviewModal

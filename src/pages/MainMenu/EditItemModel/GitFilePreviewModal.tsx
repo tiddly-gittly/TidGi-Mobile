@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ScrollView } from 'react-native';
+import { Dimensions, Image, ScrollView } from 'react-native';
 import { SegmentedButtons, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IGitFileContent } from '../../../services/GitService';
@@ -46,6 +46,10 @@ export function GitFilePreviewModal({
   const beforeText = beforeContent.kind === 'text' ? (beforeContent.text ?? '') : '';
   const afterText = afterContent.kind === 'text' ? (afterContent.text ?? '') : '';
 
+  // Card has max-height: 80%. Card.Title ~56px, SegmentedButtons ~48px, margins ~40px.
+  // Allocate remaining space to the scroll view.
+  const scrollViewMaxHeight = Dimensions.get('window').height * 0.8 - 200;
+
   return (
     <Container>
       <Text variant='titleMedium'>{filePath}</Text>
@@ -60,7 +64,7 @@ export function GitFilePreviewModal({
         ]}
       />
 
-      <ScrollView style={{ flex: 1 }} nestedScrollEnabled>
+      <ScrollView style={{ maxHeight: scrollViewMaxHeight }} nestedScrollEnabled>
         {mode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
 
         {mode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
@@ -86,7 +90,6 @@ export function GitFilePreviewModal({
 const Container = styled.View`
   margin-top: 8px;
   gap: 8px;
-  flex: 1;
 `;
 
 const CodeText = styled(Text)`

@@ -1640,25 +1640,13 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
       console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}, dir=${directory}`);
 
-      // If native returns 0, cross-check with isomorphic-git on a known-changing file
+      // If native returns 0, always fall back to isomorphic-git.
+      // Native stat-cache (mtime/size) comparison has proven unreliable — the git index
+      // mtime values written by isomorphic-git can get refreshed by statusMatrix's own
+      // cache-update mechanism, causing native to see no changes even when files differ.
       if (rawChanges.length === 0) {
-        try {
-          // $__StoryList.tid changes every wiki load; if isogit says it changed, native had a false-negative
-          const sampleStatus = await git.statusMatrix({ fs, dir: directory, filepaths: ['tiddlers/$__StoryList.tid'] });
-          const sampleChanged = sampleStatus.filter(([, , w]) => w !== 2);
-          if (sampleChanged.length > 0) {
-            console.log(`${new Date().toISOString()} [GitService] native gitStatus false-negative detected (StoryList changed), falling back to isomorphic-git`);
-            // Fall through to the isomorphic-git fallback below
-          } else {
-            // Native is correct — no changes
-            const elapsedMs = Date.now() - startedAt;
-            console.log(`${new Date().toISOString()} [GitService] gitDiffChangedFiles (native+verified) for ${workspace.id} took ${elapsedMs}ms, count=0`);
-            return [];
-          }
-        } catch (crossCheckError) {
-          console.log(`${new Date().toISOString()} [GitService] cross-check error: ${(crossCheckError as Error).message}, trusting native result`);
-          return [];
-        }
+        console.log(`${new Date().toISOString()} [GitService] native gitStatus returned 0, falling back to isomorphic-git for reliability`);
+        // Fall through to the isomorphic-git fallback below
       } else {
         // Native returned >0 changes — apply NFC/NFD deduplication
         const deletesByNFC = new Set<string>();
