@@ -24,7 +24,7 @@ import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
-import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, listTidFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
+import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTidFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
 import { processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
@@ -126,6 +126,10 @@ export class FileSystemWikiStorageService {
       // Parse in quickLoadMode to skip text content — we only need titles.
       // Process in batches of 500 to avoid a single enormous bridge call.
       const BATCH_SIZE = 500;
+      // For internal storage paths, convert plain paths back to file:// URIs
+      // so the index is consistent with the rest of the codebase (which uses
+      // file:// URIs for expo-file-system File/Directory operations).
+      const isExternal = isExternalPath(plainFolderPath);
       for (let index = 0; index < absolutePaths.length; index += BATCH_SIZE) {
         const batch = absolutePaths.slice(index, index + BATCH_SIZE);
         const jsonString = await batchParser(batch, true);
@@ -133,12 +137,11 @@ export class FileSystemWikiStorageService {
         for (let index = 0; index < tiddlers.length; index++) {
           const title = tiddlers[index].title;
           if (typeof title === 'string' && title.length > 0) {
-            const filePath = batch[index];
-            // For .meta files, register the companion path (without .meta suffix)
-            // since the tiddler content lives in the companion file.
-            // But keep the .meta path in the index for save/delete operations.
-            this.#tiddlerFilePathByTitle.set(title, filePath);
-            this.#titleByFilePath.set(filePath, title);
+            const plainPath = batch[index];
+            // Store file:// URI for internal paths so ensureDirectory / File() work
+            const storedPath = isExternal ? plainPath : `file://${plainPath}`;
+            this.#tiddlerFilePathByTitle.set(title, storedPath);
+            this.#titleByFilePath.set(plainPath, title);
           }
         }
       }

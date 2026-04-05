@@ -89,7 +89,7 @@ const Container = styled.View`
 `;
 
 const PreviewScrollView = styled(ScrollView)`
-  max-height: 360px;
+  max-height: 500px;
 `;
 
 const CodeText = styled(Text)`

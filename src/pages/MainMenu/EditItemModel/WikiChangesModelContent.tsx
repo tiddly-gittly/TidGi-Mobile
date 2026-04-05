@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { FlatList, Pressable, StyleSheet } from 'react-native';
 import { ActivityIndicator, Button, Card, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -343,19 +343,17 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           >
             <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.FilePreview')} />
-              <Card.Content style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
-                  {loadingFilePreview && <LoadingIndicator />}
-                  {!loadingFilePreview && selectedFilePath && (
-                    <GitFilePreviewModal
-                      filePath={selectedFilePath}
-                      beforeContent={beforeContent}
-                      afterContent={afterContent}
-                      mode={contentMode}
-                      onModeChange={setContentMode}
-                    />
-                  )}
-                </ScrollView>
+              <Card.Content>
+                {loadingFilePreview && <LoadingIndicator />}
+                {!loadingFilePreview && selectedFilePath && (
+                  <GitFilePreviewModal
+                    filePath={selectedFilePath}
+                    beforeContent={beforeContent}
+                    afterContent={afterContent}
+                    mode={contentMode}
+                    onModeChange={setContentMode}
+                  />
+                )}
               </Card.Content>
             </DetailsCard>
           </Pressable>
