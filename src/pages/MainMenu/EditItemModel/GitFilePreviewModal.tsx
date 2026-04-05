@@ -1,5 +1,5 @@
-import React from 'react';
-import { Dimensions, Image, ScrollView } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Dimensions, Image, LayoutChangeEvent, ScrollView, View } from 'react-native';
 import { SegmentedButtons, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IGitFileContent } from '../../../services/GitService';
@@ -45,26 +45,37 @@ export function GitFilePreviewModal({
 }: IGitFilePreviewModalProps): React.JSX.Element {
   const beforeText = beforeContent.kind === 'text' ? (beforeContent.text ?? '') : '';
   const afterText = afterContent.kind === 'text' ? (afterContent.text ?? '') : '';
+  const [headerHeight, setHeaderHeight] = useState(0);
 
-  // Card has max-height: 80%. Card.Title ~56px, SegmentedButtons ~48px, margins ~40px.
-  // Allocate remaining space to the scroll view.
-  const scrollViewMaxHeight = Dimensions.get('window').height * 0.8 - 200;
+  // Card has max-height: 80% of screen. Card.Title ~ 56px, Card.Content padding ~ 16px.
+  // We measure the header (filePath text + segmented buttons) to compute remaining space.
+  const windowHeight = Dimensions.get('window').height;
+  const cardMaxHeight = windowHeight * 0.8;
+  // Remaining height for scroll view after subtracting card chrome and header
+  const scrollViewHeight = Math.max(100, cardMaxHeight - 56 - 32 - headerHeight - 16);
+
+  const onHeaderLayout = useCallback((event: LayoutChangeEvent) => {
+    setHeaderHeight(event.nativeEvent.layout.height);
+  }, []);
 
   return (
-    <Container>
-      <Text variant='titleMedium'>{filePath}</Text>
-      <SegmentedButtons
-        value={mode}
-        onValueChange={(value) => {
-          onModeChange(value as 'diff' | 'full');
-        }}
-        buttons={[
-          { value: 'diff', label: 'Diff' },
-          { value: 'full', label: 'Full' },
-        ]}
-      />
+    <View>
+      <View onLayout={onHeaderLayout}>
+        <Text variant='titleMedium' style={{ marginTop: 8 }}>{filePath}</Text>
+        <SegmentedButtons
+          style={{ marginTop: 8 }}
+          value={mode}
+          onValueChange={(value) => {
+            onModeChange(value as 'diff' | 'full');
+          }}
+          buttons={[
+            { value: 'diff', label: 'Diff' },
+            { value: 'full', label: 'Full' },
+          ]}
+        />
+      </View>
 
-      <ScrollView style={{ maxHeight: scrollViewMaxHeight }} nestedScrollEnabled>
+      <ScrollView style={{ height: scrollViewHeight, marginTop: 8 }} nestedScrollEnabled>
         {mode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
 
         {mode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
@@ -83,14 +94,9 @@ export function GitFilePreviewModal({
         {afterContent.kind === 'binary' && <Text>Binary content preview is not supported.</Text>}
         {afterContent.kind === 'missing' && beforeContent.kind === 'missing' && <Text>File content is not available.</Text>}
       </ScrollView>
-    </Container>
+    </View>
   );
 }
-
-const Container = styled.View`
-  margin-top: 8px;
-  gap: 8px;
-`;
 
 const CodeText = styled(Text)`
   font-family: monospace;

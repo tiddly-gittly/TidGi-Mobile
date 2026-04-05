@@ -1706,7 +1706,31 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       }
     }
     const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
-    const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+    let deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+
+    // Post-filter: verify "delete" entries actually don't exist on disk.
+    // isomorphic-git may false-positive report deletes when fs.lstat() fails
+    // for files with very long names or special characters.
+    if (Platform.OS === 'android' && deduped.some(c => c.type === 'delete')) {
+      const nativeReadDir = (ExternalStorage as unknown as Record<string, unknown>).readDirRecursive as ((dir: string) => Promise<string[]>) | undefined;
+      if (nativeReadDir !== undefined) {
+        try {
+          const diskFiles = new Set(await nativeReadDir(directory));
+          const beforeCount = deduped.length;
+          deduped = deduped.filter(c => {
+            if (c.type === 'delete' && diskFiles.has(c.path)) {
+              // File exists on disk but isogit thinks it's deleted — false positive
+              return false;
+            }
+            return true;
+          });
+          if (deduped.length !== beforeCount) {
+            console.log(`${new Date().toISOString()} [GitService] filtered ${beforeCount - deduped.length} false-positive deletes (files exist on disk)`);
+          }
+        } catch { /* ignore — keep original results */ }
+      }
+    }
+
     const elapsedMs = Date.now() - startedAt;
     if (deduped.length > 0 || elapsedMs > 5_000) {
       console.log(
