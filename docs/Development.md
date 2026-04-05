@@ -49,7 +49,19 @@ For dev-client builds, use CI artifacts from the `Build Dev Client APK` workflow
 
 For tagged release builds, follow the repository release workflow and let GitHub Actions produce the artifacts from tags instead of running local EAS builds.
 
-Agent should use Github CLI to wait for CI completion or fail, in a blocking way.
+Agent should use Github CLI to wait for CI completion or fail, in a blocking way:
+
+```sh
+# Wait for the latest Dev Client APK workflow on the current branch
+gh run list --branch $(git branch --show-current) --workflow "Build Dev Client APK" --limit 1 --json databaseId --jq ".[0].databaseId" | % { gh run watch $_ --exit-status --interval 60 }
+# Download its artifact after success
+gh run list --branch $(git branch --show-current) --workflow "Build Dev Client APK" --limit 1 --json databaseId --jq ".[0].databaseId" | % { gh run download $_ --dir artifacts/dev-client-latest }
+```
+
+Key flags:
+- `--exit-status` makes `gh run watch` exit non-zero on failure (useful for scripting).
+- `--interval 60` polls every 60 seconds (default is 3s which may hit rate limits or network issues).
+- If `gh run watch` gets interrupted by network, re-run the same command — it's idempotent.
 
 ## Debug after build
 

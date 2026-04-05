@@ -178,26 +178,34 @@ class TidGiMobileFileSystemSyncAdaptor {
     // Increase task timer interval to reduce CPU usage during bulk changes
     $tw.syncer.taskTimerInterval = 2000;
 
-    // Suppress syncer's processTaskQueue during boot phase to prevent O(n²)
-    // behavior when thousands of tiddlers are added to the store.
-    // Each addition fires a wiki "change" event → syncer.processTaskQueue →
-    // getSyncedTiddlers (filters all tiddlers) → O(n) per event → O(n²) total.
+    // Suppress syncer during boot phase to prevent O(n²) behavior.
+    // The syncer's wiki "change" handler calls getSyncedTiddlers (O(n) filter)
+    // for EVERY change event. During boot, thousands of tiddlers are streamed
+    // in, each firing a change event → O(n) * O(n) = O(n²) total.
+    // We patch BOTH getSyncedTiddlers AND processTaskQueue to no-op during boot.
     if (!this._bootPhaseComplete) {
       const originalProcessTaskQueue = $tw.syncer.processTaskQueue.bind($tw.syncer);
+      const originalGetSyncedTiddlers = $tw.syncer.getSyncedTiddlers.bind($tw.syncer);
       const self = this;
       $tw.syncer.processTaskQueue = function() {
-        if (!self._bootPhaseComplete) {
-          return; // skip during boot
-        }
+        if (!self._bootPhaseComplete) return;
         return originalProcessTaskQueue();
+      };
+      // getSyncedTiddlers is the expensive O(n) call — skip it during boot
+      $tw.syncer.getSyncedTiddlers = function(source: unknown) {
+        if (!self._bootPhaseComplete) return [];
+        return originalGetSyncedTiddlers(source);
       };
       // Mark boot complete after a delay — by then initial tiddler streaming
       // and readTiddlerInfo should be done.
       setTimeout(() => {
         self._bootPhaseComplete = true;
         self.logger.log('configSyncer: boot phase complete, syncer fully enabled');
-        // Restore original and trigger one processing cycle
+        // Restore originals
         $tw.syncer.processTaskQueue = originalProcessTaskQueue;
+        $tw.syncer.getSyncedTiddlers = originalGetSyncedTiddlers;
+        // Re-read tiddler info now that all tiddlers are loaded, then process queue
+        $tw.syncer.readTiddlerInfo();
         $tw.syncer.processTaskQueue();
       }, 10_000);
     }

@@ -241,7 +241,9 @@ export class FileSystemWikiStorageService {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
       await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
-      this.#logger.log(`saveTiddler "${title}" → ${toPlainPath(fullPath)}`);
+      const plainSavePath = toPlainPath(fullPath);
+      this.#logger.log(`saveTiddler "${title}" → ${plainSavePath}`);
+      console.log(`${new Date().toISOString()} [WikiStorageService] saveTiddler "${title}" written to ${plainSavePath}`);
 
       // ─── Desktop cleanupTiddlerFiles equivalent ──────────────────────
       // If the file moved to a different location (routing changed),

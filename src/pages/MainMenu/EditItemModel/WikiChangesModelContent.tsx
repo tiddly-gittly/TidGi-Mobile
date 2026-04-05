@@ -285,12 +285,12 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         >
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
             <Card.Title title={t('GitHistory.CommitDetails')} />
-            <Card.Content>
+            <Card.Content style={{ paddingTop: 4 }}>
               <Text>{selectedCommit?.message}</Text>
               <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
               <Text variant='bodySmall'>{selectedCommit ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
               <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
-              <Text variant='titleMedium'>{t('GitHistory.Files')}</Text>
+              <Text variant='titleMedium' style={{ marginTop: 8 }}>{t('GitHistory.Files')}</Text>
               {loadingDetails && <Text>{t('Loading')}</Text>}
               {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
               {
@@ -366,8 +366,9 @@ const HistoryCard = styled(Card)`
   margin-top: 8px;
 `;
 const DetailsCard = styled(Card)`
-  max-height: 85%;
+  max-height: 80%;
   overflow: hidden;
+  margin-top: 40px;
 `;
 const FilesList = styled(FlatList)`
   max-height: 220px;
@@ -384,6 +385,7 @@ const LoadingIndicator = styled(ActivityIndicator)`
 const styles = StyleSheet.create({
   modalContentContainer: {
     padding: 16,
+    paddingVertical: 40,
     justifyContent: 'center',
   },
 });
