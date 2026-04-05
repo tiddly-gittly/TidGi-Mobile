@@ -6,6 +6,15 @@ import type { NativeService } from '../../../src/services/NativeService/index.js
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
 import type { FileSystemWikiStorageService as WikiStorageService } from '../../../src/services/WikiStorageService/FileSystemWikiStorageService.js';
 
+// Augment tw5-typed Syncer with runtime properties that exist but aren't typed
+declare module 'tiddlywiki' {
+  interface Syncer {
+    throttleInterval: number;
+    taskTimerInterval: number;
+    filterFn: (source?: unknown) => string[];
+  }
+}
+
 interface Logger {
   alert: (message: string) => void;
   log: (...arguments_: unknown[]) => void;
@@ -167,16 +176,17 @@ class TidGiMobileFileSystemSyncAdaptor {
       setTimeout(() => this.configSyncer(), 500);
       return;
     }
+    const syncer = $tw.syncer;
     this.syncerConfigured = true;
     this.logger.log('configSyncer: disabling polling, increasing throttle');
     // Disable polling — mobile uses SSE or manual sync only
-    $tw.syncer.pollTimerInterval = 2_147_483_647;
+    syncer.pollTimerInterval = 2_147_483_647;
     // Increase the throttle interval for saving tasks.
     // Default is 1000ms; on mobile with IPC overhead, 2s is more appropriate.
     // This reduces how often getSyncedTiddlers (O(n) filter) runs.
-    $tw.syncer.throttleInterval = 2000;
+    syncer.throttleInterval = 2000;
     // Increase task timer interval to reduce CPU usage during bulk changes
-    $tw.syncer.taskTimerInterval = 2000;
+    syncer.taskTimerInterval = 2000;
 
     // Suppress syncer during boot phase to prevent O(n²) behavior.
     // The syncer's wiki "change" handler calls getSyncedTiddlers (O(n) filter)
@@ -184,15 +194,17 @@ class TidGiMobileFileSystemSyncAdaptor {
     // in, each firing a change event → O(n) * O(n) = O(n²) total.
     // We patch BOTH getSyncedTiddlers AND processTaskQueue to no-op during boot.
     if (!this._bootPhaseComplete) {
-      const originalProcessTaskQueue = $tw.syncer.processTaskQueue.bind($tw.syncer);
-      const originalGetSyncedTiddlers = $tw.syncer.getSyncedTiddlers.bind($tw.syncer);
+      const originalProcessTaskQueue = syncer.processTaskQueue.bind(syncer);
+      // Runtime: getSyncedTiddlers(source) takes a source callback — the type
+      // definition omits it, so we cast to the actual signature.
+      const originalGetSyncedTiddlers = (syncer.getSyncedTiddlers as (source?: unknown) => string[]).bind(syncer);
       const self = this;
-      $tw.syncer.processTaskQueue = function() {
+      syncer.processTaskQueue = function() {
         if (!self._bootPhaseComplete) return;
         return originalProcessTaskQueue();
       };
       // getSyncedTiddlers is the expensive O(n) call — skip it during boot
-      $tw.syncer.getSyncedTiddlers = function(source: unknown) {
+      (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = function(source: unknown) {
         if (!self._bootPhaseComplete) return [];
         return originalGetSyncedTiddlers(source);
       };
@@ -202,11 +214,11 @@ class TidGiMobileFileSystemSyncAdaptor {
         self._bootPhaseComplete = true;
         self.logger.log('configSyncer: boot phase complete, syncer fully enabled');
         // Restore originals
-        $tw.syncer.processTaskQueue = originalProcessTaskQueue;
-        $tw.syncer.getSyncedTiddlers = originalGetSyncedTiddlers;
+        syncer.processTaskQueue = originalProcessTaskQueue;
+        (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = originalGetSyncedTiddlers;
         // Re-read tiddler info now that all tiddlers are loaded, then process queue
-        $tw.syncer.readTiddlerInfo();
-        $tw.syncer.processTaskQueue();
+        syncer.readTiddlerInfo();
+        syncer.processTaskQueue();
       }, 10_000);
     }
   }
