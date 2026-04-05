@@ -88,8 +88,11 @@ const Container = styled.View`
   gap: 8px;
 `;
 
-const PreviewScrollView = styled(ScrollView)`
+const PreviewScrollView = styled(ScrollView).attrs({
+  nestedScrollEnabled: true,
+})`
   max-height: 500px;
+  flex-shrink: 1;
 `;
 
 const CodeText = styled(Text)`
