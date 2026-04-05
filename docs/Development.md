@@ -59,6 +59,7 @@ gh run list --branch $(git branch --show-current) --workflow "Build Dev Client A
 ```
 
 Key flags:
+
 - `--exit-status` makes `gh run watch` exit non-zero on failure (useful for scripting).
 - `--interval 60` polls every 60 seconds (default is 3s which may hit rate limits or network issues).
 - If `gh run watch` gets interrupted by network, re-run the same command — it's idempotent.

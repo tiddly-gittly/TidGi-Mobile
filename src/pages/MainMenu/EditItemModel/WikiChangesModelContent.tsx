@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, ScrollView, StyleSheet } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { ActivityIndicator, Button, Card, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -274,7 +274,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       />
       <Portal>
         <Modal
-          contentContainerStyle={styles.modalContentContainer}
+          contentContainerStyle={styles.modalContentFillContainer}
           visible={selectedCommit !== undefined}
           onDismiss={() => {
             setSelectedCommit(undefined);
@@ -283,9 +283,15 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             setDetailsError(undefined);
           }}
         >
-          <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
-            <Card.Title title={t('GitHistory.CommitDetails')} />
-            <Card.Content style={{ paddingTop: 4 }}>
+          <Pressable style={styles.modalDismissArea} onPress={() => {
+            setSelectedCommit(undefined);
+            setChangedFiles([]);
+            setIsShallowSnapshot(false);
+            setDetailsError(undefined);
+          }}>
+            <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
+              <Card.Title title={t('GitHistory.CommitDetails')} />
+              <Card.Content style={{ paddingTop: 4 }}>
               <Text>{selectedCommit?.message}</Text>
               <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
               <Text variant='bodySmall'>{selectedCommit ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
@@ -315,32 +321,39 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               />
             </Card.Content>
           </DetailsCard>
+          </Pressable>
         </Modal>
         <Modal
-          contentContainerStyle={styles.modalContentContainer}
+          contentContainerStyle={styles.modalContentFillContainer}
           visible={filePreviewVisible}
           onDismiss={() => {
             setFilePreviewVisible(false);
             setSelectedFilePath(undefined);
           }}
         >
-          <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }}>
-            <Card.Title title={t('GitHistory.FilePreview')} />
-            <ScrollView>
-              <Card.Content>
-                {loadingFilePreview && <LoadingIndicator />}
-                {!loadingFilePreview && selectedFilePath && (
-                  <GitFilePreviewModal
-                    filePath={selectedFilePath}
-                    beforeContent={beforeContent}
-                    afterContent={afterContent}
-                    mode={contentMode}
-                    onModeChange={setContentMode}
-                  />
-                )}
+          <Pressable style={styles.modalDismissArea} onPress={() => {
+            setFilePreviewVisible(false);
+            setSelectedFilePath(undefined);
+          }}>
+            <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
+              <Card.Title title={t('GitHistory.FilePreview')} />
+              <Card.Content style={{ flex: 1 }}>
+                <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
+                  {loadingFilePreview && <LoadingIndicator />}
+                  {!loadingFilePreview && selectedFilePath && (
+                    <GitFilePreviewModal
+                      filePath={selectedFilePath}
+                      beforeContent={beforeContent}
+                      afterContent={afterContent}
+                      mode={contentMode}
+                      onModeChange={setContentMode}
+                    />
+                  )}
+                </ScrollView>
               </Card.Content>
-            </ScrollView>
-          </DetailsCard>
+              </ScrollView>
+            </DetailsCard>
+          </Pressable>
         </Modal>
       </Portal>
     </ModalContainer>
@@ -367,8 +380,6 @@ const HistoryCard = styled(Card)`
 `;
 const DetailsCard = styled(Card)`
   max-height: 80%;
-  overflow: hidden;
-  margin-top: 40px;
 `;
 const FilesList = styled(FlatList)`
   max-height: 220px;
@@ -383,9 +394,13 @@ const LoadingIndicator = styled(ActivityIndicator)`
 `;
 
 const styles = StyleSheet.create({
-  modalContentContainer: {
-    padding: 16,
-    paddingVertical: 40,
+  modalContentFillContainer: {
+    flex: 1,
     justifyContent: 'center',
+  },
+  modalDismissArea: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 16,
   },
 });

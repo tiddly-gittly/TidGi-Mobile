@@ -1638,7 +1638,17 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       const nativeGitStatus = nativeModule.gitStatus as (dir: string) => Promise<string>;
       const jsonString = await nativeGitStatus(directory);
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
-      console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}`);
+      console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}, dir=${directory}`);
+
+      // If native returns 0, log some diagnostics to help debug false-negatives
+      if (rawChanges.length === 0) {
+        const nativeReadDir = nativeModule.readDirRecursive as ((dir: string) => Promise<string[]>) | undefined;
+        if (nativeReadDir !== undefined) {
+          const allFiles = await nativeReadDir(directory);
+          const tiddlerFiles = allFiles.filter((f: string) => f.startsWith('tiddlers/'));
+          console.log(`${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${tiddlerFiles.slice(0, 5).join(', ')}`);
+        }
+      }
 
       // Apply NFC/NFD deduplication (same logic as before)
       const deletesByNFC = new Set<string>();

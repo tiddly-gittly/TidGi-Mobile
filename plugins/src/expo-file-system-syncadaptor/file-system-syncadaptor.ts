@@ -6,15 +6,6 @@ import type { NativeService } from '../../../src/services/NativeService/index.js
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
 import type { FileSystemWikiStorageService as WikiStorageService } from '../../../src/services/WikiStorageService/FileSystemWikiStorageService.js';
 
-// Augment tw5-typed Syncer with runtime properties that exist but aren't typed
-declare module 'tiddlywiki' {
-  interface Syncer {
-    throttleInterval: number;
-    taskTimerInterval: number;
-    filterFn: (source?: unknown) => string[];
-  }
-}
-
 interface Logger {
   alert: (message: string) => void;
   log: (...arguments_: unknown[]) => void;
@@ -198,21 +189,20 @@ class TidGiMobileFileSystemSyncAdaptor {
       // Runtime: getSyncedTiddlers(source) takes a source callback — the type
       // definition omits it, so we cast to the actual signature.
       const originalGetSyncedTiddlers = (syncer.getSyncedTiddlers as (source?: unknown) => string[]).bind(syncer);
-      const self = this;
-      syncer.processTaskQueue = function() {
-        if (!self._bootPhaseComplete) return;
+      syncer.processTaskQueue = () => {
+        if (!this._bootPhaseComplete) return;
         return originalProcessTaskQueue();
       };
       // getSyncedTiddlers is the expensive O(n) call — skip it during boot
-      (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = function(source: unknown) {
-        if (!self._bootPhaseComplete) return [];
+      (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = (source: unknown) => {
+        if (!this._bootPhaseComplete) return [];
         return originalGetSyncedTiddlers(source);
       };
       // Mark boot complete after a delay — by then initial tiddler streaming
       // and readTiddlerInfo should be done.
       setTimeout(() => {
-        self._bootPhaseComplete = true;
-        self.logger.log('configSyncer: boot phase complete, syncer fully enabled');
+        this._bootPhaseComplete = true;
+        this.logger.log('configSyncer: boot phase complete, syncer fully enabled');
         // Restore originals
         syncer.processTaskQueue = originalProcessTaskQueue;
         (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = originalGetSyncedTiddlers;
