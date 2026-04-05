@@ -345,7 +345,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           >
             <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.FilePreview')} />
-              <Card.Content>
+              <Card.Content style={{ flex: 1 }}>
                 {loadingFilePreview && <LoadingIndicator />}
                 {!loadingFilePreview && selectedFilePath && (
                   <GitFilePreviewModal
@@ -385,6 +385,7 @@ const HistoryCard = styled(Card)`
 `;
 const DetailsCard = styled(Card)`
   max-height: 80%;
+  overflow: hidden;
 `;
 const FilesList = styled(FlatList)`
   max-height: 220px;

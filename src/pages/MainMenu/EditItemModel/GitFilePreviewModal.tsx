@@ -60,7 +60,7 @@ export function GitFilePreviewModal({
         ]}
       />
 
-      <ScrollView style={{ maxHeight: 500 }} nestedScrollEnabled>
+      <ScrollView style={{ flex: 1 }} nestedScrollEnabled>
         {mode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
 
         {mode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
@@ -86,6 +86,7 @@ export function GitFilePreviewModal({
 const Container = styled.View`
   margin-top: 8px;
   gap: 8px;
+  flex: 1;
 `;
 
 const CodeText = styled(Text)`

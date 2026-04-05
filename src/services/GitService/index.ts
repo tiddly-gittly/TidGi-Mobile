@@ -1646,11 +1646,22 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
         if (nativeReadDirectory !== undefined) {
           const allFiles = await nativeReadDirectory(directory);
           const tiddlerFiles = allFiles.filter((f: string) => f.startsWith('tiddlers/'));
-          console.log(
-            `${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${
-              tiddlerFiles.slice(0, 5).join(', ')
-            }`,
-          );
+          // Also check with isomorphic-git statusMatrix for a small sample to cross-validate
+          try {
+            const sampleStatus = await git.statusMatrix({ fs, dir: directory, filepaths: tiddlerFiles.slice(-3) });
+            const sampleChanged = sampleStatus.filter(([, h, w, s]) => w !== h || s !== h);
+            console.log(
+              `${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${
+                tiddlerFiles.slice(0, 5).join(', ')
+              }, isogit-crosscheck: ${sampleChanged.length} changed out of ${sampleStatus.length} sampled (last 3: ${tiddlerFiles.slice(-3).join(', ')})`,
+            );
+          } catch {
+            console.log(
+              `${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${
+                tiddlerFiles.slice(0, 5).join(', ')
+              }`,
+            );
+          }
         }
       }
 
