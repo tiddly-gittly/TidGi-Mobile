@@ -3,21 +3,26 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { Buffer } from 'buffer';
 import i18n from 'i18next';
 import './i18n/index';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { HeaderBackButton } from '@react-navigation/elements';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
-import { styled, ThemeProvider } from 'styled-components/native';
+import { ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
 import { Importer, type ImporterProps } from './pages/Importer/Index';
-import { MainMenu, type MainMenuProps } from './pages/MainMenu';
+import { type MainMenuProps } from './pages/MainMenu';
+import { MainTabs } from './pages/MainTabs';
+import { AgentManagement } from './pages/AgentManagement';
+import { AuthScreen } from './pages/Auth';
+import { SubscriptionScreen } from './pages/Subscription';
+import { TaskMonitor } from './pages/TaskMonitor';
+import { TerminalViewer } from './pages/Terminal';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import {
   WorkspaceAddServerPage,
@@ -36,20 +41,23 @@ if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
 
-const SettingsIcon = styled(Ionicons)`
-  margin-right: 10px;
-`;
 import { initializeMobileLogger } from './services/LoggerService';
+import { initializeMemeLoop } from './services/MemeLoopService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
+  AgentManagement: undefined;
+  Auth: undefined;
   Config: undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
   MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
+  Subscription: undefined;
+  TaskMonitor: undefined;
+  Terminal: undefined;
   WorkspaceAddServer: { id: string };
   WorkspaceChanges: { id: string };
   WorkspaceDetail: { id: string };
@@ -73,6 +81,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     initializeMobileLogger();
+    void initializeMemeLoop();
   }, []);
 
   return (
@@ -105,22 +114,8 @@ export const App: React.FC = () => {
               />
               <Stack.Screen
                 name='MainMenu'
-                component={MainMenu}
-                options={({ navigation }) => ({
-                  headerTitle: t('Sidebar.Main'),
-                  headerTitleStyle: { color: theme.colors.primary },
-                  headerRight: () => (
-                    <SettingsIcon
-                      testID='settings-icon-button'
-                      name='settings'
-                      size={32}
-                      color={theme.colors.primary}
-                      onPress={() => {
-                        navigation.navigate('Config' as never);
-                      }}
-                    />
-                  ),
-                })}
+                component={MainTabs}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name='Importer'
@@ -190,6 +185,31 @@ export const App: React.FC = () => {
                   headerTitleStyle: { color: theme.colors.primary },
                 })}
                 component={PreviewWebView}
+              />
+              <Stack.Screen
+                name='Auth'
+                component={AuthScreen}
+                options={{ headerTitle: t('Auth.Title'), headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='Subscription'
+                component={SubscriptionScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name='AgentManagement'
+                component={AgentManagement}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name='TaskMonitor'
+                component={TaskMonitor}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name='Terminal'
+                component={TerminalViewer}
+                options={{ headerShown: false }}
               />
             </Stack.Navigator>
             {importSuccessSnackBar}

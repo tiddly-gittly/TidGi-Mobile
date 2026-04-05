@@ -190,7 +190,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
     try {
-      const endpoint = `${server.uri.replace(/\/$/, '')}/tw-mobile-sync/git/mobile-sync-info`;
+      const endpoint = `${server.uri.replace(/\/$/, '')}/git/mobile-sync-info`;
       const response = await fetch(endpoint);
       if (response.status === 403) {
         // Server has token protection — user must scan QR code instead
@@ -268,7 +268,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const {
     importWiki,
     batchImportWikis,
-    retryFailedImports,
     resetState,
     status: importStatus,
     error: importError,
@@ -278,7 +277,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     batchProgress,
     isBatchImporting,
     batchCreatedWorkspaces,
-    batchFailedItems,
   } = useGitImport();
 
   const addServerAndImport = useCallback(async () => {
@@ -419,7 +417,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ImportWikiButton>
         </>
       )}
-      {!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) && (
+      {!['idle', 'error', 'success'].includes(importStatus) && (
         <>
           {/* Overall batch progress — shown when multiple wikis are being imported */}
           {isBatchImporting && (
@@ -515,69 +513,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           <Button
             mode='elevated'
             onPress={resetState}
-          >
-            <Text>{t('AddWorkspace.Reset')}</Text>
-          </Button>
-        </>
-      )}
-      {importStatus === 'partialSuccess' && !isBatchImporting && (
-        <>
-          {/* Show successfully imported wikis */}
-          {batchCreatedWorkspaces.length > 0 && (
-            <>
-              <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
-              {batchCreatedWorkspaces.map((ws) => (
-                <Text key={ws.id} variant='bodyMedium' style={{ color: MD3Colors.primary40, marginTop: 4 }}>
-                  ✓ {ws.name}
-                </Text>
-              ))}
-            </>
-          )}
-          {/* Show failed wikis with error details */}
-          {batchFailedItems.length > 0 && (
-            <>
-              <DoneImportActionsTitleText variant='titleLarge' style={{ color: MD3Colors.error50 }}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
-              {batchFailedItems.map((f, index) => (
-                <Pressable
-                  key={index}
-                  onLongPress={() => {
-                    void Clipboard.setStringAsync(f.errorMessage);
-                    Alert.alert(t('Import.Error.CopiedToClipboard'));
-                  }}
-                >
-                  <Text variant='bodyMedium' style={{ color: MD3Colors.error50, marginTop: 4 }} selectable>
-                    ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
-                  </Text>
-                </Pressable>
-              ))}
-            </>
-          )}
-          {/* Action buttons */}
-          <Button
-            mode='elevated'
-            onPress={retryFailedImports}
-            style={{ marginTop: 16 }}
-          >
-            <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
-          </Button>
-          {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
-            <OpenWikiButton
-              key={ws.id}
-              testID={`open-wiki-button-${ws.id}`}
-              mode='elevated'
-              onPress={() => {
-                navigation.navigate('MainMenu', { fromWikiID: ws.id });
-                navigation.navigate('WikiWebView', { id: ws.id });
-              }}
-              labelStyle={{ padding: ButtonLabelPadding }}
-            >
-              <Text>{`${t('Open')} ${ws.name}`}</Text>
-            </OpenWikiButton>
-          ))}
-          <Button
-            mode='text'
-            onPress={resetState}
-            style={{ marginTop: 8 }}
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
           </Button>
