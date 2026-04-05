@@ -1640,55 +1640,51 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
       console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}, dir=${directory}`);
 
-      // If native returns 0, log some diagnostics to help debug false-negatives
+      // If native returns 0, cross-check with isomorphic-git on a known-changing file
       if (rawChanges.length === 0) {
-        const nativeReadDirectory = nativeModule.readDirRecursive as ((directory: string) => Promise<string[]>) | undefined;
-        if (nativeReadDirectory !== undefined) {
-          const allFiles = await nativeReadDirectory(directory);
-          const tiddlerFiles = allFiles.filter((f: string) => f.startsWith('tiddlers/'));
-          // Also check with isomorphic-git statusMatrix for a small sample to cross-validate
-          try {
-            const sampleStatus = await git.statusMatrix({ fs, dir: directory, filepaths: tiddlerFiles.slice(-3) });
-            const sampleChanged = sampleStatus.filter(([, h, w, s]) => w !== h || s !== h);
-            console.log(
-              `${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${
-                tiddlerFiles.slice(0, 5).join(', ')
-              }, isogit-crosscheck: ${sampleChanged.length} changed out of ${sampleStatus.length} sampled (last 3: ${tiddlerFiles.slice(-3).join(', ')})`,
-            );
-          } catch {
-            console.log(
-              `${new Date().toISOString()} [GitService] diagnostic: ${allFiles.length} total files on disk, ${tiddlerFiles.length} in tiddlers/, sample=${
-                tiddlerFiles.slice(0, 5).join(', ')
-              }`,
-            );
+        try {
+          // $__StoryList.tid changes every wiki load; if isogit says it changed, native had a false-negative
+          const sampleStatus = await git.statusMatrix({ fs, dir: directory, filepaths: ['tiddlers/$__StoryList.tid'] });
+          const sampleChanged = sampleStatus.filter(([, , w]) => w !== 2);
+          if (sampleChanged.length > 0) {
+            console.log(`${new Date().toISOString()} [GitService] native gitStatus false-negative detected (StoryList changed), falling back to isomorphic-git`);
+            // Fall through to the isomorphic-git fallback below
+          } else {
+            // Native is correct — no changes
+            const elapsedMs = Date.now() - startedAt;
+            console.log(`${new Date().toISOString()} [GitService] gitDiffChangedFiles (native+verified) for ${workspace.id} took ${elapsedMs}ms, count=0`);
+            return [];
           }
+        } catch (crossCheckError) {
+          console.log(`${new Date().toISOString()} [GitService] cross-check error: ${(crossCheckError as Error).message}, trusting native result`);
+          return [];
         }
-      }
-
-      // Apply NFC/NFD deduplication (same logic as before)
-      const deletesByNFC = new Set<string>();
-      const addsByNFC = new Set<string>();
-      const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
-      for (const change of rawChanges) {
-        const nfcPath = change.path.normalize('NFC');
-        if (change.type === 'delete') {
-          deletesByNFC.add(nfcPath);
-        } else if (change.type === 'add') {
-          addsByNFC.add(nfcPath);
+      } else {
+        // Native returned >0 changes — apply NFC/NFD deduplication
+        const deletesByNFC = new Set<string>();
+        const addsByNFC = new Set<string>();
+        const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
+        for (const change of rawChanges) {
+          const nfcPath = change.path.normalize('NFC');
+          if (change.type === 'delete') {
+            deletesByNFC.add(nfcPath);
+          } else if (change.type === 'add') {
+            addsByNFC.add(nfcPath);
+          }
+          changes.push(change);
         }
-        changes.push(change);
-      }
-      const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
-      const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
-      console.log(`${new Date().toISOString()} [GitService] after NFC dedup: ${rawChanges.length} → ${deduped.length}, removed ${artifactPaths.size} NFC/NFD pairs`);
+        const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
+        const deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
+        console.log(`${new Date().toISOString()} [GitService] after NFC dedup: ${rawChanges.length} → ${deduped.length}, removed ${artifactPaths.size} NFC/NFD pairs`);
 
-      const elapsedMs = Date.now() - startedAt;
-      console.log(
-        `${new Date().toISOString()} [GitService] gitDiffChangedFiles (native) for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
-          deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
-        }`,
-      );
-      return deduped.sort((a, b) => a.path.localeCompare(b.path));
+        const elapsedMs = Date.now() - startedAt;
+        console.log(
+          `${new Date().toISOString()} [GitService] gitDiffChangedFiles (native) for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
+            deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
+          }`,
+        );
+        return deduped.sort((a, b) => a.path.localeCompare(b.path));
+      }
     }
 
     // Fallback: isomorphic-git statusMatrix (JS-side, slower)
