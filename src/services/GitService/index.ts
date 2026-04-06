@@ -1270,6 +1270,29 @@ async function tryArchiveClone(
   // Configure git remote URL so future push/fetch works
   await configureGitRemote(directory, remote);
 
+  // The archive from TidGi Desktop is a bare-style export that does NOT
+  // include .git/index.  Without the index, native gitStatus (and many
+  // isomorphic-git operations) cannot detect changes.  Rebuild it by
+  // running a checkout on HEAD — the files are already on disk, so this
+  // only creates/updates index entries with their stat info.
+  console.log('[archiveClone] Rebuilding .git/index via checkout…');
+  onProgress?.('Building git index…', 0, 0);
+  try {
+    await git.checkout({
+      fs,
+      dir: directory,
+      ref: 'HEAD',
+      force: true,
+      nonBlocking: true,
+      batchSize: CHECKOUT_BATCH_SIZE,
+    });
+    console.log('[archiveClone] .git/index rebuilt successfully');
+  } catch (indexError) {
+    console.warn('[archiveClone] Failed to rebuild .git/index:', (indexError as Error).message);
+    // Non-fatal: the wiki still works, but gitStatus will fall back to
+    // the slow isomorphic-git statusMatrix path.
+  }
+
   return true;
 }
 
@@ -1676,6 +1699,41 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
           }
         }
         console.log(`${new Date().toISOString()} [GitService] native gitStatus returned 0, falling back to isomorphic-git for reliability`);
+
+        // If the .git/index file is missing (e.g. archive clone), rebuild it
+        // by running checkout before falling through to the JS fallback.
+        if (typeof nativeDebug === 'function') {
+          try {
+            const debugJson = await nativeDebug(directory);
+            const debugInfo = JSON.parse(debugJson);
+            if (debugInfo.indexFileExists === false && debugInfo.gitDirExists === true) {
+              console.log(`${new Date().toISOString()} [GitService] .git/index missing, rebuilding via checkout…`);
+              await git.checkout({
+                fs,
+                dir: directory,
+                ref: 'HEAD',
+                force: true,
+                nonBlocking: true,
+                batchSize: CHECKOUT_BATCH_SIZE,
+              });
+              console.log(`${new Date().toISOString()} [GitService] .git/index rebuilt, re-running native gitStatus`);
+              // Re-run native gitStatus now that the index exists
+              const retryJson = await nativeGitStatus(directory);
+              const retryChanges = JSON.parse(retryJson) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+              console.log(`${new Date().toISOString()} [GitService] native gitStatus after index rebuild: count=${retryChanges.length}`);
+              if (retryChanges.length > 0) {
+                const elapsedMs = Date.now() - startedAt;
+                console.log(
+                  `${new Date().toISOString()} [GitService] gitDiffChangedFiles (native+rebuilt) for ${workspace.id} took ${elapsedMs}ms, count=${retryChanges.length}`,
+                );
+                return retryChanges.sort((a, b) => a.path.localeCompare(b.path));
+              }
+            }
+          } catch (rebuildError) {
+            console.warn(`${new Date().toISOString()} [GitService] index rebuild failed: ${(rebuildError as Error).message}`);
+          }
+        }
+
         // Fall through to the isomorphic-git fallback below
       } else {
         // Native returned >0 changes — apply NFC/NFD deduplication
