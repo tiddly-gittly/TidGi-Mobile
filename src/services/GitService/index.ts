@@ -436,6 +436,12 @@ const fs = {
     },
 
     async writeFile(filepath: string, data: string | Uint8Array | Buffer, _options?: { encoding?: 'utf8'; mode?: number }): Promise<void> {
+      // Debug: log .git/index writes
+      const isGitIndex = filepath.endsWith('.git/index');
+      if (isGitIndex) {
+        const size = typeof data === 'string' ? data.length : data.byteLength;
+        console.log(`[fs.writeFile] .git/index write requested: path=${filepath}, dataSize=${size}, dataType=${typeof data === 'string' ? 'string' : 'binary'}, hasNativeAppendFile=${hasNativeAppendFile}, canBatchWrite=${canUseAndroidNativeBatchWrite(filepath)}`);
+      }
       // ── Android: chunked streaming for large binary data ──────────
       // For files above STREAMING_WRITE_THRESHOLD, avoid converting the
       // entire content to a single base64 string.  Instead, send it in
@@ -475,7 +481,24 @@ const fs = {
         : Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
 
       if (canUseAndroidNativeBatchWrite(filepath)) {
-        return scheduleNativeBatchWrite(filepath, base64);
+        if (isGitIndex) {
+          console.log(`[fs.writeFile] .git/index going through scheduleNativeBatchWrite, base64.length=${base64.length}`);
+        }
+        const result = scheduleNativeBatchWrite(filepath, base64);
+        if (isGitIndex) {
+          result.then(() => {
+            console.log(`[fs.writeFile] .git/index batch write completed successfully`);
+            // Verify the file exists after writing
+            ExternalStorage.getInfo(toPlainPath(filepath)).then((info: Record<string, unknown>) => {
+              console.log(`[fs.writeFile] .git/index post-write verify: exists=${info.exists}, size=${info.size}`);
+            }).catch((verifyError: Error) => {
+              console.log(`[fs.writeFile] .git/index post-write verify error: ${verifyError.message}`);
+            });
+          }).catch((error: Error) => {
+            console.log(`[fs.writeFile] .git/index batch write FAILED: ${error.message}`);
+          });
+        }
+        return result;
       }
 
       if (isExternalPath(filepath)) {
