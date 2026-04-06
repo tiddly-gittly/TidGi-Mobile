@@ -50,7 +50,7 @@
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
     "expo-task-manager": "~14.0.9",
-    "expo-tiddlywiki-filesystem-android-external-storage": "2.2.2",
+    "expo-tiddlywiki-filesystem-android-external-storage": "2.2.3",
     "exponential-backoff": "^3.1.2",
     "i18next": "^25.2.1",
     "immer": "^10.1.1",
