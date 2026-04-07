@@ -101,8 +101,8 @@ importers:
         specifier: ~14.0.9
         version: 14.0.9(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))
       expo-tiddlywiki-filesystem-android-external-storage:
-        specifier: 2.2.5
-        version: 2.2.5(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+        specifier: 2.2.6
+        version: 2.2.6(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       exponential-backoff:
         specifier: ^3.1.2
         version: 3.1.2
@@ -4494,8 +4494,8 @@ packages:
       expo: '*'
       react-native: '*'
 
-  expo-tiddlywiki-filesystem-android-external-storage@2.2.5:
-    resolution: {integrity: sha512-BSheHMSQmK6oPNwOra7QPEeF8nyBtkarD+NT0jF2Y3ktFx3bkZBuqagCV7bXytkGYdCPKN7lS0ogjW5yboHUSA==}
+  expo-tiddlywiki-filesystem-android-external-storage@2.2.6:
+    resolution: {integrity: sha512-rIfGvm0AAWfLp491l1LGXGk4sKYkrFZ67YvG+zPZYpKURoRbRS8tn9+bZTOwK4LXcmi/zVqE28IsZS38PKWyWA==}
     peerDependencies:
       expo: '*'
       react: '*'
@@ -12869,7 +12869,7 @@ snapshots:
       react-native: 0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0)
       unimodules-app-loader: 6.0.8
 
-  expo-tiddlywiki-filesystem-android-external-storage@2.2.5(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+  expo-tiddlywiki-filesystem-android-external-storage@2.2.6(expo@54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
       '@expo/config-plugins': 54.0.4
       expo: 54.0.33(@babel/core@7.26.8)(graphql@15.8.0)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
