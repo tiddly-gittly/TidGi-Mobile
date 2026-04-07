@@ -1272,20 +1272,13 @@ async function tryArchiveClone(
 
   // The archive from TidGi Desktop is a bare-style export that does NOT
   // include .git/index.  Without the index, native gitStatus (and many
-  // isomorphic-git operations) cannot detect changes.  Rebuild it by
-  // running a checkout on HEAD — the files are already on disk, so this
-  // only creates/updates index entries with their stat info.
-  console.log('[archiveClone] Rebuilding .git/index via checkout…');
+  // isomorphic-git operations) cannot detect changes.
+  // We try native buildGitIndex first (fast, pure Kotlin), then fall back
+  // to isomorphic-git checkout.
+  console.log('[archiveClone] Rebuilding .git/index…');
   onProgress?.('Building git index…', 0, 0);
   try {
-    await git.checkout({
-      fs,
-      dir: directory,
-      ref: 'HEAD',
-      force: true,
-      nonBlocking: true,
-      batchSize: CHECKOUT_BATCH_SIZE,
-    });
+    await rebuildGitIndex(directory);
     console.log('[archiveClone] .git/index rebuilt successfully');
   } catch (indexError) {
     console.warn('[archiveClone] Failed to rebuild .git/index:', (indexError as Error).message);
@@ -1294,6 +1287,41 @@ async function tryArchiveClone(
   }
 
   return true;
+}
+
+/**
+ * Rebuild .git/index for a repository that's missing it (e.g. from archive clone).
+ *
+ * Strategy: use native buildGitIndex if available (parses pack file natively,
+ * stats files natively — no JS↔Kotlin bridge per file). Falls back to
+ * isomorphic-git checkout if native is unavailable.
+ */
+async function rebuildGitIndex(directory: string): Promise<void> {
+  if (Platform.OS === 'android') {
+    try {
+      const result = await ExternalStorage.buildGitIndex(directory);
+      console.log('[rebuildGitIndex] native result:', result);
+      const parsed = JSON.parse(result) as { ok: boolean; entries?: number; error?: string };
+      if (parsed.ok) {
+        return;
+      }
+      console.warn('[rebuildGitIndex] native buildGitIndex failed:', parsed.error);
+      // Fall through to isomorphic-git fallback
+    } catch (nativeError) {
+      console.warn('[rebuildGitIndex] native buildGitIndex threw:', (nativeError as Error).message);
+    }
+  }
+
+  // Fallback: isomorphic-git checkout (slow — may crash on large repos)
+  console.log('[rebuildGitIndex] using isomorphic-git checkout fallback');
+  await git.checkout({
+    fs,
+    dir: directory,
+    ref: 'HEAD',
+    force: true,
+    nonBlocking: true,
+    batchSize: CHECKOUT_BATCH_SIZE,
+  });
 }
 
 /**
@@ -1701,21 +1729,14 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
         console.log(`${new Date().toISOString()} [GitService] native gitStatus returned 0, falling back to isomorphic-git for reliability`);
 
         // If the .git/index file is missing (e.g. archive clone), rebuild it
-        // by running checkout before falling through to the JS fallback.
+        // before falling through to the JS fallback.
         if (typeof nativeDebug === 'function') {
           try {
             const debugJson = await nativeDebug(directory);
             const debugInfo = JSON.parse(debugJson);
             if (debugInfo.indexFileExists === false && debugInfo.gitDirExists === true) {
-              console.log(`${new Date().toISOString()} [GitService] .git/index missing, rebuilding via checkout…`);
-              await git.checkout({
-                fs,
-                dir: directory,
-                ref: 'HEAD',
-                force: true,
-                nonBlocking: true,
-                batchSize: CHECKOUT_BATCH_SIZE,
-              });
+              console.log(`${new Date().toISOString()} [GitService] .git/index missing, rebuilding…`);
+              await rebuildGitIndex(directory);
               console.log(`${new Date().toISOString()} [GitService] .git/index rebuilt, re-running native gitStatus`);
               // Re-run native gitStatus now that the index exists
               const retryJson = await nativeGitStatus(directory);
