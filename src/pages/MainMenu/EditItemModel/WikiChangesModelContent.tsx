@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, StyleSheet } from 'react-native';
-import { ActivityIndicator, Button, Card, IconButton, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Card, IconButton, List, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import {
   gitDiffChangedFiles,
+  gitCommit,
   gitDiscardFileChanges,
   gitGetChangedFilesForCommit,
   gitGetCommitHistory,
@@ -56,6 +57,25 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [detailsError, setDetailsError] = useState<string | undefined>();
   const [discardingFile, setDiscardingFile] = useState<string | undefined>();
   const [selectedUncommittedItem, setSelectedUncommittedItem] = useState<IUncommittedChangeItem | undefined>();
+  const [currentTab, setCurrentTab] = useState<'details' | 'actions'>('details');
+  const [newCommitMessage, setNewCommitMessage] = useState(t('LOG.CommitBackupMessage'));
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [isDiscardingAll, setIsDiscardingAll] = useState(false);
+
+  const commitsData = useMemo(() => {
+    if (uncommittedChanges.length === 0) return commits;
+    return [
+      {
+        oid: '',
+        message: t('GitHistory.UncommittedCount', { count: uncommittedChanges.length }),
+        authorName: t('GitHistory.Uncommitted'),
+        authorEmail: '',
+        timestamp: Date.now(),
+        parentOids: commits.length > 0 ? [commits[0].oid] : [],
+      } satisfies IGitCommitInfo,
+      ...commits,
+    ];
+  }, [commits, uncommittedChanges.length, t]);
 
   const relatedWikisForUncommitted = useMemo(() => {
     if (wiki === undefined) return [] as IWikiWorkspace[];
@@ -163,24 +183,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
 
   return (
     <ModalContainer>
-      <CloseButton mode='outlined' onPress={onClose}>{t('Menu.Close')}</CloseButton>
-      <Button
-        mode='outlined'
-        onPress={() => {
-          void (async () => {
-            const historyStartAt = Date.now();
-            setLoadingHistory(true);
-            console.log(`${new Date().toISOString()} [WikiChanges] refreshing commit history for ${wiki.id}`);
-            const result = await gitGetCommitHistory(wiki, 120);
-            setCommits(result);
-            setLoadingHistory(false);
-            console.log(`${new Date().toISOString()} [WikiChanges] commit history refreshed in ${Date.now() - historyStartAt}ms, count=${result.length}`);
-          })();
-        }}
-      >
-        {t('GitHistory.Refresh')}
-      </Button>
-
       <UncommittedHeader>
         <Text variant='titleMedium'>
           {t('GitHistory.Uncommitted')}
@@ -216,11 +218,31 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         )}
       />
 
-      <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
-      {loadingHistory && <LoadingIndicator />}
+      <UncommittedHeader>
+        <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {loadingHistory && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
+          <IconButton
+            size={24}
+            icon='refresh'
+            disabled={loadingHistory}
+            onPress={() => {
+              void (async () => {
+                const historyStartAt = Date.now();
+                setLoadingHistory(true);
+                console.log(`${new Date().toISOString()} [WikiChanges] refreshing commit history for ${wiki.id}`);
+                const result = await gitGetCommitHistory(wiki, 120);
+                setCommits(result);
+                setLoadingHistory(false);
+                console.log(`${new Date().toISOString()} [WikiChanges] commit history refreshed in ${Date.now() - historyStartAt}ms, count=${result.length}`);
+              })();
+            }}
+          />
+        </View>
+      </UncommittedHeader>
       <FlatList
         style={{ flex: 1, minHeight: 120 }}
-        data={commits}
+        data={commitsData}
         initialNumToRender={20}
         keyExtractor={(item) => item.oid}
         maxToRenderPerBatch={20}
@@ -229,9 +251,18 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           <HistoryCard
             onPress={() => {
               setSelectedCommit(item);
+              setCurrentTab('details');
               setLoadingDetails(true);
               setDetailsError(undefined);
               setIsShallowSnapshot(false);
+              
+              if (item.oid === '') {
+                // Fake commit for uncommitted changes
+                setChangedFiles(uncommittedChanges);
+                setLoadingDetails(false);
+                return;
+              }
+
               void (async () => {
                 const detailsStartAt = Date.now();
                 console.log(`${new Date().toISOString()} [WikiChanges] loading changed files for ${item.oid}`);
@@ -289,33 +320,97 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.CommitDetails')} />
               <Card.Content style={{ paddingTop: 4 }}>
-                <Text>{selectedCommit?.message}</Text>
-                <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
-                <Text variant='bodySmall'>{selectedCommit ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
-                <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
-                <Text variant='titleMedium' style={{ marginTop: 8 }}>{t('GitHistory.Files')}</Text>
-                {loadingDetails && <Text>{t('Loading')}</Text>}
-                {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
-                {
-                  /* When a commit has parents but files is empty, it means the parent is not in
-                  the local repo (shallow clone with depth:1). Show an informational note. */
-                }
-                {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
-                {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
-                <ModalFilesList
-                  data={changedFiles}
-                  keyExtractor={(item) => `${item.type}-${item.path}`}
-                  renderItem={({ item }) => (
-                    <List.Item
-                      title={item.path}
-                      description={item.type.toUpperCase()}
-                      left={(props) => <List.Icon {...props} icon='file-document-outline' />}
-                      onPress={() => {
-                        void openFilePreview(item.path, item.type, selectedCommit);
-                      }}
-                    />
-                  )}
+                <SegmentedButtons
+                  value={currentTab}
+                  onValueChange={(value) => setCurrentTab(value as 'details' | 'actions')}
+                  buttons={[
+                    { value: 'details', label: t('GitHistory.Details', '详情') },
+                    { value: 'actions', label: t('GitHistory.Actions', '操作') },
+                  ]}
+                  style={{ marginBottom: 12 }}
                 />
+
+                {currentTab === 'details' && (
+                  <View>
+                    <Text>{selectedCommit?.message}</Text>
+                    <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
+                    <Text variant='bodySmall'>{selectedCommit?.oid ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
+                    <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
+                    <Text variant='titleMedium' style={{ marginTop: 8 }}>
+                      {t('GitHistory.Files')} {changedFiles.length > 0 ? `(${changedFiles.length})` : ''}
+                    </Text>
+                    {loadingDetails && <Text>{t('Loading')}</Text>}
+                    {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
+                    {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
+                    {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
+                    <ModalFilesList
+                      data={changedFiles}
+                      keyExtractor={(item) => `${item.type}-${item.path}`}
+                      renderItem={({ item }) => (
+                        <List.Item
+                          title={item.path}
+                          description={item.type.toUpperCase()}
+                          left={(props) => <List.Icon {...props} icon='file-document-outline' />}
+                          onPress={() => {
+                            void openFilePreview(item.path, item.type, selectedCommit);
+                          }}
+                        />
+                      )}
+                    />
+                  </View>
+                )}
+
+                {currentTab === 'actions' && (
+                  <View style={{ gap: 12, paddingVertical: 8 }}>
+                    {selectedCommit?.oid === '' ? (
+                      <>
+                        <TextInput
+                          label={t('GitHistory.CommitMessage', '留言')}
+                          value={newCommitMessage}
+                          onChangeText={setNewCommitMessage}
+                          mode="outlined"
+                          style={{ marginBottom: 16 }}
+                        />
+                        <Button
+                          mode="contained"
+                          loading={isCommitting}
+                          disabled={isCommitting || isDiscardingAll}
+                          onPress={() => {
+                            if (!wiki) return;
+                            setIsCommitting(true);
+                            void gitCommit(wiki, newCommitMessage).then(() => {
+                              setSelectedCommit(undefined);
+                              void refreshUncommitted();
+                            }).catch(console.error).finally(() => setIsCommitting(false));
+                          }}
+                        >
+                          {t('ContextMenu.BackupNow', '立即提交')}
+                        </Button>
+                        <Button
+                          mode="contained-tonal"
+                          buttonColor={theme.colors.errorContainer}
+                          loading={isDiscardingAll}
+                          disabled={isCommitting || isDiscardingAll}
+                          onPress={() => {
+                            setIsDiscardingAll(true);
+                            void Promise.all(
+                              uncommittedChanges.map(item => gitDiscardFileChanges(item.workspace, item.path))
+                            ).then(() => {
+                              setSelectedCommit(undefined);
+                              void refreshUncommitted();
+                            }).catch(console.error).finally(() => setIsDiscardingAll(false));
+                          }}
+                        >
+                          {t('GitHistory.DiscardAll', '全部撤销')}
+                        </Button>
+                      </>
+                    ) : (
+                      <Text variant='bodyMedium' style={{ color: theme.colors.outline }}>
+                        {t('GitHistory.NoActionsForCommit', '此提交暂无可用操作')}
+                      </Text>
+                    )}
+                  </View>
+                )}
               </Card.Content>
             </DetailsCard>
           </Pressable>
