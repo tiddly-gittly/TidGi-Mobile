@@ -140,6 +140,18 @@ function ViewAppLogItem() {
   );
 }
 
+// --- DebugInfoItem -----------------------------------------------------------
+
+function DebugInfoItem() {
+  // Lazy import to keep the bundle chunk small when not on the developer page
+  const { CopyDebugInfoButton } = require('../Developer/CopyDebugInfoButton');
+  return (
+    <View style={styles.customItemContainer}>
+      <CopyDebugInfoButton />
+    </View>
+  );
+}
+
 // --- Registry -----------------------------------------------------------------
 
 const customItemRegistry: Record<string, ComponentType> = {
@@ -148,6 +160,7 @@ const customItemRegistry: Record<string, ComponentType> = {
   'server-list': ServerListItem,
   'language-selector': LanguageSelectorItem,
   'view-app-log': ViewAppLogItem,
+  'debug-info': DebugInfoItem,
 };
 
 export function getCustomItem(key: string): ComponentType | undefined {

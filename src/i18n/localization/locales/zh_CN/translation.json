@@ -474,7 +474,8 @@
     "HideStatusBarDescription": "完全隐藏状态栏，隐藏后可以获得更多展示空间，但打开状态栏可能需要额外操作。在刘海屏挖孔屏上不生效。",
     "AndroidHardwareAcceleration": "安卓硬件加速",
     "AndroidHardwareAccelerationDescription": "开启后可能可以解决有的机型上白屏或后台放久了页面崩溃的问题，但会降低性能并导致无法加载视频。",
-    "SearchSettings": "搜索设置..."
+    "SearchSettings": "搜索设置...",
+    "AppVersionInfo": "应用版本信息"
   },
   "Error": {
     "InitWikiGitError": "E-1 笔记仓库初始化失败错误",
@@ -576,7 +577,12 @@
       "DownloadingArchiveHint": "正在以归档格式下载完整 Wiki，这比 git clone 快得多。如果中断可以自动恢复。",
       "ExtractingFiles": "正在解压文件",
       "ExtractingFilesHint": "正在将归档解压到磁盘。大多数 Wiki 只需几秒。"
-    }
+    },
+    "PartialSuccess": {
+      "Succeeded": "已成功导入",
+      "Failed": "导入失败"
+    },
+    "RetryFailed": "重试失败项 ({{count}})"
   },
   "ConfirmDelete": "是否删除？",
   "ConfirmDeleteDescription": "此操作无法撤销。",

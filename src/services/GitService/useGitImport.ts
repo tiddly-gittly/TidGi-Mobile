@@ -34,9 +34,15 @@ export interface IBatchImportItem {
   serverID: string;
 }
 
-type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error';
+type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error' | 'partialSuccess';
 /** Distinguishes known failure modes so the UI can show actionable guidance. */
 export type GitImportErrorKind = 'generic' | 'oom' | 'tooLarge' | 'connectionAbort';
+
+export interface IBatchFailedItem {
+  item: IBatchImportItem;
+  errorMessage: string;
+  errorKind: GitImportErrorKind;
+}
 
 const DEFER_STATUS_SCAN_AFTER_IMPORT_MS = 60_000;
 
@@ -50,6 +56,7 @@ export function useGitImport() {
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; failed: number; currentName: string }>({ current: 0, total: 0, failed: 0, currentName: '' });
   const [isBatchImporting, setIsBatchImporting] = useState(false);
   const [batchCreatedWorkspaces, setBatchCreatedWorkspaces] = useState<IWikiWorkspace[]>([]);
+  const [batchFailedItems, setBatchFailedItems] = useState<IBatchFailedItem[]>([]);
 
   const addWiki = useWorkspaceStore(state => state.add);
   const removeWiki = useWorkspaceStore(state => state.remove);
@@ -226,10 +233,11 @@ export function useGitImport() {
     setIsBatchImporting(true);
     setBatchProgress({ current: 1, total: items.length, failed: 0, currentName: items[0]?.wikiName ?? '' });
     setBatchCreatedWorkspaces([]);
+    setBatchFailedItems([]);
     setError(undefined);
 
     const created: IWikiWorkspace[] = [];
-    let failedCount = 0;
+    const failed: IBatchFailedItem[] = [];
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
@@ -239,34 +247,50 @@ export function useGitImport() {
         const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
         created.push(workspace);
       } catch (error) {
-        failedCount += 1;
-        setBatchProgress(previous => ({ ...previous, failed: failedCount }));
+        const errorMessage = (error as Error).message;
+        let failedErrorKind: GitImportErrorKind = 'generic';
+        if (errorMessage === GIT_CLONE_ERROR_OOM) failedErrorKind = 'oom';
+        else if (errorMessage.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX)) failedErrorKind = 'tooLarge';
+        else if (errorMessage === GIT_CLONE_ERROR_CONNECTION_ABORT) failedErrorKind = 'connectionAbort';
+
+        failed.push({ item, errorMessage, errorKind: failedErrorKind });
+        setBatchProgress(previous => ({ ...previous, failed: failed.length }));
         // If the first item (main wiki) fails, abort the batch.
         // Sub-wikis depend on the main wiki existing; importing them would create orphan workspaces.
         if (index === 0) {
-          console.error('[batchImport] Main wiki import failed, aborting sub-wiki imports:', (error as Error).message);
+          console.error('[batchImport] Main wiki import failed, aborting sub-wiki imports:', errorMessage);
           break;
         }
         continue;
       }
     }
 
-    // Batch result state machine:
-    // - all failed: error
-    // - partially failed: error (do not show misleading success actions)
-    // - all succeeded: success
     if (created.length > 0) {
       setBatchCreatedWorkspaces(created);
     }
-    if (failedCount > 0) {
-      setStatus('error');
-      setErrorKind('generic');
-      setError(previous => previous ?? 'One or more workspaces failed to import.');
-    } else {
+    if (failed.length > 0) {
+      setBatchFailedItems(failed);
+    }
+
+    if (failed.length === 0) {
       setStatus('success');
+    } else if (created.length > 0) {
+      // Some succeeded, some failed — show partial success with details
+      setStatus('partialSuccess');
+    } else {
+      setStatus('error');
+      setErrorKind(failed[0].errorKind);
+      setError(failed[0].errorMessage);
     }
     setIsBatchImporting(false);
     return created;
+  };
+
+  /** Retry only the previously failed items from a batch import. */
+  const retryFailedImports = async () => {
+    const itemsToRetry = batchFailedItems.map(f => f.item);
+    if (itemsToRetry.length === 0) return;
+    return batchImportWikis(itemsToRetry);
   };
 
   const resetState = () => {
@@ -277,12 +301,14 @@ export function useGitImport() {
     setCreatedWorkspace(undefined);
     setBatchProgress({ current: 0, total: 0, failed: 0, currentName: '' });
     setBatchCreatedWorkspaces([]);
+    setBatchFailedItems([]);
     setIsBatchImporting(false);
   };
 
   return {
     importWiki,
     batchImportWikis,
+    retryFailedImports,
     resetState,
     status,
     error,
@@ -292,5 +318,6 @@ export function useGitImport() {
     batchProgress,
     isBatchImporting,
     batchCreatedWorkspaces,
+    batchFailedItems,
   };
 }

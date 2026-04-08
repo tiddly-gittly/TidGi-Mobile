@@ -447,17 +447,19 @@
     "HideStatusBarDescription": "Completely hide the status bar, more display space is available when hidden, but opening the status bar may require additional action. Does not take effect on bangs screen dig hole screen.",
     "AndroidHardwareAcceleration": "Android Hardware Acceleration",
     "AndroidHardwareAccelerationDescription": "Enabling it may potentially solve the issues of white screens on some device models or page crashes after being left in the background for a long time. However, it will reduce performance and cause videos to fail to load.",
-    "SearchSettings": "Search settings..."
+    "SearchSettings": "Search settings...",
+    "AppVersionInfo": "App Version Info"
   },
   "GitHistory": {
     "Refresh": "Refresh Git History",
-    "LoadUncommitted": "Load Uncommitted Changes",
     "Uncommitted": "Uncommitted Changes",
     "Commits": "Commits",
     "CommitDetails": "Commit Details",
     "FilePreview": "File Preview",
     "Files": "Changed Files",
-    "NoFiles": "No changed files"
+    "NoFiles": "No changed files",
+    "ShallowCloneSnapshot": "Shallow clone snapshot — parent commit not available locally. This is the initial import state.",
+    "DiscardChanges": "Discard"
   },
   "Error": {
     "InitWikiGitError": "E-1 InitWikiGitError",
@@ -539,7 +541,7 @@
     "TagForSharedContent": "Tag for shared content",
     "Clipped": "Clipped",
     "FastImport": "Fast Import",
-    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in \u201cRecent\u201d.",
+    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in “Recent”.",
     "SaveMediaAsAttachment": "Save Media as Attachment",
     "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content."
   },
@@ -597,7 +599,12 @@
       "DownloadingArchiveHint": "Downloading the complete wiki as an archive. This is much faster than git clone. Supports resume if interrupted.",
       "ExtractingFiles": "Extracting files",
       "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis."
-    }
+    },
+    "PartialSuccess": {
+      "Succeeded": "Successfully imported",
+      "Failed": "Failed to import"
+    },
+    "RetryFailed": "Retry failed ({{count}})"
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -644,17 +651,6 @@
     "IncludeSubWikis": "Include all sub-wikis when syncing",
     "SyncActive": "Sync Active",
     "SyncSuccess": "Sync Succeeded"
-  },
-  "GitHistory": {
-    "Refresh": "Refresh Git History",
-    "Uncommitted": "Uncommitted Changes",
-    "Commits": "Commits",
-    "CommitDetails": "Commit Details",
-    "FilePreview": "File Preview",
-    "Files": "Changed Files",
-    "NoFiles": "No changed files",
-    "ShallowCloneSnapshot": "Shallow clone snapshot — parent commit not available locally. This is the initial import state.",
-    "DiscardChanges": "Discard"
   },
   "SubWiki": {
     "SubWikis": "Sub Workspaces",
