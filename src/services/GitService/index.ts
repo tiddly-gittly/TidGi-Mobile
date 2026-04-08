@@ -1714,48 +1714,13 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
       console.log(`${new Date().toISOString()} [GitService] native gitStatus raw count=${rawChanges.length}, dir=${directory}`);
 
-      // If native returns 0, run diagnostic and fall back to isomorphic-git.
+      // If native returns 0, trust the result and return immediately.
+      // Native gitStatus compares stat-cache (size+mtime) which is accurate
+      // after a correct extractTar + buildGitIndex.
       if (rawChanges.length === 0) {
-        // Call native debug function if available
-        const nativeDebug = nativeModule.gitStatusDebug as ((dir: string) => Promise<string>) | undefined;
-        if (typeof nativeDebug === 'function') {
-          try {
-            const debugJson = await nativeDebug(directory);
-            console.log(`${new Date().toISOString()} [GitService] native gitStatusDebug: ${debugJson}`);
-          } catch (debugError) {
-            console.log(`${new Date().toISOString()} [GitService] gitStatusDebug error: ${(debugError as Error).message}`);
-          }
-        }
-        console.log(`${new Date().toISOString()} [GitService] native gitStatus returned 0, falling back to isomorphic-git for reliability`);
-
-        // If the .git/index file is missing (e.g. archive clone), rebuild it
-        // before falling through to the JS fallback.
-        if (typeof nativeDebug === 'function') {
-          try {
-            const debugJson = await nativeDebug(directory);
-            const debugInfo = JSON.parse(debugJson);
-            if (debugInfo.indexFileExists === false && debugInfo.gitDirExists === true) {
-              console.log(`${new Date().toISOString()} [GitService] .git/index missing, rebuilding…`);
-              await rebuildGitIndex(directory);
-              console.log(`${new Date().toISOString()} [GitService] .git/index rebuilt, re-running native gitStatus`);
-              // Re-run native gitStatus now that the index exists
-              const retryJson = await nativeGitStatus(directory);
-              const retryChanges = JSON.parse(retryJson) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
-              console.log(`${new Date().toISOString()} [GitService] native gitStatus after index rebuild: count=${retryChanges.length}`);
-              if (retryChanges.length > 0) {
-                const elapsedMs = Date.now() - startedAt;
-                console.log(
-                  `${new Date().toISOString()} [GitService] gitDiffChangedFiles (native+rebuilt) for ${workspace.id} took ${elapsedMs}ms, count=${retryChanges.length}`,
-                );
-                return retryChanges.sort((a, b) => a.path.localeCompare(b.path));
-              }
-            }
-          } catch (rebuildError) {
-            console.warn(`${new Date().toISOString()} [GitService] index rebuild failed: ${(rebuildError as Error).message}`);
-          }
-        }
-
-        // Fall through to the isomorphic-git fallback below
+        const elapsedMs = Date.now() - startedAt;
+        console.log(`${new Date().toISOString()} [GitService] gitDiffChangedFiles (native) for ${workspace.id} took ${elapsedMs}ms, count=0 (no changes)`);
+        return [];
       } else {
         // Native returned >0 changes — apply NFC/NFD deduplication
         const deletesByNFC = new Set<string>();

@@ -55,6 +55,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | undefined>();
   const [discardingFile, setDiscardingFile] = useState<string | undefined>();
+  const [selectedUncommittedItem, setSelectedUncommittedItem] = useState<IUncommittedChangeItem | undefined>();
 
   const relatedWikisForUncommitted = useMemo(() => {
     if (wiki === undefined) return [] as IWikiWorkspace[];
@@ -195,30 +196,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             title={relatedWikisForUncommitted.length > 1 ? `[${item.workspace.name}] ${item.path}` : item.path}
             description={`${item.type.toUpperCase()} · ${item.workspace.name}`}
             left={(props) => <List.Icon {...props} icon='source-commit-local' />}
-            right={(props) => (
-              <Button
-                {...props}
-                mode='text'
-                compact
-                loading={discardingFile === `${item.workspace.id}:${item.path}`}
-                disabled={discardingFile !== undefined}
-                icon='undo-variant'
-                onPress={() => {
-                  setDiscardingFile(`${item.workspace.id}:${item.path}`);
-                  void gitDiscardFileChanges(item.workspace, item.path)
-                    .then(() => refreshUncommitted())
-                    .catch((error: unknown) => {
-                      console.error('Discard failed:', error);
-                    })
-                    .finally(() => {
-                      setDiscardingFile(undefined);
-                    });
-                }}
-              >
-                {t('GitHistory.DiscardChanges')}
-              </Button>
-            )}
+            right={(props) => <List.Icon {...props} icon='chevron-right' />}
             onPress={() => {
+              setSelectedUncommittedItem(item);
               void openFilePreview(item.path, item.type, undefined, item.workspace);
             }}
           />
@@ -334,6 +314,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           onDismiss={() => {
             setFilePreviewVisible(false);
             setSelectedFilePath(undefined);
+            setSelectedUncommittedItem(undefined);
           }}
         >
           <Pressable
@@ -341,6 +322,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             onPress={() => {
               setFilePreviewVisible(false);
               setSelectedFilePath(undefined);
+              setSelectedUncommittedItem(undefined);
             }}
           />
           <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2, alignSelf: 'center', width: '92%' }} pointerEvents='box-none'>
@@ -355,6 +337,34 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                   mode={contentMode}
                   onModeChange={setContentMode}
                 />
+              )}
+              {selectedUncommittedItem !== undefined && (
+                <Button
+                  mode='outlined'
+                  icon='undo-variant'
+                  loading={discardingFile === `${selectedUncommittedItem.workspace.id}:${selectedUncommittedItem.path}`}
+                  disabled={discardingFile !== undefined}
+                  style={{ marginTop: 12 }}
+                  onPress={() => {
+                    const item = selectedUncommittedItem;
+                    setDiscardingFile(`${item.workspace.id}:${item.path}`);
+                    void gitDiscardFileChanges(item.workspace, item.path)
+                      .then(() => {
+                        refreshUncommitted();
+                        setFilePreviewVisible(false);
+                        setSelectedFilePath(undefined);
+                        setSelectedUncommittedItem(undefined);
+                      })
+                      .catch((error: unknown) => {
+                        console.error('Discard failed:', error);
+                      })
+                      .finally(() => {
+                        setDiscardingFile(undefined);
+                      });
+                  }}
+                >
+                  {t('GitHistory.DiscardChanges')}
+                </Button>
               )}
             </Card.Content>
           </DetailsCard>
@@ -387,7 +397,7 @@ const DetailsCard = styled(Card)`
   overflow: hidden;
 `;
 const FilesList = styled(FlatList)`
-  max-height: 220px;
+  max-height: 360px;
 ` as typeof FlatList;
 const ModalFilesList = styled(FlatList)`
   max-height: 450px;
