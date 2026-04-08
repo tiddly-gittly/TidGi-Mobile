@@ -2223,6 +2223,31 @@ export async function gitDiscardFileChanges(
   }
 }
 
+export async function gitAddToGitignore(
+  workspace: IWikiWorkspace,
+  pattern: string,
+): Promise<void> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  const gitignorePath = `${directory}/.gitignore`;
+  try {
+    let existing = '';
+    try {
+      existing = await fs.promises.readFile(gitignorePath, 'utf8') as string;
+    } catch {
+      // file doesn't exist yet – start fresh
+    }
+    const lines = existing.split('\n').map(l => l.trim());
+    if (!lines.includes(pattern)) {
+      const newContent = existing.endsWith('\n') || existing === ''
+        ? `${existing}${pattern}\n`
+        : `${existing}\n${pattern}\n`;
+      await fs.promises.writeFile(gitignorePath, newContent, 'utf8');
+    }
+  } catch (error) {
+    throw new Error(`Failed to add to .gitignore: ${(error as Error).message}`);
+  }
+}
+
 /**
  * Initialize a new git repository
  */

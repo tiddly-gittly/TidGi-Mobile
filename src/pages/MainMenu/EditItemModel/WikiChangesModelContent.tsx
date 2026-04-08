@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, IconButton, List, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, Dialog, IconButton, List, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -61,6 +61,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [newCommitMessage, setNewCommitMessage] = useState(t('LOG.CommitBackupMessage'));
   const [isCommitting, setIsCommitting] = useState(false);
   const [isDiscardingAll, setIsDiscardingAll] = useState(false);
+  const [confirmDiscardAllVisible, setConfirmDiscardAllVisible] = useState(false);
 
   const commitsData = useMemo(() => {
     if (uncommittedChanges.length === 0) return commits;
@@ -201,7 +202,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
         </View>
       </UncommittedHeader>
       <FilesList
-        style={{ flex: 1, minHeight: 120 }}
+        style={{ maxHeight: 80 }}
         data={uncommittedChanges}
         keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
         renderItem={({ item }) => (
@@ -391,15 +392,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                           buttonColor={theme.colors.errorContainer}
                           loading={isDiscardingAll}
                           disabled={isCommitting || isDiscardingAll}
-                          onPress={() => {
-                            setIsDiscardingAll(true);
-                            void Promise.all(
-                              uncommittedChanges.map(item => gitDiscardFileChanges(item.workspace, item.path))
-                            ).then(() => {
-                              setSelectedCommit(undefined);
-                              void refreshUncommitted();
-                            }).catch(console.error).finally(() => setIsDiscardingAll(false));
-                          }}
+                          onPress={() => setConfirmDiscardAllVisible(true)}
                         >
                           {t('GitHistory.DiscardAll', '全部撤销')}
                         </Button>
@@ -443,39 +436,43 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                   afterContent={afterContent}
                   mode={contentMode}
                   onModeChange={setContentMode}
-                />
-              )}
-              {selectedUncommittedItem !== undefined && (
-                <Button
-                  mode='outlined'
-                  icon='undo-variant'
-                  loading={discardingFile === `${selectedUncommittedItem.workspace.id}:${selectedUncommittedItem.path}`}
-                  disabled={discardingFile !== undefined}
-                  style={{ marginTop: 12 }}
-                  onPress={() => {
-                    const item = selectedUncommittedItem;
-                    setDiscardingFile(`${item.workspace.id}:${item.path}`);
-                    void gitDiscardFileChanges(item.workspace, item.path)
-                      .then(() => {
-                        refreshUncommitted();
-                        setFilePreviewVisible(false);
-                        setSelectedFilePath(undefined);
-                        setSelectedUncommittedItem(undefined);
-                      })
-                      .catch((error: unknown) => {
-                        console.error('Discard failed:', error);
-                      })
-                      .finally(() => {
-                        setDiscardingFile(undefined);
-                      });
+                  uncommittedWorkspace={selectedUncommittedItem?.workspace}
+                  onDiscardSuccess={() => {
+                    void refreshUncommitted();
+                    setFilePreviewVisible(false);
+                    setSelectedFilePath(undefined);
+                    setSelectedUncommittedItem(undefined);
                   }}
-                >
-                  {t('GitHistory.DiscardChanges')}
-                </Button>
+                />
               )}
             </Card.Content>
           </DetailsCard>
         </Modal>
+        <Dialog visible={confirmDiscardAllVisible} onDismiss={() => setConfirmDiscardAllVisible(false)}>
+          <Dialog.Title>{t('GitHistory.DiscardAll', '全部撤销')}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{t('GitHistory.DiscardAllConfirm', `确定要撤销所有 ${uncommittedChanges.length} 处未提交的变更吗？此操作不可恢复。`)}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDiscardAllVisible(false)}>{t('Common.Cancel', '取消')}</Button>
+            <Button
+              textColor={theme.colors.error}
+              loading={isDiscardingAll}
+              onPress={() => {
+                setConfirmDiscardAllVisible(false);
+                setIsDiscardingAll(true);
+                void Promise.all(
+                  uncommittedChanges.map(item => gitDiscardFileChanges(item.workspace, item.path))
+                ).then(() => {
+                  setSelectedCommit(undefined);
+                  void refreshUncommitted();
+                }).catch(console.error).finally(() => setIsDiscardingAll(false));
+              }}
+            >
+              {t('GitHistory.DiscardChanges', '确认撤销')}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </ModalContainer>
   );
