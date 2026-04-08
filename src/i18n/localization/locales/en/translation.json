@@ -452,7 +452,9 @@
   },
   "GitHistory": {
     "Refresh": "Refresh Git History",
+    "LoadUncommitted": "Load Uncommitted",
     "Uncommitted": "Uncommitted Changes",
+    "UncommittedCount": "{{count}} uncommitted changes",
     "Commits": "Commits",
     "CommitDetails": "Commit Details",
     "FilePreview": "File Preview",
@@ -627,7 +629,7 @@
   "WarningMessage": "Warning Message",
   "Sync": {
     "WorkspaceSync": "Workspace Sync",
-    "UnsyncedCommitCount": "{{count}} unsynced commits",
+    "UnsyncedCommitCount": "{{count}} unsynced changes",
     "PendingChangesCount": "{{count}} pending git changes",
     "SyncFailed": "Sync Failed",
     "NoServerConnected": "No sync server connected",

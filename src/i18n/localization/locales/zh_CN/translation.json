@@ -605,7 +605,7 @@
   "WarningMessage": "警告信息",
   "Sync": {
     "WorkspaceSync": "工作区同步",
-    "UnsyncedCommitCount": "{{count}} 个提交未同步",
+    "UnsyncedCommitCount": "{{count}} 变更未同步",
     "PendingChangesCount": "{{count}} 个未同步 Git 变更",
     "SyncFailed": "同步失败",
     "NoServerConnected": "没有可用的同步服务器",
@@ -633,8 +633,7 @@
   "GitHistory": {
     "Refresh": "刷新 Git 历史",
     "LoadUncommitted": "加载未提交变更",
-    "Uncommitted": "未提交变更",
-    "Commits": "提交历史",
+    "Uncommitted": "未提交变更",    "UncommittedCount": "{{count}} 个未提交修改",    "Commits": "提交历史",
     "CommitDetails": "提交详情",
     "FilePreview": "文件预览",
     "Files": "变更文件",

@@ -68,6 +68,8 @@ export class FileSystemWikiStorageService {
 
   // ─── File Index (≈ desktop boot.files population) ──────────────────────
 
+  #isBuildingFileIndex = false;
+
   /**
    * Scan ALL workspace folders (main + sub-wikis) and build the title→path
    * registry.  Equivalent to desktop's boot loading that populates
@@ -76,8 +78,18 @@ export class FileSystemWikiStorageService {
    * Must be called once after construction, before any save/delete.
    */
   async buildFileIndex(): Promise<void> {
-    const startedAt = Date.now();
-    const workspaces = this.#getRelatedWorkspaces();
+    if (this.#tiddlerFilePathByTitle.size > 0) {
+      this.#logger.log(`buildFileIndex: index already built (${this.#tiddlerFilePathByTitle.size} entries), skipping.`);
+      return;
+    }
+    if (this.#isBuildingFileIndex) {
+      return this.indexReady;
+    }
+
+    this.#isBuildingFileIndex = true;
+    try {
+      const startedAt = Date.now();
+      const workspaces = this.#getRelatedWorkspaces();
     this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid files`);
 
     // Try native batch parsing first — a single bridge call that parses all
@@ -102,6 +114,9 @@ export class FileSystemWikiStorageService {
     const elapsed = Date.now() - startedAt;
     this.#logger.log(`buildFileIndex: completed in ${elapsed}ms. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
     console.log(`${new Date().toISOString()} [WikiStorageService] buildFileIndex completed in ${elapsed}ms, ${this.#tiddlerFilePathByTitle.size} tiddlers`);
+    } finally {
+      this.#isBuildingFileIndex = false;
+    }
   }
 
   /**

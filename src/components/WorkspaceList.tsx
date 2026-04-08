@@ -27,7 +27,7 @@ interface WorkspaceListProps {
 
 interface WorkspaceListItemProps {
   item: IWorkspace;
-  pendingChangesCount: number;
+  pendingChangesCount: { main: number; subWikis: number };
   onLongPress?: (workspace: IWorkspace) => void;
   onPress?: (workspace: IWorkspace) => void;
   onPressSettings?: (workspace: IWorkspace) => void;
@@ -60,7 +60,13 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         rightStyle={styles.cardTitleRight}
         style={styles.cardTitle}
         title={title}
-        subtitle={item.type === 'wiki' ? t('Sync.UnsyncedCommitCount', { count: pendingChangesCount }) : undefined}
+        subtitle={
+          item.type === 'wiki'
+            ? pendingChangesCount.main > 0 || pendingChangesCount.subWikis > 0
+              ? t('Sync.UnsyncedCommitCount', { count: pendingChangesCount.main }) + (pendingChangesCount.subWikis > 0 ? ` (+${pendingChangesCount.subWikis}子工作区)` : '')
+              : undefined
+            : undefined
+        }
         right={(props) => (
           <RightButtonsContainer>
             {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
@@ -128,7 +134,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       const isOrphanSubWorkspace = !workspaceIDSet.has(mainWikiID);
       return isOrphanSubWorkspace;
     }), [allWorkspacesList, includeSubWikis, workspaceIDSet, workspaces]);
-  const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, number>>({});
+  const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, { main: number; subWikis: number }>>({});
 
   const subWikisByMainWikiID = useMemo(() => {
     const accumulator: Partial<Record<string, IWikiWorkspace[]>> = {};
@@ -148,25 +154,50 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
     const run = () => {
       void (async () => {
-        const nextMap: Record<string, number> = {};
+        const nextMap: Record<string, { main: number; subWikis: number }> = {};
 
         for (const workspace of workspacesList) {
           if (isCancelled()) return;
           if (workspace.type !== 'wiki') {
-            nextMap[workspace.id] = 0;
+            nextMap[workspace.id] = { main: 0, subWikis: 0 };
             continue;
           }
 
-          const relatedWikis = [workspace, ...(subWikisByMainWikiID[workspace.id] ?? [])];
-          let totalChangesCount = 0;
-          for (const wikiWorkspace of relatedWikis) {
-            if (isCancelled()) return;
-            totalChangesCount += await getAheadCommitCount(wikiWorkspace);
-            await new Promise<void>(resolve => setTimeout(resolve, 0));
+          let mainCommits = 0;
+          let subWikisUncommitted = 0;
+          let mainUncommitted = 0;
+
+          mainCommits = await getAheadCommitCount(workspace) ?? 0;
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+          const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
+          // Get uncommitted files for the entire git repo (main wiki)
+          try {
+            const { gitDiffChangedFiles } = await import('../services/GitService');
+            const allChanges = await gitDiffChangedFiles(workspace);
+            
+            for (const change of allChanges) {
+              let isSubWikiChange = false;
+              for (const subWiki of subWikis) {
+                const parts = subWiki.wikiFolderLocation.split('/');
+                const subFolderName = parts[parts.length - 1];
+                if (subFolderName && change.path.startsWith(`tiddlers/${subFolderName}/`)) {
+                  subWikisUncommitted++;
+                  isSubWikiChange = true;
+                  break;
+                }
+              }
+              if (!isSubWikiChange) {
+                mainUncommitted++;
+              }
+            }
+          } catch (error) {
+            console.error('Failed to get uncommitted changes for workspace', workspace.id, error);
           }
 
-          nextMap[workspace.id] = totalChangesCount;
-          setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: totalChangesCount }));
+          const counts = { main: mainCommits + mainUncommitted, subWikis: subWikisUncommitted };
+          nextMap[workspace.id] = counts;
+          setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: counts }));
           await new Promise<void>(resolve => setTimeout(resolve, 0));
         }
 
@@ -206,7 +237,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
             renderItem={({ item }) => (
               <ReorderableWorkspaceListItem
                 item={item}
-                pendingChangesCount={pendingChangesCountMap[item.id] ?? 0}
+                pendingChangesCount={pendingChangesCountMap[item.id] ?? { main: 0, subWikis: 0 }}
                 onPress={onPress}
                 onPressSettings={onPressSettings}
                 onLongPress={onLongPress}
@@ -226,7 +257,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
             renderItem={({ item }) => (
               <PlainWorkspaceListItem
                 item={item}
-                pendingChangesCount={pendingChangesCountMap[item.id] ?? 0}
+                pendingChangesCount={pendingChangesCountMap[item.id] ?? { main: 0, subWikis: 0 }}
                 onPress={onPress}
                 onPressSettings={onPressSettings}
                 onLongPress={onLongPress}

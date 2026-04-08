@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, StyleSheet } from 'react-native';
-import { ActivityIndicator, Button, Card, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, IconButton, List, Modal, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -118,6 +118,12 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
     })();
   }, [wiki?.id]);
 
+  useEffect(() => {
+    if (wiki === undefined) return;
+    void refreshUncommitted();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wiki?.id]);
+
   const openFilePreview = async (
     filePath: string,
     type: 'add' | 'modify' | 'delete',
@@ -176,19 +182,24 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       </Button>
 
       <UncommittedHeader>
-        <Text variant='titleMedium'>{t('GitHistory.Uncommitted')}</Text>
-        <Button
-          mode='outlined'
-          compact
-          loading={loadingUncommitted}
-          onPress={() => {
-            void refreshUncommitted();
-          }}
-        >
-          {t('GitHistory.LoadUncommitted')}
-        </Button>
+        <Text variant='titleMedium'>
+          {t('GitHistory.Uncommitted')}
+          {uncommittedChanges.length > 0 ? ` (${uncommittedChanges.length})` : ''}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {loadingUncommitted && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
+          <IconButton
+            size={24}
+            icon='refresh'
+            disabled={loadingUncommitted}
+            onPress={() => {
+              void refreshUncommitted();
+            }}
+          />
+        </View>
       </UncommittedHeader>
       <FilesList
+        style={{ flex: 1, minHeight: 120 }}
         data={uncommittedChanges}
         keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
         renderItem={({ item }) => (
@@ -208,6 +219,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
       {loadingHistory && <LoadingIndicator />}
       <FlatList
+        style={{ flex: 1, minHeight: 120 }}
         data={commits}
         initialNumToRender={20}
         keyExtractor={(item) => item.oid}
@@ -397,7 +409,7 @@ const DetailsCard = styled(Card)`
   overflow: hidden;
 `;
 const FilesList = styled(FlatList)`
-  max-height: 360px;
+  flex: 1;
 ` as typeof FlatList;
 const ModalFilesList = styled(FlatList)`
   max-height: 450px;
