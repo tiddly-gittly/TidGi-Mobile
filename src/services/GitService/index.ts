@@ -1687,42 +1687,27 @@ export async function gitFetchAndReset(
 
   const headBefore = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
 
-  // Prefer native JGit fetch to avoid memory issues with large pack files
-  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
-  if (typeof nativeModule.gitFetch === 'function') {
-    const nativeGitFetch = nativeModule.gitFetch as (
-      gitRootDir: string, remoteName: string, branch: string, headers: string | null,
-    ) => Promise<string>;
-    const headers = normalizeHeaders(createAuthHeader(remote));
-    const headersJson = Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
-    console.log(`[gitFetchAndReset] using native gitFetch for ${directory}`);
-    const resultJson = await nativeGitFetch(directory, 'origin', branch, headersJson);
-    const result = JSON.parse(resultJson) as { ok: boolean; error?: string };
-    if (!result.ok) {
-      throw new Error(`Native git fetch failed: ${result.error ?? 'unknown'}`);
-    }
-    console.log(`[gitFetchAndReset] native fetch complete for ${directory}`);
-  } else {
-    // Fallback: isomorphic-git fetch
-    console.log(`[gitFetchAndReset] using isomorphic-git fetch fallback for ${directory}`);
-    await git.fetch({
-      fs,
-      http: httpWithLogging,
-      dir: directory,
-      remote: 'origin',
-      ref: branch,
-      singleBranch: true,
-      headers: normalizeHeaders(createAuthHeader(remote)),
-      ...createAuthCallbacks(remote.token),
-      onProgress: (progress) => {
-        onProgress?.(
-          typeof progress.phase === 'string' ? progress.phase : '',
-          toSafeNumber(progress.loaded, 0),
-          toSafeNumber(progress.total, 0),
-        );
-      },
-    });
-  }
+  // Use isomorphic-git fetch with native HTTP streaming (already configured via httpWithLogging).
+  // Native JGit fetch was tried but has compatibility issues with some git HTTP servers
+  // ("Starting read stage without written request data pending is not supported").
+  // isomorphic-git fetch works fine since it uses our native HTTP streaming for large pack download.
+  await git.fetch({
+    fs,
+    http: httpWithLogging,
+    dir: directory,
+    remote: 'origin',
+    ref: branch,
+    singleBranch: true,
+    headers: normalizeHeaders(createAuthHeader(remote)),
+    ...createAuthCallbacks(remote.token),
+    onProgress: (progress) => {
+      onProgress?.(
+        typeof progress.phase === 'string' ? progress.phase : '',
+        toSafeNumber(progress.loaded, 0),
+        toSafeNumber(progress.total, 0),
+      );
+    },
+  });
 
   const remoteOid = await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
 
