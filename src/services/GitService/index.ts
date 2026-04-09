@@ -1724,20 +1724,34 @@ export async function gitFetchAndReset(
   );
 
   // Use native buildGitIndex to rebuild .git/index from the new HEAD tree.
+  // Then use gitCheckoutChangedFiles to write only the changed files to the working tree.
   // This avoids the full isomorphic-git checkout which OOMs on large repos (26K+ files).
-  // After index rebuild, the working tree files are already correct for files we changed
-  // (since we just committed them before push). For files the desktop changed during merge,
-  // we rely on the next sync cycle to detect them via gitStatus.
   const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
-  if (typeof nativeModule.buildGitIndex === 'function') {
-    const buildGitIndex = nativeModule.buildGitIndex as (gitRootDir: string) => Promise<string>;
-    console.log(`[gitFetchAndReset] rebuilding git index natively for ${directory}`);
-    const indexResult = JSON.parse(await buildGitIndex(directory)) as { ok: boolean; entries?: number; error?: string };
-    if (indexResult.ok) {
-      console.log(`[gitFetchAndReset] native index rebuilt: ${indexResult.entries} entries`);
+  if (typeof nativeModule.gitCheckoutChangedFiles === 'function') {
+    // Step 1: Checkout only files that changed between old and new HEAD
+    const gitCheckoutChangedFiles = nativeModule.gitCheckoutChangedFiles as (
+      gitRootDir: string, oldOid: string, newOid: string,
+    ) => Promise<string>;
+    console.log(`[gitFetchAndReset] checking out changed files ${headBefore}..${remoteOid}`);
+    const checkoutResult = JSON.parse(await gitCheckoutChangedFiles(directory, headBefore, remoteOid)) as {
+      ok: boolean; count?: number; files?: string[]; error?: string;
+    };
+    if (checkoutResult.ok) {
+      console.log(`[gitFetchAndReset] checked out ${checkoutResult.count} changed files: ${JSON.stringify(checkoutResult.files)}`);
     } else {
-      console.warn(`[gitFetchAndReset] native buildGitIndex failed: ${indexResult.error}, falling back to checkout`);
-      await git.checkout({ fs, dir: directory, ref: branch, force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
+      console.warn(`[gitFetchAndReset] gitCheckoutChangedFiles failed: ${checkoutResult.error}`);
+    }
+
+    // Step 2: Rebuild git index to match the new HEAD tree
+    if (typeof nativeModule.buildGitIndex === 'function') {
+      const buildGitIndex = nativeModule.buildGitIndex as (gitRootDir: string) => Promise<string>;
+      console.log(`[gitFetchAndReset] rebuilding git index natively for ${directory}`);
+      const indexResult = JSON.parse(await buildGitIndex(directory)) as { ok: boolean; entries?: number; error?: string };
+      if (indexResult.ok) {
+        console.log(`[gitFetchAndReset] native index rebuilt: ${indexResult.entries} entries`);
+      } else {
+        console.warn(`[gitFetchAndReset] native buildGitIndex failed: ${indexResult.error}`);
+      }
     }
   } else {
     // Fallback: full checkout (may OOM on large repos)
