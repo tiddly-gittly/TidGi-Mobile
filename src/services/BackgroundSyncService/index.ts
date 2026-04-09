@@ -123,7 +123,9 @@ export class GitBackgroundSyncService {
       await this.updateServerOnlineStatus();
 
       const reconciledWorkspaces = await Promise.all(workspaces.map(async workspace => await this.reconcileWorkspaceID(workspace)));
-      const syncTasks: Array<Promise<boolean>> = [];
+      // Collect sync tasks as lazy thunks so they don't start until we invoke them sequentially.
+      // Running isomorphic-git push/fetch in parallel can exceed the 256MB Java heap.
+      const syncThunks: Array<() => Promise<boolean>> = [];
       const dedupe = new Set<string>();
 
       for (const workspace of reconciledWorkspaces) {
@@ -133,7 +135,7 @@ export class GitBackgroundSyncService {
             const key = `${workspace.id}:${server.id}`;
             if (dedupe.has(key)) continue;
             dedupe.add(key);
-            syncTasks.push(this.syncSingleWorkspaceWithServer(workspace, server));
+            syncThunks.push(() => this.syncSingleWorkspaceWithServer(workspace, server));
           }
           continue;
         }
@@ -148,17 +150,25 @@ export class GitBackgroundSyncService {
             const key = `${workspaceToSync.id}:${server.id}`;
             if (dedupe.has(key)) continue;
             dedupe.add(key);
-            syncTasks.push((async () => {
+            syncThunks.push(async () => {
               const reconciledWorkspace = await this.reconcileWorkspaceID(workspaceToSync);
               return await this.syncSingleWorkspaceWithServer(reconciledWorkspace, server);
-            })());
+            });
           }
         }
       }
 
-      const haveConnectedServer = syncTasks.length > 0;
-      const results = await Promise.allSettled(syncTasks);
-      const haveUpdate = results.some(result => result.status === 'fulfilled' && result.value);
+      const haveConnectedServer = syncThunks.length > 0;
+      // Run sync tasks sequentially to avoid OOM from parallel isomorphic-git operations.
+      let haveUpdate = false;
+      for (const thunk of syncThunks) {
+        try {
+          const result = await thunk();
+          if (result) haveUpdate = true;
+        } catch (error) {
+          console.error('Sync task failed:', (error as Error).message);
+        }
+      }
 
       return { haveUpdate, haveConnectedServer };
     } finally {
