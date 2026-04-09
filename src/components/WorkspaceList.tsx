@@ -8,11 +8,11 @@ import { Card, useTheme } from 'react-native-paper';
 import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
-import { gitGetAheadCommitCount } from '../services/GitService';
+
 import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
 
-const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
+
 
 interface WorkspaceListProps {
   includeSubWikis?: boolean;
@@ -63,7 +63,7 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         subtitle={
           item.type === 'wiki'
             ? pendingChangesCount.main > 0 || pendingChangesCount.subWikis > 0
-              ? t('Sync.UnsyncedCommitCount', { count: pendingChangesCount.main }) + (pendingChangesCount.subWikis > 0 ? ` (+${pendingChangesCount.subWikis}子工作区)` : '')
+              ? `${pendingChangesCount.main + pendingChangesCount.subWikis}↑`
               : undefined
             : undefined
         }
@@ -163,15 +163,10 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
             continue;
           }
 
-          let mainCommits = 0;
           let subWikisUncommitted = 0;
           let mainUncommitted = 0;
 
-          mainCommits = await getAheadCommitCount(workspace) ?? 0;
-          await new Promise<void>(resolve => setTimeout(resolve, 0));
-
           const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
-          // Get uncommitted files for the entire git repo (main wiki)
           try {
             const { gitDiffChangedFiles } = await import('../services/GitService');
             const allChanges = await gitDiffChangedFiles(workspace);
@@ -195,7 +190,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
             console.error('Failed to get uncommitted changes for workspace', workspace.id, error);
           }
 
-          const counts = { main: mainCommits + mainUncommitted, subWikis: subWikisUncommitted };
+          const counts = { main: mainUncommitted, subWikis: subWikisUncommitted };
           nextMap[workspace.id] = counts;
           setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: counts }));
           await new Promise<void>(resolve => setTimeout(resolve, 0));

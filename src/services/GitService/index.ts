@@ -8,7 +8,6 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import git from 'isomorphic-git';
 import pTimeout from 'p-timeout';
-import { Platform } from 'react-native';
 import { IWikiWorkspace } from '../../store/workspace';
 
 function toSafeNumber(value: unknown, fallback = 0): number {
@@ -52,7 +51,7 @@ interface IExternalStorageExtended {
  * and we fall back to the regular `fetch()` path (which may OOM on very large
  * repos).
  */
-const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
+const hasNativeStreamingHttp: boolean =
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).httpPostToFile === 'function' &&
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).readFileChunk === 'function' &&
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).deleteFile === 'function';
@@ -63,7 +62,7 @@ const hasNativeStreamingHttp: boolean = Platform.OS === 'android' &&
  * chunks without ever allocating the full base64 string or decoded byte array
  * in the JVM heap — preventing OOM for 50+ MB git pack files.
  */
-const hasNativeAppendFile: boolean = Platform.OS === 'android' &&
+const hasNativeAppendFile: boolean =
   typeof (ExternalStorage as unknown as Partial<IExternalStorageExtended>).appendFileBase64 === 'function';
 
 /** 64 KB — chunk size for streaming the HTTP temp file back into JS. */
@@ -208,7 +207,6 @@ function canUseAndroidNativeBatchWrite(filepath: string): boolean {
   // routing through ExternalStorage avoids Expo FS's JVM-heap buffering.
   void filepath; // kept for call-site clarity
   return (
-    Platform.OS === 'android' &&
     typeof ExternalStorage.writeFilesBase64 === 'function'
   );
 }
@@ -1115,7 +1113,7 @@ export async function gitClone(
   console.log('Git clone remote:', JSON.stringify(remote, null, 2));
 
   // ── Fast path: tar archive download (TidGi Desktop only) ──────────
-  if (Platform.OS === 'android') {
+  if (typeof ExternalStorage.extractTar === 'function') {
     try {
       const didArchive = await tryArchiveClone(remote, url, directory, onProgress);
       if (didArchive) {
@@ -1297,7 +1295,7 @@ async function tryArchiveClone(
  * isomorphic-git checkout if native is unavailable.
  */
 async function rebuildGitIndex(directory: string): Promise<void> {
-  if (Platform.OS === 'android') {
+  if (typeof ExternalStorage.buildGitIndex === 'function') {
     try {
       const result = await ExternalStorage.buildGitIndex(directory);
       console.log('[rebuildGitIndex] native result:', result);
@@ -1523,41 +1521,61 @@ export async function gitCommit(
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
-    // Stage all changes using statusMatrix
-    const status = await git.statusMatrix({ fs, dir: directory });
+    // Prefer native gitStatus to discover changed files — avoids the OOM crash
+    // caused by isomorphic-git's statusMatrix doing full SHA-1 re-hash on 26K+ files.
+    const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+    let changedFiles: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> | undefined;
 
-    // Detect NFC/NFD Unicode normalization artifact pairs before staging.
-    // On Android (FAT32/ExFAT), filenames with Chinese/multi-byte characters may be
-    // transparently converted from NFC (git index) to NFD (filesystem), causing statusMatrix
-    // to report a spurious delete+add for the same logical file.
-    const deletesByNFC = new Map<string, string>(); // nfc → original filepath
-    const addsByNFC = new Map<string, string>(); // nfc → original filepath
-    for (const [filepath, headStatus, workdirStatus] of status) {
-      const nfcPath = filepath.normalize('NFC');
-      if (headStatus !== workdirStatus) {
-        if (workdirStatus === 0) deletesByNFC.set(nfcPath, filepath);
-        else if (headStatus === 0) addsByNFC.set(nfcPath, filepath);
+    if (typeof nativeModule.gitStatus === 'function') {
+      const nativeGitStatus = nativeModule.gitStatus as (directory: string) => Promise<string>;
+      const jsonString = await nativeGitStatus(directory);
+      const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+
+      // NFC/NFD deduplication
+      const deletesByNFC = new Set<string>();
+      const addsByNFC = new Set<string>();
+      for (const change of rawChanges) {
+        const nfcPath = change.path.normalize('NFC');
+        if (change.type === 'delete') deletesByNFC.add(nfcPath);
+        else if (change.type === 'add') addsByNFC.add(nfcPath);
       }
+      const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
+      changedFiles = rawChanges.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
     }
-    const artifactNFCPaths = new Set([...deletesByNFC.keys()].filter(p => addsByNFC.has(p)));
 
-    for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
-      // headStatus: 0 = absent in HEAD, 1 = present in HEAD
-      // workdirStatus: 0 = absent in workdir, 2 = present in workdir
-      // stageStatus: 0 = absent in stage, 2 = present in stage, 3 = modified-and-staged
-      const nfcPath = filepath.normalize('NFC');
-
-      // Skip NFC/NFD normalization artifacts — the file hasn't actually changed
-      if (artifactNFCPaths.has(nfcPath)) continue;
-
-      // Stage changes when workdir differs from HEAD or stage differs from HEAD
-      if (headStatus !== workdirStatus || headStatus !== stageStatus) {
-        if (workdirStatus === 0) {
-          // File deleted in workdir, stage deletion
-          await git.remove({ fs, dir: directory, filepath });
+    if (changedFiles !== undefined) {
+      // Stage only the changed files identified by native gitStatus
+      for (const change of changedFiles) {
+        if (change.type === 'delete') {
+          await git.remove({ fs, dir: directory, filepath: change.path });
         } else {
-          // File added or modified in workdir, stage addition/modification
-          await git.add({ fs, dir: directory, filepath });
+          await git.add({ fs, dir: directory, filepath: change.path });
+        }
+      }
+    } else {
+      // Fallback: isomorphic-git statusMatrix (JS-side, slower)
+      const status = await git.statusMatrix({ fs, dir: directory });
+
+      const deletesByNFC = new Map<string, string>();
+      const addsByNFC = new Map<string, string>();
+      for (const [filepath, headStatus, workdirStatus] of status) {
+        const nfcPath = filepath.normalize('NFC');
+        if (headStatus !== workdirStatus) {
+          if (workdirStatus === 0) deletesByNFC.set(nfcPath, filepath);
+          else if (headStatus === 0) addsByNFC.set(nfcPath, filepath);
+        }
+      }
+      const artifactNFCPaths = new Set([...deletesByNFC.keys()].filter(p => addsByNFC.has(p)));
+
+      for (const [filepath, headStatus, workdirStatus, stageStatus] of status) {
+        const nfcPath = filepath.normalize('NFC');
+        if (artifactNFCPaths.has(nfcPath)) continue;
+        if (headStatus !== workdirStatus || headStatus !== stageStatus) {
+          if (workdirStatus === 0) {
+            await git.remove({ fs, dir: directory, filepath });
+          } else {
+            await git.add({ fs, dir: directory, filepath });
+          }
         }
       }
     }
@@ -1708,7 +1726,7 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
     // and uses stat-cache (size+mtime) comparison instead of SHA-1 re-hashing,
     // making it orders of magnitude faster than isomorphic-git's statusMatrix.
     const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
-    if (Platform.OS === 'android' && typeof nativeModule.gitStatus === 'function') {
+    if (typeof nativeModule.gitStatus === 'function') {
       const nativeGitStatus = nativeModule.gitStatus as (directory: string) => Promise<string>;
       const jsonString = await nativeGitStatus(directory);
       const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
@@ -1749,73 +1767,10 @@ export async function gitDiffChangedFiles(workspace: IWikiWorkspace): Promise<Ar
       }
     }
 
-    // Fallback: isomorphic-git statusMatrix (JS-side, slower)
-    console.log(`${new Date().toISOString()} [GitService] gitDiffChangedFiles falling back to JS statusMatrix for ${workspace.id}`);
-    const status = await git.statusMatrix({
-      fs,
-      dir: directory,
-      filter: (f: string) => {
-        if (f.startsWith('.git/') || f.startsWith('.git\\')) return false;
-        const extension = f.slice(f.lastIndexOf('.'));
-        if (['.tid', '.json', '.meta', '.txt', '.css', '.js', '.html', '.svg', '.md'].includes(extension)) return true;
-        if (!extension || extension === f) return true;
-        return false;
-      },
-    });
-    const changes: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> = [];
-    const deletesByNFC = new Set<string>();
-    const addsByNFC = new Set<string>();
-    for (const [filepath, headStatus, workdirStatus] of status) {
-      if (headStatus !== workdirStatus) {
-        const nfcPath = filepath.normalize('NFC');
-        if (workdirStatus === 0) {
-          deletesByNFC.add(nfcPath);
-          changes.push({ path: filepath, type: 'delete' });
-        } else if (headStatus === 0) {
-          addsByNFC.add(nfcPath);
-          changes.push({ path: filepath, type: 'add' });
-        } else {
-          changes.push({ path: filepath, type: 'modify' });
-        }
-      }
-    }
-    const artifactPaths = new Set([...deletesByNFC].filter(p => addsByNFC.has(p)));
-    let deduped = changes.filter(c => !artifactPaths.has(c.path.normalize('NFC')));
-
-    // Post-filter: verify "delete" entries actually don't exist on disk.
-    // isomorphic-git may false-positive report deletes when fs.lstat() fails
-    // for files with very long names or special characters.
-    const deletesToVerify = deduped.filter(c => c.type === 'delete');
-    if (Platform.OS === 'android' && deletesToVerify.length > 0) {
-      const nativeGetInfo = (ExternalStorage as unknown as Record<string, unknown>).getInfo as ((path: string) => Promise<{ exists: boolean }>) | undefined;
-      if (nativeGetInfo !== undefined) {
-        try {
-          const falsePositives = new Set<string>();
-          for (const del of deletesToVerify) {
-            const fullPath = `${directory}/${del.path}`;
-            const info = await nativeGetInfo(fullPath);
-            if (info.exists) {
-              falsePositives.add(del.path);
-            }
-          }
-          if (falsePositives.size > 0) {
-            const beforeCount = deduped.length;
-            deduped = deduped.filter(c => !falsePositives.has(c.path));
-            console.log(`${new Date().toISOString()} [GitService] filtered ${beforeCount - deduped.length} false-positive deletes (files exist on disk via native getInfo)`);
-          }
-        } catch { /* ignore — keep original results */ }
-      }
-    }
-
-    const elapsedMs = Date.now() - startedAt;
-    if (deduped.length > 0 || elapsedMs > 5_000) {
-      console.log(
-        `${new Date().toISOString()} [GitService] gitDiffChangedFiles (JS fallback) for ${workspace.id} took ${elapsedMs}ms, count=${deduped.length}, sample=${
-          deduped.slice(0, 8).map(change => `${change.type}:${change.path}`).join(' | ')
-        }`,
-      );
-    }
-    return deduped.sort((a, b) => a.path.localeCompare(b.path));
+    // Native gitStatus not available — return empty.
+    // iOS native module will be implemented in expo-tiddlywiki-filesystem.
+    console.warn(`${new Date().toISOString()} [GitService] gitDiffChangedFiles: native gitStatus not available for ${workspace.id}, returning empty`);
+    return [];
   } catch (error) {
     console.error(`Failed to diff: ${(error as Error).message}`);
     return [];
@@ -2136,13 +2091,22 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
+    // Prefer native gitStatus which uses stat-cache (size+mtime) comparison,
+    // avoiding the OOM-inducing full SHA-1 re-hash that isomorphic-git's
+    // statusMatrix performs on every file in the repo.
+    const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+    if (typeof nativeModule.gitStatus === 'function') {
+      const nativeGitStatus = nativeModule.gitStatus as (directory: string) => Promise<string>;
+      const jsonString = await nativeGitStatus(directory);
+      const rawChanges = JSON.parse(jsonString) as Array<{ path: string; type: string }>;
+      return rawChanges.length > 0;
+    }
+
+    // Fallback: isomorphic-git statusMatrix (JS-side, slower)
     const status = await git.statusMatrix({ fs, dir: directory });
     return status.some(([_filepath, headStatus, workdirStatus, stageStatus]) => workdirStatus !== headStatus || stageStatus !== headStatus);
   } catch (error) {
     const message = (error as Error).message;
-    // ENOENT during statusMatrix is usually caused by filenames with special
-    // characters that the expo file-system URI doesn't handle. This is not a
-    // fatal error — conservatively assume changes exist so commit proceeds.
     if (message.includes('ENOENT')) {
       console.warn(`[gitHasChanges] ENOENT during statusMatrix, assuming changes exist: ${message}`);
       return true;

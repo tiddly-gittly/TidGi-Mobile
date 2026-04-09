@@ -1,12 +1,11 @@
-name: Build IPA
-# not working without xcode p12 file
+name: Build iOS Dev Client
 
 on:
   workflow_dispatch:
   push:
     tags:
       - 'ipa-v*.*.*'
-      # - 'v*.*.*'
+      - 'v*.*.*'
     paths-ignore:
       - 'README.md'
       - 'wiki/**'
@@ -14,32 +13,20 @@ on:
       - 'scripts/**'
       - '.vscode'
       - '.idea'
-  # pull_request:
-  #   branches:
-  #     - master
-  #     - main
-  #   paths-ignore:
-  #     - 'README.md'
-  #     - 'wiki/**'
-  #     - 'public/**'
-  #     - '.scripts/**'
-  #     - '.vscode'
-  #     - '.idea'
 
 jobs:
-  build:
-    name: Install and build
+  build-ios:
+    name: Build iOS Simulator app (debug)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
         with:
           version: 10
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.x
           cache: pnpm
-
 
       - name: Get pnpm store directory
         shell: bash
@@ -59,21 +46,71 @@ jobs:
 
       - name: Build tw plugins & scripts
         run: |
-          cd plugins && pnpm i && cd ..
           pnpm run build:plugin
           pnpm run build:tw-assets
 
-      - name: Build by eject eas
+      - name: Install expo-dev-client
+        run: pnpm install expo-dev-client -w
+
+      - name: Modify app.json for dev-client
         run: |
-          pnpm exec expo prebuild -p ios --clean
-          npx pod-install
+          node -e "
+          const fs = require('fs');
+          const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          appJson.expo.name = 'TidGi Test';
+          appJson.expo.ios.bundleIdentifier = 'ren.onetwo.tidgi.mobile.test';
+          fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+          "
+
+      - name: Expo prebuild (iOS)
+        run: pnpm exec expo prebuild -p ios --clean
+
+      - name: Install CocoaPods dependencies
+        run: cd ios && pod install --repo-update
+
+      - uses: actions/cache@v4
+        name: Cache CocoaPods
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Build iOS Simulator app (debug, no signing)
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace TidGiMobile.xcworkspace \
+            -scheme TidGiMobile \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            -quiet
+
+      - name: Package .app into artifact
+        run: |
+          mkdir -p /tmp/ios-artifacts
+          APP_PATH=$(find ios/build -name "*.app" -type d | head -1)
+          if [ -n "$APP_PATH" ]; then
+            cd "$(dirname "$APP_PATH")"
+            zip -r /tmp/ios-artifacts/TidGi-Test-Simulator.zip "$(basename "$APP_PATH")"
+          fi
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-app-${{ github.run_number }}-${{ github.sha }}
+          path: /tmp/ios-artifacts/
+          if-no-files-found: warn
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
-          generate_release_notes: true
-          files: app.ipa
+          generate_release_notes: false
+          files: /tmp/ios-artifacts/TidGi-Test-Simulator.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
