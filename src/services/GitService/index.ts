@@ -1611,6 +1611,26 @@ export async function gitPushToIncoming(
   const directory = toPlainPath(workspace.wikiFolderLocation);
   const branch = await getCurrentBranch(directory);
 
+  // Prefer native JGit push to avoid OOM from isomorphic-git's JS-based pack construction
+  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+  if (typeof nativeModule.gitPush === 'function') {
+    const nativeGitPush = nativeModule.gitPush as (
+      gitRootDir: string, remoteName: string, localBranch: string, remoteBranch: string, force: boolean, headers: string | null,
+    ) => Promise<string>;
+    const headers = normalizeHeaders(createAuthHeader(remote));
+    const headersJson = Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
+    console.log(`[gitPushToIncoming] using native gitPush for ${directory}`);
+    const resultJson = await nativeGitPush(directory, 'origin', branch, 'refs/heads/mobile-incoming', true, headersJson);
+    const result = JSON.parse(resultJson) as { ok: boolean; updates?: Array<{ remoteName: string; status: string; message: string }>; error?: string };
+    if (!result.ok) {
+      throw new Error(`Native git push failed: ${result.error ?? 'unknown'}`);
+    }
+    console.log('Successfully pushed to mobile-incoming branch (native)', JSON.stringify(result.updates));
+    return;
+  }
+
+  // Fallback: isomorphic-git push (may OOM on large repos)
+  console.log(`[gitPushToIncoming] using isomorphic-git push fallback for ${directory}`);
   await git.push({
     fs,
     http: httpWithLogging,
@@ -1667,23 +1687,42 @@ export async function gitFetchAndReset(
 
   const headBefore = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
 
-  await git.fetch({
-    fs,
-    http: httpWithLogging,
-    dir: directory,
-    remote: 'origin',
-    ref: branch,
-    singleBranch: true,
-    headers: normalizeHeaders(createAuthHeader(remote)),
-    ...createAuthCallbacks(remote.token),
-    onProgress: (progress) => {
-      onProgress?.(
-        typeof progress.phase === 'string' ? progress.phase : '',
-        toSafeNumber(progress.loaded, 0),
-        toSafeNumber(progress.total, 0),
-      );
-    },
-  });
+  // Prefer native JGit fetch to avoid memory issues with large pack files
+  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+  if (typeof nativeModule.gitFetch === 'function') {
+    const nativeGitFetch = nativeModule.gitFetch as (
+      gitRootDir: string, remoteName: string, branch: string, headers: string | null,
+    ) => Promise<string>;
+    const headers = normalizeHeaders(createAuthHeader(remote));
+    const headersJson = Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
+    console.log(`[gitFetchAndReset] using native gitFetch for ${directory}`);
+    const resultJson = await nativeGitFetch(directory, 'origin', branch, headersJson);
+    const result = JSON.parse(resultJson) as { ok: boolean; error?: string };
+    if (!result.ok) {
+      throw new Error(`Native git fetch failed: ${result.error ?? 'unknown'}`);
+    }
+    console.log(`[gitFetchAndReset] native fetch complete for ${directory}`);
+  } else {
+    // Fallback: isomorphic-git fetch
+    console.log(`[gitFetchAndReset] using isomorphic-git fetch fallback for ${directory}`);
+    await git.fetch({
+      fs,
+      http: httpWithLogging,
+      dir: directory,
+      remote: 'origin',
+      ref: branch,
+      singleBranch: true,
+      headers: normalizeHeaders(createAuthHeader(remote)),
+      ...createAuthCallbacks(remote.token),
+      onProgress: (progress) => {
+        onProgress?.(
+          typeof progress.phase === 'string' ? progress.phase : '',
+          toSafeNumber(progress.loaded, 0),
+          toSafeNumber(progress.total, 0),
+        );
+      },
+    });
+  }
 
   const remoteOid = await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
 
