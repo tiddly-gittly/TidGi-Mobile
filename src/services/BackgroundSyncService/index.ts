@@ -305,14 +305,11 @@ export class GitBackgroundSyncService {
     if (includeSubWikis) {
       const subWikis = this.getSubWikisForMainWorkspace(workspace);
       const workspacesToSync = [workspace, ...subWikis];
-      // Sync sequentially to avoid OOM from parallel isomorphic-git operations
-      let anyUpdated = false;
-      for (const workspaceToSync of workspacesToSync) {
+      const updatedList = await Promise.all(workspacesToSync.map(async workspaceToSync => {
         const reconciled = await this.reconcileWorkspaceID(workspaceToSync);
-        const updated = await this.syncSingleWorkspaceWithServer(reconciled, server);
-        if (updated) anyUpdated = true;
-      }
-      return anyUpdated;
+        return await this.syncSingleWorkspaceWithServer(reconciled, server);
+      }));
+      return updatedList.some(updated => updated);
     }
     return await this.syncSingleWorkspaceWithServer(workspace, server);
   }
