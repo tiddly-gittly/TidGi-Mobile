@@ -79,9 +79,12 @@ jobs:
       - name: Build iOS Simulator app (debug, no signing)
         run: |
           cd ios
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          SCHEME=$(echo "$WORKSPACE" | sed 's/.xcworkspace//')
+          echo "Using workspace: $WORKSPACE, scheme: $SCHEME"
           xcodebuild \
-            -workspace TidGiMobile.xcworkspace \
-            -scheme TidGiMobile \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
             -configuration Debug \
             -sdk iphonesimulator \
             -derivedDataPath build \
