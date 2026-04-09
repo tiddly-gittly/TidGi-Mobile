@@ -1711,17 +1711,40 @@ export async function gitFetchAndReset(
 
   const remoteOid = await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
 
+  // If remote hasn't changed, no need to update working tree
+  if (remoteOid === headBefore) {
+    return false;
+  }
+
   // Point local branch to remote's merged result
   await fs.promises.writeFile(
     `${directory}/.git/refs/heads/${branch}`,
     `${remoteOid}\n`,
     { encoding: 'utf8' },
   );
-  // Checkout the new HEAD to update the working tree
-  await git.checkout({ fs, dir: directory, ref: branch, force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
 
-  const headAfter = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
-  return headBefore !== headAfter;
+  // Use native buildGitIndex to rebuild .git/index from the new HEAD tree.
+  // This avoids the full isomorphic-git checkout which OOMs on large repos (26K+ files).
+  // After index rebuild, the working tree files are already correct for files we changed
+  // (since we just committed them before push). For files the desktop changed during merge,
+  // we rely on the next sync cycle to detect them via gitStatus.
+  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+  if (typeof nativeModule.buildGitIndex === 'function') {
+    const buildGitIndex = nativeModule.buildGitIndex as (gitRootDir: string) => Promise<string>;
+    console.log(`[gitFetchAndReset] rebuilding git index natively for ${directory}`);
+    const indexResult = JSON.parse(await buildGitIndex(directory)) as { ok: boolean; entries?: number; error?: string };
+    if (indexResult.ok) {
+      console.log(`[gitFetchAndReset] native index rebuilt: ${indexResult.entries} entries`);
+    } else {
+      console.warn(`[gitFetchAndReset] native buildGitIndex failed: ${indexResult.error}, falling back to checkout`);
+      await git.checkout({ fs, dir: directory, ref: branch, force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
+    }
+  } else {
+    // Fallback: full checkout (may OOM on large repos)
+    await git.checkout({ fs, dir: directory, ref: branch, force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
+  }
+
+  return true;
 }
 
 /**
