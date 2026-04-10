@@ -51,11 +51,10 @@
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
     "expo-task-manager": "~14.0.9",
-    "expo-tiddlywiki-filesystem-android-external-storage": "2.3.0",
+    "expo-tiddlywiki-filesystem-android-external-storage": "2.4.0",
     "exponential-backoff": "^3.1.2",
     "i18next": "^25.2.1",
     "immer": "^10.1.1",
-    "isomorphic-git": "^1.36.3",
     "lodash": "^4.17.21",
     "p-timeout": "^6.1.4",
     "react": "19.1.0",
@@ -115,10 +114,5 @@
     "tw5-typed": "^1.1.4",
     "typescript": "~5.9.3",
     "zx": "^8.4.1"
-  },
-  "pnpm": {
-    "patchedDependencies": {
-      "isomorphic-git": "patches/isomorphic-git.patch"
-    }
   }
 }
