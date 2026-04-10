@@ -1521,9 +1521,28 @@ export async function gitCommit(
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   try {
-    // Prefer native gitStatus to discover changed files — avoids the OOM crash
-    // caused by isomorphic-git's statusMatrix doing full SHA-1 re-hash on 26K+ files.
+    // Prefer native gitAddAndCommit (JGit) — handles the entire add+commit in native code,
+    // avoiding OOM from isomorphic-git's statusMatrix on large repos (26K+ files).
     const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+    if (typeof nativeModule.gitAddAndCommit === 'function') {
+      const nativeGitAddAndCommit = nativeModule.gitAddAndCommit as (
+        gitRootDir: string, message: string, authorName: string, authorEmail: string,
+      ) => Promise<string>;
+      console.log(`[gitCommit] using native gitAddAndCommit for ${directory}`);
+      const resultJson = await nativeGitAddAndCommit(directory, message, 'TidGi Mobile', 'mobile@tidgi.fun');
+      const result = JSON.parse(resultJson) as { ok: boolean; commitId?: string; message?: string; error?: string };
+      if (!result.ok) {
+        throw new Error(`Native git commit failed: ${result.error ?? 'unknown'}`);
+      }
+      if (result.commitId === '') {
+        console.log(`[gitCommit] nothing to commit for ${directory}`);
+        return '';
+      }
+      console.log(`Committed changes (native): ${result.commitId}`);
+      return result.commitId ?? '';
+    }
+
+    // Fallback: use native gitStatus + isomorphic-git add/remove + commit
     let changedFiles: Array<{ path: string; type: 'add' | 'modify' | 'delete' }> | undefined;
 
     if (typeof nativeModule.gitStatus === 'function') {
@@ -1687,27 +1706,51 @@ export async function gitFetchAndReset(
 
   const headBefore = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
 
-  // Use isomorphic-git fetch with native HTTP streaming (already configured via httpWithLogging).
-  // Native JGit fetch was tried but has compatibility issues with some git HTTP servers
-  // ("Starting read stage without written request data pending is not supported").
-  // isomorphic-git fetch works fine since it uses our native HTTP streaming for large pack download.
-  await git.fetch({
-    fs,
-    http: httpWithLogging,
-    dir: directory,
-    remote: 'origin',
-    ref: branch,
-    singleBranch: true,
-    headers: normalizeHeaders(createAuthHeader(remote)),
-    ...createAuthCallbacks(remote.token),
-    onProgress: (progress) => {
-      onProgress?.(
-        typeof progress.phase === 'string' ? progress.phase : '',
-        toSafeNumber(progress.loaded, 0),
-        toSafeNumber(progress.total, 0),
-      );
-    },
-  });
+  // Try native JGit fetch first, fallback to isomorphic-git
+  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+  let fetchSucceeded = false;
+
+  if (typeof nativeModule.gitFetch === 'function') {
+    const nativeGitFetch = nativeModule.gitFetch as (
+      gitRootDir: string, remoteName: string, branch: string, headers: string | null,
+    ) => Promise<string>;
+    const headers = normalizeHeaders(createAuthHeader(remote));
+    const headersJson = Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
+    console.log(`[gitFetchAndReset] trying native JGit fetch for ${directory}`);
+    try {
+      const resultJson = await nativeGitFetch(directory, 'origin', branch, headersJson);
+      const result = JSON.parse(resultJson) as { ok: boolean; updates?: unknown[]; error?: string };
+      if (result.ok) {
+        console.log(`[gitFetchAndReset] native fetch succeeded: ${JSON.stringify(result.updates)}`);
+        fetchSucceeded = true;
+      } else {
+        console.warn(`[gitFetchAndReset] native fetch returned error: ${result.error}, falling back to isomorphic-git`);
+      }
+    } catch (error) {
+      console.warn(`[gitFetchAndReset] native fetch threw: ${(error as Error).message}, falling back to isomorphic-git`);
+    }
+  }
+
+  if (!fetchSucceeded) {
+    // Fallback: isomorphic-git fetch with native HTTP streaming
+    await git.fetch({
+      fs,
+      http: httpWithLogging,
+      dir: directory,
+      remote: 'origin',
+      ref: branch,
+      singleBranch: true,
+      headers: normalizeHeaders(createAuthHeader(remote)),
+      ...createAuthCallbacks(remote.token),
+      onProgress: (progress) => {
+        onProgress?.(
+          typeof progress.phase === 'string' ? progress.phase : '',
+          toSafeNumber(progress.loaded, 0),
+          toSafeNumber(progress.total, 0),
+        );
+      },
+    });
+  }
 
   const remoteOid = await git.resolveRef({ fs, dir: directory, ref: `refs/remotes/origin/${branch}` });
 
@@ -1716,17 +1759,7 @@ export async function gitFetchAndReset(
     return false;
   }
 
-  // Point local branch to remote's merged result
-  await fs.promises.writeFile(
-    `${directory}/.git/refs/heads/${branch}`,
-    `${remoteOid}\n`,
-    { encoding: 'utf8' },
-  );
-
-  // Use native buildGitIndex to rebuild .git/index from the new HEAD tree.
-  // Then use gitCheckoutChangedFiles to write only the changed files to the working tree.
-  // This avoids the full isomorphic-git checkout which OOMs on large repos (26K+ files).
-  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
+  // Use native git operations to reset and update working tree
   if (typeof nativeModule.gitCheckoutChangedFiles === 'function') {
     // Step 1: Checkout only files that changed between old and new HEAD
     const gitCheckoutChangedFiles = nativeModule.gitCheckoutChangedFiles as (
@@ -1742,19 +1775,36 @@ export async function gitFetchAndReset(
       console.warn(`[gitFetchAndReset] gitCheckoutChangedFiles failed: ${checkoutResult.error}`);
     }
 
-    // Step 2: Rebuild git index to match the new HEAD tree
-    if (typeof nativeModule.buildGitIndex === 'function') {
-      const buildGitIndex = nativeModule.buildGitIndex as (gitRootDir: string) => Promise<string>;
-      console.log(`[gitFetchAndReset] rebuilding git index natively for ${directory}`);
-      const indexResult = JSON.parse(await buildGitIndex(directory)) as { ok: boolean; entries?: number; error?: string };
-      if (indexResult.ok) {
-        console.log(`[gitFetchAndReset] native index rebuilt: ${indexResult.entries} entries`);
+    // Step 2: Reset local branch HEAD to remote and rebuild index
+    if (typeof nativeModule.gitReset === 'function') {
+      const gitReset = nativeModule.gitReset as (gitRootDir: string, ref: string, mode: string) => Promise<string>;
+      console.log(`[gitFetchAndReset] resetting to origin/${branch} via native gitReset`);
+      const resetResult = JSON.parse(await gitReset(directory, `origin/${branch}`, 'mixed')) as {
+        ok: boolean; ref?: string; error?: string;
+      };
+      if (resetResult.ok) {
+        console.log(`[gitFetchAndReset] native reset succeeded: ${resetResult.ref}`);
       } else {
-        console.warn(`[gitFetchAndReset] native buildGitIndex failed: ${indexResult.error}`);
+        console.warn(`[gitFetchAndReset] native gitReset failed: ${resetResult.error}, using manual ref write`);
+        await fs.promises.writeFile(`${directory}/.git/refs/heads/${branch}`, `${remoteOid}\n`, { encoding: 'utf8' });
+      }
+    } else {
+      // Manual ref update + buildGitIndex fallback
+      await fs.promises.writeFile(`${directory}/.git/refs/heads/${branch}`, `${remoteOid}\n`, { encoding: 'utf8' });
+      if (typeof nativeModule.buildGitIndex === 'function') {
+        const buildGitIndex = nativeModule.buildGitIndex as (gitRootDir: string) => Promise<string>;
+        console.log(`[gitFetchAndReset] rebuilding git index natively for ${directory}`);
+        const indexResult = JSON.parse(await buildGitIndex(directory)) as { ok: boolean; entries?: number; error?: string };
+        if (indexResult.ok) {
+          console.log(`[gitFetchAndReset] native index rebuilt: ${indexResult.entries} entries`);
+        } else {
+          console.warn(`[gitFetchAndReset] native buildGitIndex failed: ${indexResult.error}`);
+        }
       }
     }
   } else {
     // Fallback: full checkout (may OOM on large repos)
+    await fs.promises.writeFile(`${directory}/.git/refs/heads/${branch}`, `${remoteOid}\n`, { encoding: 'utf8' });
     await git.checkout({ fs, dir: directory, ref: branch, force: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
   }
 
