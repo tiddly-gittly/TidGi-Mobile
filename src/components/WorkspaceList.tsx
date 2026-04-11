@@ -62,9 +62,14 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         title={title}
         subtitle={
           item.type === 'wiki'
-            ? pendingChangesCount.main > 0 || pendingChangesCount.subWikis > 0
-              ? `${pendingChangesCount.main + pendingChangesCount.subWikis}↑`
-              : undefined
+            ? (() => {
+                const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
+                const unpushed = pendingChangesCount.unpushed ?? 0;
+                const parts: string[] = [];
+                if (uncommitted > 0) parts.push(`${uncommitted}↑`);
+                if (unpushed > 0) parts.push(`${unpushed}⇡`);
+                return parts.length > 0 ? parts.join(' ') : undefined;
+              })()
             : undefined
         }
         right={(props) => (
@@ -134,7 +139,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       const isOrphanSubWorkspace = !workspaceIDSet.has(mainWikiID);
       return isOrphanSubWorkspace;
     }), [allWorkspacesList, includeSubWikis, workspaceIDSet, workspaces]);
-  const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, { main: number; subWikis: number }>>({});
+  const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, { main: number; subWikis: number; unpushed: number }>>({});
 
   const subWikisByMainWikiID = useMemo(() => {
     const accumulator: Partial<Record<string, IWikiWorkspace[]>> = {};
@@ -154,21 +159,22 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
     const run = () => {
       void (async () => {
-        const nextMap: Record<string, { main: number; subWikis: number }> = {};
+        const nextMap: Record<string, { main: number; subWikis: number; unpushed: number }> = {};
 
         for (const workspace of workspacesList) {
           if (isCancelled()) return;
           if (workspace.type !== 'wiki') {
-            nextMap[workspace.id] = { main: 0, subWikis: 0 };
+            nextMap[workspace.id] = { main: 0, subWikis: 0, unpushed: 0 };
             continue;
           }
 
           let subWikisUncommitted = 0;
           let mainUncommitted = 0;
+          let unpushedCommits = 0;
 
           const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
           try {
-            const { gitDiffChangedFiles } = await import('../services/GitService');
+            const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService');
             const allChanges = await gitDiffChangedFiles(workspace);
             
             for (const change of allChanges) {
@@ -186,11 +192,13 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
                 mainUncommitted++;
               }
             }
+
+            unpushedCommits = await gitGetAheadCommitCount(workspace);
           } catch (error) {
             console.error('Failed to get uncommitted changes for workspace', workspace.id, error);
           }
 
-          const counts = { main: mainUncommitted, subWikis: subWikisUncommitted };
+          const counts = { main: mainUncommitted, subWikis: subWikisUncommitted, unpushed: unpushedCommits };
           nextMap[workspace.id] = counts;
           setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: counts }));
           await new Promise<void>(resolve => setTimeout(resolve, 0));
