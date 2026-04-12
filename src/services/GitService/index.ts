@@ -430,11 +430,45 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
 
 // ── Push ───────────────────────────────────────────────────────────
 
+/**
+ * Ensure git config has protocol.version=0 and low-memory pack settings.
+ * - protocol.version=0: TidGi Desktop's git server only speaks V0/V1.
+ * - pack.*: Limit memory for Android's ~268MB heap. JGit defaults
+ *   (50MB delta cache, unlimited window memory) cause OOM on large repos.
+ * These are set via gitSetConfig (JS-side) so changes take effect
+ * immediately without rebuilding the native APK.
+ */
+async function ensureGitConfigForMobile(directory: string): Promise<void> {
+  const settings: Array<[string, string | null, string, string]> = [
+    ['protocol', null, 'version', '0'],
+    // Disable delta compression entirely — mobile only pushes small changes,
+    // and delta search over large object stores causes OOM.
+    ['pack', null, 'window', '2'],
+    ['pack', null, 'depth', '0'],
+    ['pack', null, 'windowmemory', String(5 * 1024 * 1024)], // 5MB
+    ['pack', null, 'deltacachesize', '1'], // effectively disabled
+    ['pack', null, 'deltacachelimit', '1'], // 1 byte = disabled
+    ['pack', null, 'threads', '1'],
+    ['pack', null, 'bigfilethreshold', String(1 * 1024 * 1024)], // 1MB
+    // core.streamFileThreshold: objects larger than this are streamed
+    ['core', null, 'streamfilethreshold', String(5 * 1024 * 1024)], // 5MB
+  ];
+  for (const [section, subsection, name, value] of settings) {
+    try {
+      await ExternalStorage.gitSetConfig(directory, section, subsection, name, value);
+    } catch (error) {
+      console.warn(`[ensureGitConfig] Failed to set ${section}.${name}=${value}:`, (error as Error).message);
+    }
+  }
+  console.log('[ensureGitConfig] Applied mobile git config settings');
+}
+
 export async function gitPushToIncoming(
   workspace: IWikiWorkspace, remote: IGitRemote,
   _onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
+  await ensureGitConfigForMobile(directory);
   const branch = await getCurrentBranch(directory);
   const headersJson = headersToJson(remote);
   console.log(`[gitPushToIncoming] using native gitPush for ${directory}`);
@@ -472,6 +506,7 @@ export async function gitFetchAndReset(
   const headBefore = headBeforeResult.ok ? (headBeforeResult.oid ?? '') : '';
 
   const headersJson = headersToJson(remote);
+  await ensureGitConfigForMobile(directory);
   console.log(`[gitFetchAndReset] native JGit fetch for ${directory}`);
   const fetchResultJson = await ExternalStorage.gitFetch(directory, 'origin', branch, headersJson);
   const fetchResult = parseNativeResult<{ ok: boolean; updates?: unknown[]; error?: string }>(fetchResultJson);
