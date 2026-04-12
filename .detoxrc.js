@@ -72,6 +72,15 @@ module.exports = {
       // (or from CI artifacts) and Detox will reuse that installation.
       reinstallApp: false,
     },
+    /**
+     * iOS Simulator app built by CI (debug, no signing).
+     * Download from build-ipa workflow artifacts and extract into e2e/artifacts/ios/.
+     */
+    'ios.dev-client': {
+      type: 'ios.app',
+      binaryPath: 'e2e/artifacts/ios/TidGi Test.app',
+      reinstallApp: false,
+    },
   },
 
   devices: {
@@ -87,6 +96,13 @@ module.exports = {
       type: 'android.emulator',
       device: {
         avdName: 'Pixel_6_API_34',
+      },
+    },
+    /** iOS Simulator for testing. */
+    'ios.simulator': {
+      type: 'ios.simulator',
+      device: {
+        type: 'iPhone 15',
       },
     },
   },
@@ -107,6 +123,14 @@ module.exports = {
     'android.emulator.dev-client': {
       device: 'android.emulator',
       app: 'android.dev-client',
+    },
+    /**
+     * iOS Simulator configuration.
+     * Requires Metro running and iOS app in e2e/artifacts/ios/.
+     */
+    'ios.simulator.dev-client': {
+      device: 'ios.simulator',
+      app: 'ios.dev-client',
     },
   },
 };

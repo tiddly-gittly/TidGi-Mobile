@@ -11,7 +11,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
+import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitGetAheadCommitCount, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -341,12 +341,17 @@ export class GitBackgroundSyncService {
       // ──────────────────────────────────────────────────────────
       // Step 2: Push to mobile-incoming branch + trigger desktop merge.
       // Desktop handles all merge/conflict resolution, saving mobile battery.
+      // Also push if there are unpushed commits from a previous failed push.
       // ──────────────────────────────────────────────────────────
-      if (hasLocalChanges) {
+      const aheadCount = await gitGetAheadCommitCount(workspace);
+      const needsPush = hasLocalChanges || aheadCount > 0;
+      if (needsPush) {
         workspaceLogger.log('Pushing to mobile-incoming', {
           baseUrl: remote.baseUrl,
           remoteWorkspaceId: remote.workspaceId,
           serverId: server.id,
+          hasLocalChanges,
+          aheadCount,
         });
         await gitPushToIncoming(workspace, remote);
         await triggerDesktopMerge(remote);
@@ -363,7 +368,7 @@ export class GitBackgroundSyncService {
       }
 
       this.updateLastSync(workspace.id, server.id);
-      if (hasLocalChanges) {
+      if (needsPush) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
