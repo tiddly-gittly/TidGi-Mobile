@@ -471,11 +471,34 @@ export async function gitPushToIncoming(
   await ensureGitConfigForMobile(directory);
   const branch = await getCurrentBranch(directory);
   const headersJson = headersToJson(remote);
-  console.log(`[gitPushToIncoming] using native gitPush for ${directory}`);
-  const resultJson = await ExternalStorage.gitPush(directory, 'origin', branch, 'refs/heads/mobile-incoming', true, headersJson);
-  const result = parseNativeResult<{ ok: boolean; updates?: Array<{ remoteName: string; status: string; message: string }>; error?: string }>(resultJson);
-  if (!result.ok) throw new Error(`Native git push failed: ${result.error ?? 'unknown'}`);
-  console.log('Successfully pushed to mobile-incoming branch (native)', JSON.stringify(result.updates));
+
+  // Use bundle-based push to avoid JGit's HTTP push protocol bug:
+  // SmartHttpPushConnection's MultiRequestService throws
+  // "Starting read stage without written request data pending is not supported"
+  // because it doesn't mark finalRequest=true for push operations.
+  //
+  // Instead: JGit BundleWriter creates a git bundle locally, then we
+  // HTTP POST it to desktop's /receive-bundle endpoint.
+  console.log(`[gitPushToIncoming] creating git bundle for ${directory}`);
+  const bundleResultJson = await ExternalStorage.gitCreateBundle(directory, 'origin', branch, branch);
+  const bundleResult = parseNativeResult<{ ok: boolean; bundle?: string; bundleSize?: number; error?: string }>(bundleResultJson);
+  if (!bundleResult.ok) throw new Error(`Git bundle creation failed: ${bundleResult.error ?? 'unknown'}`);
+  console.log(`[gitPushToIncoming] bundle created: ${bundleResult.bundleSize} bytes`);
+
+  // POST bundle to desktop's receive-bundle endpoint
+  const url = `${remote.baseUrl.replace(/\/$/, '')}/tw-mobile-sync/git/${remote.workspaceId}/receive-bundle`;
+  const headers = normalizeHeaders(createAuthHeader(remote));
+  const bundleBytes = Uint8Array.from(atob(bundleResult.bundle!), c => c.charCodeAt(0));
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/octet-stream' },
+    body: bundleBytes,
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Desktop receive-bundle failed (${response.status}): ${body}`);
+  }
+  console.log('[gitPushToIncoming] bundle uploaded successfully, triggering merge');
 }
 
 // ── Merge trigger ──────────────────────────────────────────────────
