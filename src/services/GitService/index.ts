@@ -485,14 +485,13 @@ export async function gitPushToIncoming(
   if (!bundleResult.ok) throw new Error(`Git bundle creation failed: ${bundleResult.error ?? 'unknown'}`);
   console.log(`[gitPushToIncoming] bundle created: ${bundleResult.bundleSize} bytes`);
 
-  // POST bundle to desktop's receive-bundle endpoint
+  // POST bundle to desktop's receive-bundle endpoint (send as base64 text, desktop will decode)
   const url = `${remote.baseUrl.replace(/\/$/, '')}/tw-mobile-sync/git/${remote.workspaceId}/receive-bundle`;
   const headers = normalizeHeaders(createAuthHeader(remote));
-  const bundleBytes = Uint8Array.from(atob(bundleResult.bundle!), c => c.charCodeAt(0));
   const response = await fetch(url, {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/octet-stream' },
-    body: bundleBytes,
+    headers: { ...headers, 'Content-Type': 'application/x-git-bundle-base64' },
+    body: bundleResult.bundle!,
   });
   if (!response.ok) {
     const body = await response.text();
