@@ -1,0 +1,3 @@
+title: $:/config/FileSystemPaths
+
+[is[system]!has[draft.of]search-replace:g:regexp[/|\\],[_]addprefix[system/]]
