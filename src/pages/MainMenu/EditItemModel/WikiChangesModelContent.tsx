@@ -12,6 +12,7 @@ import {
   gitGetChangedFilesForCommit,
   gitGetCommitHistory,
   gitGetFileContentAtReference,
+  gitGetRemoteOids,
   gitResolveReference,
   IGitCommitFileDiffResult,
   IGitCommitInfo,
@@ -62,6 +63,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [isCommitting, setIsCommitting] = useState(false);
   const [isDiscardingAll, setIsDiscardingAll] = useState(false);
   const [confirmDiscardAllVisible, setConfirmDiscardAllVisible] = useState(false);
+  const [remoteOids, setRemoteOids] = useState<Set<string>>(new Set());
 
   const commitsData = useMemo(() => {
     if (uncommittedChanges.length === 0) return commits;
@@ -132,10 +134,14 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       const historyStartAt = Date.now();
       setLoadingHistory(true);
       console.log(`${new Date().toISOString()} [WikiChanges] loading commit history for ${wiki.id}`);
-      const result = await gitGetCommitHistory(wiki, 120);
+      const [result, remotes] = await Promise.all([
+        gitGetCommitHistory(wiki, 120),
+        gitGetRemoteOids(wiki, 300),
+      ]);
       setCommits(result);
+      setRemoteOids(remotes);
       setLoadingHistory(false);
-      console.log(`${new Date().toISOString()} [WikiChanges] commit history loaded in ${Date.now() - historyStartAt}ms, count=${result.length}`);
+      console.log(`${new Date().toISOString()} [WikiChanges] commit history loaded in ${Date.now() - historyStartAt}ms, count=${result.length}, remoteOids=${remotes.size}`);
     })();
   }, [wiki?.id]);
 
@@ -232,8 +238,12 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 const historyStartAt = Date.now();
                 setLoadingHistory(true);
                 console.log(`${new Date().toISOString()} [WikiChanges] refreshing commit history for ${wiki.id}`);
-                const result = await gitGetCommitHistory(wiki, 120);
+                const [result, remotes] = await Promise.all([
+                  gitGetCommitHistory(wiki, 120),
+                  gitGetRemoteOids(wiki, 300),
+                ]);
                 setCommits(result);
+                setRemoteOids(remotes);
                 setLoadingHistory(false);
                 console.log(`${new Date().toISOString()} [WikiChanges] commit history refreshed in ${Date.now() - historyStartAt}ms, count=${result.length}`);
               })();
@@ -289,7 +299,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             <Card.Title
               title={item.message.split('\n')[0] || '(no message)'}
               subtitle={`${new Date(item.timestamp).toLocaleString()} · ${item.authorName}`}
-              left={(props) => <Ionicons name='git-commit' {...props} />}
+              left={(props) => item.oid !== '' && !remoteOids.has(item.oid)
+                ? <Ionicons name='arrow-up-circle-outline' {...props} color={theme.colors.primary} />
+                : <Ionicons name='git-commit' {...props} />}
             />
             <Card.Content>
               <Text variant='bodySmall'>{item.oid.slice(0, 12)}</Text>

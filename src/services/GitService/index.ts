@@ -628,6 +628,29 @@ export async function gitGetCommitHistory(workspace: IWikiWorkspace, depth = 100
 
 // ── Ahead commit count ─────────────────────────────────────────────
 
+/**
+ * Get the set of commit OIDs that exist on the remote tracking branch (origin/<branch>).
+ * Used by the commit history UI to mark which commits have been pushed.
+ *
+ * Git tracks this via the remote tracking ref `origin/<branch>`. After a successful
+ * fetch or push, git updates this ref to point to the remote's branch tip. Any local
+ * commit whose OID appears in the remote branch's history has been synced to at least
+ * one desktop remote.
+ */
+export async function gitGetRemoteOids(workspace: IWikiWorkspace, depth = 300): Promise<Set<string>> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  try {
+    const branch = await getCurrentBranch(directory);
+    const remoteResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }> }>(
+      await ExternalStorage.gitLog(directory, `origin/${branch}`, depth),
+    );
+    const remoteCommits = remoteResult.ok ? (remoteResult.commits ?? []) : [];
+    return new Set(remoteCommits.map(c => c.oid));
+  } catch {
+    return new Set();
+  }
+}
+
 export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise<number> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
