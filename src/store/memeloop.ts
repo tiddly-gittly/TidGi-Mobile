@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import type { PersistStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { expoFileSystemStorage } from '../utils/expoFileSystemStorage';
 
@@ -33,7 +34,11 @@ export interface IConversationMeta {
   nodeId?: string;
 }
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'error';
 
 export interface MemeLoopState {
   /** Local node identity */
@@ -50,10 +55,16 @@ export interface MemeLoopState {
   /** Connection state */
   connectionStatus: ConnectionStatus;
   connectedPeers: IConnectedPeer[];
+  selectedRemoteNodeId: string | null;
   knownNodes: IKnownNode[];
 
   /** LAN discovery */
-  discoveredNodes: Array<{ nodeId: string; host: string; port: number; name: string }>;
+  discoveredNodes: Array<{
+    nodeId: string;
+    host: string;
+    port: number;
+    name: string;
+  }>;
 
   /** Conversations */
   conversations: IConversationMeta[];
@@ -66,9 +77,16 @@ export interface MemeLoopState {
 
 interface MemeLoopActions {
   setIdentity: (nodeId: string, hasKeypair: boolean) => void;
-  setCloudAuth: (data: { cloudUrl?: string | null; cloudLoggedIn?: boolean; cloudEmail?: string | null; cloudNodeRegistered?: boolean; cloudJwt?: string | null }) => void;
+  setCloudAuth: (data: {
+    cloudUrl?: string | null;
+    cloudLoggedIn?: boolean;
+    cloudEmail?: string | null;
+    cloudNodeRegistered?: boolean;
+    cloudJwt?: string | null;
+  }) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setPeers: (peers: IConnectedPeer[]) => void;
+  setSelectedRemoteNodeId: (nodeId: string | null) => void;
   setKnownNodes: (nodes: IKnownNode[]) => void;
   addKnownNode: (node: IKnownNode) => void;
   removeKnownNode: (nodeId: string) => void;
@@ -91,6 +109,7 @@ const defaultState: MemeLoopState = {
   cloudJwt: null,
   connectionStatus: 'disconnected',
   connectedPeers: [],
+  selectedRemoteNodeId: null,
   knownNodes: [],
   discoveredNodes: [],
   conversations: [],
@@ -99,106 +118,157 @@ const defaultState: MemeLoopState = {
   subscriptionMode: false,
 };
 
+const memeloopPersistStorage = expoFileSystemStorage as PersistStorage<
+  Pick<
+    MemeLoopState,
+    | 'nodeId'
+    | 'hasKeypair'
+    | 'cloudUrl'
+    | 'cloudLoggedIn'
+    | 'cloudEmail'
+    | 'cloudNodeRegistered'
+    | 'cloudJwt'
+    | 'selectedRemoteNodeId'
+    | 'knownNodes'
+    | 'providers'
+    | 'subscriptionMode'
+    | 'conversations'
+    | 'activeConversationId'
+  >
+>;
+
 export const useMemeLoopStore = create<MemeLoopState & MemeLoopActions>()(
-  immer(devtools(
-    persist(
-      (set) => ({
-        ...defaultState,
+  immer(
+    devtools(
+      persist(
+        (set) => ({
+          ...defaultState,
 
-        setIdentity(nodeId, hasKeypair) {
-          set((s) => {
-            s.nodeId = nodeId;
-            s.hasKeypair = hasKeypair;
-          });
-        },
+          setIdentity(nodeId, hasKeypair) {
+            set((s) => {
+              s.nodeId = nodeId;
+              s.hasKeypair = hasKeypair;
+            });
+          },
 
-        setCloudAuth(data) {
-          set((s) => {
-            if (data.cloudUrl !== undefined) s.cloudUrl = data.cloudUrl;
-            if (data.cloudLoggedIn !== undefined) s.cloudLoggedIn = data.cloudLoggedIn;
-            if (data.cloudEmail !== undefined) s.cloudEmail = data.cloudEmail;
-            if (data.cloudNodeRegistered !== undefined) s.cloudNodeRegistered = data.cloudNodeRegistered;
-            if (data.cloudJwt !== undefined) s.cloudJwt = data.cloudJwt;
-          });
-        },
+          setCloudAuth(data) {
+            set((s) => {
+              if (data.cloudUrl !== undefined) s.cloudUrl = data.cloudUrl;
+              if (data.cloudLoggedIn !== undefined) {
+                s.cloudLoggedIn = data.cloudLoggedIn;
+              }
+              if (data.cloudEmail !== undefined) s.cloudEmail = data.cloudEmail;
+              if (data.cloudNodeRegistered !== undefined) {
+                s.cloudNodeRegistered = data.cloudNodeRegistered;
+              }
+              if (data.cloudJwt !== undefined) s.cloudJwt = data.cloudJwt;
+            });
+          },
 
-        setConnectionStatus(status) {
-          set((s) => { s.connectionStatus = status; });
-        },
+          setConnectionStatus(status) {
+            set((s) => {
+              s.connectionStatus = status;
+            });
+          },
 
-        setPeers(peers) {
-          set((s) => { s.connectedPeers = peers; });
-        },
+          setPeers(peers) {
+            set((s) => {
+              s.connectedPeers = peers;
+            });
+          },
 
-        setKnownNodes(nodes) {
-          set((s) => { s.knownNodes = nodes; });
-        },
+          setSelectedRemoteNodeId(nodeId) {
+            set((s) => {
+              s.selectedRemoteNodeId = nodeId;
+            });
+          },
 
-        addKnownNode(node) {
-          set((s) => {
-            const existing = s.knownNodes.findIndex((n) => n.nodeId === node.nodeId);
-            if (existing >= 0) {
-              s.knownNodes[existing] = node;
-            } else {
-              s.knownNodes.push(node);
-            }
-          });
-        },
+          setKnownNodes(nodes) {
+            set((s) => {
+              s.knownNodes = nodes;
+            });
+          },
 
-        removeKnownNode(nodeId) {
-          set((s) => {
-            s.knownNodes = s.knownNodes.filter((n) => n.nodeId !== nodeId);
-          });
-        },
+          addKnownNode(node) {
+            set((s) => {
+              const existing = s.knownNodes.findIndex(
+                (n) => n.nodeId === node.nodeId,
+              );
+              if (existing >= 0) {
+                s.knownNodes[existing] = node;
+              } else {
+                s.knownNodes.push(node);
+              }
+            });
+          },
 
-        setDiscoveredNodes(nodes) {
-          set((s) => { s.discoveredNodes = nodes; });
-        },
+          removeKnownNode(nodeId) {
+            set((s) => {
+              s.knownNodes = s.knownNodes.filter((n) => n.nodeId !== nodeId);
+            });
+          },
 
-        setConversations(conversations) {
-          set((s) => { s.conversations = conversations; });
-        },
+          setDiscoveredNodes(nodes) {
+            set((s) => {
+              s.discoveredNodes = nodes;
+            });
+          },
 
-        setActiveConversation(id) {
-          set((s) => { s.activeConversationId = id; });
-        },
+          setConversations(conversations) {
+            set((s) => {
+              s.conversations = conversations;
+            });
+          },
 
-        addConversation(meta) {
-          set((s) => {
-            s.conversations.unshift(meta);
-          });
-        },
+          setActiveConversation(id) {
+            set((s) => {
+              s.activeConversationId = id;
+            });
+          },
 
-        setProviders(providers) {
-          set((s) => { s.providers = providers; });
-        },
+          addConversation(meta) {
+            set((s) => {
+              s.conversations.unshift(meta);
+            });
+          },
 
-        setSubscriptionMode(mode) {
-          set((s) => { s.subscriptionMode = mode; });
-        },
+          setProviders(providers) {
+            set((s) => {
+              s.providers = providers;
+            });
+          },
 
-        reset() {
-          set(() => ({ ...defaultState }));
-        },
-      }),
-      {
-        name: 'memeloop-store',
-        storage: expoFileSystemStorage as any,
-        partialize: (state) => ({
-          nodeId: state.nodeId,
-          hasKeypair: state.hasKeypair,
-          cloudUrl: state.cloudUrl,
-          cloudLoggedIn: state.cloudLoggedIn,
-          cloudEmail: state.cloudEmail,
-          cloudNodeRegistered: state.cloudNodeRegistered,
-          knownNodes: state.knownNodes,
-          providers: state.providers,
-          subscriptionMode: state.subscriptionMode,
-          conversations: state.conversations,
-          activeConversationId: state.activeConversationId,
+          setSubscriptionMode(mode) {
+            set((s) => {
+              s.subscriptionMode = mode;
+            });
+          },
+
+          reset() {
+            set(() => ({ ...defaultState }));
+          },
         }),
-      },
+        {
+          name: 'memeloop-store',
+          storage: memeloopPersistStorage,
+          partialize: (state) => ({
+            nodeId: state.nodeId,
+            hasKeypair: state.hasKeypair,
+            cloudUrl: state.cloudUrl,
+            cloudLoggedIn: state.cloudLoggedIn,
+            cloudEmail: state.cloudEmail,
+            cloudNodeRegistered: state.cloudNodeRegistered,
+            cloudJwt: state.cloudJwt,
+            selectedRemoteNodeId: state.selectedRemoteNodeId,
+            knownNodes: state.knownNodes,
+            providers: state.providers,
+            subscriptionMode: state.subscriptionMode,
+            conversations: state.conversations,
+            activeConversationId: state.activeConversationId,
+          }),
+        },
+      ),
+      { name: 'MemeLoopStore' },
     ),
-    { name: 'MemeLoopStore' },
-  )),
+  ),
 );
