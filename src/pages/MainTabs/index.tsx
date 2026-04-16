@@ -23,7 +23,9 @@ export type MainTabParameterList = {
 
 const Tab = createBottomTabNavigator<MainTabParameterList>();
 
-export function MainTabs({ navigation }: StackScreenProps<RootStackParameterList, 'MainMenu'>): React.JSX.Element {
+export function MainTabs({
+  navigation,
+}: StackScreenProps<RootStackParameterList, 'MainMenu'>): React.JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -32,42 +34,44 @@ export function MainTabs({ navigation }: StackScreenProps<RootStackParameterList
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.onSurfaceVariant ?? '#888',
+        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
         tabBarStyle: { backgroundColor: theme.colors.surface },
       }}
     >
       <Tab.Screen
-        name="WikisTab"
+        name='WikisTab'
         options={{
           tabBarLabel: t('Navigation.Wikis'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="library" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name='library' size={size} color={color} />,
         }}
       >
         {() => <WikisTab rootNavigation={navigation} />}
       </Tab.Screen>
       <Tab.Screen
-        name="AgentTab"
+        name='AgentTab'
         options={{
           tabBarLabel: t('Navigation.Agent'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" size={size} color={color} />,
+          tabBarButtonTestID: 'main-tab-agent',
+          tabBarIcon: ({ color, size }) => <Ionicons name='chatbubbles' size={size} color={color} />,
         }}
       >
         {() => <AgentTab rootNavigation={navigation} />}
       </Tab.Screen>
       <Tab.Screen
-        name="NodesTab"
+        name='NodesTab'
         options={{
           tabBarLabel: t('Navigation.Nodes'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="git-network" size={size} color={color} />,
+          tabBarButtonTestID: 'main-tab-nodes',
+          tabBarIcon: ({ color, size }) => <Ionicons name='git-network' size={size} color={color} />,
         }}
       >
         {() => <NodesTab />}
       </Tab.Screen>
       <Tab.Screen
-        name="SettingsTab"
+        name='SettingsTab'
         options={{
           tabBarLabel: t('Navigation.Settings'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name='settings' size={size} color={color} />,
         }}
       >
         {() => <SettingsTab rootNavigation={navigation} />}

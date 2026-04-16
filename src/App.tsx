@@ -12,18 +12,20 @@ import { PaperProvider } from 'react-native-paper';
 import { ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
+import { AgentManagement } from './pages/AgentManagement';
+import { PromptEditor } from './pages/AgentManagement/PromptEditor';
+import { AuthScreen } from './pages/Auth';
+import { KnownNodesScreen } from './pages/Auth/KnownNodes';
+import { PinPairingScreen } from './pages/Auth/PinPairing';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { type MainMenuProps } from './pages/MainMenu';
 import { MainTabs } from './pages/MainTabs';
-import { AgentManagement } from './pages/AgentManagement';
-import { AuthScreen } from './pages/Auth';
 import { SubscriptionScreen } from './pages/Subscription';
 import { TaskMonitor } from './pages/TaskMonitor';
 import { TerminalViewer } from './pages/Terminal';
-import { PromptEditor } from './pages/AgentManagement/PromptEditor';
 import { WikiManagement } from './pages/WikiManagement';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import {
@@ -46,7 +48,9 @@ if (typeof global.Buffer === 'undefined') {
 import { initializeMobileLogger } from './services/LoggerService';
 import { initializeMemeLoop } from './services/MemeLoopService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
+import { initializeAgentStore, switchToLocalMode, switchToRemoteMode, useAgentStore } from './store/agent';
 import { useConfigStore } from './store/config';
+import { useMemeLoopStore } from './store/memeloop';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
@@ -58,6 +62,8 @@ export type RootStackParameterList = {
   MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
   PromptEditor: { definitionId?: string };
+  PinPairing: { nodeId?: string } | undefined;
+  KnownNodes: undefined;
   Subscription: undefined;
   TaskMonitor: undefined;
   Terminal: undefined;
@@ -75,31 +81,107 @@ export type RootStackParameterList = {
 };
 const Stack = createStackNavigator<RootStackParameterList>();
 
-function PromptEditorScreen({ route, navigation }: StackScreenProps<RootStackParameterList, 'PromptEditor'>): React.JSX.Element {
-  return <PromptEditor definitionId={route.params?.definitionId} onBack={() => navigation.goBack()} onSave={() => navigation.goBack()} />;
+function PromptEditorScreen({
+  route,
+  navigation,
+}: StackScreenProps<
+  RootStackParameterList,
+  'PromptEditor'
+>): React.JSX.Element {
+  return (
+    <PromptEditor
+      definitionId={route.params.definitionId}
+      onBack={() => {
+        navigation.goBack();
+      }}
+      onSave={() => {
+        navigation.goBack();
+      }}
+    />
+  );
 }
 
 export const App: React.FC = () => {
   const { t } = useTranslation();
-  const themeConfig = useConfigStore(state => state.theme);
+  const themeConfig = useConfigStore((state) => state.theme);
   const colorScheme = useColorScheme();
-  const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) === 'light' ? lightTheme : darkTheme;
-  const [translucentStatusBar, hideStatusBar] = useConfigStore(useShallow(state => [state.translucentStatusBar, state.hideStatusBar]));
+  const theme = (themeConfig === 'default' ? colorScheme : (themeConfig ?? colorScheme)) ===
+      'light'
+    ? lightTheme
+    : darkTheme;
+  const [translucentStatusBar, hideStatusBar] = useConfigStore(
+    useShallow((state) => [state.translucentStatusBar, state.hideStatusBar]),
+  );
   const { importSuccessSnackBar } = useRegisterReceivingShareIntent();
+  const selectedRemoteNodeId = useMemeLoopStore(
+    (state) => state.selectedRemoteNodeId,
+  );
+  const connectedPeers = useMemeLoopStore((state) => state.connectedPeers);
+  const connectionStatus = useMemeLoopStore((state) => state.connectionStatus);
+  const dataSourceMode = useAgentStore((state) => state.dataSourceMode);
+  const remoteNodeId = useAgentStore((state) => state.remoteNodeId);
 
   useEffect(() => {
     initializeMobileLogger();
-    void initializeMemeLoop();
+    void (async () => {
+      await initializeMemeLoop();
+      await initializeAgentStore();
+    })();
   }, []);
+
+  useEffect(() => {
+    const connectedPeerIds = new Set(connectedPeers.map((peer) => peer.nodeId));
+
+    if (selectedRemoteNodeId && !connectedPeerIds.has(selectedRemoteNodeId)) {
+      useMemeLoopStore.getState().setSelectedRemoteNodeId(null);
+      if (dataSourceMode === 'remote') {
+        void switchToLocalMode();
+      }
+      return;
+    }
+
+    if (
+      connectionStatus === 'connected' &&
+      selectedRemoteNodeId &&
+      connectedPeerIds.has(selectedRemoteNodeId) &&
+      (dataSourceMode !== 'remote' || remoteNodeId !== selectedRemoteNodeId)
+    ) {
+      void switchToRemoteMode(selectedRemoteNodeId);
+      return;
+    }
+
+    if (
+      dataSourceMode === 'remote' &&
+      (!remoteNodeId || !connectedPeerIds.has(remoteNodeId))
+    ) {
+      void switchToLocalMode();
+    }
+  }, [
+    connectedPeers,
+    connectionStatus,
+    dataSourceMode,
+    remoteNodeId,
+    selectedRemoteNodeId,
+  ]);
 
   return (
     <I18nextProvider i18n={i18n}>
       <PaperProvider theme={theme}>
         <ThemeProvider theme={theme}>
-          <StatusBar translucent={translucentStatusBar} hidden={hideStatusBar} />
-          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
+          <StatusBar
+            translucent={translucentStatusBar}
+            hidden={hideStatusBar}
+          />
+          <NavigationContainer
+            ref={navigationReference}
+            theme={theme.reactNavigation}
+          >
             <Stack.Navigator initialRouteName='MainMenu'>
-              <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
+              <Stack.Screen
+                name='WikiWebView'
+                component={WikiWebView}
+                options={{ headerShown: false }}
+              />
               <Stack.Screen
                 name='Config'
                 component={Config}
@@ -197,7 +279,20 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='Auth'
                 component={AuthScreen}
-                options={{ headerTitle: t('Auth.Title'), headerTitleStyle: { color: theme.colors.primary } }}
+                options={{
+                  headerTitle: t('Auth.Title'),
+                  headerTitleStyle: { color: theme.colors.primary },
+                }}
+              />
+              <Stack.Screen
+                name='PinPairing'
+                component={PinPairingScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name='KnownNodes'
+                component={KnownNodesScreen}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name='Subscription'
