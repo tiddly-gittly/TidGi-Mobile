@@ -1,6 +1,6 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
-const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
+const { getDefaultConfig } = require("expo/metro-config");
+const path = require("path");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -19,12 +19,12 @@ module.exports = {
   resolver: {
     ...resolver,
     unstable_enableSymlinks: true,
-    sourceExts: [...sourceExts, 'mjs', 'sql'],
+    sourceExts: [...sourceExts, "mjs", "sql"],
     extraNodeModules: new Proxy(
       {
-        buffer: require.resolve('buffer'),
-        stream: require.resolve('readable-stream'),
-        // crypto: require.resolve('react-native-crypto-js'),
+        buffer: require.resolve("buffer"),
+        stream: require.resolve("readable-stream"),
+        crypto: require.resolve("react-native-quick-crypto"),
       },
       {
         get: (target, name) => {
@@ -34,7 +34,7 @@ module.exports = {
           // Fallback to node_modules
           return path.join(projectRoot, `node_modules/${name}`);
         },
-      }
+      },
     ),
   },
 };
