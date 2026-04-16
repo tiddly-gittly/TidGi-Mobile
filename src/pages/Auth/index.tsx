@@ -1,8 +1,10 @@
+import type { StackScreenProps } from '@react-navigation/stack';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, ScrollView } from 'react-native';
+import { Alert } from 'react-native';
 import { Button, Card, Divider, Text, TextInput } from 'react-native-paper';
 import { styled, useTheme } from 'styled-components/native';
+import type { RootStackParameterList } from '../../App';
 import * as MemeLoop from '../../services/MemeLoopService';
 import { useMemeLoopStore } from '../../store/memeloop';
 
@@ -25,7 +27,18 @@ const Row = styled.View`
   align-items: center;
 `;
 
-export function AuthScreen(): React.JSX.Element {
+const ActionRow = styled.View`
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+`;
+
+const MONOSPACE_TEXT_STYLE = { fontFamily: 'monospace' } as const;
+const FLEX_BUTTON_STYLE = { flex: 1 } as const;
+
+export function AuthScreen({
+  navigation,
+}: StackScreenProps<RootStackParameterList, 'Auth'>): React.JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
   const nodeId = useMemeLoopStore((s) => s.nodeId);
@@ -34,12 +47,16 @@ export function AuthScreen(): React.JSX.Element {
   const cloudEmail = useMemeLoopStore((s) => s.cloudEmail);
   const cloudNodeRegistered = useMemeLoopStore((s) => s.cloudNodeRegistered);
   const cloudUrl = useMemeLoopStore((s) => s.cloudUrl);
+  const knownNodes = useMemeLoopStore((s) => s.knownNodes);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [customCloudUrl, setCustomCloudUrl] = useState(cloudUrl ?? 'https://cloud.memeloop.app');
+  const [customCloudUrl, setCustomCloudUrl] = useState(
+    cloudUrl ?? 'https://cloud.memeloop.app',
+  );
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = useCallback(async () => {
     if (!email.trim() || !password.trim()) return;
@@ -52,7 +69,11 @@ export function AuthScreen(): React.JSX.Element {
         Alert.alert(t('Auth.LoginFailed', { error: result.error }));
       }
     } catch (error) {
-      Alert.alert(t('Auth.LoginFailed', { error: error instanceof Error ? error.message : String(error) }));
+      Alert.alert(
+        t('Auth.LoginFailed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
     setLoading(false);
   }, [email, password, customCloudUrl, t]);
@@ -71,7 +92,11 @@ export function AuthScreen(): React.JSX.Element {
       await MemeLoop.requestNodeOtp(customCloudUrl, jwt);
       Alert.alert(t('Auth.OtpSent'));
     } catch (error) {
-      Alert.alert(t('Auth.RegisterFailed', { error: error instanceof Error ? error.message : String(error) }));
+      Alert.alert(
+        t('Auth.RegisterFailed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
     setLoading(false);
   }, [customCloudUrl, t]);
@@ -85,7 +110,11 @@ export function AuthScreen(): React.JSX.Element {
       Alert.alert(t('Auth.RegisterSuccess'));
       setOtp('');
     } catch (error) {
-      Alert.alert(t('Auth.RegisterFailed', { error: error instanceof Error ? error.message : String(error) }));
+      Alert.alert(
+        t('Auth.RegisterFailed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
     setLoading(false);
   }, [customCloudUrl, otp, t]);
@@ -93,19 +122,24 @@ export function AuthScreen(): React.JSX.Element {
   return (
     <Container>
       {/* Node Identity */}
-      <Section mode="outlined">
+      <Section mode='outlined'>
         <Card.Title title={t('Auth.Title')} />
         <SectionContent>
           <Row>
-            <Text variant="bodyMedium">Node ID</Text>
-            <Text variant="bodySmall" style={{ fontFamily: 'monospace' }}>{nodeId ? nodeId.slice(0, 16) + '…' : '—'}</Text>
+            <Text variant='bodyMedium'>Node ID</Text>
+            <Text variant='bodySmall' style={MONOSPACE_TEXT_STYLE}>
+              {nodeId ? nodeId.slice(0, 16) + '…' : '—'}
+            </Text>
           </Row>
           <Row>
-            <Text variant="bodyMedium">Keypair</Text>
-            <Text variant="bodySmall">{hasKeypair ? '✅' : '❌'}</Text>
+            <Text variant='bodyMedium'>Keypair</Text>
+            <Text variant='bodySmall'>{hasKeypair ? '✅' : '❌'}</Text>
           </Row>
           {!hasKeypair && (
-            <Button mode="outlined" onPress={() => void MemeLoop.ensureKeypair()}>
+            <Button
+              mode='outlined'
+              onPress={() => void MemeLoop.ensureKeypair()}
+            >
               Generate Keypair
             </Button>
           )}
@@ -115,51 +149,68 @@ export function AuthScreen(): React.JSX.Element {
       <Divider />
 
       {/* Cloud Login */}
-      <Section mode="outlined">
+      <Section mode='outlined'>
         <Card.Title title={t('Auth.CloudLogin')} />
         <SectionContent>
           {cloudLoggedIn
             ? (
               <>
                 <Row>
-                  <Text variant="bodyMedium">{t('Auth.Email')}</Text>
-                  <Text variant="bodySmall">{cloudEmail}</Text>
+                  <Text variant='bodyMedium'>{t('Auth.Email')}</Text>
+                  <Text variant='bodySmall'>{cloudEmail}</Text>
                 </Row>
                 <Row>
-                  <Text variant="bodyMedium">{t('Auth.NodeRegistration')}</Text>
-                  <Text variant="bodySmall">{cloudNodeRegistered ? '✅ Registered' : '❌ Not registered'}</Text>
+                  <Text variant='bodyMedium'>{t('Auth.NodeRegistration')}</Text>
+                  <Text variant='bodySmall'>
+                    {cloudNodeRegistered ? '✅ Registered' : '❌ Not registered'}
+                  </Text>
                 </Row>
-                <Button mode="outlined" onPress={handleLogout}>{t('Auth.Logout')}</Button>
+                <Button mode='outlined' onPress={handleLogout}>
+                  {t('Auth.Logout')}
+                </Button>
               </>
             )
             : (
               <>
                 <TextInput
-                  mode="outlined"
-                  label="Cloud URL"
+                  mode='outlined'
+                  label='Cloud URL'
                   value={customCloudUrl}
                   onChangeText={setCustomCloudUrl}
-                  autoCapitalize="none"
+                  autoCapitalize='none'
                   dense
                 />
                 <TextInput
-                  mode="outlined"
+                  mode='outlined'
                   label={t('Auth.Email')}
                   value={email}
                   onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
+                  keyboardType='email-address'
+                  autoCapitalize='none'
                   dense
                 />
                 <TextInput
-                  mode="outlined"
+                  mode='outlined'
                   label={t('Auth.Password')}
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   dense
+                  right={
+                    <TextInput.Icon
+                      icon={showPassword ? 'eye-off' : 'eye'}
+                      onPress={() => {
+                        setShowPassword(!showPassword);
+                      }}
+                    />
+                  }
                 />
-                <Button mode="contained" onPress={() => void handleLogin()} loading={loading} disabled={loading}>
+                <Button
+                  mode='contained'
+                  onPress={() => void handleLogin()}
+                  loading={loading}
+                  disabled={loading}
+                >
                   {t('Auth.Login')}
                 </Button>
               </>
@@ -169,22 +220,32 @@ export function AuthScreen(): React.JSX.Element {
 
       {/* Node Registration (only if logged in but not registered) */}
       {cloudLoggedIn && !cloudNodeRegistered && (
-        <Section mode="outlined">
+        <Section mode='outlined'>
           <Card.Title title={t('Auth.NodeRegistration')} />
           <SectionContent>
-            <Button mode="outlined" onPress={() => void handleRequestOtp()} loading={loading} disabled={loading}>
+            <Button
+              mode='outlined'
+              onPress={() => void handleRequestOtp()}
+              loading={loading}
+              disabled={loading}
+            >
               {t('Auth.RequestOtp')}
             </Button>
             <TextInput
-              mode="outlined"
+              mode='outlined'
               label={t('Auth.EnterOtp')}
               value={otp}
               onChangeText={setOtp}
-              keyboardType="numeric"
+              keyboardType='numeric'
               maxLength={6}
               dense
             />
-            <Button mode="contained" onPress={() => void handleRegisterWithOtp()} loading={loading} disabled={loading || otp.length !== 6}>
+            <Button
+              mode='contained'
+              onPress={() => void handleRegisterWithOtp()}
+              loading={loading}
+              disabled={loading || otp.length !== 6}
+            >
               {t('Auth.RegisterNode')}
             </Button>
           </SectionContent>
@@ -192,12 +253,44 @@ export function AuthScreen(): React.JSX.Element {
       )}
 
       {/* Local Mode */}
-      <Section mode="outlined">
+      <Section mode='outlined'>
         <Card.Title title={t('Auth.LocalMode')} />
         <SectionContent>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant ?? '#888' }}>
+          <Text
+            variant='bodySmall'
+            style={{ color: theme.colors.onSurfaceVariant }}
+          >
             {t('Auth.LocalModeDesc')}
           </Text>
+        </SectionContent>
+      </Section>
+
+      {/* Quick Actions */}
+      <Section mode='outlined'>
+        <Card.Title title={t('Auth.QuickActions')} />
+        <SectionContent>
+          <ActionRow>
+            <Button
+              mode='outlined'
+              icon='shield-check'
+              style={FLEX_BUTTON_STYLE}
+              onPress={() => {
+                navigation.navigate('KnownNodes');
+              }}
+            >
+              {t('Auth.KnownNodes')} ({knownNodes.length})
+            </Button>
+            <Button
+              mode='outlined'
+              icon='qrcode-scan'
+              style={FLEX_BUTTON_STYLE}
+              onPress={() => {
+                navigation.navigate('PinPairing');
+              }}
+            >
+              {t('Auth.PinPairing')}
+            </Button>
+          </ActionRow>
         </SectionContent>
       </Section>
     </Container>
