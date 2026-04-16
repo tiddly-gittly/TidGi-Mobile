@@ -515,6 +515,18 @@ export async function triggerDesktopMerge(remote: IGitRemote): Promise<void> {
 
 // ── Fetch + Reset ──────────────────────────────────────────────────
 
+/**
+ * Fetch from desktop using bundle protocol (private protocol).
+ *
+ * Instead of JGit's HTTP git-upload-pack (which triggers the "Starting read stage"
+ * bug on multi-request transport), we:
+ * 1. Ask desktop to create a bundle containing commits we don't have
+ * 2. Download the bundle (base64-encoded)
+ * 3. Write it to .git/incoming.bundle
+ * 4. JGit fetches from the local bundle file (no HTTP transport issues)
+ *
+ * Standard git services (GitHub, etc.) do NOT implement the create-bundle endpoint.
+ */
 export async function gitFetchAndReset(
   workspace: IWikiWorkspace, remote: IGitRemote,
   _onProgress?: (phase: string, loaded: number, total: number) => void,
@@ -527,13 +539,54 @@ export async function gitFetchAndReset(
   );
   const headBefore = headBeforeResult.ok ? (headBeforeResult.oid ?? '') : '';
 
-  const headersJson = headersToJson(remote);
   await ensureGitConfigForMobile(directory);
-  console.log(`[gitFetchAndReset] native JGit fetch for ${directory}`);
-  const fetchResultJson = await ExternalStorage.gitFetch(directory, 'origin', branch, headersJson);
+
+  // Request a bundle from the desktop containing commits we don't have
+  const bundleUrl = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}/create-bundle`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/x-git-bundle-base64',
+  };
+  if (remote.token) {
+    headers['Authorization'] = `Bearer ${remote.token}`;
+  }
+
+  console.log(`[gitFetchAndReset] requesting bundle from desktop, have=${headBefore.slice(0, 8)}`);
+  const bundleResponse = await fetch(bundleUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ have: headBefore }),
+  });
+
+  if (bundleResponse.status === 204) {
+    console.log('[gitFetchAndReset] desktop says already up-to-date');
+    return false;
+  }
+
+  if (!bundleResponse.ok) {
+    const errorText = await bundleResponse.text();
+    throw new Error(`Desktop create-bundle failed (${bundleResponse.status}): ${errorText}`);
+  }
+
+  const bundleBase64 = await bundleResponse.text();
+  const desktopHead = bundleResponse.headers.get('X-Git-Bundle-Head') ?? '';
+  console.log(`[gitFetchAndReset] received bundle: ${bundleBase64.length} chars base64, desktopHead=${desktopHead.slice(0, 8)}`);
+
+  // Write bundle to .git/incoming.bundle
+  const bundleBytes = Uint8Array.from(atob(bundleBase64), c => c.charCodeAt(0));
+  const bundlePath = `${directory}/.git/incoming.bundle`;
+  if (isExternalPath(directory)) {
+    await ExternalStorage.writeFileBase64(bundlePath, bundleBase64);
+  } else {
+    await FileSystemLegacy.writeAsStringAsync(toFileUri(bundlePath), bundleBase64, { encoding: FileSystemLegacy.EncodingType.Base64 });
+  }
+
+  // Fetch from the local bundle file using JGit
+  console.log(`[gitFetchAndReset] JGit fetch from local bundle`);
+  const fetchResultJson = await ExternalStorage.gitFetchFromBundle(directory, 'incoming.bundle', branch);
   const fetchResult = parseNativeResult<{ ok: boolean; updates?: unknown[]; error?: string }>(fetchResultJson);
-  if (!fetchResult.ok) throw new Error(`Native git fetch failed: ${fetchResult.error ?? 'unknown'}`);
-  console.log(`[gitFetchAndReset] native fetch succeeded: ${JSON.stringify(fetchResult.updates)}`);
+  if (!fetchResult.ok) throw new Error(`Bundle fetch failed: ${fetchResult.error ?? 'unknown'}`);
+  console.log(`[gitFetchAndReset] bundle fetch succeeded: ${JSON.stringify(fetchResult.updates)}`);
 
   const remoteRefResult = parseNativeResult<{ ok: boolean; oid?: string }>(
     await ExternalStorage.gitResolveRef(directory, `refs/remotes/origin/${branch}`),
