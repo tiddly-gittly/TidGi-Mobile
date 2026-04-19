@@ -1,19 +1,14 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "@modern-js/tsconfig/base.json",
   "compilerOptions": {
-    "strict": true,
-    "skipLibCheck": true,
-    "typeRoots": [
-      "node_modules/@types",
-      "node_modules/tw5-typed",
-      "./src/types"
-    ],
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "declaration": false,
+    "jsx": "react-jsx",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "types": ["node", "tw5-typed"],
+    "lib": ["DOM", "ESNext"]
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "src/types/**/*.d.ts"
-  ]
+  "include": ["src", "*.json", "wiki/*.info", "*.mjs", "*.js", "src/**/*.d.ts", "wiki/tiddlers/tests/playwright/**/*.ts"]
 }
+
