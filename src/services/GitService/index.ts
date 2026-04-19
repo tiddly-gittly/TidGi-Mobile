@@ -544,12 +544,10 @@ export async function gitFetchAndReset(
   // Request a bundle from the desktop containing commits we don't have
   const bundleUrl = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}/create-bundle`;
   const headers: Record<string, string> = {
+    ...normalizeHeaders(createAuthHeader(remote)),
     'Content-Type': 'application/json',
     'Accept': 'application/x-git-bundle-base64',
   };
-  if (remote.token) {
-    headers['Authorization'] = `Bearer ${remote.token}`;
-  }
 
   console.log(`[gitFetchAndReset] requesting bundle from desktop, have=${headBefore.slice(0, 8)}`);
   const bundleResponse = await fetch(bundleUrl, {
@@ -573,7 +571,6 @@ export async function gitFetchAndReset(
   console.log(`[gitFetchAndReset] received bundle: ${bundleBase64.length} chars base64, desktopHead=${desktopHead.slice(0, 8)}`);
 
   // Write bundle to .git/incoming.bundle
-  const bundleBytes = Uint8Array.from(atob(bundleBase64), c => c.charCodeAt(0));
   const bundlePath = `${directory}/.git/incoming.bundle`;
   if (isExternalPath(directory)) {
     await ExternalStorage.writeFileBase64(bundlePath, bundleBase64);
@@ -599,7 +596,9 @@ export async function gitFetchAndReset(
   const checkoutResultJson = await ExternalStorage.gitCheckoutChangedFiles(directory, headBefore, remoteOid);
   const checkoutResult = parseNativeResult<{ ok: boolean; count?: number; files?: string[]; error?: string }>(checkoutResultJson);
   if (checkoutResult.ok) console.log(`[gitFetchAndReset] checked out ${checkoutResult.count} changed files`);
-  else console.warn(`[gitFetchAndReset] gitCheckoutChangedFiles failed: ${checkoutResult.error}`);
+  else {
+    throw new Error(`Working tree update failed after fetch: ${checkoutResult.error ?? 'gitCheckoutChangedFiles failed'}`);
+  }
 
   console.log(`[gitFetchAndReset] resetting to origin/${branch}`);
   const resetResultJson = await ExternalStorage.gitReset(directory, `origin/${branch}`, 'mixed');
