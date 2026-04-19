@@ -170,6 +170,12 @@ export const preferenceSections: PreferenceSectionSchema[] = [
     titleKey: 'Preference.DeveloperTools',
     items: [
       {
+        type: 'custom',
+        key: 'debug-info',
+        titleKey: 'Preference.AppVersionInfo',
+        customKey: 'debug-info',
+      },
+      {
         type: 'action',
         key: 'clear-wiki-data',
         titleKey: 'Preference.RemoveAllWikiData',

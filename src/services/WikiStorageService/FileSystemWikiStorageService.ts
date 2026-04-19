@@ -15,7 +15,8 @@
  *   - Registry empty → tiddler was never on disk → succeed silently
  */
 
-import { toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
+import { Platform } from 'react-native';
 import { Observable } from 'rxjs';
 import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParameter } from 'tiddlywiki';
 import { getWikiTiddlerFolderPath } from '../../constants/paths';
@@ -23,7 +24,7 @@ import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
-import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, listTidFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
+import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTidFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
 import { processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
@@ -67,6 +68,8 @@ export class FileSystemWikiStorageService {
 
   // ─── File Index (≈ desktop boot.files population) ──────────────────────
 
+  #isBuildingFileIndex = false;
+
   /**
    * Scan ALL workspace folders (main + sub-wikis) and build the title→path
    * registry.  Equivalent to desktop's boot loading that populates
@@ -75,20 +78,90 @@ export class FileSystemWikiStorageService {
    * Must be called once after construction, before any save/delete.
    */
   async buildFileIndex(): Promise<void> {
-    const workspaces = this.#getRelatedWorkspaces();
+    if (this.#tiddlerFilePathByTitle.size > 0) {
+      this.#logger.log(`buildFileIndex: index already built (${this.#tiddlerFilePathByTitle.size} entries), skipping.`);
+      return;
+    }
+    if (this.#isBuildingFileIndex) {
+      return this.indexReady;
+    }
+
+    this.#isBuildingFileIndex = true;
+    try {
+      const startedAt = Date.now();
+      const workspaces = this.#getRelatedWorkspaces();
     this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid files`);
+
+    // Try native batch parsing first — a single bridge call that parses all
+    // files in parallel using Java ForkJoinPool, ~100x faster than per-file
+    // JS reads through the bridge.
+    const nativeBatchParser = Platform.OS === 'android'
+      ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
+      : undefined;
+
     for (const workspace of workspaces) {
       const folderPath = getWikiTiddlerFolderPath(workspace);
-      this.#logger.log(`buildFileIndex: scanning ${toPlainPath(folderPath)}`);
-      await this.#indexDirectory(folderPath);
+      const plainFolderPath = toPlainPath(folderPath);
+      this.#logger.log(`buildFileIndex: scanning ${plainFolderPath}`);
+
+      if (nativeBatchParser !== undefined) {
+        await this.#indexDirectoryNative(plainFolderPath, nativeBatchParser);
+      } else {
+        await this.#indexDirectory(folderPath);
+      }
     }
-    this.#logger.log(`buildFileIndex: completed. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
-    // Log a few sample entries for debugging
-    let sampleCount = 0;
-    for (const [title, path] of this.#tiddlerFilePathByTitle) {
-      if (sampleCount >= 5) break;
-      this.#logger.log(`  sample: "${title}" → ${toPlainPath(path)}`);
-      sampleCount++;
+
+    const elapsed = Date.now() - startedAt;
+    this.#logger.log(`buildFileIndex: completed in ${elapsed}ms. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
+    console.log(`${new Date().toISOString()} [WikiStorageService] buildFileIndex completed in ${elapsed}ms, ${this.#tiddlerFilePathByTitle.size} tiddlers`);
+    } finally {
+      this.#isBuildingFileIndex = false;
+    }
+  }
+
+  /**
+   * Native-accelerated index building: list files, batch-parse in Kotlin,
+   * extract title→path pairs from the result. One bridge call for file
+   * listing + one for batch parsing vs thousands of per-file reads.
+   */
+  async #indexDirectoryNative(
+    plainFolderPath: string,
+    batchParser: (filePaths: string[], quickLoadMode: boolean) => Promise<string>,
+  ): Promise<void> {
+    try {
+      const info = await ExternalStorage.getInfo(plainFolderPath);
+      if (!info.exists || !info.isDirectory) return;
+
+      const relativePaths = await ExternalStorage.readDirRecursive(plainFolderPath);
+      const tidFiles = relativePaths.filter((p: string) => p.endsWith('.tid') || p.endsWith('.json') || p.endsWith('.meta'));
+      const absolutePaths = tidFiles.map((p: string) => `${plainFolderPath}${plainFolderPath.endsWith('/') ? '' : '/'}${p}`);
+
+      if (absolutePaths.length === 0) return;
+
+      // Parse in quickLoadMode to skip text content — we only need titles.
+      // Process in batches of 500 to avoid a single enormous bridge call.
+      const BATCH_SIZE = 500;
+      // For internal storage paths, convert plain paths back to file:// URIs
+      // so the index is consistent with the rest of the codebase (which uses
+      // file:// URIs for expo-file-system File/Directory operations).
+      const isExternal = isExternalPath(plainFolderPath);
+      for (let index = 0; index < absolutePaths.length; index += BATCH_SIZE) {
+        const batch = absolutePaths.slice(index, index + BATCH_SIZE);
+        const jsonString = await batchParser(batch, true);
+        const tiddlers = JSON.parse(jsonString) as Array<{ title?: string; [key: string]: unknown }>;
+        for (let index = 0; index < tiddlers.length; index++) {
+          const title = tiddlers[index].title;
+          if (typeof title === 'string' && title.length > 0) {
+            const plainPath = batch[index];
+            // Store file:// URI for internal paths so ensureDirectory / File() work
+            const storedPath = isExternal ? plainPath : `file://${plainPath}`;
+            this.#tiddlerFilePathByTitle.set(title, storedPath);
+            this.#titleByFilePath.set(plainPath, title);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`buildFileIndex (native): failed to scan ${plainFolderPath}: ${(error as Error).message}`);
     }
   }
 
@@ -241,7 +314,9 @@ export class FileSystemWikiStorageService {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
       await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
-      this.#logger.log(`saveTiddler "${title}" → ${toPlainPath(fullPath)}`);
+      const plainSavePath = toPlainPath(fullPath);
+      this.#logger.log(`saveTiddler "${title}" → ${plainSavePath}`);
+      console.log(`${new Date().toISOString()} [WikiStorageService] saveTiddler "${title}" written to ${plainSavePath}`);
 
       // ─── Desktop cleanupTiddlerFiles equivalent ──────────────────────
       // If the file moved to a different location (routing changed),

@@ -12,6 +12,3 @@ onlyBuiltDependencies:
   - less
   - svelte-preprocess
   - unrs-resolver
-
-patchedDependencies:
-  isomorphic-git: patches/isomorphic-git.patch

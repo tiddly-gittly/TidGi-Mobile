@@ -3,6 +3,7 @@ import * as Application from 'expo-application';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
 import { Button, Text } from 'react-native-paper';
+import nativeModuleInfo from 'expo-tiddlywiki-filesystem-android-external-storage/package.json';
 import twVersionInfo from '../../../../assets/tiddlywiki/version.json';
 
 export function CopyDebugInfoButton(): JSX.Element {
@@ -18,6 +19,7 @@ export function CopyDebugInfoButton(): JSX.Element {
               nativeAppVersion: Application.nativeApplicationVersion,
               nativeBuildVersion: Application.nativeBuildVersion,
             },
+            nativeModule: nativeModuleInfo.version,
             tiddlywiki: twVersionInfo,
           },
           undefined,
@@ -28,7 +30,7 @@ export function CopyDebugInfoButton(): JSX.Element {
       }}
       mode='outlined'
     >
-      <Text>{t('ContextMenu.Copy')} v{Application.nativeApplicationVersion ?? '?-?-?'} (TW {twVersionInfo.tiddlywikiVersion})</Text>
+      <Text>{t('ContextMenu.Copy')} v{Application.nativeApplicationVersion ?? '?-?-?'} (NM {nativeModuleInfo.version}, TW {twVersionInfo.tiddlywikiVersion})</Text>
     </Button>
   );
 }

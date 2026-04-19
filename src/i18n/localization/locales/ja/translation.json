@@ -446,7 +446,8 @@
     "HideStatusBarDescription": "ステータスバーを完全に非表示にします。非表示にすると、より多くの表示スペースが利用可能になりますが、ステータスバーを開くには追加の操作が必要になる場合があります。バンズスクリーンやドットホールスクリーンでは機能しません。",
     "AndroidHardwareAcceleration": "Androidのハードウェアアクセラレーション",
     "AndroidHardwareAccelerationDescription": "有効にすると、一部の機種での白画面や、バックグラウンドに長時間置いた後の画面クラッシュの問題が解決するかもしれません。ただし、これにより性能が低下し、ビデオの読み込みができなくなる場合があります。",
-    "SearchSettings": "設定を検索..."
+    "SearchSettings": "設定を検索...",
+    "AppVersionInfo": "アプリバージョン情報"
   },
   "Error": {
     "InitWikiGitError": "E - 1 InitWikiGitエラー",
@@ -542,7 +543,12 @@
   "Import": {
     "ImportWiki": "Wikiをインポート",
     "ServerTokenProtected": "トークン保護",
-    "ServerTokenProtectedMessage": "このサーバーはトークン認証で保護されています。安全にインポートするには、TidGi デスクトップからQRコードをスキャンしてください。"
+    "ServerTokenProtectedMessage": "このサーバーはトークン認証で保護されています。安全にインポートするには、TidGi デスクトップからQRコードをスキャンしてください。",
+    "PartialSuccess": {
+      "Succeeded": "インポート成功",
+      "Failed": "インポート失敗"
+    },
+    "RetryFailed": "失敗を再試行 ({{count}})"
   },
   "ConfirmDelete": "本当に削除しますか？",
   "ConfirmDeleteDescription": "この操作は元に戻せません。",

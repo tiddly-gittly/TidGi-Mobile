@@ -11,7 +11,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
+import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitGetAheadCommitCount, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -48,6 +48,8 @@ export async function unregisterBackgroundSyncAsync() {
  * Service for syncing wikis using git
  */
 export class GitBackgroundSyncService {
+  readonly #workspaceSyncLocks = new Map<string, Promise<boolean>>();
+
   public getSubWikisForMainWorkspace(workspace: IWikiWorkspace): IWikiWorkspace[] {
     if (workspace.isSubWiki === true) {
       return [];
@@ -129,12 +131,17 @@ export class GitBackgroundSyncService {
       for (const workspace of reconciledWorkspaces) {
         if (workspace.isSubWiki === true) {
           const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
+          let chain = Promise.resolve(false);
           for (const server of onlineServers) {
             const key = `${workspace.id}:${server.id}`;
             if (dedupe.has(key)) continue;
             dedupe.add(key);
-            syncTasks.push(this.syncSingleWorkspaceWithServer(workspace, server));
+            chain = chain.then(async previousUpdated => {
+              const updated = await this.syncWorkspaceOnQueue(workspace.id, async () => await this.syncSingleWorkspaceWithServer(workspace, server));
+              return previousUpdated || updated;
+            });
           }
+          syncTasks.push(chain);
           continue;
         }
 
@@ -143,16 +150,19 @@ export class GitBackgroundSyncService {
           ? [workspace]
           : [workspace, ...this.getSubWikisForMainWorkspace(workspace)];
 
-        for (const server of onlineServers) {
-          for (const workspaceToSync of workspacesToSync) {
+        for (const workspaceToSync of workspacesToSync) {
+          let chain = Promise.resolve(false);
+          for (const server of onlineServers) {
             const key = `${workspaceToSync.id}:${server.id}`;
             if (dedupe.has(key)) continue;
             dedupe.add(key);
-            syncTasks.push((async () => {
+            chain = chain.then(async previousUpdated => {
               const reconciledWorkspace = await this.reconcileWorkspaceID(workspaceToSync);
-              return await this.syncSingleWorkspaceWithServer(reconciledWorkspace, server);
-            })());
+              const updated = await this.syncWorkspaceOnQueue(reconciledWorkspace.id, async () => await this.syncSingleWorkspaceWithServer(reconciledWorkspace, server));
+              return previousUpdated || updated;
+            });
           }
+          syncTasks.push(chain);
         }
       }
 
@@ -163,6 +173,21 @@ export class GitBackgroundSyncService {
       return { haveUpdate, haveConnectedServer };
     } finally {
       this.#isSyncing = false;
+    }
+  }
+
+  private async syncWorkspaceOnQueue(workspaceId: string, task: () => Promise<boolean>): Promise<boolean> {
+    const previous = this.#workspaceSyncLocks.get(workspaceId) ?? Promise.resolve(false);
+    const current = previous
+      .catch(() => false)
+      .then(async () => await task());
+    this.#workspaceSyncLocks.set(workspaceId, current);
+    try {
+      return await current;
+    } finally {
+      if (this.#workspaceSyncLocks.get(workspaceId) === current) {
+        this.#workspaceSyncLocks.delete(workspaceId);
+      }
     }
   }
 
@@ -341,12 +366,17 @@ export class GitBackgroundSyncService {
       // ──────────────────────────────────────────────────────────
       // Step 2: Push to mobile-incoming branch + trigger desktop merge.
       // Desktop handles all merge/conflict resolution, saving mobile battery.
+      // Also push if there are unpushed commits from a previous failed push.
       // ──────────────────────────────────────────────────────────
-      if (hasLocalChanges) {
+      const aheadCount = await gitGetAheadCommitCount(workspace);
+      const needsPush = hasLocalChanges || aheadCount > 0;
+      if (needsPush) {
         workspaceLogger.log('Pushing to mobile-incoming', {
           baseUrl: remote.baseUrl,
           remoteWorkspaceId: remote.workspaceId,
           serverId: server.id,
+          hasLocalChanges,
+          aheadCount,
         });
         await gitPushToIncoming(workspace, remote);
         await triggerDesktopMerge(remote);
@@ -363,7 +393,7 @@ export class GitBackgroundSyncService {
       }
 
       this.updateLastSync(workspace.id, server.id);
-      if (hasLocalChanges) {
+      if (needsPush) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 

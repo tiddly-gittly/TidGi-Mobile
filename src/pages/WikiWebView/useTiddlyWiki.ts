@@ -1,5 +1,4 @@
 import { Asset } from 'expo-asset';
-import { File } from 'expo-file-system';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { Dispatch, RefObject, SetStateAction, useEffect, useRef, useState } from 'react';
@@ -144,7 +143,7 @@ async function loadBundledAssets(): Promise<IBundledAssets> {
     if (!uris[index]) throw new Error(`Asset ${index} failed to load (localUri is null)`);
   }
   const [emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi] = await Promise.all(
-    uris.map(uri => new File(uri!).text()),
+    uris.map(uri => FileSystemLegacy.readAsStringAsync(uri!)),
   );
   return { emptyHtml, expoFileSystemSyncadaptor, expoFileSystemSyncadaptorUi };
 }

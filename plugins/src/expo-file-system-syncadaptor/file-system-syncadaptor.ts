@@ -87,6 +87,8 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.tiddlersToNotSave = $tw.utils.parseStringArray(this.wiki.getTiddlerText('$:/plugins/linonetwo/expo-file-system-syncadaptor/TiddlersToNotSave') ?? '');
     // React-Native don't have fs monitor, so no SSE on mobile
     // this.setupSSE();
+    // Note: configSyncer() is deferred to getStatus() because $tw.syncer
+    // is not yet available during syncer constructor → syncadaptor constructor.
   }
 
   setupSSE() {
@@ -161,17 +163,58 @@ class TidGiMobileFileSystemSyncAdaptor {
 
   private configSyncer() {
     if ($tw.syncer === undefined) {
-      console.error('Syncer is undefined in TidGiMobileFileSystemSyncAdaptor. Abort the configSyncer.');
+      this.logger.log('configSyncer deferred — $tw.syncer not yet available, retrying in 500ms');
+      setTimeout(() => this.configSyncer(), 500);
       return;
     }
-    $tw.syncer.pollTimerInterval = 2_147_483_647;
+    const syncer = $tw.syncer;
+    this.syncerConfigured = true;
+    this.logger.log('configSyncer: disabling polling, increasing throttle');
+    // Disable polling — mobile uses SSE or manual sync only
+    syncer.pollTimerInterval = 2_147_483_647;
+    // Increase the throttle interval for saving tasks.
+    // Default is 1000ms; on mobile with IPC overhead, 2s is more appropriate.
+    // This reduces how often getSyncedTiddlers (O(n) filter) runs.
+    syncer.throttleInterval = 2000;
+    // Increase task timer interval to reduce CPU usage during bulk changes
+    syncer.taskTimerInterval = 2000;
+
+    // Suppress syncer during boot phase to prevent O(n²) behavior.
+    // The syncer's wiki "change" handler calls getSyncedTiddlers (O(n) filter)
+    // for EVERY change event. During boot, thousands of tiddlers are streamed
+    // in, each firing a change event → O(n) * O(n) = O(n²) total.
+    // We patch BOTH getSyncedTiddlers AND processTaskQueue to no-op during boot.
+    if (!this._bootPhaseComplete) {
+      const originalProcessTaskQueue = syncer.processTaskQueue.bind(syncer);
+      // Runtime: getSyncedTiddlers(source) takes a source callback — the type
+      // definition omits it, so we cast to the actual signature.
+      const originalGetSyncedTiddlers = (syncer.getSyncedTiddlers as (source?: unknown) => string[]).bind(syncer);
+      syncer.processTaskQueue = () => {
+        if (!this._bootPhaseComplete) return;
+        return originalProcessTaskQueue();
+      };
+      // getSyncedTiddlers is the expensive O(n) call — skip it during boot
+      (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = (source: unknown) => {
+        if (!this._bootPhaseComplete) return [];
+        return originalGetSyncedTiddlers(source);
+      };
+      // Mark boot complete after a delay — by then initial tiddler streaming
+      // and readTiddlerInfo should be done.
+      setTimeout(() => {
+        this._bootPhaseComplete = true;
+        this.logger.log('configSyncer: boot phase complete, syncer fully enabled');
+        // Restore originals
+        syncer.processTaskQueue = originalProcessTaskQueue;
+        (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = originalGetSyncedTiddlers;
+        // Re-read tiddler info now that all tiddlers are loaded, then process queue
+        syncer.readTiddlerInfo();
+        syncer.processTaskQueue();
+      }, 10_000);
+    }
   }
 
   getUpdatedTiddlers(_syncer: Syncer, callback: (error: Error | null | undefined, changes: { deletions: string[]; modifications: string[] }) => void): void {
-    this.logger.log('getUpdatedTiddlers', {
-      deletions: this.updatedTiddlers.deletions.length,
-      modifications: this.updatedTiddlers.modifications.length,
-    });
+    this.logger.log(`getUpdatedTiddlers del=${this.updatedTiddlers.deletions.length} mod=${this.updatedTiddlers.modifications.length}`);
     callback(null, this.updatedTiddlers);
   }
 
@@ -213,8 +256,15 @@ class TidGiMobileFileSystemSyncAdaptor {
   /**
    * Get the current status of the TiddlyWeb connection
    */
+  private syncerConfigured = false;
+  private _bootPhaseComplete = false;
+
   async getStatus(callback?: ISyncAdaptorGetStatusCallback) {
     this.logger.log('Getting status');
+    // Configure syncer here because $tw.syncer is not yet available during our constructor
+    if (!this.syncerConfigured) {
+      this.configSyncer();
+    }
     try {
       const status = await this.wikiStorageService.getStatus();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined even though type says otherwise
@@ -270,7 +320,7 @@ class TidGiMobileFileSystemSyncAdaptor {
       this.logger.log(`saveTiddler ${title}`);
       this.addRecentUpdatedTiddlersFromClient('modifications', title);
       const targetWorkspaceId = await this.routeTiddlerToWorkspace(tiddler);
-      this.logger.log('saveTiddler routing', { title, targetWorkspaceId });
+      this.logger.log(`saveTiddler routing title=${title} workspace=${targetWorkspaceId}`);
       const etag = await this.wikiStorageService.saveTiddler(title, tiddler.getFieldStrings(), targetWorkspaceId);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined
       if (etag === undefined) {
@@ -288,7 +338,7 @@ class TidGiMobileFileSystemSyncAdaptor {
           if (typeof trackedFilePath === 'string' && trackedFilePath.length > 0) {
             this.filePathCache.set(title, trackedFilePath);
           }
-          this.logger.log('saveTiddler tracked path', { title, trackedFilePath, targetWorkspaceId });
+          this.logger.log(`saveTiddler tracked path title=${title} file=${trackedFilePath} workspace=${targetWorkspaceId}`);
           // Invoke the callback
           callback(null, {
             bag: etagInfo.bag,
@@ -511,27 +561,27 @@ class TidGiMobileFileSystemSyncAdaptor {
 
     for (const workspaceConfig of sortedConfigs) {
       if (this.matchesDirectTag(tiddlerTitle, tiddlerTags, workspaceConfig.tagNames)) {
-        this.logger.log('routeTiddlerToWorkspace matched direct tag', { title: tiddlerTitle, workspaceId: workspaceConfig.id });
+        this.logger.log(`routeTiddlerToWorkspace matched direct tag title=${tiddlerTitle} workspace=${workspaceConfig.id}`);
         return workspaceConfig.id;
       }
 
       if (workspaceConfig.includeTagTree && workspaceConfig.tagNames.length > 0) {
         if (this.matchesTagTree(tiddlerTitle, workspaceConfig.tagNames)) {
-          this.logger.log('routeTiddlerToWorkspace matched tag tree', { title: tiddlerTitle, workspaceId: workspaceConfig.id });
+          this.logger.log(`routeTiddlerToWorkspace matched tag tree title=${tiddlerTitle} workspace=${workspaceConfig.id}`);
           return workspaceConfig.id;
         }
       }
 
       if (workspaceConfig.fileSystemPathFilterEnable && typeof workspaceConfig.fileSystemPathFilter === 'string' && workspaceConfig.fileSystemPathFilter.length > 0) {
         if (this.matchesCustomFilter(tiddlerTitle, workspaceConfig.fileSystemPathFilter)) {
-          this.logger.log('routeTiddlerToWorkspace matched custom filter', { title: tiddlerTitle, workspaceId: workspaceConfig.id });
+          this.logger.log(`routeTiddlerToWorkspace matched custom filter title=${tiddlerTitle} workspace=${workspaceConfig.id}`);
           return workspaceConfig.id;
         }
       }
     }
 
     const fallbackWorkspaceId = sortedConfigs.find(workspaceConfig => !workspaceConfig.isSubWiki)?.id;
-    this.logger.log('routeTiddlerToWorkspace defaulted to main workspace', { title: tiddlerTitle, workspaceId: fallbackWorkspaceId });
+    this.logger.log(`routeTiddlerToWorkspace defaulted to main workspace title=${tiddlerTitle} workspace=${fallbackWorkspaceId}`);
     return fallbackWorkspaceId;
   }
 }
