@@ -11,6 +11,9 @@
 		},
 		{
 			"path": "../TidGi-Desktop"
+		},
+		{
+			"path": "../expo-tiddlywiki-filesystem-android-external-storage"
 		}
 	],
 	"settings": {
