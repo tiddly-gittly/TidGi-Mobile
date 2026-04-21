@@ -5,6 +5,7 @@
     "jsx": "react-jsx",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "strictNullChecks": true,
     "noEmit": true,
     "types": ["node", "tw5-typed"],
     "lib": ["DOM", "ESNext"]

@@ -1,9 +1,9 @@
 /** This file is commented out, because expo-application block the f-droid integration. issue #6 */
 import * as Application from 'expo-application';
 import * as Clipboard from 'expo-clipboard';
+import nativeModuleInfo from 'expo-tiddlywiki-filesystem-android-external-storage/package.json';
 import { useTranslation } from 'react-i18next';
 import { Button, Text } from 'react-native-paper';
-import nativeModuleInfo from 'expo-tiddlywiki-filesystem-android-external-storage/package.json';
 import twVersionInfo from '../../../../assets/tiddlywiki/version.json';
 
 export function CopyDebugInfoButton(): JSX.Element {

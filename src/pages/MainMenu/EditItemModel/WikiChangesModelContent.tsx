@@ -6,8 +6,8 @@ import { ActivityIndicator, Button, Card, Dialog, IconButton, List, Modal, Porta
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  gitDiffChangedFiles,
   gitCommit,
+  gitDiffChangedFiles,
   gitDiscardFileChanges,
   gitGetChangedFilesForCommit,
   gitGetCommitHistory,
@@ -148,7 +148,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   useEffect(() => {
     if (wiki === undefined) return;
     void refreshUncommitted();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wiki?.id]);
 
   const openFilePreview = async (
@@ -166,7 +165,11 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       const parentReference = commit.parentOids[0];
       const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, parentReference);
       const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, commit.oid);
-      console.log(`[FilePreview] commit ${commit.oid?.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${'text' in after ? after.text?.length : 'N/A'}`);
+      console.log(
+        `[FilePreview] commit ${commit.oid?.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${
+          'text' in after ? after.text?.length : 'N/A'
+        }`,
+      );
       setBeforeContent(before);
       setAfterContent(after);
     } else {
@@ -196,7 +199,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           {uncommittedChanges.length > 0 ? ` (${uncommittedChanges.length})` : ''}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {loadingUncommitted && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
+          {loadingUncommitted && <ActivityIndicator size='small' style={{ marginRight: 8 }} />}
           <IconButton
             size={24}
             icon='refresh'
@@ -228,7 +231,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       <UncommittedHeader>
         <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {loadingHistory && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
+          {loadingHistory && <ActivityIndicator size='small' style={{ marginRight: 8 }} />}
           <IconButton
             size={24}
             icon='refresh'
@@ -266,7 +269,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               setLoadingDetails(true);
               setDetailsError(undefined);
               setIsShallowSnapshot(false);
-              
+
               if (item.oid === '') {
                 // Fake commit for uncommitted changes
                 setChangedFiles(uncommittedChanges);
@@ -299,9 +302,10 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             <Card.Title
               title={item.message.split('\n')[0] || '(no message)'}
               subtitle={`${new Date(item.timestamp).toLocaleString()} · ${item.authorName}`}
-              left={(props) => item.oid !== '' && !remoteOids.has(item.oid)
-                ? <Ionicons name='arrow-up-circle-outline' {...props} color={theme.colors.primary} />
-                : <Ionicons name='git-commit' {...props} />}
+              left={(props) =>
+                item.oid !== '' && !remoteOids.has(item.oid)
+                  ? <Ionicons name='arrow-up-circle-outline' {...props} color={theme.colors.primary} />
+                  : <Ionicons name='git-commit' {...props} />}
             />
             <Card.Content>
               <Text variant='bodySmall'>{item.oid.slice(0, 12)}</Text>
@@ -335,7 +339,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               <Card.Content style={{ paddingTop: 4 }}>
                 <SegmentedButtons
                   value={currentTab}
-                  onValueChange={(value) => setCurrentTab(value as 'details' | 'actions')}
+                  onValueChange={(value) => {
+                    setCurrentTab(value as 'details' | 'actions');
+                  }}
                   buttons={[
                     { value: 'details', label: t('GitHistory.Details', '详情') },
                     { value: 'actions', label: t('GitHistory.Actions', '操作') },
@@ -375,45 +381,51 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
 
                 {currentTab === 'actions' && (
                   <View style={{ gap: 12, paddingVertical: 8 }}>
-                    {selectedCommit?.oid === '' ? (
-                      <>
-                        <TextInput
-                          label={t('GitHistory.CommitMessage', '留言')}
-                          value={newCommitMessage}
-                          onChangeText={setNewCommitMessage}
-                          mode="outlined"
-                          style={{ marginBottom: 16 }}
-                        />
-                        <Button
-                          mode="contained"
-                          loading={isCommitting}
-                          disabled={isCommitting || isDiscardingAll}
-                          onPress={() => {
-                            if (!wiki) return;
-                            setIsCommitting(true);
-                            void gitCommit(wiki, newCommitMessage).then(() => {
-                              setSelectedCommit(undefined);
-                              void refreshUncommitted();
-                            }).catch(console.error).finally(() => setIsCommitting(false));
-                          }}
-                        >
-                          {t('ContextMenu.BackupNow', '立即提交')}
-                        </Button>
-                        <Button
-                          mode="contained-tonal"
-                          buttonColor={theme.colors.errorContainer}
-                          loading={isDiscardingAll}
-                          disabled={isCommitting || isDiscardingAll}
-                          onPress={() => setConfirmDiscardAllVisible(true)}
-                        >
-                          {t('GitHistory.DiscardAll', '全部撤销')}
-                        </Button>
-                      </>
-                    ) : (
-                      <Text variant='bodyMedium' style={{ color: theme.colors.outline }}>
-                        {t('GitHistory.NoActionsForCommit', '此提交暂无可用操作')}
-                      </Text>
-                    )}
+                    {selectedCommit?.oid === ''
+                      ? (
+                        <>
+                          <TextInput
+                            label={t('GitHistory.CommitMessage', '留言')}
+                            value={newCommitMessage}
+                            onChangeText={setNewCommitMessage}
+                            mode='outlined'
+                            style={{ marginBottom: 16 }}
+                          />
+                          <Button
+                            mode='contained'
+                            loading={isCommitting}
+                            disabled={isCommitting || isDiscardingAll}
+                            onPress={() => {
+                              if (!wiki) return;
+                              setIsCommitting(true);
+                              void gitCommit(wiki, newCommitMessage).then(() => {
+                                setSelectedCommit(undefined);
+                                void refreshUncommitted();
+                              }).catch(console.error).finally(() => {
+                                setIsCommitting(false);
+                              });
+                            }}
+                          >
+                            {t('ContextMenu.BackupNow', '立即提交')}
+                          </Button>
+                          <Button
+                            mode='contained-tonal'
+                            buttonColor={theme.colors.errorContainer}
+                            loading={isDiscardingAll}
+                            disabled={isCommitting || isDiscardingAll}
+                            onPress={() => {
+                              setConfirmDiscardAllVisible(true);
+                            }}
+                          >
+                            {t('GitHistory.DiscardAll', '全部撤销')}
+                          </Button>
+                        </>
+                      )
+                      : (
+                        <Text variant='bodyMedium' style={{ color: theme.colors.outline }}>
+                          {t('GitHistory.NoActionsForCommit', '此提交暂无可用操作')}
+                        </Text>
+                      )}
                   </View>
                 )}
               </Card.Content>
@@ -460,13 +472,24 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
             </Card.Content>
           </DetailsCard>
         </Modal>
-        <Dialog visible={confirmDiscardAllVisible} onDismiss={() => setConfirmDiscardAllVisible(false)}>
+        <Dialog
+          visible={confirmDiscardAllVisible}
+          onDismiss={() => {
+            setConfirmDiscardAllVisible(false);
+          }}
+        >
           <Dialog.Title>{t('GitHistory.DiscardAll', '全部撤销')}</Dialog.Title>
           <Dialog.Content>
             <Text>{t('GitHistory.DiscardAllConfirm', `确定要撤销所有 ${uncommittedChanges.length} 处未提交的变更吗？此操作不可恢复。`)}</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setConfirmDiscardAllVisible(false)}>{t('Common.Cancel', '取消')}</Button>
+            <Button
+              onPress={() => {
+                setConfirmDiscardAllVisible(false);
+              }}
+            >
+              {t('Common.Cancel', '取消')}
+            </Button>
             <Button
               textColor={theme.colors.error}
               loading={isDiscardingAll}
@@ -474,11 +497,13 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 setConfirmDiscardAllVisible(false);
                 setIsDiscardingAll(true);
                 void Promise.all(
-                  uncommittedChanges.map(item => gitDiscardFileChanges(item.workspace, item.path))
+                  uncommittedChanges.map(item => gitDiscardFileChanges(item.workspace, item.path)),
                 ).then(() => {
                   setSelectedCommit(undefined);
                   void refreshUncommitted();
-                }).catch(console.error).finally(() => setIsDiscardingAll(false));
+                }).catch(console.error).finally(() => {
+                  setIsDiscardingAll(false);
+                });
               }}
             >
               {t('GitHistory.DiscardChanges', '确认撤销')}

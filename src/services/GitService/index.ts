@@ -215,12 +215,18 @@ function getImageMimeType(filePath: string): string {
   const extension = getFileExtension(filePath);
   switch (extension) {
     case '.jpg':
-    case '.jpeg': return 'image/jpeg';
-    case '.gif': return 'image/gif';
-    case '.webp': return 'image/webp';
-    case '.bmp': return 'image/bmp';
-    case '.svg': return 'image/svg+xml';
-    default: return 'image/png';
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.bmp':
+      return 'image/bmp';
+    case '.svg':
+      return 'image/svg+xml';
+    default:
+      return 'image/png';
   }
 }
 
@@ -250,7 +256,10 @@ export async function gitClone(
   if (typeof ExternalStorage.extractTar === 'function') {
     try {
       const didArchive = await tryArchiveClone(remote, url, directory, onProgress);
-      if (didArchive) { console.log('[gitClone] Fast archive clone succeeded'); return; }
+      if (didArchive) {
+        console.log('[gitClone] Fast archive clone succeeded');
+        return;
+      }
     } catch (error) {
       const message = (error as Error).message;
       if (isConnectionAbortError(message)) {
@@ -296,7 +305,9 @@ export async function gitClone(
 }
 
 async function gitCloneNative(
-  remote: IGitRemote, url: string, directory: string,
+  remote: IGitRemote,
+  url: string,
+  directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   try {
@@ -329,7 +340,9 @@ async function gitCloneNative(
 // ── Archive clone ──────────────────────────────────────────────────
 
 async function tryArchiveClone(
-  remote: IGitRemote, gitUrl: string, directory: string,
+  remote: IGitRemote,
+  gitUrl: string,
+  directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<boolean> {
   const archiveUrl = `${gitUrl}/full-archive`;
@@ -345,11 +358,15 @@ async function tryArchiveClone(
   console.log('[archiveClone] Download result:', downloadResult);
 
   if (downloadResult.statusCode === 404) {
-    try { await ExternalStorage.deleteFile(tarPath); } catch { /* ignore */ }
+    try {
+      await ExternalStorage.deleteFile(tarPath);
+    } catch { /* ignore */ }
     return false;
   }
   if (downloadResult.statusCode !== 200 && downloadResult.statusCode !== 206) {
-    try { await ExternalStorage.deleteFile(tarPath); } catch { /* ignore */ }
+    try {
+      await ExternalStorage.deleteFile(tarPath);
+    } catch { /* ignore */ }
     return false;
   }
 
@@ -369,7 +386,9 @@ async function tryArchiveClone(
   const extractResult = await ExternalStorage.extractTar(tarPath, directory);
   console.log('[archiveClone] Extracted', extractResult.filesExtracted, 'files');
   onProgress?.('Extracted files', extractResult.filesExtracted, extractResult.filesExtracted);
-  try { await ExternalStorage.deleteFile(tarPath); } catch { /* ignore */ }
+  try {
+    await ExternalStorage.deleteFile(tarPath);
+  } catch { /* ignore */ }
 
   await configureGitRemote(directory, remote);
 
@@ -401,7 +420,8 @@ async function configureGitRemote(directory: string, remote: IGitRemote): Promis
   } catch (error) {
     console.warn('[configureGitRemote] Failed, writing config directly:', (error as Error).message);
     const configPath = `${directory}/.git/config`;
-    const configContent = '[core]\n\trepositoryformatversion = 0\n\tfilemode = false\n\tbare = false\n[remote "origin"]\n\turl = ' + remoteUrl + '\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n';
+    const configContent = '[core]\n\trepositoryformatversion = 0\n\tfilemode = false\n\tbare = false\n[remote "origin"]\n\turl = ' + remoteUrl +
+      '\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n';
     if (isExternalPath(directory)) {
       await ExternalStorage.writeFileUtf8(configPath, configContent);
     } else {
@@ -419,7 +439,10 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
     const resultJson = await ExternalStorage.gitAddAndCommit(directory, message, 'TidGi Mobile', 'mobile@tidgi.fun');
     const result = parseNativeResult<{ ok: boolean; commitId?: string; message?: string; error?: string }>(resultJson);
     if (!result.ok) throw new Error(`Native git commit failed: ${result.error ?? 'unknown'}`);
-    if (result.commitId === '') { console.log(`[gitCommit] nothing to commit`); return ''; }
+    if (result.commitId === '') {
+      console.log(`[gitCommit] nothing to commit`);
+      return '';
+    }
     console.log(`Committed changes (native): ${result.commitId}`);
     return result.commitId ?? '';
   } catch (error) {
@@ -464,7 +487,8 @@ async function ensureGitConfigForMobile(directory: string): Promise<void> {
 }
 
 export async function gitPushToIncoming(
-  workspace: IWikiWorkspace, remote: IGitRemote,
+  workspace: IWikiWorkspace,
+  remote: IGitRemote,
   _onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
@@ -528,7 +552,8 @@ export async function triggerDesktopMerge(remote: IGitRemote): Promise<void> {
  * Standard git services (GitHub, etc.) do NOT implement the create-bundle endpoint.
  */
 export async function gitFetchAndReset(
-  workspace: IWikiWorkspace, remote: IGitRemote,
+  workspace: IWikiWorkspace,
+  remote: IGitRemote,
   _onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<boolean> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
@@ -546,7 +571,7 @@ export async function gitFetchAndReset(
   const headers: Record<string, string> = {
     ...normalizeHeaders(createAuthHeader(remote)),
     'Content-Type': 'application/json',
-    'Accept': 'application/x-git-bundle-base64',
+    Accept: 'application/x-git-bundle-base64',
   };
 
   console.log(`[gitFetchAndReset] requesting bundle from desktop, have=${headBefore.slice(0, 8)}`);
@@ -585,10 +610,10 @@ export async function gitFetchAndReset(
   if (!fetchResult.ok) throw new Error(`Bundle fetch failed: ${fetchResult.error ?? 'unknown'}`);
   console.log(`[gitFetchAndReset] bundle fetch succeeded: ${JSON.stringify(fetchResult.updates)}`);
 
-  const remoteRefResult = parseNativeResult<{ ok: boolean; oid?: string }>(
+  const remoteReferenceResult = parseNativeResult<{ ok: boolean; oid?: string }>(
     await ExternalStorage.gitResolveRef(directory, `refs/remotes/origin/${branch}`),
   );
-  const remoteOid = remoteRefResult.ok ? (remoteRefResult.oid ?? '') : '';
+  const remoteOid = remoteReferenceResult.ok ? (remoteReferenceResult.oid ?? '') : '';
 
   if (remoteOid === headBefore) return false;
 
@@ -607,14 +632,17 @@ export async function gitFetchAndReset(
     console.log(`[gitFetchAndReset] reset succeeded: ${resetResult.ref}`);
   } else {
     console.warn(`[gitFetchAndReset] gitReset failed: ${resetResult.error}`);
-    const refContent = `${remoteOid}\n`;
+    const referenceContent = `${remoteOid}\n`;
     if (isExternalPath(directory)) {
-      await ExternalStorage.writeFileUtf8(`${directory}/.git/refs/heads/${branch}`, refContent);
+      await ExternalStorage.writeFileUtf8(`${directory}/.git/refs/heads/${branch}`, referenceContent);
     } else {
-      await FileSystemLegacy.writeAsStringAsync(toFileUri(`${directory}/.git/refs/heads/${branch}`), refContent);
+      await FileSystemLegacy.writeAsStringAsync(toFileUri(`${directory}/.git/refs/heads/${branch}`), referenceContent);
     }
-    try { await ExternalStorage.buildGitIndex(directory); }
-    catch (error) { console.warn(`[gitFetchAndReset] buildGitIndex failed: ${(error as Error).message}`); }
+    try {
+      await ExternalStorage.buildGitIndex(directory);
+    } catch (error) {
+      console.warn(`[gitFetchAndReset] buildGitIndex failed: ${(error as Error).message}`);
+    }
   }
   return true;
 }
@@ -667,10 +695,17 @@ export async function gitGetCommitHistory(workspace: IWikiWorkspace, depth = 100
       commits?: Array<{ oid: string; message: string; authorName: string; authorEmail: string; timestamp: number; parentOids: string[] }>;
       error?: string;
     }>(resultJson);
-    if (!result.ok || !result.commits) { console.warn(`[gitGetCommitHistory] failed: ${result.error}`); return []; }
+    if (!result.ok || !result.commits) {
+      console.warn(`[gitGetCommitHistory] failed: ${result.error}`);
+      return [];
+    }
     return result.commits.map(c => ({
-      oid: c.oid, message: c.message, authorName: c.authorName,
-      authorEmail: c.authorEmail, timestamp: c.timestamp, parentOids: c.parentOids,
+      oid: c.oid,
+      message: c.message,
+      authorName: c.authorName,
+      authorEmail: c.authorEmail,
+      timestamp: c.timestamp,
+      parentOids: c.parentOids,
     }));
   } catch (error) {
     console.error(`Failed to read git history: ${(error as Error).message}`);
@@ -735,7 +770,9 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
 // ── Changed files for commit ───────────────────────────────────────
 
 export async function gitGetChangedFilesForCommit(
-  workspace: IWikiWorkspace, commitOid: string, parentOid?: string,
+  workspace: IWikiWorkspace,
+  commitOid: string,
+  parentOid?: string,
 ): Promise<IGitCommitFileDiffResult> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
@@ -746,7 +783,9 @@ export async function gitGetChangedFilesForCommit(
     if (!parentResult.ok) return { files: [], isShallowSnapshot: true };
     const diffResultJson = await ExternalStorage.gitDiffTrees(directory, parentOid, commitOid);
     const diffResult = parseNativeResult<{
-      ok: boolean; files?: Array<{ path: string; type: 'add' | 'modify' | 'delete' }>; error?: string;
+      ok: boolean;
+      files?: Array<{ path: string; type: 'add' | 'modify' | 'delete' }>;
+      error?: string;
     }>(diffResultJson);
     if (!diffResult.ok || !diffResult.files) {
       console.warn(`[gitGetChangedFilesForCommit] native diff failed: ${diffResult.error}`);
@@ -762,7 +801,9 @@ export async function gitGetChangedFilesForCommit(
 // ── File content at reference ──────────────────────────────────────
 
 export async function gitGetFileContentAtReference(
-  workspace: IWikiWorkspace, filePath: string, reference?: string,
+  workspace: IWikiWorkspace,
+  filePath: string,
+  reference?: string,
 ): Promise<IGitFileContent> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
   try {
@@ -770,7 +811,11 @@ export async function gitGetFileContentAtReference(
     const isImage = isImageFile(filePath);
     const resultJson = await ExternalStorage.gitReadBlob(directory, reference, filePath, isImage);
     const result = parseNativeResult<{
-      ok: boolean; content?: string; encoding?: 'base64' | 'utf8'; size?: number; error?: string;
+      ok: boolean;
+      content?: string;
+      encoding?: 'base64' | 'utf8';
+      size?: number;
+      error?: string;
     }>(resultJson);
     if (!result.ok || result.content === undefined) return { kind: 'missing' };
     if (isImage) {

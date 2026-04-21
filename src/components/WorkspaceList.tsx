@@ -12,8 +12,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
 
-
-
 interface WorkspaceListProps {
   includeSubWikis?: boolean;
   isFocused?: boolean;
@@ -60,18 +58,16 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         rightStyle={styles.cardTitleRight}
         style={styles.cardTitle}
         title={title}
-        subtitle={
-          item.type === 'wiki'
-            ? (() => {
-                const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
-                const unpushed = pendingChangesCount.unpushed ?? 0;
-                const parts: string[] = [];
-                if (uncommitted > 0) parts.push(`${uncommitted}↑`);
-                if (unpushed > 0) parts.push(`${unpushed}⇡`);
-                return parts.length > 0 ? parts.join(' ') : undefined;
-              })()
-            : undefined
-        }
+        subtitle={item.type === 'wiki'
+          ? (() => {
+            const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
+            const unpushed = pendingChangesCount.unpushed ?? 0;
+            const parts: string[] = [];
+            if (uncommitted > 0) parts.push(`${uncommitted}↑`);
+            if (unpushed > 0) parts.push(`${unpushed}⇡`);
+            return parts.length > 0 ? parts.join(' ') : undefined;
+          })()
+          : undefined}
         right={(props) => (
           <RightButtonsContainer>
             {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
@@ -176,7 +172,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
           try {
             const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService');
             const allChanges = await gitDiffChangedFiles(workspace);
-            
+
             for (const change of allChanges) {
               let isSubWikiChange = false;
               for (const subWiki of subWikis) {

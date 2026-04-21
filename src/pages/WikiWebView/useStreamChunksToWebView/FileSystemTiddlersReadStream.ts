@@ -404,17 +404,17 @@ export class FileSystemTiddlersReadStream extends Readable {
           // (.css), JSON (.json), and other text formats must have their content
           // included — otherwise boot.js cannot execute them as modules.
           // Binary companions (images, pdfs) use _canonical_uri for lazy loading.
-          const isTextCompanion = companionPath.endsWith('.json')
-            || companionPath.endsWith('.js')
-            || companionPath.endsWith('.css')
-            || companionPath.endsWith('.svg')
-            || companionPath.endsWith('.txt')
-            || companionPath.endsWith('.html')
-            || companionPath.endsWith('.htm')
-            || tiddlerType.startsWith('text/')
-            || tiddlerType === 'application/javascript'
-            || tiddlerType === 'application/json'
-            || tiddlerType === 'application/x-tiddler-dictionary';
+          const isTextCompanion = companionPath.endsWith('.json') ||
+            companionPath.endsWith('.js') ||
+            companionPath.endsWith('.css') ||
+            companionPath.endsWith('.svg') ||
+            companionPath.endsWith('.txt') ||
+            companionPath.endsWith('.html') ||
+            companionPath.endsWith('.htm') ||
+            tiddlerType.startsWith('text/') ||
+            tiddlerType === 'application/javascript' ||
+            tiddlerType === 'application/json' ||
+            tiddlerType === 'application/x-tiddler-dictionary';
 
           if (isTextCompanion) {
             const textContent = await readText(companionPath);

@@ -90,30 +90,30 @@ export class FileSystemWikiStorageService {
     try {
       const startedAt = Date.now();
       const workspaces = this.#getRelatedWorkspaces();
-    this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid files`);
+      this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid files`);
 
-    // Try native batch parsing first — a single bridge call that parses all
-    // files in parallel using Java ForkJoinPool, ~100x faster than per-file
-    // JS reads through the bridge.
-    const nativeBatchParser = Platform.OS === 'android'
-      ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
-      : undefined;
+      // Try native batch parsing first — a single bridge call that parses all
+      // files in parallel using Java ForkJoinPool, ~100x faster than per-file
+      // JS reads through the bridge.
+      const nativeBatchParser = Platform.OS === 'android'
+        ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
+        : undefined;
 
-    for (const workspace of workspaces) {
-      const folderPath = getWikiTiddlerFolderPath(workspace);
-      const plainFolderPath = toPlainPath(folderPath);
-      this.#logger.log(`buildFileIndex: scanning ${plainFolderPath}`);
+      for (const workspace of workspaces) {
+        const folderPath = getWikiTiddlerFolderPath(workspace);
+        const plainFolderPath = toPlainPath(folderPath);
+        this.#logger.log(`buildFileIndex: scanning ${plainFolderPath}`);
 
-      if (nativeBatchParser !== undefined) {
-        await this.#indexDirectoryNative(plainFolderPath, nativeBatchParser);
-      } else {
-        await this.#indexDirectory(folderPath);
+        if (nativeBatchParser !== undefined) {
+          await this.#indexDirectoryNative(plainFolderPath, nativeBatchParser);
+        } else {
+          await this.#indexDirectory(folderPath);
+        }
       }
-    }
 
-    const elapsed = Date.now() - startedAt;
-    this.#logger.log(`buildFileIndex: completed in ${elapsed}ms. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
-    console.log(`${new Date().toISOString()} [WikiStorageService] buildFileIndex completed in ${elapsed}ms, ${this.#tiddlerFilePathByTitle.size} tiddlers`);
+      const elapsed = Date.now() - startedAt;
+      this.#logger.log(`buildFileIndex: completed in ${elapsed}ms. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
+      console.log(`${new Date().toISOString()} [WikiStorageService] buildFileIndex completed in ${elapsed}ms, ${this.#tiddlerFilePathByTitle.size} tiddlers`);
     } finally {
       this.#isBuildingFileIndex = false;
     }
