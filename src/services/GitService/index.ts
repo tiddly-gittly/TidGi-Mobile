@@ -190,6 +190,10 @@ async function tryGetRemotePackSize(
   }
 }
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
+const SHADOW_CHECKPOINT_DIRECTORY_NAME = '.tidgi-shadow-checkpoints';
+const SHADOW_CHECKPOINT_DEFAULT_BRANCH = 'main';
+const SHADOW_CHECKPOINT_MESSAGE_PREFIX = 'checkpoint';
+const SHADOW_CHECKPOINT_STATE_FILE_NAME = '.tidgi-checkpoint-state.json';
 
 interface INativeWriteTask {
   base64Content: string;
@@ -277,6 +281,12 @@ export interface IGitCommitFileDiffResult {
   isShallowSnapshot: boolean;
 }
 
+export interface IGitCheckpointInfo {
+  hash: string;
+  message: string;
+  timestamp: string;
+}
+
 /**
  * Helper: get current branch name, defaulting to 'main'.
  * `git.currentBranch()` returns `string | void`; the `void` case
@@ -329,6 +339,15 @@ async function getCurrentBranch(directory: string): Promise<string> {
   }
 
   return 'main';
+}
+
+function getShadowCheckpointDirectory(workspace: IWikiWorkspace): string {
+  return `${toPlainPath(workspace.wikiFolderLocation)}/${SHADOW_CHECKPOINT_DIRECTORY_NAME}`;
+}
+
+function buildCheckpointMessage(label?: string): string {
+  const trimmedLabel = label?.trim();
+  return trimmedLabel ? `${SHADOW_CHECKPOINT_MESSAGE_PREFIX}: ${trimmedLabel}` : `${SHADOW_CHECKPOINT_MESSAGE_PREFIX}: ${new Date().toISOString()}`;
 }
 
 export interface IGitFileContent {
@@ -2107,4 +2126,121 @@ export async function gitAddRemote(
     console.error(`Failed to add remote: ${(error as Error).message}`);
     throw error;
   }
+}
+
+async function ensureShadowCheckpointRepository(workspace: IWikiWorkspace): Promise<string> {
+  const shadowDirectory = getShadowCheckpointDirectory(workspace);
+  try {
+    await git.resolveRef({ fs, dir: shadowDirectory, ref: 'HEAD' });
+    return shadowDirectory;
+  } catch {
+    await fs.promises.mkdir(shadowDirectory, { recursive: true });
+    await git.init({ fs, dir: shadowDirectory, defaultBranch: SHADOW_CHECKPOINT_DEFAULT_BRANCH });
+    return shadowDirectory;
+  }
+}
+
+async function writeShadowCheckpointState(shadowDirectory: string, value: Record<string, unknown>): Promise<void> {
+  await fs.promises.writeFile(`${shadowDirectory}/${SHADOW_CHECKPOINT_STATE_FILE_NAME}`, JSON.stringify(value, null, 2));
+}
+
+async function copyPathRecursive(sourcePath: string, targetPath: string): Promise<void> {
+  const stat = await fs.promises.stat(sourcePath);
+  if (stat.isDirectory()) {
+    await fs.promises.mkdir(targetPath, { recursive: true });
+    const children = await fs.promises.readdir(sourcePath);
+    await Promise.all(children.map(child => copyPathRecursive(`${sourcePath}/${child}`, `${targetPath}/${child}`)));
+    return;
+  }
+  const directoryPath = targetPath.includes('/') ? targetPath.slice(0, targetPath.lastIndexOf('/')) : '';
+  if (directoryPath) {
+    await fs.promises.mkdir(directoryPath, { recursive: true });
+  }
+  const content = await fs.promises.readFile(sourcePath);
+  await fs.promises.writeFile(targetPath, content);
+}
+
+async function removePathRecursive(targetPath: string): Promise<void> {
+  try {
+    const stat = await fs.promises.stat(targetPath);
+    if (stat.isDirectory()) {
+      const children = await fs.promises.readdir(targetPath);
+      await Promise.all(children.map(child => removePathRecursive(`${targetPath}/${child}`)));
+      await fs.promises.rmdir(targetPath);
+      return;
+    }
+    await fs.promises.unlink(targetPath);
+  } catch (error) {
+    void error;
+  }
+}
+
+async function syncWorkspaceToShadowRepo(workspace: IWikiWorkspace, shadowDirectory: string): Promise<void> {
+  const sourceDirectory = toPlainPath(workspace.wikiFolderLocation);
+  const sourceEntries = await fs.promises.readdir(sourceDirectory);
+  const sourceNames = new Set(sourceEntries.filter(entry => entry !== '.git' && entry !== SHADOW_CHECKPOINT_DIRECTORY_NAME));
+  const existingEntries = await fs.promises.readdir(shadowDirectory).catch(() => [] as string[]);
+
+  await Promise.all(existingEntries.map(async (entry) => {
+    if (entry === '.git' || entry === SHADOW_CHECKPOINT_STATE_FILE_NAME) return;
+    if (!sourceNames.has(entry)) {
+      await removePathRecursive(`${shadowDirectory}/${entry}`);
+    }
+  }));
+
+  await Promise.all(Array.from(sourceNames).map(entry => copyPathRecursive(`${sourceDirectory}/${entry}`, `${shadowDirectory}/${entry}`)));
+}
+
+async function clearWorkspaceForCheckpointRestore(workspace: IWikiWorkspace): Promise<void> {
+  const directory = toPlainPath(workspace.wikiFolderLocation);
+  const entries = await fs.promises.readdir(directory);
+  await Promise.all(entries.map(async (entry) => {
+    if (entry === '.git' || entry === SHADOW_CHECKPOINT_DIRECTORY_NAME) return;
+    await removePathRecursive(`${directory}/${entry}`);
+  }));
+}
+
+export async function gitCreateCheckpoint(workspace: IWikiWorkspace, label?: string): Promise<IGitCheckpointInfo> {
+  const shadowDirectory = await ensureShadowCheckpointRepository(workspace);
+  await syncWorkspaceToShadowRepo(workspace, shadowDirectory);
+  await writeShadowCheckpointState(shadowDirectory, {
+    label: label?.trim() || null,
+    createdAt: new Date().toISOString(),
+  });
+  await git.add({ fs, dir: shadowDirectory, filepath: '.' });
+  const message = buildCheckpointMessage(label);
+  const hash = await git.commit({
+    fs,
+    dir: shadowDirectory,
+    author: { name: 'TidGi Checkpoint', email: 'checkpoint@tidgi.app' },
+    message,
+  });
+  const history = await git.log({ fs, dir: shadowDirectory, depth: 1 });
+  const latest = history[0];
+  return {
+    hash,
+    message,
+    timestamp: new Date(latest.commit.author.timestamp * 1000).toISOString(),
+  };
+}
+
+export async function gitListCheckpoints(workspace: IWikiWorkspace): Promise<IGitCheckpointInfo[]> {
+  const shadowDirectory = await ensureShadowCheckpointRepository(workspace);
+  const history = await git.log({ fs, dir: shadowDirectory, depth: 200 });
+  return history
+    .filter(entry => entry.commit.message !== 'initial checkpoint')
+    .map(entry => ({
+      hash: entry.oid,
+      message: entry.commit.message,
+      timestamp: new Date(entry.commit.author.timestamp * 1000).toISOString(),
+    }));
+}
+
+export async function gitRestoreCheckpoint(workspace: IWikiWorkspace, checkpointHash: string): Promise<void> {
+  const shadowDirectory = await ensureShadowCheckpointRepository(workspace);
+  await git.checkout({ fs, dir: shadowDirectory, ref: checkpointHash, force: true, noUpdateHead: true, nonBlocking: true, batchSize: CHECKOUT_BATCH_SIZE });
+  await clearWorkspaceForCheckpointRestore(workspace);
+  const entries = await fs.promises.readdir(shadowDirectory);
+  const restorableEntries = entries.filter(entry => entry !== '.git' && entry !== SHADOW_CHECKPOINT_STATE_FILE_NAME);
+  await Promise.all(restorableEntries.map(entry => copyPathRecursive(`${shadowDirectory}/${entry}`, `${toPlainPath(workspace.wikiFolderLocation)}/${entry}`)));
 }
