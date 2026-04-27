@@ -9,8 +9,10 @@ export const navigationReference = createNavigationContainerRef<RootStackParamet
 
 export function navigateIfNotAlreadyThere(screen: 'WikiWebView', parameters: WikiWebViewProps) {
   if (navigationReference.isReady()) {
-    const currentRouteName = navigationReference.getCurrentRoute()?.name;
-    if (currentRouteName !== screen) {
+    const currentRoute = navigationReference.getCurrentRoute();
+    const currentRouteId = currentRoute?.name === screen ? currentRoute.params.id : undefined;
+    const isSameWikiWebViewTarget = currentRouteId === parameters.id;
+    if (!isSameWikiWebViewTarget) {
       navigationReference.navigate(screen, parameters);
     }
   }

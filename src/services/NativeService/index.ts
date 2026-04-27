@@ -6,11 +6,10 @@ import { compact } from 'lodash';
 
 import type { ITiddlerFieldsParameter } from 'tiddlywiki';
 import { getWikiFilesPathByCanonicalUri } from '../../constants/paths';
-import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { navigationReference } from '../../utils/RootNavigation';
+import { navigateIfNotAlreadyThere, navigationReference } from '../../utils/RootNavigation';
 import type { WikiHookService } from '../WikiHookService';
 import { FileSystemWikiStorageService as WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
 import { getReadyWikiStorageService } from '../WikiStorageService/registry';
@@ -157,7 +156,10 @@ export class NativeService {
     if (!script) return;
     const currentRouteWiki = this.#getCurrentRouteWiki();
     if (currentRouteWiki?.id !== targetWorkspace.id) {
-      openDefaultWikiIfNotAlreadyThere();
+      navigateIfNotAlreadyThere('WikiWebView', {
+        id: targetWorkspace.id,
+        quickLoad: targetWorkspace.enableQuickLoad,
+      });
     }
     const wikiHookService = await this.getCurrentWikiHookServices();
     await wikiHookService.executeAfterTwReady(script);
