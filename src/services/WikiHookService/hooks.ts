@@ -22,9 +22,9 @@ export function useSetWebViewReferenceToService(
   useEffect(() => {
     if (servicesOfWorkspace.current !== undefined) {
       servicesOfWorkspace.current.wikiHookService.setLatestWebViewReference(webViewReference);
-      nativeService.setCurrentWikiHookServices(servicesOfWorkspace.current.wikiHookService);
+      nativeService.setCurrentWikiServices(servicesOfWorkspace.current.wikiHookService, servicesOfWorkspace.current.wikiStorageService);
       return () => {
-        nativeService.clearCurrentWikiHookServices();
+        nativeService.clearCurrentWikiServices();
       };
     }
   }, [webViewReference]);

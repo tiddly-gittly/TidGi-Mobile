@@ -66,6 +66,10 @@ export class FileSystemWikiStorageService {
     this.#logger = logFor(workspace.id);
   }
 
+  getWorkspace(): IWikiWorkspace {
+    return this.#workspace;
+  }
+
   // ─── File Index (≈ desktop boot.files population) ──────────────────────
 
   #isBuildingFileIndex = false;

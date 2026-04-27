@@ -543,7 +543,7 @@
     "TagForSharedContent": "Tag for shared content",
     "Clipped": "Clipped",
     "FastImport": "Fast Import",
-    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in “Recent”.",
+    "FastImportDescription": "Import directly into the currently open wiki when available, otherwise into the default workspace, without waiting for the wiki UI. No confirmation dialog will be shown.",
     "SaveMediaAsAttachment": "Save Media as Attachment",
     "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content."
   },
