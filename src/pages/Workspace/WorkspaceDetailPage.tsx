@@ -128,38 +128,42 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
         {t('AddWorkspace.OpenPerformanceTools')}
       </ActionButton>
 
-      <ActionButton
-        mode='outlined'
-        onPress={() => {
-          void gitBackgroundSyncService.updateServerOnlineStatus();
-          setExpandServerList(previous => !previous);
-        }}
-      >
-        {t('AddWorkspace.ToggleServerList')}
-      </ActionButton>
-      <Collapsible collapsed={!expandServerList}>
-        <ServerList
-          serverIDs={wiki.syncedServers.map(server => server.serverID)}
-          activeIDs={wiki.syncedServers.filter(serverInfoInWiki => serverInfoInWiki.syncActive).map(server => server.serverID)}
-          onPress={(server) => {
-            const serverInWiki = wiki.syncedServers.find(serverInfoInWiki => serverInfoInWiki.serverID === server.id);
-            if (serverInWiki) {
-              setServerActive(wiki.id, server.id, !serverInWiki.syncActive);
-            }
-          }}
-          onLongPress={(server) => {
-            void Haptics.selectionAsync();
-            navigation.navigate('WorkspaceServerEdit', { id: wiki.id, serverId: server.id });
-          }}
-        />
-        <Button
-          onPress={() => {
-            navigation.navigate('WorkspaceAddServer', { id: wiki.id });
-          }}
-        >
-          {t('EditWorkspace.AddNewServer')}
-        </Button>
-      </Collapsible>
+      {wiki.isSubWiki !== true && (
+        <>
+          <ActionButton
+            mode='outlined'
+            onPress={() => {
+              void gitBackgroundSyncService.updateServerOnlineStatus();
+              setExpandServerList(previous => !previous);
+            }}
+          >
+            {t('AddWorkspace.ToggleServerList')}
+          </ActionButton>
+          <Collapsible collapsed={!expandServerList}>
+            <ServerList
+              serverIDs={wiki.syncedServers.map(server => server.serverID)}
+              activeIDs={wiki.syncedServers.filter(serverInfoInWiki => serverInfoInWiki.syncActive).map(server => server.serverID)}
+              onPress={(server) => {
+                const serverInWiki = wiki.syncedServers.find(serverInfoInWiki => serverInfoInWiki.serverID === server.id);
+                if (serverInWiki) {
+                  setServerActive(wiki.id, server.id, !serverInWiki.syncActive);
+                }
+              }}
+              onLongPress={(server) => {
+                void Haptics.selectionAsync();
+                navigation.navigate('WorkspaceServerEdit', { id: wiki.id, serverId: server.id });
+              }}
+            />
+            <Button
+              onPress={() => {
+                navigation.navigate('WorkspaceAddServer', { id: wiki.id });
+              }}
+            >
+              {t('EditWorkspace.AddNewServer')}
+            </Button>
+          </Collapsible>
+        </>
+      )}
 
       <FooterRow>
         <Button

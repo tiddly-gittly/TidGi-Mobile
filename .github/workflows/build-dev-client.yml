@@ -64,6 +64,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Type check and lint
+        run: |
+          pnpm run check
+          pnpm run lint
+
       - uses: actions/cache@v4
         name: Cache Gradle Wrapper and Dependencies
         with:

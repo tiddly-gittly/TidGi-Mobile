@@ -5,7 +5,7 @@
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView } from 'react-native';
-import { Button, Card, Text, TextInput } from 'react-native-paper';
+import { Button, Card, Checkbox, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { ITidgiConfig, readTidgiConfig, writeTidgiConfig } from '../../services/WikiStorageService/tidgiConfigManager';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
@@ -44,6 +44,9 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
     includeTagTree: false,
   });
   const { openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
+  const defaultWorkspaceId = useWorkspaceStore(state => state.defaultWorkspaceId);
+  const setDefaultWorkspace = useWorkspaceStore(state => state.setDefaultWorkspace);
+  const isDefault = defaultWorkspaceId === workspace.id;
 
   // Load config
   useEffect(() => {
@@ -103,6 +106,18 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
               }}
             />
           }
+        />
+      </Section>
+
+      <Section>
+        <SectionTitle>{t('WorkspaceSettings.DefaultWorkspace')}</SectionTitle>
+        <Checkbox.Item
+          label={t('WorkspaceSettings.SetAsDefault')}
+          status={isDefault ? 'checked' : 'unchecked'}
+          onPress={() => {
+            setDefaultWorkspace(isDefault ? null : workspace.id);
+          }}
+          mode='android'
         />
       </Section>
 

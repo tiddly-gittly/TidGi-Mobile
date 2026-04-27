@@ -398,7 +398,7 @@ export class FileSystemTiddlersReadStream extends Readable {
           metaFields.title = getTitleFromFilename(filename.replace(/\.meta$/, ''));
         }
         if (await fileExists(companionPath)) {
-          const tiddlerType = (metaFields as Record<string, string>).type ?? 'text/vnd.tiddlywiki';
+          const tiddlerType = (metaFields.type as string | undefined) ?? 'text/vnd.tiddlywiki';
           // Determine if the companion is a text-based file whose content should
           // be loaded as the tiddler's "text" field. JS modules (.js), stylesheets
           // (.css), JSON (.json), and other text formats must have their content

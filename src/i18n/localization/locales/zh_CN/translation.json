@@ -672,6 +672,8 @@
     "ShareLog": "分享日志文件",
     "OpenLogFile": "打开日志文件",
     "GeneralSettings": "通用设置",
+    "DefaultWorkspace": "默认工作区",
+    "SetAsDefault": "设为默认工作区",
     "SubWikiRouting": "内容路由规则",
     "RoutingDescription": "按标签与规则将条目保存到对应工作区。",
     "TagNames": "标签规则",

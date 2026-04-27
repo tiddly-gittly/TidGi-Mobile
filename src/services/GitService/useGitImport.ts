@@ -89,6 +89,20 @@ export function useGitImport() {
       if (useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === qrData.workspaceId)) {
         throw new Error(`Workspace id already exists: ${qrData.workspaceId}`);
       }
+      // Sub-wikis inherit synced servers from their main workspace.
+      const mainWorkspace = qrData.mainWikiID !== undefined
+        ? useWorkspaceStore.getState().workspaces.find(w => w.type === 'wiki' && w.id === qrData.mainWikiID)
+        : undefined;
+      const inheritedServers = (qrData.isSubWiki === true && mainWorkspace?.type === 'wiki')
+        ? mainWorkspace.syncedServers.map(s => ({ ...s, lastSync: Date.now(), syncActive: false }))
+        : [{
+          serverID,
+          lastSync: Date.now(),
+          syncActive: false,
+          token: qrData.token,
+          tokenAuthHeaderName: qrData.tokenAuthHeaderName,
+          tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
+        }];
       const newWorkspace = addWiki({
         type: 'wiki',
         id: qrData.workspaceId,
@@ -96,14 +110,7 @@ export function useGitImport() {
         deferStatusScanUntil: Date.now() + DEFER_STATUS_SCAN_AFTER_IMPORT_MS,
         isSubWiki: qrData.isSubWiki === true,
         mainWikiID: qrData.mainWikiID ?? null,
-        syncedServers: [{
-          serverID,
-          lastSync: Date.now(),
-          syncActive: false,
-          token: qrData.token,
-          tokenAuthHeaderName: qrData.tokenAuthHeaderName,
-          tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
-        }],
+        syncedServers: inheritedServers,
       }) as IWikiWorkspace | undefined;
 
       if (newWorkspace === undefined) {

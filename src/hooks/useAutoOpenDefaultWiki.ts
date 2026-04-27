@@ -40,7 +40,10 @@ export function openDefaultWikiIfNotAlreadyThere() {
   /**
    * Be aware that this is loaded using asyncStorage, so it maybe empty or not loaded yet.
    */
-  const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
+  const { workspaces, defaultWorkspaceId } = useWorkspaceStore.getState();
+  const defaultWiki = defaultWorkspaceId !== null
+    ? workspaces.find((w): w is IWikiWorkspace => w.type === 'wiki' && w.id === defaultWorkspaceId)
+    : compact(workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
   console.log(`openDefaultWiki ${defaultWiki?.id ?? 'undefined'}`);
   if (defaultWiki === undefined) {
     const unsubscribe = useWorkspaceStore.subscribe(onStoreLoaded);

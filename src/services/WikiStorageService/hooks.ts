@@ -2,7 +2,6 @@ import { useEffect, useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { IWikiWorkspace } from '../../store/workspace';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
-import { WikiStorageService as FileSystemWikiStorageService } from './FileSystemWikiStorageService';
 import { getOrCreateWikiStorageService } from './registry';
 
 export function useWikiStorageService(workspace: IWikiWorkspace) {

@@ -683,6 +683,8 @@
     "ShareLog": "Share Log File",
     "OpenLogFile": "Open Log File",
     "GeneralSettings": "General Settings",
+    "DefaultWorkspace": "Default Workspace",
+    "SetAsDefault": "Set as default workspace",
     "SubWikiRouting": "Content Routing Rules",
     "RoutingDescription": "Route tiddlers to the appropriate workspace by tags and rules.",
     "TagNames": "Tag Rules",

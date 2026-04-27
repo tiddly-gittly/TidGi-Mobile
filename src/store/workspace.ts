@@ -81,6 +81,11 @@ export interface WikiState {
    * created here instead of the default internal document directory.
    */
   customWikiFolderPath: string | null;
+  /**
+   * Explicitly designated default wiki workspace. When null, the first wiki
+   * workspace (excluding system help page) is used as a fallback.
+   */
+  defaultWorkspaceId: string | null;
   workspaces: IWorkspace[];
 }
 interface WikiActions {
@@ -96,6 +101,7 @@ interface WikiActions {
   removeSyncedServersFromWorkspace: (serverIDToRemove: string) => void;
   syncWorkspaceID: (id: string, newID: string) => boolean;
   setCustomWikiFolderPath: (path: string | null) => void;
+  setDefaultWorkspace: (id: string | null) => void;
   setServerActive: (id: string, serverIDToActive: string, isActive?: boolean) => void;
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
@@ -110,6 +116,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
     persist(
       (set) => ({
         customWikiFolderPath: null,
+        defaultWorkspaceId: null,
         workspaces: defaultWorkspaces,
         add(newWorkspace) {
           let result: IWorkspace | undefined;
@@ -166,6 +173,11 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             state.customWikiFolderPath = path;
           });
         },
+        setDefaultWorkspace(id) {
+          set((state) => {
+            state.defaultWorkspaceId = id;
+          });
+        },
         update(id, newWikiWorkspace) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
@@ -193,6 +205,19 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 syncActive: true,
               }];
               state.workspaces[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
+
+              // Propagate the new server to all sub-wikis attached to this main wiki.
+              state.workspaces.forEach((workspace) => {
+                if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
+                  const subLastSync = workspace.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? LAST_SYNC_TO_SYNC_ALL;
+                  const subUpdatedServers = [...workspace.syncedServers, {
+                    serverID: newServerID,
+                    lastSync: subLastSync,
+                    syncActive: true,
+                  }];
+                  workspace.syncedServers = uniqBy(subUpdatedServers, 'serverID');
+                }
+              });
             }
           });
         },
@@ -263,6 +288,18 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
       {
         name: 'wiki-storage',
         storage: expoFileSystemStorage,
+        version: 1,
+        migrate: (persistedState: unknown, version: number) => {
+          if (version === 0) {
+            const state = persistedState as Record<string, unknown>;
+            if (typeof state.defaultWorkspaceId === 'undefined') {
+              const workspaces = state.workspaces as Array<{ type?: string; id?: string }> | undefined;
+              const firstWiki = workspaces?.find(workspace => workspace.type === 'wiki');
+              state.defaultWorkspaceId = firstWiki?.id ?? null;
+            }
+          }
+          return persistedState as WikiState & WikiActions;
+        },
       },
     ),
   )),

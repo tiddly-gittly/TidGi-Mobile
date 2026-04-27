@@ -61,7 +61,7 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         subtitle={item.type === 'wiki'
           ? (() => {
             const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
-            const unpushed = pendingChangesCount.unpushed ?? 0;
+            const unpushed = pendingChangesCount.unpushed;
             const parts: string[] = [];
             if (uncommitted > 0) parts.push(`${uncommitted}↑`);
             if (unpushed > 0) parts.push(`${unpushed}⇡`);

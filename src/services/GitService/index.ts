@@ -93,6 +93,7 @@ function toFileUri(plainPath: string): string {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 function parseNativeResult<T>(json: string): T {
   return JSON.parse(json) as T;
 }
@@ -494,7 +495,7 @@ export async function gitPushToIncoming(
   const directory = toPlainPath(workspace.wikiFolderLocation);
   await ensureGitConfigForMobile(directory);
   const branch = await getCurrentBranch(directory);
-  const headersJson = headersToJson(remote);
+  void headersToJson(remote);
 
   // Use bundle-based push to avoid JGit's HTTP push protocol bug:
   // SmartHttpPushConnection's MultiRequestService throws
@@ -878,7 +879,6 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
 // ── Unsynced commit count ──────────────────────────────────────────
 
 export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Promise<number> {
-  const directory = toPlainPath(workspace.wikiFolderLocation);
   if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
   try {
     const aheadCount = await gitGetAheadCommitCount(workspace);

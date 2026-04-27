@@ -69,7 +69,10 @@ export class NativeService {
   }
 
   #getDefaultWiki(): IWikiWorkspace | undefined {
-    return compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
+    const { workspaces, defaultWorkspaceId } = useWorkspaceStore.getState();
+    return defaultWorkspaceId !== null
+      ? workspaces.find((w): w is IWikiWorkspace => w.type === 'wiki' && w.id === defaultWorkspaceId)
+      : compact(workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
   }
 
   #getWikiById(id?: string): IWikiWorkspace | undefined {

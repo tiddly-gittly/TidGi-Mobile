@@ -25,10 +25,13 @@ export function useStreamChunksToWebView(
   const [streamChunksToWebViewPercentage, setStreamChunksToWebViewPercentage] = useState(0);
   const activeInjectionIdReference = useRef(0);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const sender = useMemo(() =>
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
     new WebViewStreamSender((messageType: WebViewStreamEventType, data?: string) => {
       console.log(`sendDataToWebView ${messageType}`);
       if (webViewReference.current === null) throw new Error('WebView is not ready when sendDataToWebView');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const stringifiedData = JSON.stringify({ type: messageType, data });
       webViewReference.current.injectJavaScript(`
       var receiveData = () => {
@@ -57,6 +60,7 @@ export function useStreamChunksToWebView(
         // This is also required when app bring from background after a while, the webview will be recycled, and need to wait for it to resume before sending large data, otherwise first few data will be lost.
         console.log(`[injectHtmlAndTiddlersStore] waiting for webview receiver ready...`);
         await servicesOfWorkspace.current.wikiHookService.waitForWebviewReceiverReady(() => {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
           sender.checkReceiverReady();
         });
         if (injectionId !== activeInjectionIdReference.current) {
@@ -67,6 +71,7 @@ export function useStreamChunksToWebView(
         /**
          * First sending the html content, including empty html and preload scripts and preload style sheets, this is rather small, down to 100kB (132161 chars from string length)
          */
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         sender.setContent(html);
         console.log(`[injectHtmlAndTiddlersStore] HTML sent, starting tiddler stream pipe...`);
         /**
@@ -81,6 +86,7 @@ export function useStreamChunksToWebView(
           objectMode: true,
           write: (tiddlersJSONArrayString: string, _encoding, next) => {
             try {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
               sender.appendChunk(tiddlersJSONArrayString);
               next();
             } catch (error) {
@@ -110,12 +116,14 @@ export function useStreamChunksToWebView(
           tiddlersStream.once('end', () => {
             console.log(`[injectHtmlAndTiddlersStore] tiddlersStream ended`);
             if (injectionId === activeInjectionIdReference.current) {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
               sender.finalizePayload({
                 scriptType: 'application/json',
                 scriptClassName: 'tiddlywiki-tiddler-store',
                 scriptTagName: 'tidgi-tiddlers-store',
                 anchorSelector: 'script.tiddlywiki-tiddler-store',
               });
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
               sender.reexecuteScripts();
               setStreamChunksToWebViewPercentage(1);
             }

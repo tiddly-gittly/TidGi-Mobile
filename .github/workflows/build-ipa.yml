@@ -44,6 +44,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Type check and lint
+        run: |
+          pnpm run check
+          pnpm run lint
+
       - name: Build tw plugins & scripts
         run: |
           pnpm run build:plugin

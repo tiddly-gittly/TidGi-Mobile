@@ -31,7 +31,7 @@ interface IUncommittedChangeItem {
   workspace: IWikiWorkspace;
 }
 
-export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Element {
+export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -56,7 +56,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [loadingFilePreview, setLoadingFilePreview] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | undefined>();
-  const [discardingFile, setDiscardingFile] = useState<string | undefined>();
+  const [_discardingFile, _setDiscardingFile] = useState<string | undefined>();
   const [selectedUncommittedItem, setSelectedUncommittedItem] = useState<IUncommittedChangeItem | undefined>();
   const [currentTab, setCurrentTab] = useState<'details' | 'actions'>('details');
   const [newCommitMessage, setNewCommitMessage] = useState(t('LOG.CommitBackupMessage'));
@@ -166,7 +166,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, parentReference);
       const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, commit.oid);
       console.log(
-        `[FilePreview] commit ${commit.oid?.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${
+        `[FilePreview] commit ${commit.oid.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${
           'text' in after ? after.text?.length : 'N/A'
         }`,
       );
@@ -396,7 +396,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                             loading={isCommitting}
                             disabled={isCommitting || isDiscardingAll}
                             onPress={() => {
-                              if (!wiki) return;
                               setIsCommitting(true);
                               void gitCommit(wiki, newCommitMessage).then(() => {
                                 setSelectedCommit(undefined);
@@ -519,9 +518,6 @@ const ModalContainer = styled.View`
   background-color: ${({ theme }) => theme.colors.background};
   padding: 20px;
   height: 100%;
-`;
-const CloseButton = styled(Button)`
-  margin-bottom: 10px;
 `;
 const UncommittedHeader = styled.View`
   flex-direction: row;

@@ -1,5 +1,6 @@
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useState } from 'react';
-import { Clipboard, Dimensions, Image, LayoutChangeEvent, ScrollView, View } from 'react-native';
+import { Dimensions, Image, LayoutChangeEvent, ScrollView, View } from 'react-native';
 import { Button, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { gitAddToGitignore, gitDiscardFileChanges, IGitFileContent } from '../../../services/GitService';
@@ -44,7 +45,7 @@ export function GitFilePreviewModal({
   afterContent,
   beforeContent,
   filePath,
-  mode,
+  mode: _mode,
   onModeChange,
   uncommittedWorkspace,
   onDiscardSuccess,
@@ -100,8 +101,8 @@ export function GitFilePreviewModal({
       });
   };
 
-  const handleCopyPath = () => {
-    Clipboard.setString(filePath);
+  const handleCopyPath = async () => {
+    await Clipboard.setStringAsync(filePath);
   };
 
   // Card has max-height: 80% of screen. Card.Title ~ 56px, Card.Content padding ~ 16px.

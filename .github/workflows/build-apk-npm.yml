@@ -49,6 +49,11 @@ jobs:
       - name: Install dependencies
         run: npm install --force
 
+      - name: Type check and lint
+        run: |
+          npm run check
+          npm run lint
+
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v4
         name: Cache Gradle Wrapper and Dependencies
