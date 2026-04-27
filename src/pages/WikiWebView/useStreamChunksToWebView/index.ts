@@ -1,6 +1,6 @@
 import { Dispatch, RefObject, SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
 import { WebView } from 'react-native-webview';
-import { WebViewStreamSender } from 'react-native-webview-stream-chunks';
+import { type WebViewStreamEventType, WebViewStreamSender } from 'react-native-webview-stream-chunks';
 import { Writable } from 'readable-stream';
 import type { WikiHookService } from '../../../services/WikiHookService';
 import type { FileSystemWikiStorageService } from '../../../services/WikiStorageService/FileSystemWikiStorageService';
@@ -26,7 +26,7 @@ export function useStreamChunksToWebView(
   const activeInjectionIdReference = useRef(0);
 
   const sender = useMemo(() =>
-    new WebViewStreamSender((messageType, data) => {
+    new WebViewStreamSender((messageType: WebViewStreamEventType, data?: string) => {
       console.log(`sendDataToWebView ${messageType}`);
       if (webViewReference.current === null) throw new Error('WebView is not ready when sendDataToWebView');
       const stringifiedData = JSON.stringify({ type: messageType, data });

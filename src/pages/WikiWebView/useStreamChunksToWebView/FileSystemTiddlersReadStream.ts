@@ -419,7 +419,10 @@ export class FileSystemTiddlersReadStream extends Readable {
           if (isTextCompanion) {
             const textContent = await readText(companionPath);
             // For skinny loading, only include text for boot-critical tiddlers
-            const headerFields = metaFields as Record<string, unknown>;
+            if (typeof metaFields.title !== 'string') {
+              throw new Error('.meta file must have a title');
+            }
+            const headerFields = metaFields as Record<string, unknown> & { title: string; type?: string };
             if (this.quickLoadMode && !shouldPreserveFullTextInQuickLoad(headerFields)) {
               (metaFields as Record<string, string>)._is_skinny = 'yes';
             } else {
