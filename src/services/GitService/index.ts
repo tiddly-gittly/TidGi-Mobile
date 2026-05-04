@@ -397,10 +397,30 @@ async function tryArchiveClone(
   onProgress?.('Building git index…', 0, 0);
   try {
     const indexResult = parseNativeResult<{ ok: boolean; entries?: number; error?: string }>(await ExternalStorage.buildGitIndex(directory));
-    if (indexResult.ok) console.log(`[archiveClone] .git/index rebuilt: ${indexResult.entries} entries`);
-    else console.warn(`[archiveClone] buildGitIndex failed: ${indexResult.error}`);
+    if (indexResult.ok) {
+      console.log(`[archiveClone] .git/index rebuilt: ${indexResult.entries} entries`);
+    } else {
+      // If the index cannot be rebuilt, the working tree and HEAD will be out of sync:
+      // git status will report every file as a modification.
+      // Throw here so the caller falls back to a native JGit clone that sets up the
+      // index correctly, rather than silently leaving the workspace in a dirty state.
+      throw new Error(`buildGitIndex failed: ${indexResult.error ?? 'unknown'}`);
+    }
   } catch (error) {
-    console.warn('[archiveClone] Failed to rebuild .git/index:', (error as Error).message);
+    console.warn('[archiveClone] Failed to rebuild .git/index, falling back to native clone:', (error as Error).message);
+    // Clean up the partially-extracted directory so the fallback clone can proceed.
+    try {
+      if (isExternalPath(directory)) {
+        await ExternalStorage.rmdir(directory);
+        await ExternalStorage.mkdir(directory);
+      } else {
+        await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+        await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+      }
+    } catch (cleanupError) {
+      console.warn('[archiveClone] Cleanup before fallback failed (non-fatal):', cleanupError);
+    }
+    return false;
   }
   return true;
 }
