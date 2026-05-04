@@ -482,7 +482,16 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
  * These are set via gitSetConfig (JS-side) so changes take effect
  * immediately without rebuilding the native APK.
  */
+/**
+ * Tracks directories where mobile git config has already been applied this session.
+ * These settings (protocol version, pack limits) never change at runtime, so there is
+ * no need to write them on every push/fetch — each write is a JNI→Kotlin→JGit→file-I/O
+ * round trip that adds tens of milliseconds of pure overhead.
+ */
+const gitConfigAppliedDirectories = new Set<string>();
+
 async function ensureGitConfigForMobile(directory: string): Promise<void> {
+  if (gitConfigAppliedDirectories.has(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
     // Disable delta compression entirely — mobile only pushes small changes,
@@ -505,6 +514,7 @@ async function ensureGitConfigForMobile(directory: string): Promise<void> {
     }
   }
   console.log('[ensureGitConfig] Applied mobile git config settings');
+  gitConfigAppliedDirectories.add(directory);
 }
 
 export async function gitPushToIncoming(
@@ -764,15 +774,49 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
   if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
   try {
     const branch = await getCurrentBranch(directory);
+    const remoteRef = `origin/${branch}`;
+
+    // Fast path: if local HEAD and remote tracking ref resolve to the same OID, we are
+    // already up-to-date. This avoids loading any commit objects via JNI.
+    const [localRefResult, remoteRefResult] = await Promise.all([
+      ExternalStorage.gitResolveRef(directory, branch).then(j =>
+        parseNativeResult<{ ok: boolean; oid?: string }>(j),
+      ).catch(() => ({ ok: false as const, oid: undefined })),
+      ExternalStorage.gitResolveRef(directory, remoteRef).then(j =>
+        parseNativeResult<{ ok: boolean; oid?: string }>(j),
+      ).catch(() => ({ ok: false as const, oid: undefined })),
+    ]);
+    const localOid = localRefResult.ok ? (localRefResult.oid ?? '') : '';
+    const remoteOid = remoteRefResult.ok ? (remoteRefResult.oid ?? '') : '';
+    if (localOid.length > 0 && localOid === remoteOid) return 0;
+
+    // Slow path: walk the local commit graph until we hit a commit that exists in
+    // the remote branch. We cap at 100 commits — any more indicates a large divergence
+    // where the exact count is less important than knowing "there are many". Using a
+    // smaller depth than the previous 300 reduces JNI data transfer and JSON parsing.
+    const LOG_DEPTH = 100;
     let localResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }>; error?: string }>(
-      await ExternalStorage.gitLog(directory, branch, 300),
+      await ExternalStorage.gitLog(directory, branch, LOG_DEPTH),
     );
     if (!localResult.ok || !localResult.commits) {
-      localResult = parseNativeResult(await ExternalStorage.gitLog(directory, 'HEAD', 300));
+      localResult = parseNativeResult(await ExternalStorage.gitLog(directory, 'HEAD', LOG_DEPTH));
     }
     const localCommits = localResult.ok ? (localResult.commits ?? []) : [];
+
+    // If remote ref resolved to a known OID we can short-circuit without a second gitLog:
+    // walk local commits and stop as soon as we see the remote tip.
+    if (remoteOid.length > 0) {
+      let aheadCount = 0;
+      for (const commit of localCommits) {
+        if (commit.oid === remoteOid) return aheadCount;
+        aheadCount += 1;
+      }
+      return aheadCount;
+    }
+
+    // Fallback: remote ref couldn't be resolved — load remote log and do set intersection.
     const remoteResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }> }>(
-      await ExternalStorage.gitLog(directory, `origin/${branch}`, 300),
+      await ExternalStorage.gitLog(directory, remoteRef, LOG_DEPTH),
     );
     const remoteCommits = remoteResult.ok ? (remoteResult.commits ?? []) : [];
     const remoteOids = new Set(remoteCommits.map(c => c.oid));
