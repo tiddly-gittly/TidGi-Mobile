@@ -40,6 +40,11 @@ const ProgressLabel = styled(Text)`
   color: #666;
 `;
 
+const StorageHintText = styled(Text)`
+  color: #888;
+  margin-top: 4px;
+`;
+
 export interface IWorkspaceSettingsProps {
   workspace: IWikiWorkspace;
 }
@@ -175,11 +180,11 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
             }}
             mode='android'
           />
-          <Text variant='bodySmall' style={{ color: '#888', marginTop: 4 }}>
+          <StorageHintText variant='bodySmall'>
             {isCurrentlyExternal
               ? t('WorkspaceSettings.UseExternalStorageHintExternal')
               : t('WorkspaceSettings.UseExternalStorageHintInternal')}
-          </Text>
+          </StorageHintText>
         </Section>
       )}
 
