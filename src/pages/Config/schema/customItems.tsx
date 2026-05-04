@@ -60,7 +60,7 @@ function ServerListItem() {
   return (
     <View style={styles.customItemContainer}>
       <ServerList
-        onLongPress={onEditServer}
+        onSettings={onEditServer}
         onPress={onEditServer}
         activeIDs={activeIDs}
       />

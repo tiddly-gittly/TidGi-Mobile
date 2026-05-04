@@ -172,6 +172,14 @@
     "Preview": "Preview",
     "LoadingFromServer": "Loading List From Server"
   },
+  "ServerList": {
+    "LastSync": "Last sync",
+    "AheadCommits": "ahead",
+    "Settings": "Server settings",
+    "StandardGitProtocol": "Standard git protocol",
+    "UseStandardGitProtocol": "Use standard git protocol",
+    "UseStandardGitProtocolDescription": "Enable to use the standard git HTTP protocol (git-upload-pack / git-receive-pack) instead of TidGi's custom bundle protocol. Use this for GitHub, Gitea, or any host without TidGi Desktop."
+  },
   "EditWorkspace": {
     "Path": "Wiki Path",
     "Save": "Save",

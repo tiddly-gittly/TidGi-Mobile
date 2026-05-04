@@ -190,6 +190,14 @@
     "PreviewWebView": "预览网页",
     "LoadingFromServer": "正在从服务器加载列表"
   },
+  "ServerList": {
+    "LastSync": "最近同步",
+    "AheadCommits": "个超前提交",
+    "Settings": "服务器设置",
+    "StandardGitProtocol": "标准 Git 协议",
+    "UseStandardGitProtocol": "使用 Git 默认协议",
+    "UseStandardGitProtocolDescription": "开启后使用标准 Git HTTP 协议（git-upload-pack / git-receive-pack）进行同步，而不是 TidGi 自定义的 Bundle 协议。适用于 GitHub、Gitea 或其他不运行 TidGi Desktop 的服务器。"
+  },
   "EditWorkspace": {
     "Path": "Wiki的位置",
     "Save": "保存",

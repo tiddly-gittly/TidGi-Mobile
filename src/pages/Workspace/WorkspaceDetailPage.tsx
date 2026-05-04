@@ -143,13 +143,14 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
             <ServerList
               serverIDs={wiki.syncedServers.map(server => server.serverID)}
               activeIDs={wiki.syncedServers.filter(serverInfoInWiki => serverInfoInWiki.syncActive).map(server => server.serverID)}
+              workspace={wiki}
               onPress={(server) => {
                 const serverInWiki = wiki.syncedServers.find(serverInfoInWiki => serverInfoInWiki.serverID === server.id);
                 if (serverInWiki) {
                   setServerActive(wiki.id, server.id, !serverInWiki.syncActive);
                 }
               }}
-              onLongPress={(server) => {
+              onSettings={(server) => {
                 void Haptics.selectionAsync();
                 navigation.navigate('WorkspaceServerEdit', { id: wiki.id, serverId: server.id });
               }}

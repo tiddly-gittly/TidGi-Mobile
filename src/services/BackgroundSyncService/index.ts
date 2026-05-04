@@ -355,6 +355,56 @@ export class GitBackgroundSyncService {
       this.setServerActive(workspace.id, server.id, true);
 
       // ──────────────────────────────────────────────────────────
+      // Route to the correct sync strategy based on server config.
+      // ──────────────────────────────────────────────────────────
+      if (server.useStandardGitProtocol === true) {
+        haveUpdate = await this.syncWithStandardGitProtocol(workspace, server, remote, workspaceLogger);
+      } else {
+        haveUpdate = await this.syncWithBundleProtocol(workspace, server, remote, workspaceLogger);
+      }
+
+      this.updateLastSync(workspace.id, server.id);
+      if (haveUpdate) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      return true;
+    } catch (error) {
+      workspaceLogger.error('Sync failed', {
+        error: (error as Error).message,
+        serverId: server.id,
+        serverUri: server.uri,
+      });
+      console.error(`Sync failed for workspace ${workspace.name}:`, {
+        error,
+        workspaceId: workspace.id,
+        serverId: server.id,
+        serverUri: server.uri,
+      });
+      // Use safe notification instead of Alert.alert which crashes in background mode
+      this.#notifySyncError(workspace.name, (error as Error).message);
+      return false;
+    } finally {
+      this.setServerActive(workspace.id, server.id, false);
+    }
+  }
+
+  /**
+   * Custom TidGi bundle protocol:
+   * 1. Commit local changes
+   * 2. Push via BundleWriter → /receive-bundle → desktop merge
+   * 3. Fetch via /create-bundle → local bundle file → JGit fetch
+   *
+   * This avoids JGit's SmartHttpPushConnection MultiRequestService bug and is
+   * optimised for TidGi Desktop (custom endpoints required).
+   */
+  private async syncWithBundleProtocol(
+    workspace: IWikiWorkspace,
+    server: IServerInfo,
+    remote: import('../GitService').IGitRemote,
+    workspaceLogger: ReturnType<typeof logFor>,
+  ): Promise<boolean> {
+      // ──────────────────────────────────────────────────────────
       // Step 1: Commit local changes first.
       // ──────────────────────────────────────────────────────────
       const hasLocalChanges = await gitHasChanges(workspace);
@@ -387,35 +437,41 @@ export class GitBackgroundSyncService {
       // Step 3: Fetch desktop's merged main and reset local to match.
       // ──────────────────────────────────────────────────────────
       workspaceLogger.log('Fetching merged result from desktop');
-      haveUpdate = await gitFetchAndReset(workspace, remote);
+      const haveUpdate = await gitFetchAndReset(workspace, remote);
       if (haveUpdate) {
         workspaceLogger.log('Remote changes detected');
       }
 
-      this.updateLastSync(workspace.id, server.id);
-      if (needsPush) {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
+      return haveUpdate;
+  }
 
-      return true;
-    } catch (error) {
-      workspaceLogger.error('Sync failed', {
-        error: (error as Error).message,
-        serverId: server.id,
-        serverUri: server.uri,
-      });
-      console.error(`Sync failed for workspace ${workspace.name}:`, {
-        error,
-        workspaceId: workspace.id,
-        serverId: server.id,
-        serverUri: server.uri,
-      });
-      // Use safe notification instead of Alert.alert which crashes in background mode
-      this.#notifySyncError(workspace.name, (error as Error).message);
-      return false;
-    } finally {
-      this.setServerActive(workspace.id, server.id, false);
-    }
+  /**
+   * Standard git HTTP protocol (git-upload-pack / git-receive-pack).
+   *
+   * Used when `server.useStandardGitProtocol` is true, e.g. for GitHub, Gitea,
+   * or any standard git host that does not implement TidGi's custom endpoints.
+   *
+   * NOTE: The native ExternalStorage module does not yet expose a gitPush /
+   * gitFetch method separate from the bundle protocol. Until that is added,
+   * this path falls back to the bundle protocol and logs a warning.
+   * When the native module gains gitPush / gitFetch support, replace the fallback
+   * below with:
+   *   await ExternalStorage.gitFetch(directory, 'origin', branch, JSON.stringify(headers));
+   *   await ExternalStorage.gitPush(directory, 'origin', branch, JSON.stringify(headers));
+   */
+  private async syncWithStandardGitProtocol(
+    workspace: IWikiWorkspace,
+    server: IServerInfo,
+    remote: import('../GitService').IGitRemote,
+    workspaceLogger: ReturnType<typeof logFor>,
+  ): Promise<boolean> {
+    workspaceLogger.warn(
+      'Standard git protocol requested but native gitPush/gitFetch are not yet available. ' +
+      'Falling back to bundle protocol.',
+      { serverId: server.id },
+    );
+    console.warn('[BackgroundSync] useStandardGitProtocol=true but native gitPush/gitFetch not available; falling back to bundle protocol');
+    return await this.syncWithBundleProtocol(workspace, server, remote, workspaceLogger);
   }
 
   /**
