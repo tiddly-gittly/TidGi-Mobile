@@ -10,6 +10,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
 import { IServerInfo, useServerStore } from '../../store/server';
+import { useWorkspaceStore } from '../../store/workspace';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
 import { GitQRData } from './types';
 
@@ -82,10 +83,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [isLoadingServerInfo, setIsLoadingServerInfo] = useState(false);
   const [reachableServerIDs, setReachableServerIDs] = useState<string[]>([]);
   const [selectedSubWikiIds, setSelectedSubWikiIds] = useState<string[]>([]);
+  const [useExternalStorage, setUseExternalStorage] = useState(false);
+  const [useStandardGitProtocol, setUseStandardGitProtocol] = useState(false);
   const scanHandledReference = useRef(false);
 
   const addServer = useServerStore(state => state.add);
   const allServers = useServerStore(useShallow(state => Object.values(state.servers)));
+  const customWikiFolderPath = useWorkspaceStore(state => state.customWikiFolderPath);
   const addAsServer = route.params.addAsServer ?? true;
 
   const reachableServers = allServers.filter(server => reachableServerIDs.includes(server.id));
@@ -300,6 +304,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           qrData: qrData,
           wikiName: wikiName,
           serverID: newServer.id,
+          useExternalStorage,
+          useStandardGitProtocol,
         });
 
         // 2. Add selected sub-wikis
@@ -316,6 +322,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 },
                 wikiName: sub.name,
                 serverID: newServer.id,
+                useExternalStorage,
+                useStandardGitProtocol,
               });
             }
           });
@@ -325,7 +333,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           await batchImportWikis(batchItems);
         } else {
           // Single import (fallback to original behavior for better UX if used alone)
-          await importWiki(qrData, wikiName, newServer.id);
+          await importWiki(qrData, wikiName, newServer.id, useExternalStorage, useStandardGitProtocol);
         }
       } else {
         // No valid QR data - cannot use Git sync
@@ -339,11 +347,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
     setWikiUrl(undefined);
     setQrData(undefined);
-  }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, t]);
+  }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, useExternalStorage, useStandardGitProtocol, t]);
 
   const serverConfigs = (
     <ImporterServerConfigs
       allServers={reachableServers}
+      customWikiFolderPath={customWikiFolderPath}
       handleBarcodeScanned={handleBarcodeScanned}
       importStatus={importStatus}
       isLoadingServerInfo={isLoadingServerInfo}
@@ -381,6 +390,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       setSelectedSubWikiIds={setSelectedSubWikiIds}
       showSavedServers={showSavedServers}
       t={t}
+      useExternalStorage={useExternalStorage}
+      setUseExternalStorage={setUseExternalStorage}
+      useStandardGitProtocol={useStandardGitProtocol}
+      setUseStandardGitProtocol={setUseStandardGitProtocol}
     />
   );
 
