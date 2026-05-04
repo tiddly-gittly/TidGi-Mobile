@@ -245,6 +245,7 @@ export async function gitClone(
   workspace: IWikiWorkspace,
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
+  options: { useStandardGitProtocol?: boolean } = {},
 ): Promise<void> {
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
@@ -253,8 +254,9 @@ export async function gitClone(
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
 
-  // Fast path: tar archive download (TidGi Desktop only)
-  if (typeof ExternalStorage.extractTar === 'function') {
+  // Fast path: tar archive download (TidGi Desktop only). Skip it when the
+  // caller explicitly requests the standard Git HTTP protocol.
+  if (options.useStandardGitProtocol !== true && typeof ExternalStorage.extractTar === 'function') {
     try {
       const didArchive = await tryArchiveClone(remote, url, directory, onProgress);
       if (didArchive) {
@@ -774,20 +776,19 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
   if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
   try {
     const branch = await getCurrentBranch(directory);
-    const remoteRef = `origin/${branch}`;
+    const remoteReference = `origin/${branch}`;
 
-    // Fast path: if local HEAD and remote tracking ref resolve to the same OID, we are
+    // Fast path: if local HEAD and remote tracking reference resolve to the same OID, we are
     // already up-to-date. This avoids loading any commit objects via JNI.
-    const [localRefResult, remoteRefResult] = await Promise.all([
-      ExternalStorage.gitResolveRef(directory, branch).then(j =>
-        parseNativeResult<{ ok: boolean; oid?: string }>(j),
-      ).catch(() => ({ ok: false as const, oid: undefined })),
-      ExternalStorage.gitResolveRef(directory, remoteRef).then(j =>
-        parseNativeResult<{ ok: boolean; oid?: string }>(j),
-      ).catch(() => ({ ok: false as const, oid: undefined })),
+    const [localReferenceResult, remoteReferenceResult] = await Promise.all([
+      ExternalStorage.gitResolveRef(directory, branch).then(json => parseNativeResult<{ ok: boolean; oid?: string }>(json)).catch(() => ({ ok: false as const, oid: undefined })),
+      ExternalStorage.gitResolveRef(directory, remoteReference).then(json => parseNativeResult<{ ok: boolean; oid?: string }>(json)).catch(() => ({
+        ok: false as const,
+        oid: undefined,
+      })),
     ]);
-    const localOid = localRefResult.ok ? (localRefResult.oid ?? '') : '';
-    const remoteOid = remoteRefResult.ok ? (remoteRefResult.oid ?? '') : '';
+    const localOid = localReferenceResult.ok ? (localReferenceResult.oid ?? '') : '';
+    const remoteOid = remoteReferenceResult.ok ? (remoteReferenceResult.oid ?? '') : '';
     if (localOid.length > 0 && localOid === remoteOid) return 0;
 
     // Slow path: walk the local commit graph until we hit a commit that exists in
@@ -815,7 +816,10 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
       let aheadCount = 0;
       let foundRemote = false;
       for (const commit of localCommits) {
-        if (commit.oid === remoteOid) { foundRemote = true; break; }
+        if (commit.oid === remoteOid) {
+          foundRemote = true;
+          break;
+        }
         aheadCount += 1;
       }
       // Common case: remote tip is somewhere in local history → aheadCount is exact.
@@ -823,9 +827,9 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
       // Remote tip not found — fall through to the set-intersection path below.
     }
 
-    // Fallback: remote ref couldn't be resolved — load remote log and do set intersection.
+    // Fallback: remote reference couldn't be resolved — load remote log and do set intersection.
     const remoteResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }> }>(
-      await ExternalStorage.gitLog(directory, remoteRef, LOG_DEPTH),
+      await ExternalStorage.gitLog(directory, remoteReference, LOG_DEPTH),
     );
     const remoteCommits = remoteResult.ok ? (remoteResult.commits ?? []) : [];
     const remoteOids = new Set(remoteCommits.map(c => c.oid));

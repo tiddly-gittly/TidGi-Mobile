@@ -32,6 +32,8 @@ export interface IBatchImportItem {
   qrData: IGitImportQRCode;
   wikiName: string;
   serverID: string;
+  useExternalStorage?: boolean;
+  useStandardGitProtocol?: boolean;
 }
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error' | 'partialSuccess';
@@ -65,7 +67,7 @@ export function useGitImport() {
   /**
    * Import wiki from server via git clone
    */
-  const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string) => {
+  const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string, useExternalStorage = false, useStandardGitProtocol = false) => {
     // Reset individual operation state
     setError(undefined);
     setCreatedWorkspace(undefined);
@@ -111,6 +113,7 @@ export function useGitImport() {
         isSubWiki: qrData.isSubWiki === true,
         mainWikiID: qrData.mainWikiID ?? null,
         syncedServers: inheritedServers,
+        useExternalStorage,
       }) as IWikiWorkspace | undefined;
 
       if (newWorkspace === undefined) {
@@ -167,7 +170,7 @@ export function useGitImport() {
       });
       await gitClone(newWorkspace, remote, (phase, loaded, total) => {
         setCloneProgress({ phase, loaded, total });
-      });
+      }, { useStandardGitProtocol });
       console.log('[import] Git clone completed');
       workspaceLogger.log('Git clone completed');
 
@@ -251,7 +254,7 @@ export function useGitImport() {
       // Show 1-based index of the item currently being imported + its name
       setBatchProgress(previous => ({ ...previous, current: index + 1, currentName: item.wikiName }));
       try {
-        const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
+        const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID, item.useExternalStorage ?? false, item.useStandardGitProtocol ?? false);
         created.push(workspace);
       } catch (error) {
         const errorMessage = (error as Error).message;
