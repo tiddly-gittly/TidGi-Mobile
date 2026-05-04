@@ -2,7 +2,7 @@ import { Picker } from '@react-native-picker/picker';
 import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Checkbox, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -39,6 +39,7 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const addServer = useServerStore(useShallow(state => state.add));
   const [serverName, setServerName] = useState('');
   const [serverUrlString, setServerUrlString] = useState('');
+  const [useStandardGitProtocol, setUseStandardGitProtocol] = useState(false);
   const pickerStyle = useMemo(() => ({ color: theme.colors.onSurface, backgroundColor: theme.colors.surface }), [theme.colors.onSurface, theme.colors.surface]);
   const servers = useServerStore(useShallow(state => state.servers));
   const availableServersToPick = useMemo(() => {
@@ -76,6 +77,8 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
       try {
         setQrScannerOpen(false);
         setServerUrlString(data);
+        // QR codes always come from TidGi Desktop which uses the bundle protocol
+        setUseStandardGitProtocol(false);
       } catch (error) {
         console.warn('Not a valid URL', error);
       }
@@ -85,10 +88,10 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   const addServerForWiki = useCallback(() => {
     if (id === undefined) return;
     const serverUrl = new URL(serverUrlString);
-    const newServer = addServer({ uri: serverUrl.origin, name: serverName });
+    const newServer = addServer({ uri: serverUrl.origin, name: serverName, useStandardGitProtocol });
     addServerToWiki(id, newServer.id);
     onClose();
-  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString]);
+  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString, useStandardGitProtocol]);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -143,6 +146,11 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
         onChangeText={(newText: string) => {
           setServerName(newText);
         }}
+      />
+      <Checkbox.Item
+        label={t('ServerList.UseStandardGitProtocol')}
+        status={useStandardGitProtocol ? 'checked' : 'unchecked'}
+        onPress={() => { setUseStandardGitProtocol(prev => !prev); }}
       />
       <ButtonsContainer>
         <Button onPress={addServerForWiki}>

@@ -805,13 +805,22 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
 
     // If remote ref resolved to a known OID we can short-circuit without a second gitLog:
     // walk local commits and stop as soon as we see the remote tip.
+    // If remoteOid is not found in the local list it means either:
+    //   a) remote is ahead of local (local is behind), or
+    //   b) diverged and the common base is outside LOG_DEPTH.
+    // In case (a) we should return 0 (nothing to push) but we can't distinguish
+    // it from (b) with only the local log. Load the remote log to do a proper
+    // intersection so we don't mistakenly report all local commits as unpushed.
     if (remoteOid.length > 0) {
       let aheadCount = 0;
+      let foundRemote = false;
       for (const commit of localCommits) {
-        if (commit.oid === remoteOid) return aheadCount;
+        if (commit.oid === remoteOid) { foundRemote = true; break; }
         aheadCount += 1;
       }
-      return aheadCount;
+      // Common case: remote tip is somewhere in local history → aheadCount is exact.
+      if (foundRemote) return aheadCount;
+      // Remote tip not found — fall through to the set-intersection path below.
     }
 
     // Fallback: remote ref couldn't be resolved — load remote log and do set intersection.
