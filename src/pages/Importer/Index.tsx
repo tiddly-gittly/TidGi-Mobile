@@ -55,6 +55,20 @@ const HintText = styled(Text)`
 const WorkspaceNameInput = styled(TextInput)`
   margin-top: 10px;
 `;
+const SuccessWikiNameText = styled(Text)`
+  color: ${MD3Colors.primary40};
+  margin-top: 4px;
+`;
+const FailedWikiNameText = styled(Text)`
+  color: ${MD3Colors.error50};
+  margin-top: 4px;
+`;
+const RetryButton = styled(Button)`
+  margin-top: 16px;
+`;
+const ResetButton = styled(Button)`
+  margin-top: 8px;
+`;
 
 export interface ImporterProps {
   /**
@@ -540,9 +554,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <>
               <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
               {batchCreatedWorkspaces.map((ws) => (
-                <Text key={ws.id} variant='bodyMedium' style={{ color: MD3Colors.primary40, marginTop: 4 }}>
+                <SuccessWikiNameText key={ws.id} variant='bodyMedium'>
                   ✓ {ws.name}
-                </Text>
+                </SuccessWikiNameText>
               ))}
             </>
           )}
@@ -558,21 +572,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                     Alert.alert(t('Import.Error.CopiedToClipboard'));
                   }}
                 >
-                  <Text variant='bodyMedium' style={{ color: MD3Colors.error50, marginTop: 4 }} selectable>
+                  <FailedWikiNameText variant='bodyMedium' selectable>
                     ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
-                  </Text>
+                  </FailedWikiNameText>
                 </Pressable>
               ))}
             </>
           )}
           {/* Action buttons */}
-          <Button
+          <RetryButton
             mode='elevated'
             onPress={retryFailedImports}
-            style={{ marginTop: 16 }}
           >
             <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
-          </Button>
+          </RetryButton>
           {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
             <OpenWikiButton
               key={ws.id}
@@ -587,13 +600,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               <Text>{`${t('Open')} ${ws.name}`}</Text>
             </OpenWikiButton>
           ))}
-          <Button
+          <ResetButton
             mode='text'
             onPress={resetState}
-            style={{ marginTop: 8 }}
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
-          </Button>
+          </ResetButton>
         </>
       )}
       {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (

@@ -40,6 +40,11 @@ const SavedServerButton = styled(Button)`
   margin-top: 8px;
 `;
 
+const AdvancedToggleButton = styled(Button)`
+  margin-top: 8px;
+  align-self: flex-start;
+`;
+
 const ButtonLabelPadding = 30;
 
 interface IImporterServerConfigsProps {
@@ -196,17 +201,16 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
         </Collapsible>
 
         {/* Advanced section — hidden by default */}
-        <Button
+        <AdvancedToggleButton
           mode='text'
           compact
           icon={showAdvanced ? 'chevron-up' : 'chevron-down'}
           onPress={() => {
             setShowAdvanced(previous => !previous);
           }}
-          style={{ marginTop: 8, alignSelf: 'flex-start' }}
         >
           <Text>{t('Import.Advanced')}</Text>
-        </Button>
+        </AdvancedToggleButton>
         <Collapsible collapsed={!showAdvanced}>
           {externalStorageGloballyEnabled && (
             <Checkbox.Item
