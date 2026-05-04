@@ -12,7 +12,19 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitGetAheadCommitCount, gitHasChanges, gitPushToIncoming, headersToJson, getCurrentBranch, ensureGitConfigForMobile, IGitRemote, triggerDesktopMerge } from '../GitService';
+import {
+  ensureGitConfigForMobile,
+  getCurrentBranch,
+  gitCommit,
+  gitDiffChangedFiles,
+  gitFetchAndReset,
+  gitGetAheadCommitCount,
+  gitHasChanges,
+  gitPushToIncoming,
+  headersToJson,
+  IGitRemote,
+  triggerDesktopMerge,
+} from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -405,45 +417,45 @@ export class GitBackgroundSyncService {
     remote: import('../GitService').IGitRemote,
     workspaceLogger: ReturnType<typeof logFor>,
   ): Promise<boolean> {
-      // ──────────────────────────────────────────────────────────
-      // Step 1: Commit local changes first.
-      // ──────────────────────────────────────────────────────────
-      const hasLocalChanges = await gitHasChanges(workspace);
-      if (hasLocalChanges) {
-        await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
-        workspaceLogger.log('Local changes committed before sync');
-      }
+    // ──────────────────────────────────────────────────────────
+    // Step 1: Commit local changes first.
+    // ──────────────────────────────────────────────────────────
+    const hasLocalChanges = await gitHasChanges(workspace);
+    if (hasLocalChanges) {
+      await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+      workspaceLogger.log('Local changes committed before sync');
+    }
 
-      // ──────────────────────────────────────────────────────────
-      // Step 2: Push to mobile-incoming branch + trigger desktop merge.
-      // Desktop handles all merge/conflict resolution, saving mobile battery.
-      // Also push if there are unpushed commits from a previous failed push.
-      // ──────────────────────────────────────────────────────────
-      const aheadCount = await gitGetAheadCommitCount(workspace);
-      const needsPush = hasLocalChanges || aheadCount > 0;
-      if (needsPush) {
-        workspaceLogger.log('Pushing to mobile-incoming', {
-          baseUrl: remote.baseUrl,
-          remoteWorkspaceId: remote.workspaceId,
-          serverId: server.id,
-          hasLocalChanges,
-          aheadCount,
-        });
-        await gitPushToIncoming(workspace, remote);
-        await triggerDesktopMerge(remote);
-        workspaceLogger.log('Desktop merge complete');
-      }
+    // ──────────────────────────────────────────────────────────
+    // Step 2: Push to mobile-incoming branch + trigger desktop merge.
+    // Desktop handles all merge/conflict resolution, saving mobile battery.
+    // Also push if there are unpushed commits from a previous failed push.
+    // ──────────────────────────────────────────────────────────
+    const aheadCount = await gitGetAheadCommitCount(workspace);
+    const needsPush = hasLocalChanges || aheadCount > 0;
+    if (needsPush) {
+      workspaceLogger.log('Pushing to mobile-incoming', {
+        baseUrl: remote.baseUrl,
+        remoteWorkspaceId: remote.workspaceId,
+        serverId: server.id,
+        hasLocalChanges,
+        aheadCount,
+      });
+      await gitPushToIncoming(workspace, remote);
+      await triggerDesktopMerge(remote);
+      workspaceLogger.log('Desktop merge complete');
+    }
 
-      // ──────────────────────────────────────────────────────────
-      // Step 3: Fetch desktop's merged main and reset local to match.
-      // ──────────────────────────────────────────────────────────
-      workspaceLogger.log('Fetching merged result from desktop');
-      const haveUpdate = await gitFetchAndReset(workspace, remote);
-      if (haveUpdate) {
-        workspaceLogger.log('Remote changes detected');
-      }
+    // ──────────────────────────────────────────────────────────
+    // Step 3: Fetch desktop's merged main and reset local to match.
+    // ──────────────────────────────────────────────────────────
+    workspaceLogger.log('Fetching merged result from desktop');
+    const haveUpdate = await gitFetchAndReset(workspace, remote);
+    if (haveUpdate) {
+      workspaceLogger.log('Remote changes detected');
+    }
 
-      return haveUpdate;
+    return haveUpdate;
   }
 
   /**
@@ -462,7 +474,7 @@ export class GitBackgroundSyncService {
    */
   private async syncWithStandardGitProtocol(
     workspace: IWikiWorkspace,
-    server: IServerInfo,
+    _server: IServerInfo,
     remote: IGitRemote,
     workspaceLogger: ReturnType<typeof logFor>,
   ): Promise<boolean> {
@@ -492,8 +504,8 @@ export class GitBackgroundSyncService {
     }
 
     // Step 3: If remote has new commits, hard-reset to remote (remote wins)
-    const remoteRefJson = await ExternalStorage.gitResolveRef(directory, `origin/${branch}`);
-    const remoteOid = (JSON.parse(remoteRefJson) as { ok: boolean; oid?: string }).oid ?? '';
+    const remoteReferenceJson = await ExternalStorage.gitResolveRef(directory, `origin/${branch}`);
+    const remoteOid = (JSON.parse(remoteReferenceJson) as { ok: boolean; oid?: string }).oid ?? '';
 
     let haveUpdate = false;
     if (remoteOid !== '' && remoteOid !== headBefore) {

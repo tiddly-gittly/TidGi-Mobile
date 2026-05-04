@@ -213,7 +213,9 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       <Checkbox.Item
         label={t('ServerList.UseStandardGitProtocol')}
         status={editedUseStandardGitProtocol ? 'checked' : 'unchecked'}
-        onPress={() => { setEditedUseStandardGitProtocol(prev => !prev); }}
+        onPress={() => {
+          setEditedUseStandardGitProtocol(previous => !previous);
+        }}
       />
       <Text variant='bodySmall' style={{ marginHorizontal: 8, marginBottom: 8, opacity: 0.7 }}>
         {t('ServerList.UseStandardGitProtocolDescription')}

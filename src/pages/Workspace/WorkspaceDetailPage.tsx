@@ -1,5 +1,4 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, Dialog, Portal, Text } from 'react-native-paper';

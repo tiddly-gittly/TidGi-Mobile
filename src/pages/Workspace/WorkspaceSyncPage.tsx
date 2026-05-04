@@ -8,8 +8,8 @@ import { useShallow } from 'zustand/react/shallow';
 import type { RootStackParameterList } from '../../App';
 import { ServerList } from '../../components/ServerList';
 import { SyncTextButton } from '../../components/SyncButton';
-import { useWorkspaceStore } from '../../store/workspace';
 import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
+import { useWorkspaceStore } from '../../store/workspace';
 import { WorkspaceSyncModalContent } from '../MainMenu/EditItemModel/WorkspaceSyncModalContent';
 import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
 
@@ -88,4 +88,3 @@ export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootSt
     </PageContainer>
   );
 }
-

@@ -150,7 +150,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
       <Checkbox.Item
         label={t('ServerList.UseStandardGitProtocol')}
         status={useStandardGitProtocol ? 'checked' : 'unchecked'}
-        onPress={() => { setUseStandardGitProtocol(prev => !prev); }}
+        onPress={() => {
+          setUseStandardGitProtocol(previous => !previous);
+        }}
       />
       <ButtonsContainer>
         <Button onPress={addServerForWiki}>

@@ -20,6 +20,7 @@ import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import {
+  WebPageDetailPage,
   WorkspaceAddServerPage,
   WorkspaceChangesPage,
   WorkspaceDetailPage,
@@ -50,6 +51,7 @@ export type RootStackParameterList = {
   Importer: ImporterProps;
   MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
+  WebPageDetail: { id: string };
   WorkspaceAddServer: { id: string };
   WorkspaceChanges: { id: string };
   WorkspaceDetail: { id: string };
@@ -141,6 +143,11 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='WorkspaceDetail'
                 component={WorkspaceDetailPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WebPageDetail'
+                component={WebPageDetailPage}
                 options={{ headerTitleStyle: { color: theme.colors.primary } }}
               />
               <Stack.Screen

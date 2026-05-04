@@ -100,10 +100,10 @@ async function flushLogBuffer(): Promise<void> {
       await ensureDirectory(logDirectory);
       // Use the raw logDirectory URI (which may contain a file:// prefix for internal storage).
       // Do NOT call toPlainPath here — writeTextFile / readTextFile handle routing.
-      const logDirNormalized = logDirectory.endsWith('/') ? logDirectory : `${logDirectory}/`;
+      const logDirectoryNormalized = logDirectory.endsWith('/') ? logDirectory : `${logDirectory}/`;
       await Promise.all(
         Object.entries(chunksByFileName).map(async ([fileName, lines]) => {
-          const filePath = `${logDirNormalized}${fileName}`;
+          const filePath = `${logDirectoryNormalized}${fileName}`;
           let previousContent = '';
           try {
             previousContent = await readTextFile(filePath);

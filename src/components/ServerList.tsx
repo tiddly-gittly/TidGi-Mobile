@@ -48,7 +48,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
   const allSyncedServers = useWorkspaceStore(useShallow(state =>
     state.workspaces
       .filter((w): w is IWikiWorkspace => w.type === 'wiki')
-      .flatMap(w => w.syncedServers),
+      .flatMap(w => w.syncedServers)
   ));
 
   useEffect(() => {
@@ -63,15 +63,15 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
   }, [serverList, onlineOnly]);
 
   // ahead commit counts per server (only computed when a workspace is given)
-  const [aheadMap, setAheadMap] = useState<Record<string, ServerAheadInfo>>({});
+  const [aheadMap, setAheadMap] = useState<Partial<Record<string, ServerAheadInfo>>>({});
   useEffect(() => {
     if (!workspace) return;
     let cancelled = false;
     const fetchAhead = async () => {
       const count = await gitGetAheadCommitCount(workspace).catch(() => 0);
       if (cancelled) return;
-      setAheadMap(prev => {
-        const next = { ...prev };
+      setAheadMap(previous => {
+        const next = { ...previous };
         for (const s of filteredServer) {
           next[s.id] = { ahead: count, loading: false };
         }
@@ -79,14 +79,15 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
       });
     };
     // mark all as loading
-    setAheadMap(prev => {
-      const next = { ...prev };
+    setAheadMap(previous => {
+      const next = { ...previous };
       for (const s of filteredServer) next[s.id] = { ahead: 0, loading: true };
       return next;
     });
     void fetchAhead();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [workspace?.id, filteredServer.map(s => s.id).join(',')]);
 
   const getLastSync = useCallback((serverId: string): number | undefined => {
@@ -109,7 +110,9 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
     return (
       <ServerCard key={serverInfo.id}>
         <TouchableOpacity
-          onPress={() => { onPress?.(serverInfo); }}
+          onPress={() => {
+            onPress?.(serverInfo);
+          }}
           accessibilityRole='button'
           style={{ flex: 1 }}
         >
@@ -142,7 +145,9 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
         <IconButton
           icon='cog-outline'
           size={20}
-          onPress={() => { onSettings?.(serverInfo); }}
+          onPress={() => {
+            onSettings?.(serverInfo);
+          }}
           accessibilityLabel={t('ServerList.Settings')}
         />
       </ServerCard>
@@ -178,4 +183,3 @@ const Row = styled(View)`
   align-items: center;
   flex-wrap: wrap;
 `;
-

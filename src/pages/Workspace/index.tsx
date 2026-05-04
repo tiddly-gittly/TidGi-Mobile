@@ -1,3 +1,4 @@
+export { WebPageDetailPage } from './WebPageDetailPage';
 export { WorkspaceAddServerPage } from './WorkspaceAddServerPage';
 export { WorkspaceChangesPage } from './WorkspaceChangesPage';
 export { WorkspaceDetailPage } from './WorkspaceDetailPage';
