@@ -126,12 +126,12 @@ function normalizeHeaders(headers: Record<string, string | undefined>): Record<s
   return Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined)) as Record<string, string>;
 }
 
-function headersToJson(remote: IGitRemote): string | null {
+export function headersToJson(remote: IGitRemote): string | null {
   const headers = normalizeHeaders(createAuthHeader(remote));
   return Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
 }
 
-async function getCurrentBranch(directory: string): Promise<string> {
+export async function getCurrentBranch(directory: string): Promise<string> {
   try {
     const json = await ExternalStorage.gitCurrentBranch(directory);
     const result = parseNativeResult<{
@@ -490,7 +490,7 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
  */
 const gitConfigAppliedDirectories = new Set<string>();
 
-async function ensureGitConfigForMobile(directory: string): Promise<void> {
+export async function ensureGitConfigForMobile(directory: string): Promise<void> {
   if (gitConfigAppliedDirectories.has(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],

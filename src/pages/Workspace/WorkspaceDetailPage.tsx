@@ -2,14 +2,11 @@ import { StackScreenProps } from '@react-navigation/stack';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Collapsible from 'react-native-collapsible';
 import { Button, Checkbox, Dialog, Portal, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import type { RootStackParameterList } from '../../App';
 import { LogViewerDialog } from '../../components/LogViewerDialog';
-import { ServerList } from '../../components/ServerList';
-import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
 import { gitGetAheadCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
@@ -27,10 +24,9 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const { t } = useTranslation();
   const wiki = useWikiWorkspace(route.params.id);
   // Combine multiple selector calls into a single useShallow call
-  const [removeWorkspace, setServerActive] = useWorkspaceStore(useShallow(state => [state.remove, state.setServerActive]));
+  const [removeWorkspace] = useWorkspaceStore(useShallow(state => [state.remove]));
   const allWorkspaces = useWorkspaceStore(useShallow(state => state.workspaces));
   const [pendingCommitCount, setPendingCommitCount] = useState(0);
-  const [expandServerList, setExpandServerList] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteSubWorkspacesTogether, setDeleteSubWorkspacesTogether] = useState(false);
   const [workspaceLogVisible, setWorkspaceLogVisible] = useState(false);
@@ -119,51 +115,15 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
           {t('SubWiki.ManageSubKnowledgeBases')}
         </ActionButton>
       )}
-      <ActionButton
-        mode='outlined'
-        onPress={() => {
-          navigation.navigate('WorkspacePerformance', { id: wiki.id });
-        }}
-      >
-        {t('AddWorkspace.OpenPerformanceTools')}
-      </ActionButton>
-
       {wiki.isSubWiki !== true && (
-        <>
-          <ActionButton
-            mode='outlined'
-            onPress={() => {
-              void gitBackgroundSyncService.updateServerOnlineStatus();
-              setExpandServerList(previous => !previous);
-            }}
-          >
-            {t('AddWorkspace.ToggleServerList')}
-          </ActionButton>
-          <Collapsible collapsed={!expandServerList}>
-            <ServerList
-              serverIDs={wiki.syncedServers.map(server => server.serverID)}
-              activeIDs={wiki.syncedServers.filter(serverInfoInWiki => serverInfoInWiki.syncActive).map(server => server.serverID)}
-              workspace={wiki}
-              onPress={(server) => {
-                const serverInWiki = wiki.syncedServers.find(serverInfoInWiki => serverInfoInWiki.serverID === server.id);
-                if (serverInWiki) {
-                  setServerActive(wiki.id, server.id, !serverInWiki.syncActive);
-                }
-              }}
-              onSettings={(server) => {
-                void Haptics.selectionAsync();
-                navigation.navigate('WorkspaceServerEdit', { id: wiki.id, serverId: server.id });
-              }}
-            />
-            <Button
-              onPress={() => {
-                navigation.navigate('WorkspaceAddServer', { id: wiki.id });
-              }}
-            >
-              {t('EditWorkspace.AddNewServer')}
-            </Button>
-          </Collapsible>
-        </>
+        <ActionButton
+          mode='outlined'
+          onPress={() => {
+            navigation.navigate('WorkspacePerformance', { id: wiki.id });
+          }}
+        >
+          {t('AddWorkspace.OpenPerformanceTools')}
+        </ActionButton>
       )}
 
       <FooterRow>

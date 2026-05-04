@@ -6,12 +6,13 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { AppState } from 'react-native';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitGetAheadCommitCount, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
+import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitGetAheadCommitCount, gitHasChanges, gitPushToIncoming, headersToJson, getCurrentBranch, ensureGitConfigForMobile, IGitRemote, triggerDesktopMerge } from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -446,32 +447,82 @@ export class GitBackgroundSyncService {
   }
 
   /**
-   * Standard git HTTP protocol (git-upload-pack / git-receive-pack).
+   * Standard git HTTP protocol (git-upload-pack / git-receive-pack) via JGit.
    *
    * Used when `server.useStandardGitProtocol` is true, e.g. for GitHub, Gitea,
    * or any standard git host that does not implement TidGi's custom endpoints.
    *
-   * NOTE: The native ExternalStorage module does not yet expose a gitPush /
-   * gitFetch method separate from the bundle protocol. Until that is added,
-   * this path falls back to the bundle protocol and logs a warning.
-   * When the native module gains gitPush / gitFetch support, replace the fallback
-   * below with:
-   *   await ExternalStorage.gitFetch(directory, 'origin', branch, JSON.stringify(headers));
-   *   await ExternalStorage.gitPush(directory, 'origin', branch, JSON.stringify(headers));
+   * Strategy:
+   *   1. Commit local changes.
+   *   2. gitFetch to update the remote-tracking branch (origin/<branch>).
+   *   3. If we are behind or diverged: hard-reset local branch to origin/<branch>
+   *      (remote wins — suitable for personal notes sync where both sides belong
+   *      to the same user; local commits are preserved in reflog).
+   *   4. gitPush to origin/<branch> (fast-forward; should always succeed after reset).
    */
   private async syncWithStandardGitProtocol(
     workspace: IWikiWorkspace,
     server: IServerInfo,
-    remote: import('../GitService').IGitRemote,
+    remote: IGitRemote,
     workspaceLogger: ReturnType<typeof logFor>,
   ): Promise<boolean> {
-    workspaceLogger.warn(
-      'Standard git protocol requested but native gitPush/gitFetch are not yet available. ' +
-      'Falling back to bundle protocol.',
-      { serverId: server.id },
-    );
-    console.warn('[BackgroundSync] useStandardGitProtocol=true but native gitPush/gitFetch not available; falling back to bundle protocol');
-    return await this.syncWithBundleProtocol(workspace, server, remote, workspaceLogger);
+    const directory = toPlainPath(workspace.wikiFolderLocation);
+    const headers = headersToJson(remote);
+
+    // Step 1: Commit local changes
+    const hasLocalChanges = await gitHasChanges(workspace);
+    if (hasLocalChanges) {
+      await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+      workspaceLogger.log('Standard git: local changes committed');
+    }
+
+    await ensureGitConfigForMobile(directory);
+    const branch = await getCurrentBranch(directory);
+
+    // Record HEAD before fetch to detect remote changes
+    const headBeforeJson = await ExternalStorage.gitResolveRef(directory, 'HEAD');
+    const headBefore = (JSON.parse(headBeforeJson) as { ok: boolean; oid?: string }).oid ?? '';
+
+    // Step 2: Fetch remote tracking branch
+    workspaceLogger.log(`Standard git: fetching origin/${branch}`);
+    const fetchJson = await ExternalStorage.gitFetch(directory, 'origin', branch, headers);
+    const fetchResult = JSON.parse(fetchJson) as { ok: boolean; error?: string };
+    if (!fetchResult.ok) {
+      throw new Error(`git fetch failed: ${fetchResult.error ?? 'unknown'}`);
+    }
+
+    // Step 3: If remote has new commits, hard-reset to remote (remote wins)
+    const remoteRefJson = await ExternalStorage.gitResolveRef(directory, `origin/${branch}`);
+    const remoteOid = (JSON.parse(remoteRefJson) as { ok: boolean; oid?: string }).oid ?? '';
+
+    let haveUpdate = false;
+    if (remoteOid !== '' && remoteOid !== headBefore) {
+      workspaceLogger.log(`Standard git: remote has new commits, resetting to origin/${branch}`);
+      const resetJson = await ExternalStorage.gitReset(directory, `origin/${branch}`, 'hard');
+      const resetResult = JSON.parse(resetJson) as { ok: boolean; error?: string };
+      if (!resetResult.ok) {
+        throw new Error(`git reset to origin/${branch} failed: ${resetResult.error ?? 'unknown'}`);
+      }
+      haveUpdate = true;
+    }
+
+    // Step 4: Push (fast-forward after reset above)
+    const aheadCount = await gitGetAheadCommitCount(workspace);
+    if (aheadCount > 0 || hasLocalChanges) {
+      workspaceLogger.log(`Standard git: pushing ${aheadCount} commits to origin/${branch}`);
+      const pushJson = await ExternalStorage.gitPush(directory, 'origin', branch, `refs/heads/${branch}`, false, headers);
+      const pushResult = JSON.parse(pushJson) as { ok: boolean; error?: string };
+      if (!pushResult.ok) {
+        workspaceLogger.warn(`Standard git: push rejected: ${pushResult.error ?? 'unknown'}`);
+        console.warn(`[BackgroundSync] standard git push rejected for ${workspace.name}: ${pushResult.error}`);
+        // Don't throw — fetch succeeded so local is at least up-to-date
+      } else {
+        workspaceLogger.log('Standard git: push succeeded');
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    }
+
+    return haveUpdate;
   }
 
   /**
