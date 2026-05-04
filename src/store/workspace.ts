@@ -46,6 +46,12 @@ export interface IWikiWorkspace {
   syncedServers: IWikiServerSync[];
   type?: 'wiki';
   /**
+   * Whether this workspace stores files in external (device-visible) storage.
+   * Requires the global MANAGE_EXTERNAL_STORAGE permission to be granted.
+   * When undefined, inherits from the global customWikiFolderPath setting at creation time.
+   */
+  useExternalStorage?: boolean;
+  /**
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
@@ -123,12 +129,16 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
           set((state) => {
             switch (newWorkspace.type) {
               case 'wiki': {
-                // When customWikiFolderPath is set (file:// path from MANAGE_EXTERNAL_STORAGE),
-                // use it as the base. Otherwise fall back to internal WIKI_FOLDER_PATH.
-                // Both place wikis under a `wikis/` subdirectory so the parent directory
-                // can also hold `logs/` and other shared data.
+                // Determine base path based on per-workspace useExternalStorage flag.
+                // - If caller passes useExternalStorage=true AND customWikiFolderPath is set → external
+                // - If caller passes useExternalStorage=false explicitly → internal regardless of global setting
+                // - If caller doesn't pass it (undefined) → check global customWikiFolderPath (legacy behaviour)
                 const customPath = state.customWikiFolderPath;
-                const wikiFolderBasePath = customPath
+                const requestedExternal = (newWorkspace as IWikiWorkspace).useExternalStorage;
+                const useExternal = requestedExternal === true
+                  ? customPath !== null
+                  : (requestedExternal === false ? false : customPath !== null);
+                const wikiFolderBasePath = useExternal && customPath
                   ? `${customPath.endsWith('/') ? customPath : `${customPath}/`}wikis/`
                   : WIKI_FOLDER_PATH;
                 if (!wikiFolderBasePath) return;
@@ -148,6 +158,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   ...(newWorkspace as IWikiWorkspace),
                   id,
                   wikiFolderLocation,
+                  useExternalStorage: useExternal,
                   allowReadFileAttachment: true,
                   enableQuickLoad: false,
                   syncIncludeSubWikis: true,

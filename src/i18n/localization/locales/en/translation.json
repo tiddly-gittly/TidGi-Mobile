@@ -614,7 +614,10 @@
       "Succeeded": "Successfully imported",
       "Failed": "Failed to import"
     },
-    "RetryFailed": "Retry failed ({{count}})"
+    "RetryFailed": "Retry failed ({{count}})",
+    "Advanced": "Advanced",
+    "UseExternalStorage": "Store in external (device-visible) storage",
+    "UseStandardGitProtocol": "Use standard Git protocol (GitHub / Gitea)"
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -704,7 +707,15 @@
     "FiltersDescription": "Use file system path filters to control where tiddlers are saved.",
     "EnablePathFilter": "Enable Path Filter",
     "EnablePathFilterDescription": "When enabled, save path follows filter output.",
-    "FileSystemPathFilter": "File System Path Filter"
+    "FileSystemPathFilter": "File System Path Filter",
+    "StorageType": "Storage Location",
+    "UseExternalStorage": "Store in device-visible external storage",
+    "UseExternalStorageHintExternal": "Files are stored in /sdcard/Documents/TidGi/ (visible to other apps).",
+    "UseExternalStorageHintInternal": "Files are stored in app internal storage (private).",
+    "MigratingStorage": "Migrating Storage",
+    "MigrationConfirm": "Move all wiki files {{direction}}? This may take a while.",
+    "ToExternal": "to external storage",
+    "ToInternal": "to internal storage"
   },
   "StorageLocation": {
     "PermissionDenied": "Permission Required",
@@ -723,6 +734,7 @@
   "Common": {
     "OK": "OK",
     "Cancel": "Cancel",
+    "Confirm": "Confirm",
     "Save": "Save"
   },
   "Settings": {
