@@ -109,19 +109,17 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
 
     return (
       <ServerCard key={serverInfo.id}>
-        <TouchableOpacity
+        <FlexTouchableOpacity
           onPress={() => {
             onPress?.(serverInfo);
           }}
           accessibilityRole='button'
-          style={{ flex: 1 }}
         >
           <CardInner>
-            <Ionicons
+            <StatusIcon
               name={online ? 'wifi' : 'cloud-offline-outline'}
               size={22}
               color={online ? theme.colors.primary : theme.colors.outline}
-              style={{ marginRight: 8, marginTop: 2 }}
             />
             <InfoBlock>
               <Text variant='titleSmall' numberOfLines={1}>{serverInfo.name}</Text>
@@ -141,7 +139,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
               )}
             </InfoBlock>
           </CardInner>
-        </TouchableOpacity>
+        </FlexTouchableOpacity>
         <IconButton
           icon='cog-outline'
           size={20}
@@ -182,4 +180,13 @@ const Row = styled(View)`
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
+`;
+
+const FlexTouchableOpacity = styled(TouchableOpacity)`
+  flex: 1;
+`;
+
+const StatusIcon = styled(Ionicons)`
+  margin-right: 8px;
+  margin-top: 2px;
 `;

@@ -217,9 +217,9 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
           setEditedUseStandardGitProtocol(previous => !previous);
         }}
       />
-      <Text variant='bodySmall' style={{ marginHorizontal: 8, marginBottom: 8, opacity: 0.7 }}>
+      <ProtocolHintText variant='bodySmall'>
         {t('ServerList.UseStandardGitProtocolDescription')}
-      </Text>
+      </ProtocolHintText>
       <ActionButtons
         handleSave={handleSave}
         onRemoveServer={onRemoveServer}
@@ -243,4 +243,10 @@ const ButtonsContainer = styled.View`
   flex-direction: row;
   justify-content: space-between;
   margin-top: 15px;
+`;
+
+const ProtocolHintText = styled(Text)`
+  margin-horizontal: 8px;
+  margin-bottom: 8px;
+  opacity: 0.7;
 `;
