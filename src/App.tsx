@@ -1,5 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, type StackNavigationProp } from '@react-navigation/stack';
 import { Buffer } from 'buffer';
 import i18n from 'i18next';
 import './i18n/index';
@@ -63,6 +63,9 @@ export type RootStackParameterList = {
   WorkspaceSync: { id: string };
   WikiWebView: WikiWebViewProps;
 };
+
+type RootStackNavigation<RouteName extends keyof RootStackParameterList> = StackNavigationProp<RootStackParameterList, RouteName>;
+
 const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
@@ -88,7 +91,7 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='Config'
                 component={Config}
-                options={({ navigation }) => ({
+                options={({ navigation }: { navigation: RootStackNavigation<'Config'> }) => ({
                   headerTitle: t('Preference.Title'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerLeft: () => (
@@ -108,7 +111,7 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='MainMenu'
                 component={MainMenu}
-                options={({ navigation }) => ({
+                options={({ navigation }: { navigation: RootStackNavigation<'MainMenu'> }) => ({
                   headerTitle: t('Sidebar.Main'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerRight: () => (
@@ -118,7 +121,7 @@ export const App: React.FC = () => {
                       size={32}
                       color={theme.colors.primary}
                       onPress={() => {
-                        navigation.navigate('Config' as never);
+                        navigation.navigate('Config');
                       }}
                     />
                   ),
