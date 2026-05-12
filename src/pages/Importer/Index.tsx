@@ -249,16 +249,39 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       scanHandledReference.current = true;
       try {
         setQrScannerOpen(false);
-        // Try to parse as JSON (Git QR format)
-        const parsed = JSON.parse(data) as unknown;
+
+        // Some Android QR scanners (ZXing via expo-camera) mis-decode UTF-8
+        // Byte-mode QR codes as Latin-1: each UTF-8 byte becomes a separate
+        // JS character, turning CJK continuation bytes (0x80-0xBF) into C1
+        // control characters that are illegal in JSON strings.
+        // Fix: re-encode the string as bytes and decode as UTF-8.
+        const parseJson = (raw: string): unknown => {
+          // Strip BOM and try plain parse first
+          const cleaned = raw.replace(/^\uFEFF/, '').trim();
+          try {
+            return JSON.parse(cleaned);
+          } catch {
+            // Re-decode as if the bytes were incorrectly treated as Latin-1
+            try {
+              const bytes = Uint8Array.from({ length: cleaned.length }, (_, i) => cleaned.charCodeAt(i));
+              const reDecoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+              return JSON.parse(reDecoded);
+            } catch {
+              // Last resort: just re-throw the original parse error
+              return JSON.parse(cleaned);
+            }
+          }
+        };
+
+        const parsed = parseJson(data);
 
         if (
           parsed !== null &&
           typeof parsed === 'object' &&
           'baseUrl' in parsed &&
           'workspaceId' in parsed &&
-          typeof parsed.baseUrl === 'string' &&
-          typeof parsed.workspaceId === 'string'
+          typeof (parsed as { baseUrl: unknown }).baseUrl === 'string' &&
+          typeof (parsed as { workspaceId: unknown }).workspaceId === 'string'
           // token is optional
         ) {
           // Valid Git QR code
