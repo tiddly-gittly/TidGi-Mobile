@@ -57,8 +57,8 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
     includeTagTree: false,
   });
   const { openDocumentDirectory, OpenDirectoryResultSnackBar } = useOpenDirectory();
-  const [defaultWorkspaceId, setDefaultWorkspace, customWikiFolderPath] = useWorkspaceStore(
-    useShallow(state => [state.defaultWorkspaceId, state.setDefaultWorkspace, state.customWikiFolderPath]),
+  const [defaultWorkspaceId, setDefaultWorkspace, customWikiFolderPath, updateWorkspace] = useWorkspaceStore(
+    useShallow(state => [state.defaultWorkspaceId, state.setDefaultWorkspace, state.customWikiFolderPath, state.update]),
   );
   const isDefault = defaultWorkspaceId === workspace.id;
   const externalStorageEnabled = customWikiFolderPath !== null;
@@ -187,6 +187,21 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
           </StorageHintText>
         </Section>
       )}
+
+      <Section>
+        <SectionTitle>{t('WorkspaceSettings.Performance')}</SectionTitle>
+        <Checkbox.Item
+          label={t('WorkspaceSettings.EnableQuickLoad')}
+          status={workspace.enableQuickLoad === true ? 'checked' : 'unchecked'}
+          onPress={() => {
+            updateWorkspace(workspace.id, { enableQuickLoad: !(workspace.enableQuickLoad === true) });
+          }}
+          mode='android'
+        />
+        <StorageHintText variant='bodySmall'>
+          {t('WorkspaceSettings.EnableQuickLoadDescription')}
+        </StorageHintText>
+      </Section>
 
       <SaveButton
         mode='contained'

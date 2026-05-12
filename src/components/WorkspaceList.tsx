@@ -170,7 +170,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
           const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
           try {
-            const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService/index.js');
+            const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService');
             const allChanges = await gitDiffChangedFiles(workspace);
 
             for (const change of allChanges) {
@@ -236,7 +236,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
             renderItem={({ item }) => (
               <ReorderableWorkspaceListItem
                 item={item}
-                pendingChangesCount={pendingChangesCountMap[item.id] ?? { main: 0, subWikis: 0 }}
+                pendingChangesCount={pendingChangesCountMap[item.id] ?? { main: 0, subWikis: 0, unpushed: 0 }}
                 onPress={onPress}
                 onPressSettings={onPressSettings}
                 onLongPress={onLongPress}
@@ -256,7 +256,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
             renderItem={({ item }) => (
               <PlainWorkspaceListItem
                 item={item}
-                pendingChangesCount={pendingChangesCountMap[item.id] ?? { main: 0, subWikis: 0 }}
+                pendingChangesCount={pendingChangesCountMap[item.id] ?? { main: 0, subWikis: 0, unpushed: 0 }}
                 onPress={onPress}
                 onPressSettings={onPressSettings}
                 onLongPress={onLongPress}

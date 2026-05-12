@@ -19,8 +19,8 @@ jobs:
     name: Build iOS Simulator app (debug)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
         with:
           version: 10
       - uses: actions/setup-node@v6
@@ -33,7 +33,7 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
@@ -73,7 +73,7 @@ jobs:
       - name: Install CocoaPods dependencies
         run: cd ios && pod install --repo-update
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         name: Cache CocoaPods
         with:
           path: ios/Pods
@@ -107,7 +107,7 @@ jobs:
           fi
 
       - name: Upload iOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ios-simulator-app-${{ github.run_number }}-${{ github.sha }}
           path: /tmp/ios-artifacts/

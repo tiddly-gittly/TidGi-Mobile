@@ -530,7 +530,6 @@ export class GitBackgroundSyncService {
         // Don't throw — fetch succeeded so local is at least up-to-date
       } else {
         workspaceLogger.log('Standard git: push succeeded');
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }
 

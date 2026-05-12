@@ -29,8 +29,8 @@ jobs:
     name: Install and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
         with:
           version: 10
       - uses: actions/setup-node@v6
@@ -38,12 +38,12 @@ jobs:
           node-version: 22.x
           cache: pnpm
       - name: Set Up JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu' # See 'Supported distributions' for available options
           java-version: '17'
       - name: Setup Gradle # fix `incompatible version of Kotlin. The binary version of its metadata is 1.9.0, expected version is 1.7.1.`
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.10.2 # use the gradle version I saw on eas build's console, which might match the kotlin version?
       - name: Set Build Tools Version
@@ -55,7 +55,7 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
@@ -72,7 +72,7 @@ jobs:
           pnpm run lint
 
       ## configure cash for gradle : will help to reduce build time
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         name: Cache Gradle Wrapper and Dependencies
         with:
           path: |

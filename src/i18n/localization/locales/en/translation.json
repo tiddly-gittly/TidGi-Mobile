@@ -717,7 +717,10 @@
     "MigratingStorage": "Migrating Storage",
     "MigrationConfirm": "Move all wiki files {{direction}}? This may take a while.",
     "ToExternal": "to external storage",
-    "ToInternal": "to internal storage"
+    "ToInternal": "to internal storage",
+    "Performance": "Performance",
+    "EnableQuickLoad": "Enable Directory Lazy Load",
+    "EnableQuickLoadDescription": "When enabled, only tiddler directory metadata is loaded first. Tiddler text content is loaded lazily when opening a tiddler. When disabled, text content is loaded together when opening the wiki."
   },
   "StorageLocation": {
     "PermissionDenied": "Permission Required",

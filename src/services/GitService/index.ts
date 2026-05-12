@@ -76,6 +76,7 @@ const CLONE_RETRY_DELAY_MS = 3_000;
 const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
+const LOCAL_GIT_INFO_ATTRIBUTES_RULE = '* text=auto eol=lf';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -205,11 +206,19 @@ function deduplicateNFC(
 
 const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_FILE_EXTENSIONS = new Set(['.tid', '.js', '.ts', '.tsx', '.json', '.md', '.txt', '.css', '.html', '.xml', '.yml', '.yaml', '.meta']);
+const LINE_ENDING_NORMALIZATION_EXTENSIONS = new Set([...TEXT_FILE_EXTENSIONS, '.info', '.ini', '.svg', '.toml']);
+const LINE_ENDING_NORMALIZATION_FILE_NAMES = new Set(['.editorconfig', '.gitattributes', '.gitignore', '.gitmodules']);
 
 function getFileExtension(filePath: string): string {
   const dotIndex = filePath.lastIndexOf('.');
   if (dotIndex < 0) return '';
   return filePath.slice(dotIndex).toLowerCase();
+}
+
+function getFileName(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const slashIndex = normalizedPath.lastIndexOf('/');
+  return slashIndex >= 0 ? normalizedPath.slice(slashIndex + 1) : normalizedPath;
 }
 
 function getImageMimeType(filePath: string): string {
@@ -239,6 +248,149 @@ function isImageFile(filePath: string): boolean {
   return IMAGE_FILE_EXTENSIONS.has(getFileExtension(filePath));
 }
 
+function shouldNormalizeLineEndings(filePath: string): boolean {
+  const fileName = getFileName(filePath).toLowerCase();
+  if (LINE_ENDING_NORMALIZATION_FILE_NAMES.has(fileName)) return true;
+  return LINE_ENDING_NORMALIZATION_EXTENSIONS.has(getFileExtension(fileName));
+}
+
+function normalizeLineEndingsToLF(content: string): string {
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+async function readUtf8File(path: string): Promise<string> {
+  if (isExternalPath(path)) {
+    return ExternalStorage.readFileUtf8(path);
+  }
+  return FileSystemLegacy.readAsStringAsync(toFileUri(path), { encoding: FileSystemLegacy.EncodingType.UTF8 });
+}
+
+async function writeUtf8File(path: string, content: string): Promise<void> {
+  if (isExternalPath(path)) {
+    await ExternalStorage.writeFileUtf8(path, content);
+    return;
+  }
+  await FileSystemLegacy.writeAsStringAsync(toFileUri(path), content, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+}
+
+async function ensureDirectoryExists(path: string): Promise<void> {
+  if (isExternalPath(path)) {
+    const info = await ExternalStorage.getInfo(path).catch(() => ({ exists: false, isDirectory: false }));
+    if (!info.exists) {
+      await ExternalStorage.mkdir(path);
+    }
+    return;
+  }
+
+  const info = await FileSystemLegacy.getInfoAsync(toFileUri(path));
+  if (!info.exists) {
+    await FileSystemLegacy.makeDirectoryAsync(toFileUri(path), { intermediates: true });
+  }
+}
+
+async function listAllFilesInternal(directory: string): Promise<string[]> {
+  const results: string[] = [];
+  const directoryUri = `${toFileUri(directory).replace(/\/+$/, '')}/`;
+
+  let entries: string[] = [];
+  try {
+    entries = await FileSystemLegacy.readDirectoryAsync(directoryUri);
+  } catch {
+    return results;
+  }
+
+  for (const entry of entries) {
+    if (entry === '.git') continue;
+    const entryUri = `${directoryUri}${entry}`;
+    const info = await FileSystemLegacy.getInfoAsync(entryUri);
+    if (!info.exists) continue;
+    if (info.isDirectory) {
+      results.push(...await listAllFilesInternal(toPlainPath(entryUri)));
+      continue;
+    }
+    results.push(toPlainPath(entryUri));
+  }
+
+  return results;
+}
+
+async function listAllRepositoryFiles(directory: string): Promise<string[]> {
+  if (isExternalPath(directory)) {
+    const plainDirectory = directory.replace(/\/+$/, '');
+    const relativePaths = await ExternalStorage.readDirRecursive(plainDirectory).catch(() => [] as string[]);
+    return relativePaths
+      .filter(relativePath => !relativePath.startsWith('.git/'))
+      .map(relativePath => `${plainDirectory}/${relativePath}`);
+  }
+
+  return listAllFilesInternal(directory);
+}
+
+async function normalizeRepositoryTextFilesToLF(directory: string): Promise<number> {
+  const filePaths = await listAllRepositoryFiles(directory);
+  let normalizedCount = 0;
+
+  for (const filePath of filePaths) {
+    if (!shouldNormalizeLineEndings(filePath)) continue;
+
+    let content: string;
+    try {
+      content = await readUtf8File(filePath);
+    } catch {
+      continue;
+    }
+
+    const normalizedContent = normalizeLineEndingsToLF(content);
+    if (normalizedContent === content) continue;
+
+    await writeUtf8File(filePath, normalizedContent);
+    normalizedCount += 1;
+  }
+
+  return normalizedCount;
+}
+
+const gitAttributesAppliedDirectories = new Set<string>();
+const clearGitTextCheckoutPolicyCache = (directory: string) => {
+  gitAttributesAppliedDirectories.delete(directory);
+  gitConfigAppliedDirectories.delete(directory);
+};
+
+async function ensureGitAttributesForMobile(directory: string): Promise<void> {
+  if (gitAttributesAppliedDirectories.has(directory)) return;
+
+  const infoDirectory = `${directory}/.git/info`;
+  const attributesPath = `${infoDirectory}/attributes`;
+  await ensureDirectoryExists(infoDirectory);
+
+  let existing = '';
+  try {
+    existing = normalizeLineEndingsToLF(await readUtf8File(attributesPath));
+  } catch {
+    existing = '';
+  }
+
+  const existingRules = existing.split('\n').map(line => line.trim());
+  if (!existingRules.includes(LOCAL_GIT_INFO_ATTRIBUTES_RULE)) {
+    const updated = existing === '' || existing.endsWith('\n')
+      ? `${existing}${LOCAL_GIT_INFO_ATTRIBUTES_RULE}\n`
+      : `${existing}\n${LOCAL_GIT_INFO_ATTRIBUTES_RULE}\n`;
+    await writeUtf8File(attributesPath, updated);
+  }
+
+  gitAttributesAppliedDirectories.add(directory);
+}
+
+async function ensureGitTextCheckoutPolicy(directory: string, options: { normalizeWorkingTreeTextFiles?: boolean } = {}): Promise<void> {
+  await ensureGitAttributesForMobile(directory);
+  await ensureGitConfigForMobile(directory);
+
+  if (options.normalizeWorkingTreeTextFiles === true) {
+    const normalizedCount = await normalizeRepositoryTextFilesToLF(directory);
+    console.log(`[ensureGitTextCheckoutPolicy] Normalized ${normalizedCount} files to LF in ${directory}`);
+  }
+}
+
 // ── Clone ──────────────────────────────────────────────────────────
 
 export async function gitClone(
@@ -250,6 +402,8 @@ export async function gitClone(
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
   const directory = toPlainPath(workspace.wikiFolderLocation);
+
+  clearGitTextCheckoutPolicyCache(directory);
 
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
@@ -263,7 +417,9 @@ export async function gitClone(
         console.log('[gitClone] Fast archive clone succeeded');
         return;
       }
+      clearGitTextCheckoutPolicyCache(directory);
     } catch (error) {
+      clearGitTextCheckoutPolicyCache(directory);
       const message = (error as Error).message;
       if (isConnectionAbortError(message)) {
         console.warn('[gitClone] Archive download interrupted:', message);
@@ -273,7 +429,20 @@ export async function gitClone(
     }
   }
 
-  // Native JGit clone
+  // Native JGit clone — ensure directory is empty before first attempt.
+  // tryArchiveClone may have left partial files on failure.
+  try {
+    if (isExternalPath(directory)) {
+      const info = await ExternalStorage.getInfo(directory);
+      if (info.exists) await ExternalStorage.rmdir(directory);
+      await ExternalStorage.mkdir(directory);
+    } else {
+      await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+      await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+    }
+  } catch (cleanupError) {
+    console.warn('[gitClone] Failed to prepare directory before native clone:', cleanupError);
+  }
   console.log('Git clone strategy: native JGit');
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= CLONE_MAX_RETRIES; attempt++) {
@@ -296,6 +465,11 @@ export async function gitClone(
     }
     try {
       await gitCloneNative(remote, url, directory, onProgress);
+      try {
+        await ensureGitTextCheckoutPolicy(directory);
+      } catch (policyError) {
+        console.warn('[gitClone] Failed to apply local git text checkout policy after native clone:', (policyError as Error).message);
+      }
       return;
     } catch (error) {
       lastError = error as Error;
@@ -394,6 +568,7 @@ async function tryArchiveClone(
   } catch { /* ignore */ }
 
   await configureGitRemote(directory, remote);
+  await ensureGitTextCheckoutPolicy(directory, { normalizeWorkingTreeTextFiles: true });
 
   console.log('[archiveClone] Rebuilding .git/index…');
   onProgress?.('Building git index…', 0, 0);
@@ -496,6 +671,8 @@ export async function ensureGitConfigForMobile(directory: string): Promise<void>
   if (gitConfigAppliedDirectories.has(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
+    ['core', null, 'autocrlf', 'false'],
+    ['core', null, 'eol', 'lf'],
     // Disable delta compression entirely — mobile only pushes small changes,
     // and delta search over large object stores causes OOM.
     ['pack', null, 'window', '2'],
@@ -527,7 +704,6 @@ export async function gitPushToIncoming(
   const directory = toPlainPath(workspace.wikiFolderLocation);
   await ensureGitConfigForMobile(directory);
   const branch = await getCurrentBranch(directory);
-  void headersToJson(remote);
 
   // Use bundle-based push to avoid JGit's HTTP push protocol bug:
   // SmartHttpPushConnection's MultiRequestService throws
@@ -597,7 +773,7 @@ export async function gitFetchAndReset(
   );
   const headBefore = headBeforeResult.ok ? (headBeforeResult.oid ?? '') : '';
 
-  await ensureGitConfigForMobile(directory);
+  await ensureGitTextCheckoutPolicy(directory);
 
   // Request a bundle from the desktop containing commits we don't have
   const bundleUrl = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}/create-bundle`;
@@ -1020,6 +1196,7 @@ export async function gitInit(workspace: IWikiWorkspace): Promise<void> {
     const resultJson = await ExternalStorage.gitInit(directory, 'main');
     const result = parseNativeResult<{ ok: boolean; error?: string }>(resultJson);
     if (!result.ok) throw new Error(result.error ?? 'Unknown init error');
+    await ensureGitTextCheckoutPolicy(directory);
     console.log(`Initialized git repository at ${directory}`);
   } catch (error) {
     console.error(`Git init failed: ${(error as Error).message}`);

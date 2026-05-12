@@ -208,7 +208,10 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               }
               if (oldWiki.type !== 'wiki') return;
               // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
-              const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? LAST_SYNC_TO_SYNC_ALL;
+              const lastSync = oldWiki.syncedServers.reduce<number>(
+                (max, server) => (server.lastSync > max ? server.lastSync : max),
+                LAST_SYNC_TO_SYNC_ALL,
+              );
               console.log(`Add new server to wiki ${oldWiki.name} with last sync ${lastSync} to server ${newServerID}`);
               const updatedServers = [...oldWiki.syncedServers, {
                 serverID: newServerID,
@@ -220,7 +223,10 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               // Propagate the new server to all sub-wikis attached to this main wiki.
               state.workspaces.forEach((workspace) => {
                 if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
-                  const subLastSync = workspace.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? LAST_SYNC_TO_SYNC_ALL;
+                  const subLastSync = workspace.syncedServers.reduce<number>(
+                    (max, server) => (server.lastSync > max ? server.lastSync : max),
+                    LAST_SYNC_TO_SYNC_ALL,
+                  );
                   const subUpdatedServers = [...workspace.syncedServers, {
                     serverID: newServerID,
                     lastSync: subLastSync,

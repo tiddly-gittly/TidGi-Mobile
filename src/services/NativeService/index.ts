@@ -84,7 +84,7 @@ export class NativeService {
     if (!navigationReference.isReady()) return;
     const currentRoute = navigationReference.getCurrentRoute();
     if (currentRoute?.name !== 'WikiWebView') return;
-    return this.#getWikiById(currentRoute.params.id);
+    return this.#getWikiById(currentRoute?.params?.id);
   }
 
   #resolveShareTargetWorkspace(): IWikiWorkspace | undefined {

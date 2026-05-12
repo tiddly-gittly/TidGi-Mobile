@@ -131,7 +131,10 @@ export async function migrateWorkspaceStorage(
     return currentLocation;
   }
 
-  // Compute new location
+  // Compute new location (kept as plain path for ExternalStorage API; normalized
+  // to a file:// URI when persisted to the store so callers using expo-file-system
+  // `Directory`/`File` directly with `workspace.wikiFolderLocation` work for both
+  // internal and external storage).
   let newLocation: string;
   if (goingToExternal && toExternalPath) {
     const base = toPlainDirectory(toExternalPath);
@@ -217,8 +220,12 @@ export async function migrateWorkspaceStorage(
   }
 
   // Step 4: Update workspace in store
+  // Always persist wikiFolderLocation as a file:// URI for consistency with
+  // internal storage. Code at the ExternalStorage boundary still converts
+  // back to plain paths via `toPlainPath`.
+  const persistedLocation = goingToExternal ? toFileUri(newLocation) : newLocation;
   useWorkspaceStore.getState().update(workspace.id, {
-    wikiFolderLocation: newLocation,
+    wikiFolderLocation: persistedLocation,
     useExternalStorage: goingToExternal,
   });
 
@@ -236,5 +243,5 @@ export async function migrateWorkspaceStorage(
   }
 
   onProgress({ fraction: 1, phase: 'Done', done: total, total });
-  return newLocation;
+  return persistedLocation;
 }

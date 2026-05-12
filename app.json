@@ -56,6 +56,7 @@
       ],
       "expo-tiddlywiki-filesystem-android-external-storage",
       "./expo-plugins/trustHTTPRequests/trust-local-certs.js",
+      "./expo-plugins/arOptional/ar-optional.js",
       [
         "expo-share-intent",
         {

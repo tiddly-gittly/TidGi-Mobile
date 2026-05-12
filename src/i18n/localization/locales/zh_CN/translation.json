@@ -695,7 +695,18 @@
     "FiltersDescription": "使用文件系统路径过滤器控制条目落盘路径。",
     "EnablePathFilter": "启用路径过滤器",
     "EnablePathFilterDescription": "启用后按过滤器结果决定保存路径。",
-    "FileSystemPathFilter": "文件系统路径过滤器"
+    "FileSystemPathFilter": "文件系统路径过滤器",
+    "StorageType": "存储位置",
+    "UseExternalStorage": "存储到设备可见的外部存储",
+    "UseExternalStorageHintExternal": "文件存储在 /sdcard/Documents/TidGi/（对其他应用可见）。",
+    "UseExternalStorageHintInternal": "文件存储在应用内部存储（私有）。",
+    "MigratingStorage": "迁移存储中",
+    "MigrationConfirm": "将所有 wiki 文件{{direction}}？这可能需要一些时间。",
+    "ToExternal": "迁移到外部存储",
+    "ToInternal": "迁移到内部存储",
+    "Performance": "性能",
+    "EnableQuickLoad": "启用目录懒加载",
+    "EnableQuickLoadDescription": "启用后仅加载条目目录，条目内容将在打开条目时才懒加载。关闭后会在打开知识库时一起读取并加载条目文本。"
   },
   "StorageLocation": {
     "PermissionDenied": "需要权限",
