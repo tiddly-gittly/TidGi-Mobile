@@ -16,7 +16,7 @@ export function getOrCreateWikiStorageService(workspace: IWikiWorkspace): FileSy
 
 export async function getReadyWikiStorageService(workspace: IWikiWorkspace): Promise<FileSystemWikiStorageService> {
   const service = getOrCreateWikiStorageService(workspace);
-  service.indexReady ||= service.buildFileIndex();
+  service.indexReady = service.buildFileIndex();
   await service.indexReady;
   return service;
 }

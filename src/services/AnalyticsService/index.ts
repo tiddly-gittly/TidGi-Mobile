@@ -85,7 +85,7 @@ async function readSecrets(): Promise<IAnalyticsSecretSettings> {
 }
 
 function createDeviceId(): string {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
+  if (typeof globalThis.crypto.randomUUID === 'function') {
     return globalThis.crypto.randomUUID();
   }
 
@@ -99,7 +99,7 @@ async function getOrCreateDeviceId(): Promise<string> {
   }
 
   const nextDeviceId = createDeviceId();
-  expoFileSystemStorage.setItem(ANALYTICS_SECRETS_KEY, { ...secrets, deviceId: nextDeviceId });
+  (expoFileSystemStorage.setItem as (name: string, value: unknown) => void)(ANALYTICS_SECRETS_KEY, { ...secrets, deviceId: nextDeviceId });
   return nextDeviceId;
 }
 
@@ -213,7 +213,7 @@ export async function trackMobileAppLaunch(): Promise<void> {
     daysSinceLastLaunch = Math.floor((now.getTime() - lastDate.getTime()) / 86_400_000);
   }
 
-  expoFileSystemStorage.setItem(ANALYTICS_SECRETS_KEY, {
+  (expoFileSystemStorage.setItem as (name: string, value: unknown) => void)(ANALYTICS_SECRETS_KEY, {
     ...secrets,
     deviceFirstLaunchDate: firstLaunchDate,
     deviceLastLaunchDate: todayDate,
@@ -221,7 +221,7 @@ export async function trackMobileAppLaunch(): Promise<void> {
 
   await trackMobileEvent('app.launched', {
     platform: Platform.OS,
-    version: Application.nativeApplicationVersion ?? Application.applicationVersion ?? 'unknown',
+    version: Application.nativeApplicationVersion ?? 'unknown',
     firstLaunchDate,
     isFirstLaunch,
     ...(daysSinceLastLaunch !== undefined ? { daysSinceLastLaunch } : {}),

@@ -170,7 +170,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
           const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
           try {
-            const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService');
+            const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService/index.js');
             const allChanges = await gitDiffChangedFiles(workspace);
 
             for (const change of allChanges) {
