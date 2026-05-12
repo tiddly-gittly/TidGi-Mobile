@@ -30,9 +30,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.x
+          cache: pnpm
       - name: Set Up JDK
         uses: actions/setup-java@v3
         with:
@@ -46,13 +50,26 @@ jobs:
         run: |
           echo "BUILD_TOOLS_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | sort -V | tail -n 1)" >> $GITHUB_ENV
 
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
       - name: Install dependencies
-        run: npm install --force
+        run: pnpm install
 
       - name: Type check and lint
         run: |
-          npm run check
-          npm run lint
+          pnpm run check
+          pnpm run lint
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v4
@@ -67,12 +84,11 @@ jobs:
 
       - name: Build tw plugins & scripts
         run: |
-          cd plugins && npm i && cd ..
-          npm run build:plugin
-          npm run build:tw-assets
+          pnpm run build:plugin
+          pnpm run build:tw-assets
 
       - name: Build by eject eas and not remove debug signing key for apk
-        run: npx expo prebuild -p android --clean
+        run: pnpm exec expo prebuild -p android --clean
 
       # Don't need this, because we already remove expo-application that blocks f-droid https://github.com/tiddly-gittly/TidGi-Mobile/issues/6
       # - name: Remove prorietary bits (for fix f-droid)
