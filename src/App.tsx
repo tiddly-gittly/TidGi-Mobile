@@ -41,6 +41,7 @@ const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
 `;
 import { initializeMobileLogger } from './services/LoggerService';
+import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
@@ -75,6 +76,10 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     initializeMobileLogger();
+    const cleanupAnalytics = initializeMobileAnalytics();
+    void trackMobileAppLaunch();
+
+    return cleanupAnalytics;
   }, []);
 
   return (

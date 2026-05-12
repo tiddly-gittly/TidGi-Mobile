@@ -366,6 +366,8 @@
     "RememberLastVisitState": "Remember last page visited, restore last visit state on open",
     "Network": "Network",
     "PrivacyAndSecurity": "Privacy & Security",
+    "AnalyticsOptOut": "Opt out of usage analytics",
+    "AnalyticsOptOutDescription": "Turn this on to stop sending privacy-safe product analytics from TidGi Mobile.",
     "ShareBrowsingData": "Share browsing data (cookies, cache) between workspaces, if this is off, you can login into different 3rd party service in each workspace.",
     "IgnoreCertificateErrors": "Ignore network certificate errors",
     "ClearBrowsingDataDescription": "Clear cookies, cache, and more",

@@ -22,6 +22,7 @@ import type { IChangedTiddlers, ITiddlerFields, ITiddlerFieldsParameter } from '
 import { getWikiTiddlerFolderPath } from '../../constants/paths';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
 import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTidFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
@@ -294,6 +295,7 @@ export class FileSystemWikiStorageService {
       // If yes → overwrite in place (reuse existing path). This prevents
       // unnecessary file moves and echo loops, matching desktop behavior.
       const oldPath = this.#tiddlerFilePathByTitle.get(title);
+      const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
       let fullPath: string;
 
       if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory)) {
@@ -345,6 +347,10 @@ export class FileSystemWikiStorageService {
       // Update registries (≈ desktop boot.files[title] = savedFileInfo)
       this.#tiddlerFilePathByTitle.set(title, fullPath);
       this.#titleByFilePath.set(toPlainPath(fullPath), title);
+
+      if (shouldTrackCreatedUserTiddler) {
+        void trackNewUserTiddlerCreated(targetWorkspace.isSubWiki === true);
+      }
 
       return Etag;
     } catch (error) {

@@ -403,6 +403,8 @@
     "Languages": "语言/Lang",
     "Performance": "性能",
     "PrivacyAndSecurity": "隐私和安全",
+    "AnalyticsOptOut": "退出使用分析统计",
+    "AnalyticsOptOutDescription": "开启后，太记移动端将停止发送不含内容和隐私数据的产品使用统计。",
     "AskDownloadLocation": "下载前询问每个文件的保存位置",
     "ClearBrowsingDataDescription": "清除Cookie、缓存等",
     "DeveloperTools": "开发者工具",

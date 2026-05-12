@@ -114,6 +114,19 @@ export const preferenceSections: PreferenceSectionSchema[] = [
     ],
   },
   {
+    id: 'privacy',
+    titleKey: 'Preference.PrivacyAndSecurity',
+    items: [
+      {
+        type: 'toggle',
+        key: 'analytics-opt-out',
+        titleKey: 'Preference.AnalyticsOptOut',
+        descriptionKey: 'Preference.AnalyticsOptOutDescription',
+        configKey: 'analyticsOptOut',
+      },
+    ],
+  },
+  {
     id: 'shared',
     titleKey: 'Preference.Shared',
     items: [
