@@ -31,6 +31,7 @@ const ANALYTICS_PATHNAME = '/mobile';
 const ANALYTICS_SECRETS_KEY = 'analytics-secrets';
 const ANALYTICS_SITE_ID = 'ea075d0b269d';
 const DEFAULT_TIMEOUT_MS = 5000;
+const MAX_QUEUED_EVENTS = 100;
 
 const allowedPropertiesByEvent: Record<MobileAnalyticsEventName, ReadonlySet<string>> = {
   'app.launched': new Set(['platform', 'version', 'firstLaunchDate', 'daysSinceLastLaunch', 'isFirstLaunch']),
@@ -189,6 +190,9 @@ export async function trackMobileEvent(eventName: MobileAnalyticsEventName, prop
   const sent = await sendEvent(eventName, sanitizedProperties);
   if (!sent) {
     queuedEvents.push({ eventName, properties: sanitizedProperties });
+    if (queuedEvents.length > MAX_QUEUED_EVENTS) {
+      queuedEvents.shift();
+    }
   }
 }
 
