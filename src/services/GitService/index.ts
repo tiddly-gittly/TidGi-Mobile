@@ -112,9 +112,18 @@ function createAuthHeader(remote: Pick<IGitRemote, 'token' | 'tokenAuthHeaderNam
   const tokenAuthHeaderName = typeof remote.tokenAuthHeaderName === 'string' && remote.tokenAuthHeaderName.length > 0
     ? remote.tokenAuthHeaderName
     : (remote.token ? `${DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX}-${remote.token}` : undefined);
-  const tokenAuthHeaderValue = typeof remote.tokenAuthHeaderValue === 'string' && remote.tokenAuthHeaderValue.length > 0
+  const rawTokenAuthHeaderValue = typeof remote.tokenAuthHeaderValue === 'string' && remote.tokenAuthHeaderValue.length > 0
     ? remote.tokenAuthHeaderValue
     : (remote.token ? DEFAULT_TIDGI_USER_NAME : undefined);
+
+  // HTTP header values must be printable ASCII (RFC 7230). Encode non-ASCII
+  // characters (e.g. CJK display names used as tokenAuthHeaderValue) with
+  // percent-encoding so OkHttp / native HTTP stacks don't reject the request.
+  const tokenAuthHeaderValue = rawTokenAuthHeaderValue === undefined
+    ? undefined
+    : /[^\x20-\x7E]/.test(rawTokenAuthHeaderValue)
+      ? encodeURIComponent(rawTokenAuthHeaderValue)
+      : rawTokenAuthHeaderValue;
 
   if (tokenAuthHeaderName && tokenAuthHeaderValue) {
     headers[tokenAuthHeaderName] = tokenAuthHeaderValue;
