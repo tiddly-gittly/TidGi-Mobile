@@ -263,7 +263,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           } catch {
             // Re-decode as if the bytes were incorrectly treated as Latin-1
             try {
-              const bytes = Uint8Array.from({ length: cleaned.length }, (_, i) => cleaned.charCodeAt(i));
+              const bytes = Uint8Array.from({ length: cleaned.length }, (_, index) => cleaned.charCodeAt(index));
               const reDecoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
               return JSON.parse(reDecoded);
             } catch {
