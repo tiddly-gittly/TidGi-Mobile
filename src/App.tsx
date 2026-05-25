@@ -40,8 +40,8 @@ if (typeof global.Buffer === 'undefined') {
 const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
 `;
-import { initializeMobileLogger } from './services/LoggerService';
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
+import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';

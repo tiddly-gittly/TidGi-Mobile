@@ -122,8 +122,8 @@ function createAuthHeader(remote: Pick<IGitRemote, 'token' | 'tokenAuthHeaderNam
   const tokenAuthHeaderValue = rawTokenAuthHeaderValue === undefined
     ? undefined
     : /[^\x20-\x7E]/.test(rawTokenAuthHeaderValue)
-      ? encodeURIComponent(rawTokenAuthHeaderValue)
-      : rawTokenAuthHeaderValue;
+    ? encodeURIComponent(rawTokenAuthHeaderValue)
+    : rawTokenAuthHeaderValue;
 
   if (tokenAuthHeaderName && tokenAuthHeaderValue) {
     headers[tokenAuthHeaderName] = tokenAuthHeaderValue;
