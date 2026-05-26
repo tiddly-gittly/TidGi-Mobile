@@ -27,6 +27,21 @@ The test runner needs two APKs built by CI.
 You do **not** need a local Android SDK or Gradle — only `adb`.
 
 1. Trigger the **Build Dev Client APK** GitHub Actions workflow (push a commit or run `workflow_dispatch`)
+
+   > **Monitoring CI from the terminal (PowerShell):**  
+   > `gh run watch` blocks the terminal in a way that prevents reading output in
+   > non-interactive agents. Use a `do-until` polling loop instead:
+   >
+   > ```powershell
+   > # Wait for the run to appear for a given commit SHA
+   > $repo = 'tiddly-gittly/TidGi-Mobile'; $sha = 'abc1234'
+   > do { Start-Sleep 15; $runId = gh run list --repo $repo --limit 30 --json databaseId,headSha,workflowName | ConvertFrom-Json | Where-Object { $_.headSha -like "$sha*" -and $_.workflowName -eq 'Build Dev Client APK' } | Select-Object -First 1 -ExpandProperty databaseId } until ($runId)
+   > Write-Host "Run ID: $runId"
+   >
+   > # Poll until completed
+   > do { Start-Sleep 30; $r = gh run view $runId --repo $repo --json status,conclusion | ConvertFrom-Json; Write-Host "$(Get-Date -Format HH:mm:ss) status=$($r.status) conclusion=$($r.conclusion)" } until ($r.status -eq 'completed')
+   > Write-Host "DONE: $($r.conclusion)"
+   > ```
 2. Download the artifact `dev-client-apks-*` from the Actions run
 3. Extract the two APKs into `e2e/artifacts/apks/`:
    ```
