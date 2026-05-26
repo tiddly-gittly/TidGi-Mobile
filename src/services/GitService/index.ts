@@ -15,6 +15,7 @@ import { IWikiWorkspace } from '../../store/workspace';
 
 export interface IGitRemote {
   baseUrl: string;
+  gitUrl?: string;
   token?: string;
   tokenAuthHeaderName?: string;
   tokenAuthHeaderValue?: string;
@@ -46,6 +47,8 @@ export interface IGitFileContent {
 export const GIT_CLONE_ERROR_OOM = 'WIKI_OOM';
 export const GIT_CLONE_ERROR_TOO_LARGE_PREFIX = 'WIKI_TOO_LARGE:';
 export const GIT_CLONE_ERROR_CONNECTION_ABORT = 'WIKI_CONNECTION_ABORT';
+export const GIT_CLONE_ERROR_NATIVE_UNAVAILABLE =
+  'Native git clone is unavailable in this dev-client APK. Rebuild and reinstall the dev-client APK after updating expo-tiddlywiki-filesystem-android-external-storage.';
 
 function isOOMError(message: string): boolean {
   return (
@@ -66,6 +69,14 @@ function isConnectionAbortError(message: string): boolean {
     message.includes('ECONNRESET') ||
     message.includes('ECONNABORTED') ||
     message.includes('The Internet connection appears to be offline')
+  );
+}
+
+function isMissingNativeGitCloneError(message: string): boolean {
+  return message.includes('gitClone') && (
+    message.includes('not a function') ||
+    message.includes('it is undefined') ||
+    message.includes('undefined')
   );
 }
 
@@ -194,6 +205,16 @@ async function preflightInfoReferences(url: string, headers: Record<string, stri
   if (!response.ok) {
     throw new Error(`Git info/refs failed: ${response.status} ${response.statusText}`);
   }
+}
+
+function shouldIgnorePreflightFailure(message: string): boolean {
+  return (
+    message === 'Network request failed' ||
+    message.startsWith('Git info/refs timeout:') ||
+    isConnectionAbortError(message) ||
+    /ssl/i.test(message) ||
+    /handshake/i.test(message)
+  );
 }
 
 function deduplicateNFC(
@@ -409,7 +430,9 @@ export async function gitClone(
   options: { useStandardGitProtocol?: boolean } = {},
 ): Promise<void> {
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
-  const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+  const url = typeof remote.gitUrl === 'string' && remote.gitUrl.length > 0
+    ? remote.gitUrl
+    : `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
   const directory = toPlainPath(workspace.wikiFolderLocation);
 
   clearGitTextCheckoutPolicyCache(directory);
@@ -497,8 +520,21 @@ async function gitCloneNative(
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   try {
+    if (typeof ExternalStorage.gitClone !== 'function') {
+      throw new Error(GIT_CLONE_ERROR_NATIVE_UNAVAILABLE);
+    }
+
     const headers = normalizeHeaders(createAuthHeader(remote));
-    await preflightInfoReferences(url, headers);
+    try {
+      await preflightInfoReferences(url, headers);
+    } catch (error) {
+      const message = (error as Error).message;
+      if (!shouldIgnorePreflightFailure(message)) {
+        throw error;
+      }
+
+      console.warn(`[gitCloneNative] info/refs preflight failed, falling back to native clone: ${message}`);
+    }
     const estimatedBytes = await tryGetRemotePackSize(url, headers);
     if (estimatedBytes !== null) {
       const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
@@ -516,7 +552,16 @@ async function gitCloneNative(
     onProgress?.('Clone complete', 1, 1);
   } catch (error) {
     const message = (error as Error).message;
-    if (message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) || message === GIT_CLONE_ERROR_OOM) throw error;
+    if (
+      message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) ||
+      message === GIT_CLONE_ERROR_OOM ||
+      message === GIT_CLONE_ERROR_NATIVE_UNAVAILABLE
+    ) {
+      throw error;
+    }
+    if (isMissingNativeGitCloneError(message)) {
+      throw new Error(GIT_CLONE_ERROR_NATIVE_UNAVAILABLE);
+    }
     if (isOOMError(message)) throw new Error(GIT_CLONE_ERROR_OOM);
     if (isConnectionAbortError(message)) throw new Error(GIT_CLONE_ERROR_CONNECTION_ABORT);
     throw new Error(`Failed to clone repository: ${message}`);

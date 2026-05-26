@@ -20,6 +20,7 @@ const ButtonButtonsContainer = styled.View`
   display: flex;
   flex-direction: row;
   justify-content: space-around;
+  padding-bottom: 24px;
 `;
 
 export interface MainMenuProps {

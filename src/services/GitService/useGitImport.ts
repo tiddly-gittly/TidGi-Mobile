@@ -18,6 +18,7 @@ function isExternalPath(filepath: string): boolean {
 
 export interface IGitImportQRCode {
   baseUrl: string;
+  gitUrl?: string;
   /** Token is optional - empty/undefined means anonymous access (insecure) */
   token?: string;
   tokenAuthHeaderName?: string;
@@ -157,6 +158,7 @@ export function useGitImport() {
       setStatus('cloning');
       const remote: IGitRemote = {
         baseUrl: qrData.baseUrl,
+        gitUrl: qrData.gitUrl,
         workspaceId: qrData.workspaceId,
         token: qrData.token,
         tokenAuthHeaderName: qrData.tokenAuthHeaderName,

@@ -1,4 +1,16 @@
 {
+  "defaultTemplates": [
+    {
+      "contribute": "",
+      "description": "从太记默认模板 Git 仓库创建一个干净的新 wiki 工作区",
+      "gitUrl": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "language": "zh_CN",
+      "tags": "WikiTemplates GitTemplate",
+      "testIdKey": "tidgi-default-template",
+      "title": "太记默认模板",
+      "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template"
+    }
+  ],
   "onlineSources": [
     "https://tidgi.fun/recipes/default/tiddlers.json?filter=[tag[WikiTemplates]tag[ServerList]]"
   ]

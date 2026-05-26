@@ -41,7 +41,7 @@ export function CreateWebpageShortcutTab() {
           onPreviewPress={(uri: string) => {
             navigation.navigate('PreviewWebView', { uri });
           }}
-          onUsePress={(uri: string) => {
+          onUsePress={(_item: ITemplateListItem, uri: string) => {
             newPageUrlSetter(uri);
           }}
         />

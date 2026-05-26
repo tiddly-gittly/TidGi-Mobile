@@ -7,11 +7,10 @@ import { RootStackParameterList } from '../App';
 
 const MainFeatureButton = styled(Button)`
   margin: 10px;
-  /* Use height: 3em will cause label to disappear on iOS */
-  min-height: 3em;
 `;
 /** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
 const ButtonLabelPadding = 15;
+const ButtonMinHeight = 56;
 
 export function ImporterButton() {
   const { t } = useTranslation();
@@ -20,6 +19,7 @@ export function ImporterButton() {
   return (
     <MainFeatureButton
       testID='import-wiki-button'
+      contentStyle={{ minHeight: ButtonMinHeight }}
       mode='outlined'
       onPress={() => {
         navigation.navigate('Importer', {});
@@ -37,6 +37,8 @@ export function CreateWorkspaceButton() {
 
   return (
     <MainFeatureButton
+      testID='create-workspace-button'
+      contentStyle={{ minHeight: ButtonMinHeight }}
       mode='outlined'
       onPress={() => {
         navigation.navigate('CreateWorkspace');

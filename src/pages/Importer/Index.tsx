@@ -72,6 +72,10 @@ const ResetButton = styled(Button)`
 
 export interface ImporterProps {
   /**
+   * Direct standard-git repository URL used for template-based imports.
+   */
+  gitUrl?: string;
+  /**
    * Save the URI as a server to workspace. Default to `true`.
    */
   addAsServer?: boolean;
@@ -83,13 +87,49 @@ export interface ImporterProps {
    * The URI to auto fill the server URI input
    */
   uri?: string;
+  /**
+   * Preferred workspace name when importing directly from a git repository URL.
+   */
+  workspaceName?: string;
+}
+
+function normalizeGitRepositoryUrl(rawUrl: string): string {
+  const parsed = new URL(rawUrl);
+  parsed.hash = '';
+  parsed.search = '';
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  if (parsed.hostname.toLowerCase() === 'github.com' && !parsed.pathname.endsWith('.git')) {
+    parsed.pathname = `${parsed.pathname}.git`;
+  }
+  return parsed.toString();
+}
+
+function deriveWorkspaceNameFromGitUrl(gitUrl: string): string {
+  const parsed = new URL(gitUrl);
+  const lastSegment = parsed.pathname.split('/').filter(Boolean).pop() ?? 'wiki';
+  return decodeURIComponent(lastSegment).replace(/\.git$/i, '');
+}
+
+function deriveWorkspaceIdFromGitUrl(gitUrl: string, preferredName?: string): string {
+  const baseName = preferredName ?? deriveWorkspaceNameFromGitUrl(gitUrl);
+  const slug = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const safeSlug = slug.length > 0 ? slug : 'wiki';
+  return `${safeSlug}-${Date.now().toString(36)}`;
 }
 
 export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
+  const autoImportTriggeredReference = useRef(false);
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
+  const directGitUrl = route.params.gitUrl === undefined ? undefined : normalizeGitRepositoryUrl(route.params.gitUrl);
+  const [wikiUrl, setWikiUrl] = useState<undefined | URL>(() => {
+    const initialUrl = directGitUrl ?? route.params.uri;
+    return initialUrl === undefined ? undefined : new URL(new URL(initialUrl).origin);
+  });
   const [wikiName, setWikiName] = useState('');
   const [qrData, setQrData] = useState<GitQRData | undefined>();
   const [manualEdit, setManualEdit] = useState(false);
@@ -107,23 +147,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const addAsServer = route.params.addAsServer ?? true;
 
   const reachableServers = allServers.filter(server => reachableServerIDs.includes(server.id));
-
-  useEffect(() => {
-    // Lazy camera permission: only check permission status, don't request it.
-    // This avoids heavy Camera module initialization that can block the main
-    // thread and interfere with Espresso/Detox. The actual permission request
-    // happens when the user taps the QR scanner button.
-    const checkCameraPermission = async () => {
-      try {
-        const { status } = await Camera.getCameraPermissionsAsync();
-        setHasPermission(status === PermissionStatus.GRANTED);
-      } catch {
-        setHasPermission(false);
-      }
-    };
-
-    void checkCameraPermission();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +188,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         previous.baseUrl === qr.baseUrl &&
         previous.workspaceId === qr.workspaceId &&
         previous.workspaceName === qr.workspaceName &&
+        previous.gitUrl === qr.gitUrl &&
         previous.token === qr.token &&
         previous.tokenAuthHeaderName === qr.tokenAuthHeaderName &&
         previous.tokenAuthHeaderValue === qr.tokenAuthHeaderValue
@@ -204,6 +228,22 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       // Invalid JSON, ignore
     }
   }, [fillFromQRCodeData]);
+
+  useEffect(() => {
+    if (directGitUrl === undefined) return;
+
+    const preferredWorkspaceName = route.params.workspaceName ?? deriveWorkspaceNameFromGitUrl(directGitUrl);
+    fillFromQRCodeData({
+      baseUrl: new URL(directGitUrl).origin,
+      gitUrl: directGitUrl,
+      workspaceId: deriveWorkspaceIdFromGitUrl(directGitUrl, preferredWorkspaceName),
+      workspaceName: preferredWorkspaceName,
+    });
+    setUseStandardGitProtocol(true);
+    setManualEdit(false);
+    setShowSavedServers(false);
+    setQrScannerOpen(false);
+  }, [directGitUrl, fillFromQRCodeData, route.params.workspaceName]);
 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
@@ -330,7 +370,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setQrScannerOpen(false);
 
     if (addAsServer) {
-      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
+      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
 
       if (qrData) {
         // Collect batch items
@@ -385,6 +425,19 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setWikiUrl(undefined);
     setQrData(undefined);
   }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, useExternalStorage, useStandardGitProtocol, t]);
+
+  useEffect(() => {
+    if (route.params.autoStartImport !== true) return;
+    if (qrData === undefined) return;
+    if (importStatus !== 'idle') return;
+    if (autoImportTriggeredReference.current) return;
+
+    autoImportTriggeredReference.current = true;
+    void addServerAndImport().catch((error: unknown) => {
+      autoImportTriggeredReference.current = false;
+      console.error('Auto-start import failed:', error);
+    });
+  }, [addServerAndImport, importStatus, qrData, route.params.autoStartImport]);
 
   const serverConfigs = (
     <ImporterServerConfigs
@@ -564,7 +617,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           )}
           <Button
             mode='elevated'
-            onPress={resetState}
+            onPress={() => {
+              autoImportTriggeredReference.current = false;
+              resetState();
+            }}
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
           </Button>
@@ -625,7 +681,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           ))}
           <ResetButton
             mode='text'
-            onPress={resetState}
+            onPress={() => {
+              autoImportTriggeredReference.current = false;
+              resetState();
+            }}
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
           </ResetButton>

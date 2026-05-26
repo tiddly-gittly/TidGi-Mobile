@@ -12,8 +12,10 @@ export interface ITemplateListItem {
   contribute: string;
   description: string;
   fallbackUrls?: string | undefined;
+  gitUrl?: string | undefined;
   language: string;
   tags: string;
+  testIdKey?: string | undefined;
   title: string;
   url: string;
 }
@@ -21,15 +23,46 @@ export interface ITemplateListItem {
 interface ITemplateListItemProps {
   item: ITemplateListItem;
   onPreviewPress: (url: string) => void;
-  onUsePress: (url: string) => void;
+  onUsePress: (item: ITemplateListItem, url: string) => void;
+}
+
+function toTemplateTestIdSegment(item: ITemplateListItem): string {
+  if (typeof item.testIdKey === 'string' && item.testIdKey.length > 0) {
+    return item.testIdKey;
+  }
+
+  const source = item.gitUrl ?? item.url;
+  let candidate = item.title;
+
+  try {
+    const parsed = new URL(source);
+    candidate = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() ?? item.title);
+  } catch {
+    candidate = item.title;
+  }
+
+  const normalized = candidate
+    .toLowerCase()
+    .replace(/\.git$/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized.length > 0 ? normalized : 'template';
 }
 
 export function filterTemplate(list: ITemplateListItem[]): ITemplateListItem[] {
   const currentLanguage = i18n.language;
+  const normalizedCurrentLanguage = currentLanguage.toLowerCase().replace(/_/g, '-');
+  const currentLanguageRoot = normalizedCurrentLanguage.split('-')[0];
   /**
    * When language is `zh`, match `zh` and `zh-CN` and `zh-Hans`
    */
-  return list.filter((item) => item.language.startsWith(currentLanguage));
+  return list.filter((item) => {
+    const normalizedItemLanguage = item.language.toLowerCase().replace(/_/g, '-');
+    return normalizedItemLanguage === normalizedCurrentLanguage ||
+      normalizedItemLanguage.startsWith(normalizedCurrentLanguage) ||
+      normalizedCurrentLanguage.startsWith(normalizedItemLanguage) ||
+      normalizedItemLanguage.startsWith(currentLanguageRoot);
+  });
 }
 
 export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplateListItemProps) {
@@ -45,6 +78,7 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
 
   const fallbackUrls = item.fallbackUrls ? item.fallbackUrls.split(' ').filter(Boolean) : [];
   const [selectedUrl, setSelectedUrl] = useState(item.url);
+  const templateTestIdSegment = toTemplateTestIdSegment(item);
 
   const handleSelectUrl = useCallback((url: string) => {
     setSelectedUrl(url);
@@ -59,6 +93,7 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
       </Card.Content>
       <Card.Actions>
         <Button
+          testID={`template-preview-${templateTestIdSegment}`}
           icon='eye-outline'
           mode='text'
           onPress={() => {
@@ -84,10 +119,11 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
           ))}
         </Menu>
         <Button
+          testID={`template-use-${templateTestIdSegment}`}
           icon='plus'
           mode='text'
           onPress={() => {
-            onUsePress(selectedUrl);
+            onUsePress(item, selectedUrl);
           }}
         >
           {t('AddWorkspace.Use')}
