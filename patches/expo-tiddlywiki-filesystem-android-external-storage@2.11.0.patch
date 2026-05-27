@@ -15,7 +15,7 @@ index a9ccc8f..a93ebbb 100644
  dependencies {
 +  coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 -  implementation 'org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r'
-+  implementation 'org.eclipse.jgit:org.eclipse.jgit:6.4.0.202211300538-r'
++  implementation 'org.eclipse.jgit:org.eclipse.jgit:6.2.0.202206071550-r'
    implementation "com.squareup.okhttp3:okhttp:4.12.0"
  }
 diff --git a/app.plugin.js b/app.plugin.js
