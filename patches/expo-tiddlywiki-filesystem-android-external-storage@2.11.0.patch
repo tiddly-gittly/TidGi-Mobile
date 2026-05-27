@@ -1,5 +1,5 @@
 diff --git a/android/build.gradle b/android/build.gradle
-index a9ccc8f..a93ebbb 100644
+index a9ccc8f30680680132b5ea0915775e499ef5d36a..8e882e3dfadd3724ff8bd9e0bf6a2dc9a0910ad1 100644
 --- a/android/build.gradle
 +++ b/android/build.gradle
 @@ -14,12 +14,14 @@ android {
@@ -13,13 +13,27 @@ index a9ccc8f..a93ebbb 100644
  }
  
  dependencies {
-+  coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 -  implementation 'org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r'
++  coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 +  implementation 'org.eclipse.jgit:org.eclipse.jgit:6.2.0.202206071550-r'
    implementation "com.squareup.okhttp3:okhttp:4.12.0"
  }
+diff --git a/android/src/main/java/expo/modules/externalstorage/GitNetwork.kt b/android/src/main/java/expo/modules/externalstorage/GitNetwork.kt
+index 480a17b1be4516eef5280e1b52b2439dd946f488..283e261aa3a680d6cf55319e5cfad7d3b2944ce2 100644
+--- a/android/src/main/java/expo/modules/externalstorage/GitNetwork.kt
++++ b/android/src/main/java/expo/modules/externalstorage/GitNetwork.kt
+@@ -133,9 +133,6 @@ internal object GitNetwork {
+         cloneCommand.setBranchesToClone(listOf("refs/heads/$branch"))
+       }
+ 
+-      if (depth > 0) {
+-        cloneCommand.setDepth(depth)
+-      }
+ 
+       if (noTags) {
+         cloneCommand.setNoTags()
 diff --git a/app.plugin.js b/app.plugin.js
-index b05c1d7..53b8a9a 100644
+index b05c1d7c046e34496663080553252c581fa86e4a..818e8795432368e3c5d3a325a29973dc4bfda11e 100644
 --- a/app.plugin.js
 +++ b/app.plugin.js
 @@ -1,7 +1,34 @@
@@ -73,8 +87,9 @@ index b05c1d7..53b8a9a 100644
  };
  
  module.exports = withExternalStoragePermission;
+\ No newline at end of file
 diff --git a/plugin.js b/plugin.js
-index b05c1d7..53b8a9a 100644
+index b05c1d7c046e34496663080553252c581fa86e4a..818e8795432368e3c5d3a325a29973dc4bfda11e 100644
 --- a/plugin.js
 +++ b/plugin.js
 @@ -1,7 +1,34 @@
