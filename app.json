@@ -75,8 +75,7 @@
         }
       ],
       "expo-background-task",
-      "./expo-plugins/withDetox/with-detox.js",
-      "./expo-plugins/withDesugaring/with-desugaring.js"
+      "./expo-plugins/withDetox/with-detox.js"
     ],
     "extra": {
       "eas": {
