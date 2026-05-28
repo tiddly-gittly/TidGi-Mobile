@@ -117,5 +117,9 @@
     "typescript": "^6.0.2",
     "zx": "^8.4.1"
   },
-  "pnpm": {}
+  "pnpm": {
+    "patchedDependencies": {
+      "expo-tiddlywiki-filesystem-android-external-storage@2.12.0": "patches/expo-tiddlywiki-filesystem-android-external-storage@2.12.0.patch"
+    }
+  }
 }
