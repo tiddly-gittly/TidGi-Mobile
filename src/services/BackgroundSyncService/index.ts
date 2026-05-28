@@ -414,7 +414,7 @@ export class GitBackgroundSyncService {
   private async syncWithBundleProtocol(
     workspace: IWikiWorkspace,
     server: IServerInfo,
-    remote: import('../GitService').IGitRemote,
+    remote: IGitRemote,
     workspaceLogger: ReturnType<typeof logFor>,
   ): Promise<boolean> {
     // ──────────────────────────────────────────────────────────

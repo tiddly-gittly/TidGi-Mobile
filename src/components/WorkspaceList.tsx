@@ -9,6 +9,7 @@ import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReordera
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
+import { gitDiffChangedFiles, gitGetAheadCommitCount } from '../services/GitService';
 import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
 import { SyncIconButton } from './SyncButton';
 
@@ -170,7 +171,6 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
           const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
           try {
-            const { gitDiffChangedFiles, gitGetAheadCommitCount } = await import('../services/GitService/index.js');
             const allChanges = await gitDiffChangedFiles(workspace);
 
             for (const change of allChanges) {
