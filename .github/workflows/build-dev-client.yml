@@ -102,10 +102,12 @@ jobs:
       - name: Expo prebuild (dev-client)
         run: pnpm exec expo prebuild -p android --clean
 
-      - name: Save AndroidManifest (dev-client prebuild)
+      - name: Save Android prebuild diagnostics (dev-client)
         run: |
           mkdir -p /tmp/apk-artifacts
           cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-dev-client.xml
+          cp android/app/build.gradle /tmp/apk-artifacts/app-build.gradle
+          grep -nE "coreLibraryDesugaring|desugar_jdk_libs|compileOptions" android/app/build.gradle || true
 
       - name: Build dev-client APK (debug + androidTest)
         run: |
