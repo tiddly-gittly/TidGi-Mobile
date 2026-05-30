@@ -24,6 +24,13 @@ export interface IServerInfo {
    */
   status: ServerStatus;
   uri: string;
+  /**
+   * Use standard git HTTP protocol (git-upload-pack / git-receive-pack) instead of
+   * TidGi's custom bundle-based sync protocol.
+   * Enable this when syncing with standard git hosts (GitHub, Gitea, etc.).
+   * Default: false (use bundle protocol optimised for TidGi Desktop).
+   */
+  useStandardGitProtocol?: boolean;
 }
 
 export interface ServerState {

@@ -46,6 +46,12 @@ export interface IWikiWorkspace {
   syncedServers: IWikiServerSync[];
   type?: 'wiki';
   /**
+   * Whether this workspace stores files in external (device-visible) storage.
+   * Requires the global MANAGE_EXTERNAL_STORAGE permission to be granted.
+   * When undefined, inherits from the global customWikiFolderPath setting at creation time.
+   */
+  useExternalStorage?: boolean;
+  /**
    * folder path for this wiki workspace
    */
   wikiFolderLocation: string;
@@ -81,6 +87,11 @@ export interface WikiState {
    * created here instead of the default internal document directory.
    */
   customWikiFolderPath: string | null;
+  /**
+   * Explicitly designated default wiki workspace. When null, the first wiki
+   * workspace (excluding system help page) is used as a fallback.
+   */
+  defaultWorkspaceId: string | null;
   workspaces: IWorkspace[];
 }
 interface WikiActions {
@@ -96,6 +107,7 @@ interface WikiActions {
   removeSyncedServersFromWorkspace: (serverIDToRemove: string) => void;
   syncWorkspaceID: (id: string, newID: string) => boolean;
   setCustomWikiFolderPath: (path: string | null) => void;
+  setDefaultWorkspace: (id: string | null) => void;
   setServerActive: (id: string, serverIDToActive: string, isActive?: boolean) => void;
   update: (id: string, newWikiWorkspace: Partial<IWorkspace>) => void;
 }
@@ -110,18 +122,23 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
     persist(
       (set) => ({
         customWikiFolderPath: null,
+        defaultWorkspaceId: null,
         workspaces: defaultWorkspaces,
         add(newWorkspace) {
           let result: IWorkspace | undefined;
           set((state) => {
             switch (newWorkspace.type) {
               case 'wiki': {
-                // When customWikiFolderPath is set (file:// path from MANAGE_EXTERNAL_STORAGE),
-                // use it as the base. Otherwise fall back to internal WIKI_FOLDER_PATH.
-                // Both place wikis under a `wikis/` subdirectory so the parent directory
-                // can also hold `logs/` and other shared data.
+                // Determine base path based on per-workspace useExternalStorage flag.
+                // - If caller passes useExternalStorage=true AND customWikiFolderPath is set → external
+                // - If caller passes useExternalStorage=false explicitly → internal regardless of global setting
+                // - If caller doesn't pass it (undefined) → check global customWikiFolderPath (legacy behaviour)
                 const customPath = state.customWikiFolderPath;
-                const wikiFolderBasePath = customPath
+                const requestedExternal = (newWorkspace as IWikiWorkspace).useExternalStorage;
+                const useExternal = requestedExternal === true
+                  ? customPath !== null
+                  : (requestedExternal === false ? false : customPath !== null);
+                const wikiFolderBasePath = useExternal && customPath
                   ? `${customPath.endsWith('/') ? customPath : `${customPath}/`}wikis/`
                   : WIKI_FOLDER_PATH;
                 if (!wikiFolderBasePath) return;
@@ -141,6 +158,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   ...(newWorkspace as IWikiWorkspace),
                   id,
                   wikiFolderLocation,
+                  useExternalStorage: useExternal,
                   allowReadFileAttachment: true,
                   enableQuickLoad: false,
                   syncIncludeSubWikis: true,
@@ -166,6 +184,11 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             state.customWikiFolderPath = path;
           });
         },
+        setDefaultWorkspace(id) {
+          set((state) => {
+            state.defaultWorkspaceId = id;
+          });
+        },
         update(id, newWikiWorkspace) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
@@ -185,7 +208,10 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               }
               if (oldWiki.type !== 'wiki') return;
               // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
-              const lastSync = oldWiki.syncedServers.sort((a, b) => b.lastSync - a.lastSync)[0]?.lastSync ?? LAST_SYNC_TO_SYNC_ALL;
+              const lastSync = oldWiki.syncedServers.reduce<number>(
+                (max, server) => (server.lastSync > max ? server.lastSync : max),
+                LAST_SYNC_TO_SYNC_ALL,
+              );
               console.log(`Add new server to wiki ${oldWiki.name} with last sync ${lastSync} to server ${newServerID}`);
               const updatedServers = [...oldWiki.syncedServers, {
                 serverID: newServerID,
@@ -193,6 +219,22 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 syncActive: true,
               }];
               state.workspaces[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
+
+              // Propagate the new server to all sub-wikis attached to this main wiki.
+              state.workspaces.forEach((workspace) => {
+                if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
+                  const subLastSync = workspace.syncedServers.reduce<number>(
+                    (max, server) => (server.lastSync > max ? server.lastSync : max),
+                    LAST_SYNC_TO_SYNC_ALL,
+                  );
+                  const subUpdatedServers = [...workspace.syncedServers, {
+                    serverID: newServerID,
+                    lastSync: subLastSync,
+                    syncActive: true,
+                  }];
+                  workspace.syncedServers = uniqBy(subUpdatedServers, 'serverID');
+                }
+              });
             }
           });
         },
@@ -263,6 +305,18 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
       {
         name: 'wiki-storage',
         storage: expoFileSystemStorage,
+        version: 1,
+        migrate: (persistedState: unknown, version: number) => {
+          if (version === 0) {
+            const state = persistedState as Record<string, unknown>;
+            if (typeof state.defaultWorkspaceId === 'undefined') {
+              const workspaces = state.workspaces as Array<{ type?: string; id?: string }> | undefined;
+              const firstWiki = workspaces?.find(workspace => workspace.type === 'wiki');
+              state.defaultWorkspaceId = firstWiki?.id ?? null;
+            }
+          }
+          return persistedState as WikiState & WikiActions;
+        },
       },
     ),
   )),

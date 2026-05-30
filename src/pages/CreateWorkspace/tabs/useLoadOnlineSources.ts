@@ -51,7 +51,7 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
           return [];
         }
       }));
-      webPagesSetter(uniqBy([...flatten(fetchedLists), ...(defaultList ?? [])], 'title'));
+      webPagesSetter(uniqBy([...(defaultList ?? []), ...flatten(fetchedLists)], 'title'));
     };
     void loadOnlineSources();
   }, [defaultList, fetchJSON, onlineSourcesUrls, temporaryFileLocation]);

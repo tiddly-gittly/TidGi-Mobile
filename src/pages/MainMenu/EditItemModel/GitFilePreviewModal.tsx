@@ -1,5 +1,6 @@
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useState } from 'react';
-import { Clipboard, Dimensions, Image, LayoutChangeEvent, ScrollView, View } from 'react-native';
+import { Dimensions, Image, LayoutChangeEvent, ScrollView, View } from 'react-native';
 import { Button, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { gitAddToGitignore, gitDiscardFileChanges, IGitFileContent } from '../../../services/GitService';
@@ -44,7 +45,7 @@ export function GitFilePreviewModal({
   afterContent,
   beforeContent,
   filePath,
-  mode,
+  mode: _mode,
   onModeChange,
   uncommittedWorkspace,
   onDiscardSuccess,
@@ -100,8 +101,8 @@ export function GitFilePreviewModal({
       });
   };
 
-  const handleCopyPath = () => {
-    Clipboard.setString(filePath);
+  const handleCopyPath = async () => {
+    await Clipboard.setStringAsync(filePath);
   };
 
   // Card has max-height: 80% of screen. Card.Title ~ 56px, Card.Content padding ~ 16px.
@@ -118,9 +119,8 @@ export function GitFilePreviewModal({
   return (
     <View>
       <View onLayout={onHeaderLayout}>
-        <Text variant='titleMedium' style={{ marginTop: 8 }}>{filePath}</Text>
-        <SegmentedButtons
-          style={{ marginTop: 8 }}
+        <FilePathText variant='titleMedium'>{filePath}</FilePathText>
+        <ModeSegmentedButtons
           value={panelMode}
           onValueChange={(value) => {
             if (value === 'diff' || value === 'full') onModeChange(value);
@@ -136,7 +136,7 @@ export function GitFilePreviewModal({
 
       {panelMode === 'actions'
         ? (
-          <View style={{ marginTop: 8, gap: 8 }}>
+          <ActionsContainer>
             <Button
               mode='outlined'
               icon='undo-variant'
@@ -170,10 +170,10 @@ export function GitFilePreviewModal({
             <Button mode='outlined' icon='content-copy' onPress={handleCopyPath}>
               复制文件路径
             </Button>
-          </View>
+          </ActionsContainer>
         )
         : (
-          <ScrollView style={{ height: scrollViewHeight, marginTop: 8 }} nestedScrollEnabled>
+          <ContentScrollView scrollViewHeight={scrollViewHeight}>
             {panelMode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
 
             {panelMode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
@@ -191,7 +191,7 @@ export function GitFilePreviewModal({
 
             {afterContent.kind === 'binary' && <Text>Binary content preview is not supported.</Text>}
             {afterContent.kind === 'missing' && beforeContent.kind === 'missing' && <Text>File content is not available.</Text>}
-          </ScrollView>
+          </ContentScrollView>
         )}
     </View>
   );
@@ -205,4 +205,25 @@ const PreviewImage = styled(Image)`
   width: 100%;
   min-height: 180px;
   resize-mode: contain;
+`;
+
+const FilePathText = styled(Text)`
+  margin-top: 8px;
+`;
+
+const ModeSegmentedButtons = styled(SegmentedButtons)`
+  margin-top: 8px;
+`;
+
+const ActionsContainer = styled(View)`
+  margin-top: 8px;
+  gap: 8px;
+`;
+
+interface ContentScrollViewProps {
+  scrollViewHeight: number;
+}
+const ContentScrollView = styled(ScrollView).attrs({ nestedScrollEnabled: true })<ContentScrollViewProps>`
+  height: ${({ scrollViewHeight }) => scrollViewHeight}px;
+  margin-top: 8px;
 `;

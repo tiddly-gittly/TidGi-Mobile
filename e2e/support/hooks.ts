@@ -22,10 +22,10 @@
  */
 
 import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, setDefaultTimeout, Status } from '@cucumber/cucumber';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
-import { writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { captureDeviceSnapshot, diagnosticError, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
@@ -48,6 +48,70 @@ const ATTACH_EXISTING_APP = process.env.TIDGI_ATTACH_EXISTING_APP === 'true';
 const MAIN_MENU_ID = 'main-menu-screen';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function keepDeviceAwake(): void {
+  try {
+    execSync('adb shell svc power stayon true', { stdio: 'ignore' });
+  } catch {
+    // Non-fatal on devices that don't support stayon.
+  }
+}
+
+function allowDeviceSleepNormally(): void {
+  try {
+    execSync('adb shell svc power stayon false', { stdio: 'ignore' });
+  } catch {
+    // Non-fatal on devices that don't support stayon.
+  }
+}
+
+function wakeAndUnlockDevice(): void {
+  try {
+    execSync('adb shell input keyevent 224', { stdio: 'ignore' });
+  } catch {
+    // Ignore when already awake.
+  }
+
+  try {
+    execSync('adb shell wm dismiss-keyguard', { stdio: 'ignore' });
+  } catch {
+    // Fall through to input-based unlock.
+  }
+
+  try {
+    execSync('adb shell input keyevent 82', { stdio: 'ignore' });
+  } catch {
+    // Some devices ignore KEYCODE_MENU on the lock screen.
+  }
+
+  try {
+    execSync('adb shell input swipe 540 1800 540 500 200', { stdio: 'ignore' });
+  } catch {
+    // Non-fatal fallback for swipe-to-unlock devices.
+  }
+}
+
+function isKeyguardShowing(): boolean {
+  try {
+    const raw = execSync('adb shell dumpsys window policy', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    return raw.includes('showing=true') || raw.includes('mIsShowing=true');
+  } catch {
+    return false;
+  }
+}
+
+function ensureDeviceUnlocked(): void {
+  wakeAndUnlockDevice();
+
+  if (isKeyguardShowing()) {
+    throw new Error(
+      'Android device is still locked behind keyguard. Unlock the phone once manually, then rerun Detox. The test hooks now keep the screen awake after that, but they cannot bypass a credential-protected lock screen over adb.',
+    );
+  }
+}
 
 /** Check if main menu is currently visible (non-throwing). */
 async function isMainMenuVisible(timeoutMs = 3_000): Promise<boolean> {
@@ -109,6 +173,9 @@ async function dismissExpoOverlays(initialWaitMs = 40_000) {
 // ── Global setup / teardown ──────────────────────────────────────────────────
 
 BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
+  keepDeviceAwake();
+  ensureDeviceUnlocked();
+
   // Set up adb reverse for Metro and Desktop server ports.
   // NOTE: Do NOT use `adb reverse --remove-all` — it removes Metro's port
   // mapping and causes the Expo dev client to show "Connect to dev server".
@@ -288,6 +355,7 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
 });
 
 AfterAll(async () => {
+  allowDeviceSleepNormally();
   await detox.cleanup();
 });
 
@@ -295,6 +363,8 @@ AfterAll(async () => {
 
 Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
   const { pickle } = message;
+  ensureDeviceUnlocked();
+
   await detox.onTestStart({
     title: pickle.uri,
     fullName: pickle.name,
@@ -471,16 +541,31 @@ AfterStep(async (message) => {
   if (result.status !== Status.FAILED) return;
 
   const stepSlug = pickleStep.text.replace(/\W+/g, '-').slice(0, 50);
+  const latestScreenshotPath = 'artifacts/latest-fail-screen.png';
+  const latestStepInfoPath = 'artifacts/latest-fail-step.txt';
 
   // 1. Screenshot
   try {
     await device.takeScreenshot(`fail-${stepSlug}`);
   } catch { /* non-fatal */ }
 
+  // Save an additional deterministic screenshot path for quick manual review.
+  try {
+    mkdirSync('artifacts', { recursive: true });
+    const png = execFileSync('adb', ['exec-out', 'screencap', '-p'], {
+      encoding: 'buffer',
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }) as Buffer;
+    writeFileSync(latestScreenshotPath, png);
+    writeFileSync(latestStepInfoPath, `Failed step: ${pickleStep.text}\nScreenshot: ${latestScreenshotPath}\n`);
+  } catch { /* non-fatal */ }
+
   // 2. Device snapshot — captures activity, view tree, JS errors
   const snapshot = captureDeviceSnapshot();
   console.error(
     `\n[AfterStep FAIL] Step: "${pickleStep.text}"\n` +
+      `[AfterStep FAIL] Screenshot: ${latestScreenshotPath}\n` +
       `[AfterStep FAIL] ${formatSnapshot(snapshot)}`,
   );
 

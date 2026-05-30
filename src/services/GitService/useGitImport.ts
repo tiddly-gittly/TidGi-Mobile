@@ -18,6 +18,7 @@ function isExternalPath(filepath: string): boolean {
 
 export interface IGitImportQRCode {
   baseUrl: string;
+  gitUrl?: string;
   /** Token is optional - empty/undefined means anonymous access (insecure) */
   token?: string;
   tokenAuthHeaderName?: string;
@@ -32,6 +33,8 @@ export interface IBatchImportItem {
   qrData: IGitImportQRCode;
   wikiName: string;
   serverID: string;
+  useExternalStorage?: boolean;
+  useStandardGitProtocol?: boolean;
 }
 
 type GitImportStatus = 'idle' | 'creating' | 'cloning' | 'success' | 'error' | 'partialSuccess';
@@ -65,7 +68,7 @@ export function useGitImport() {
   /**
    * Import wiki from server via git clone
    */
-  const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string) => {
+  const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string, useExternalStorage = false, useStandardGitProtocol = false) => {
     // Reset individual operation state
     setError(undefined);
     setCreatedWorkspace(undefined);
@@ -89,6 +92,20 @@ export function useGitImport() {
       if (useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === qrData.workspaceId)) {
         throw new Error(`Workspace id already exists: ${qrData.workspaceId}`);
       }
+      // Sub-wikis inherit synced servers from their main workspace.
+      const mainWorkspace = qrData.mainWikiID !== undefined
+        ? useWorkspaceStore.getState().workspaces.find(w => w.type === 'wiki' && w.id === qrData.mainWikiID)
+        : undefined;
+      const inheritedServers = (qrData.isSubWiki === true && mainWorkspace?.type === 'wiki')
+        ? mainWorkspace.syncedServers.map(s => ({ ...s, lastSync: Date.now(), syncActive: false }))
+        : [{
+          serverID,
+          lastSync: Date.now(),
+          syncActive: false,
+          token: qrData.token,
+          tokenAuthHeaderName: qrData.tokenAuthHeaderName,
+          tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
+        }];
       const newWorkspace = addWiki({
         type: 'wiki',
         id: qrData.workspaceId,
@@ -96,14 +113,8 @@ export function useGitImport() {
         deferStatusScanUntil: Date.now() + DEFER_STATUS_SCAN_AFTER_IMPORT_MS,
         isSubWiki: qrData.isSubWiki === true,
         mainWikiID: qrData.mainWikiID ?? null,
-        syncedServers: [{
-          serverID,
-          lastSync: Date.now(),
-          syncActive: false,
-          token: qrData.token,
-          tokenAuthHeaderName: qrData.tokenAuthHeaderName,
-          tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
-        }],
+        syncedServers: inheritedServers,
+        useExternalStorage,
       }) as IWikiWorkspace | undefined;
 
       if (newWorkspace === undefined) {
@@ -147,6 +158,7 @@ export function useGitImport() {
       setStatus('cloning');
       const remote: IGitRemote = {
         baseUrl: qrData.baseUrl,
+        gitUrl: qrData.gitUrl,
         workspaceId: qrData.workspaceId,
         token: qrData.token,
         tokenAuthHeaderName: qrData.tokenAuthHeaderName,
@@ -160,7 +172,7 @@ export function useGitImport() {
       });
       await gitClone(newWorkspace, remote, (phase, loaded, total) => {
         setCloneProgress({ phase, loaded, total });
-      });
+      }, { useStandardGitProtocol });
       console.log('[import] Git clone completed');
       workspaceLogger.log('Git clone completed');
 
@@ -244,7 +256,7 @@ export function useGitImport() {
       // Show 1-based index of the item currently being imported + its name
       setBatchProgress(previous => ({ ...previous, current: index + 1, currentName: item.wikiName }));
       try {
-        const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID);
+        const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID, item.useExternalStorage ?? false, item.useStandardGitProtocol ?? false);
         created.push(workspace);
       } catch (error) {
         const errorMessage = (error as Error).message;

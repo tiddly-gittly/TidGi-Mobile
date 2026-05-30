@@ -10,6 +10,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
 import { IServerInfo, useServerStore } from '../../store/server';
+import { useWorkspaceStore } from '../../store/workspace';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
 import { GitQRData } from './types';
 
@@ -54,8 +55,26 @@ const HintText = styled(Text)`
 const WorkspaceNameInput = styled(TextInput)`
   margin-top: 10px;
 `;
+const SuccessWikiNameText = styled(Text)`
+  color: ${MD3Colors.primary40};
+  margin-top: 4px;
+`;
+const FailedWikiNameText = styled(Text)`
+  color: ${MD3Colors.error50};
+  margin-top: 4px;
+`;
+const RetryButton = styled(Button)`
+  margin-top: 16px;
+`;
+const ResetButton = styled(Button)`
+  margin-top: 8px;
+`;
 
 export interface ImporterProps {
+  /**
+   * Direct standard-git repository URL used for template-based imports.
+   */
+  gitUrl?: string;
   /**
    * Save the URI as a server to workspace. Default to `true`.
    */
@@ -68,13 +87,49 @@ export interface ImporterProps {
    * The URI to auto fill the server URI input
    */
   uri?: string;
+  /**
+   * Preferred workspace name when importing directly from a git repository URL.
+   */
+  workspaceName?: string;
+}
+
+function normalizeGitRepositoryUrl(rawUrl: string): string {
+  const parsed = new URL(rawUrl);
+  parsed.hash = '';
+  parsed.search = '';
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  if (parsed.hostname.toLowerCase() === 'github.com' && !parsed.pathname.endsWith('.git')) {
+    parsed.pathname = `${parsed.pathname}.git`;
+  }
+  return parsed.toString();
+}
+
+function deriveWorkspaceNameFromGitUrl(gitUrl: string): string {
+  const parsed = new URL(gitUrl);
+  const lastSegment = parsed.pathname.split('/').filter(Boolean).pop() ?? 'wiki';
+  return decodeURIComponent(lastSegment).replace(/\.git$/i, '');
+}
+
+function deriveWorkspaceIdFromGitUrl(gitUrl: string, preferredName?: string): string {
+  const baseName = preferredName ?? deriveWorkspaceNameFromGitUrl(gitUrl);
+  const slug = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const safeSlug = slug.length > 0 ? slug : 'wiki';
+  return `${safeSlug}-${Date.now().toString(36)}`;
 }
 
 export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
+  const autoImportTriggeredReference = useRef(false);
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [wikiUrl, setWikiUrl] = useState<undefined | URL>(route.params.uri === undefined ? undefined : new URL(new URL(route.params.uri).origin));
+  const directGitUrl = route.params.gitUrl === undefined ? undefined : normalizeGitRepositoryUrl(route.params.gitUrl);
+  const [wikiUrl, setWikiUrl] = useState<undefined | URL>(() => {
+    const initialUrl = directGitUrl ?? route.params.uri;
+    return initialUrl === undefined ? undefined : new URL(new URL(initialUrl).origin);
+  });
   const [wikiName, setWikiName] = useState('');
   const [qrData, setQrData] = useState<GitQRData | undefined>();
   const [manualEdit, setManualEdit] = useState(false);
@@ -82,30 +137,16 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [isLoadingServerInfo, setIsLoadingServerInfo] = useState(false);
   const [reachableServerIDs, setReachableServerIDs] = useState<string[]>([]);
   const [selectedSubWikiIds, setSelectedSubWikiIds] = useState<string[]>([]);
+  const [useExternalStorage, setUseExternalStorage] = useState(false);
+  const [useStandardGitProtocol, setUseStandardGitProtocol] = useState(false);
   const scanHandledReference = useRef(false);
 
   const addServer = useServerStore(state => state.add);
   const allServers = useServerStore(useShallow(state => Object.values(state.servers)));
+  const customWikiFolderPath = useWorkspaceStore(state => state.customWikiFolderPath);
   const addAsServer = route.params.addAsServer ?? true;
 
   const reachableServers = allServers.filter(server => reachableServerIDs.includes(server.id));
-
-  useEffect(() => {
-    // Lazy camera permission: only check permission status, don't request it.
-    // This avoids heavy Camera module initialization that can block the main
-    // thread and interfere with Espresso/Detox. The actual permission request
-    // happens when the user taps the QR scanner button.
-    const checkCameraPermission = async () => {
-      try {
-        const { status } = await Camera.getCameraPermissionsAsync();
-        setHasPermission(status === PermissionStatus.GRANTED);
-      } catch {
-        setHasPermission(false);
-      }
-    };
-
-    void checkCameraPermission();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +188,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         previous.baseUrl === qr.baseUrl &&
         previous.workspaceId === qr.workspaceId &&
         previous.workspaceName === qr.workspaceName &&
+        previous.gitUrl === qr.gitUrl &&
         previous.token === qr.token &&
         previous.tokenAuthHeaderName === qr.tokenAuthHeaderName &&
         previous.tokenAuthHeaderValue === qr.tokenAuthHeaderValue
@@ -186,6 +228,22 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       // Invalid JSON, ignore
     }
   }, [fillFromQRCodeData]);
+
+  useEffect(() => {
+    if (directGitUrl === undefined) return;
+
+    const preferredWorkspaceName = route.params.workspaceName ?? deriveWorkspaceNameFromGitUrl(directGitUrl);
+    fillFromQRCodeData({
+      baseUrl: new URL(directGitUrl).origin,
+      gitUrl: directGitUrl,
+      workspaceId: deriveWorkspaceIdFromGitUrl(directGitUrl, preferredWorkspaceName),
+      workspaceName: preferredWorkspaceName,
+    });
+    setUseStandardGitProtocol(true);
+    setManualEdit(false);
+    setShowSavedServers(false);
+    setQrScannerOpen(false);
+  }, [directGitUrl, fillFromQRCodeData, route.params.workspaceName]);
 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
@@ -231,16 +289,39 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       scanHandledReference.current = true;
       try {
         setQrScannerOpen(false);
-        // Try to parse as JSON (Git QR format)
-        const parsed = JSON.parse(data) as unknown;
+
+        // Some Android QR scanners (ZXing via expo-camera) mis-decode UTF-8
+        // Byte-mode QR codes as Latin-1: each UTF-8 byte becomes a separate
+        // JS character, turning CJK continuation bytes (0x80-0xBF) into C1
+        // control characters that are illegal in JSON strings.
+        // Fix: re-encode the string as bytes and decode as UTF-8.
+        const parseJson = (raw: string): unknown => {
+          // Strip BOM and try plain parse first
+          const cleaned = raw.replace(/^\uFEFF/, '').trim();
+          try {
+            return JSON.parse(cleaned);
+          } catch {
+            // Re-decode as if the bytes were incorrectly treated as Latin-1
+            try {
+              const bytes = Uint8Array.from({ length: cleaned.length }, (_, index) => cleaned.charCodeAt(index));
+              const reDecoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+              return JSON.parse(reDecoded);
+            } catch {
+              // Last resort: just re-throw the original parse error
+              return JSON.parse(cleaned);
+            }
+          }
+        };
+
+        const parsed = parseJson(data);
 
         if (
           parsed !== null &&
           typeof parsed === 'object' &&
           'baseUrl' in parsed &&
           'workspaceId' in parsed &&
-          typeof parsed.baseUrl === 'string' &&
-          typeof parsed.workspaceId === 'string'
+          typeof (parsed as { baseUrl: unknown }).baseUrl === 'string' &&
+          typeof (parsed as { workspaceId: unknown }).workspaceId === 'string'
           // token is optional
         ) {
           // Valid Git QR code
@@ -289,7 +370,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setQrScannerOpen(false);
 
     if (addAsServer) {
-      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName });
+      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
 
       if (qrData) {
         // Collect batch items
@@ -300,6 +381,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           qrData: qrData,
           wikiName: wikiName,
           serverID: newServer.id,
+          useExternalStorage,
+          useStandardGitProtocol,
         });
 
         // 2. Add selected sub-wikis
@@ -316,6 +399,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 },
                 wikiName: sub.name,
                 serverID: newServer.id,
+                useExternalStorage,
+                useStandardGitProtocol,
               });
             }
           });
@@ -325,7 +410,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           await batchImportWikis(batchItems);
         } else {
           // Single import (fallback to original behavior for better UX if used alone)
-          await importWiki(qrData, wikiName, newServer.id);
+          await importWiki(qrData, wikiName, newServer.id, useExternalStorage, useStandardGitProtocol);
         }
       } else {
         // No valid QR data - cannot use Git sync
@@ -339,11 +424,25 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
     setWikiUrl(undefined);
     setQrData(undefined);
-  }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, t]);
+  }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, useExternalStorage, useStandardGitProtocol, t]);
+
+  useEffect(() => {
+    if (route.params.autoStartImport !== true) return;
+    if (qrData === undefined) return;
+    if (importStatus !== 'idle') return;
+    if (autoImportTriggeredReference.current) return;
+
+    autoImportTriggeredReference.current = true;
+    void addServerAndImport().catch((error: unknown) => {
+      autoImportTriggeredReference.current = false;
+      console.error('Auto-start import failed:', error);
+    });
+  }, [addServerAndImport, importStatus, qrData, route.params.autoStartImport]);
 
   const serverConfigs = (
     <ImporterServerConfigs
       allServers={reachableServers}
+      customWikiFolderPath={customWikiFolderPath}
       handleBarcodeScanned={handleBarcodeScanned}
       importStatus={importStatus}
       isLoadingServerInfo={isLoadingServerInfo}
@@ -381,6 +480,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       setSelectedSubWikiIds={setSelectedSubWikiIds}
       showSavedServers={showSavedServers}
       t={t}
+      useExternalStorage={useExternalStorage}
+      setUseExternalStorage={setUseExternalStorage}
+      useStandardGitProtocol={useStandardGitProtocol}
+      setUseStandardGitProtocol={setUseStandardGitProtocol}
     />
   );
 
@@ -514,7 +617,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           )}
           <Button
             mode='elevated'
-            onPress={resetState}
+            onPress={() => {
+              autoImportTriggeredReference.current = false;
+              resetState();
+            }}
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
           </Button>
@@ -527,9 +633,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             <>
               <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
               {batchCreatedWorkspaces.map((ws) => (
-                <Text key={ws.id} variant='bodyMedium' style={{ color: MD3Colors.primary40, marginTop: 4 }}>
+                <SuccessWikiNameText key={ws.id} variant='bodyMedium'>
                   ✓ {ws.name}
-                </Text>
+                </SuccessWikiNameText>
               ))}
             </>
           )}
@@ -545,21 +651,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                     Alert.alert(t('Import.Error.CopiedToClipboard'));
                   }}
                 >
-                  <Text variant='bodyMedium' style={{ color: MD3Colors.error50, marginTop: 4 }} selectable>
+                  <FailedWikiNameText variant='bodyMedium' selectable>
                     ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
-                  </Text>
+                  </FailedWikiNameText>
                 </Pressable>
               ))}
             </>
           )}
           {/* Action buttons */}
-          <Button
+          <RetryButton
             mode='elevated'
             onPress={retryFailedImports}
-            style={{ marginTop: 16 }}
           >
             <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
-          </Button>
+          </RetryButton>
           {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
             <OpenWikiButton
               key={ws.id}
@@ -574,13 +679,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               <Text>{`${t('Open')} ${ws.name}`}</Text>
             </OpenWikiButton>
           ))}
-          <Button
+          <ResetButton
             mode='text'
-            onPress={resetState}
-            style={{ marginTop: 8 }}
+            onPress={() => {
+              autoImportTriggeredReference.current = false;
+              resetState();
+            }}
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
-          </Button>
+          </ResetButton>
         </>
       )}
       {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (

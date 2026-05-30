@@ -6,12 +6,13 @@ import { compact } from 'lodash';
 
 import type { ITiddlerFieldsParameter } from 'tiddlywiki';
 import { getWikiFilesPathByCanonicalUri } from '../../constants/paths';
-import { openDefaultWikiIfNotAlreadyThere } from '../../hooks/useAutoOpenDefaultWiki';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { navigateIfNotAlreadyThere, navigationReference } from '../../utils/RootNavigation';
 import type { WikiHookService } from '../WikiHookService';
 import { FileSystemWikiStorageService as WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
+import { getReadyWikiStorageService } from '../WikiStorageService/registry';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
 /**
@@ -55,12 +56,48 @@ export class NativeService {
   }
 
   #wikiHookServices?: WikiHookService;
-  setCurrentWikiHookServices(wikiHookServices: WikiHookService) {
+  #currentWikiStorageService?: WikiStorageService;
+
+  setCurrentWikiServices(wikiHookServices: WikiHookService, wikiStorageService: WikiStorageService) {
     this.#wikiHookServices = wikiHookServices;
+    this.#currentWikiStorageService = wikiStorageService;
   }
 
-  clearCurrentWikiHookServices() {
+  clearCurrentWikiServices() {
     this.#wikiHookServices = undefined;
+    this.#currentWikiStorageService = undefined;
+  }
+
+  #getDefaultWiki(): IWikiWorkspace | undefined {
+    const { workspaces, defaultWorkspaceId } = useWorkspaceStore.getState();
+    return defaultWorkspaceId !== null
+      ? workspaces.find((w): w is IWikiWorkspace => w.type === 'wiki' && w.id === defaultWorkspaceId)
+      : compact(workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
+  }
+
+  #getWikiById(id?: string): IWikiWorkspace | undefined {
+    if (typeof id !== 'string' || id.length === 0) return;
+    return compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki' && w.id === id);
+  }
+
+  #getCurrentRouteWiki(): IWikiWorkspace | undefined {
+    if (!navigationReference.isReady()) return;
+    const currentRoute = navigationReference.getCurrentRoute();
+    if (currentRoute?.name !== 'WikiWebView') return;
+    return this.#getWikiById(currentRoute.params.id);
+  }
+
+  #resolveShareTargetWorkspace(): IWikiWorkspace | undefined {
+    return this.#getCurrentRouteWiki() ?? this.#getDefaultWiki();
+  }
+
+  async #getStorageServiceForWorkspace(workspace: IWikiWorkspace): Promise<WikiStorageService> {
+    const currentWikiStorageService = this.#currentWikiStorageService;
+    const currentRouteWiki = this.#getCurrentRouteWiki();
+    if (currentWikiStorageService !== undefined && currentRouteWiki?.id === workspace.id) {
+      return currentWikiStorageService;
+    }
+    return await getReadyWikiStorageService(workspace);
   }
 
   public async getCurrentWikiHookServices() {
@@ -79,11 +116,13 @@ export class NativeService {
   }
 
   async receivingShareIntent(shareIntent: ShareIntent) {
+    const targetWorkspace = this.#resolveShareTargetWorkspace();
+    if (targetWorkspace === undefined) return;
     const configs = useConfigStore.getState();
     if (configs.fastImport) {
-      await this.storeSharedContentToStorage(shareIntent);
+      await this.storeSharedContentToStorage(shareIntent, targetWorkspace);
     } else {
-      await this.importSharedContentToWiki(shareIntent);
+      await this.importSharedContentToWiki(shareIntent, targetWorkspace);
     }
   }
 
@@ -91,7 +130,7 @@ export class NativeService {
    * If wiki has not started, android will store files in a queue, wait for getReceivedFiles to be called.
    * Even wiki previously loaded, but after go background for a while, it may be unloaded too. We need to wait not only webview loaded, need wiki core loaded, then call this.
    */
-  async importSharedContentToWiki(shareIntent: ShareIntent) {
+  async importSharedContentToWiki(shareIntent: ShareIntent, targetWorkspace: IWikiWorkspace) {
     const { text, files } = shareIntent;
     let script = '';
     switch (shareIntent.type) {
@@ -118,22 +157,27 @@ export class NativeService {
       }
     }
     if (!script) return;
-    openDefaultWikiIfNotAlreadyThere();
+    const currentRouteWiki = this.#getCurrentRouteWiki();
+    if (currentRouteWiki?.id !== targetWorkspace.id) {
+      navigateIfNotAlreadyThere('WikiWebView', {
+        id: targetWorkspace.id,
+        quickLoad: targetWorkspace.enableQuickLoad,
+      });
+    }
     const wikiHookService = await this.getCurrentWikiHookServices();
     await wikiHookService.executeAfterTwReady(script);
   }
 
   /**
-   * Directly store shared content to default workspace's sqlite, very fast, don't need to wait for wiki to load.
+   * Directly store shared content into the default workspace's filesystem-backed storage,
+   * so imports do not need to wait for the wiki WebView to load.
    */
-  async storeSharedContentToStorage(shareIntent: ShareIntent) {
-    const defaultWiki = compact(useWorkspaceStore.getState().workspaces).find((w): w is IWikiWorkspace => w.type === 'wiki');
-    if (defaultWiki === undefined) return;
-    const storageOfDefaultWorkspace = new WikiStorageService(defaultWiki);
+  async storeSharedContentToStorage(shareIntent: ShareIntent, targetWorkspace: IWikiWorkspace) {
+    const storageOfTargetWorkspace = await this.#getStorageServiceForWorkspace(targetWorkspace);
     const configs = useConfigStore.getState();
     const tagForSharedContent = configs.tagForSharedContent;
     const newTagForSharedContent = tagForSharedContent ?? i18n.t('Share.Clipped');
-    // put into default workspace's database, with random title
+    // Put into the target workspace storage with a random title when the share payload does not provide one.
     const randomTitle = `${i18n.t('Share.SharedContent')}-${Date.now()}`;
     const created = format(new Date(), 'yyyyMMddHHmmssSSS');
     let fields: ITiddlerFieldsParameter = {
@@ -147,7 +191,7 @@ export class NativeService {
       case 'text':
       case 'weburl': {
         if (shareIntent.text) fields = { ...fields, text: shareIntent.text };
-        await storageOfDefaultWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
+        await storageOfTargetWorkspace.saveTiddler(shareIntent.meta?.title ?? randomTitle, fields);
         break;
       }
       case 'media':
@@ -157,11 +201,11 @@ export class NativeService {
             if (configs.saveMediaAsAttachment) {
               // Save file to filesystem and create tiddler with _canonical_uri
               const canonicalUri = `files/${file.fileName || randomTitle}`;
-              const filePath = getWikiFilesPathByCanonicalUri(defaultWiki, canonicalUri);
-              const filesDirectory = `${defaultWiki.wikiFolderLocation}/files`;
+              const filePath = getWikiFilesPathByCanonicalUri(targetWorkspace, canonicalUri);
+              const filesDirectory = `${targetWorkspace.wikiFolderLocation}/files`;
               const directory = new Directory(filesDirectory);
               if (!directory.exists) {
-                directory.create();
+                directory.create({ idempotent: true, intermediates: true });
               }
               const sourceFile = new File(file.path.startsWith('file://') ? file.path : `file://${file.path}`);
               const destinationFile = new File(filePath);
@@ -172,7 +216,7 @@ export class NativeService {
                 type: file.mimeType,
                 _canonical_uri: canonicalUri,
               };
-              await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
+              await storageOfTargetWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
             } else {
               // Original behavior: embed file content as base64
               const filePath = file.path.startsWith('file://') ? file.path : `file://${file.path}`;
@@ -184,7 +228,7 @@ export class NativeService {
                 type: file.mimeType,
                 text: fileContent,
               };
-              await storageOfDefaultWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
+              await storageOfTargetWorkspace.saveTiddler(file.fileName || randomTitle, fileFields);
             }
           }
         }

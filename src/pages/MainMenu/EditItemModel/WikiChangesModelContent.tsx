@@ -31,7 +31,7 @@ interface IUncommittedChangeItem {
   workspace: IWikiWorkspace;
 }
 
-export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Element {
+export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -56,7 +56,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
   const [loadingFilePreview, setLoadingFilePreview] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | undefined>();
-  const [discardingFile, setDiscardingFile] = useState<string | undefined>();
+  const [_discardingFile, _setDiscardingFile] = useState<string | undefined>();
   const [selectedUncommittedItem, setSelectedUncommittedItem] = useState<IUncommittedChangeItem | undefined>();
   const [currentTab, setCurrentTab] = useState<'details' | 'actions'>('details');
   const [newCommitMessage, setNewCommitMessage] = useState(t('LOG.CommitBackupMessage'));
@@ -166,7 +166,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
       const before = type === 'add' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, parentReference);
       const after = type === 'delete' ? { kind: 'missing' as const } : await gitGetFileContentAtReference(workspaceForFile, filePath, commit.oid);
       console.log(
-        `[FilePreview] commit ${commit.oid?.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${
+        `[FilePreview] commit ${commit.oid.substring(0, 8)} file=${filePath} before.kind=${before.kind} after.kind=${after.kind} afterTextLen=${
           'text' in after ? after.text?.length : 'N/A'
         }`,
       );
@@ -198,8 +198,8 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
           {t('GitHistory.Uncommitted')}
           {uncommittedChanges.length > 0 ? ` (${uncommittedChanges.length})` : ''}
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {loadingUncommitted && <ActivityIndicator size='small' style={{ marginRight: 8 }} />}
+        <HeaderActions>
+          {loadingUncommitted && <SmallActivityIndicator />}
           <IconButton
             size={24}
             icon='refresh'
@@ -208,10 +208,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               void refreshUncommitted();
             }}
           />
-        </View>
+        </HeaderActions>
       </UncommittedHeader>
       <FilesList
-        style={{ maxHeight: 80 }}
         data={uncommittedChanges}
         keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
         renderItem={({ item }) => (
@@ -230,8 +229,8 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
 
       <UncommittedHeader>
         <Text variant='titleMedium'>{t('GitHistory.Commits')}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {loadingHistory && <ActivityIndicator size='small' style={{ marginRight: 8 }} />}
+        <HeaderActions>
+          {loadingHistory && <SmallActivityIndicator />}
           <IconButton
             size={24}
             icon='refresh'
@@ -252,10 +251,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               })();
             }}
           />
-        </View>
+        </HeaderActions>
       </UncommittedHeader>
-      <FlatList
-        style={{ flex: 1, minHeight: 120 }}
+      <CommitsFlatList
         data={commitsData}
         initialNumToRender={20}
         keyExtractor={(item) => item.oid}
@@ -334,10 +332,10 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               setDetailsError(undefined);
             }}
           >
-            <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
+            <DetailsCard onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.CommitDetails')} />
-              <Card.Content style={{ paddingTop: 4 }}>
-                <SegmentedButtons
+              <PaddedCardContent>
+                <DetailSegmentedButtons
                   value={currentTab}
                   onValueChange={(value) => {
                     setCurrentTab(value as 'details' | 'actions');
@@ -346,7 +344,6 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                     { value: 'details', label: t('GitHistory.Details', '详情') },
                     { value: 'actions', label: t('GitHistory.Actions', '操作') },
                   ]}
-                  style={{ marginBottom: 12 }}
                 />
 
                 {currentTab === 'details' && (
@@ -355,9 +352,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                     <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
                     <Text variant='bodySmall'>{selectedCommit?.oid ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
                     <Text variant='bodySmall'>{selectedCommit?.oid}</Text>
-                    <Text variant='titleMedium' style={{ marginTop: 8 }}>
+                    <FilesTitleText variant='titleMedium'>
                       {t('GitHistory.Files')} {changedFiles.length > 0 ? `(${changedFiles.length})` : ''}
-                    </Text>
+                    </FilesTitleText>
                     {loadingDetails && <Text>{t('Loading')}</Text>}
                     {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
                     {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
@@ -380,23 +377,21 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 )}
 
                 {currentTab === 'actions' && (
-                  <View style={{ gap: 12, paddingVertical: 8 }}>
+                  <ActionsView>
                     {selectedCommit?.oid === ''
                       ? (
                         <>
-                          <TextInput
+                          <MessageTextInput
                             label={t('GitHistory.CommitMessage', '留言')}
                             value={newCommitMessage}
                             onChangeText={setNewCommitMessage}
                             mode='outlined'
-                            style={{ marginBottom: 16 }}
                           />
                           <Button
                             mode='contained'
                             loading={isCommitting}
                             disabled={isCommitting || isDiscardingAll}
                             onPress={() => {
-                              if (!wiki) return;
                               setIsCommitting(true);
                               void gitCommit(wiki, newCommitMessage).then(() => {
                                 setSelectedCommit(undefined);
@@ -426,9 +421,9 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                           {t('GitHistory.NoActionsForCommit', '此提交暂无可用操作')}
                         </Text>
                       )}
-                  </View>
+                  </ActionsView>
                 )}
-              </Card.Content>
+              </PaddedCardContent>
             </DetailsCard>
           </Pressable>
         </Modal>
@@ -449,7 +444,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
               setSelectedUncommittedItem(undefined);
             }}
           />
-          <DetailsCard style={{ backgroundColor: theme.colors.elevation.level2, alignSelf: 'center', width: '92%' }} pointerEvents='box-none'>
+          <PreviewDetailsCard pointerEvents='box-none'>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
@@ -470,7 +465,7 @@ export function WikiChangesModelContent({ id, onClose }: ModalProps): JSX.Elemen
                 />
               )}
             </Card.Content>
-          </DetailsCard>
+          </PreviewDetailsCard>
         </Modal>
         <Dialog
           visible={confirmDiscardAllVisible}
@@ -520,9 +515,6 @@ const ModalContainer = styled.View`
   padding: 20px;
   height: 100%;
 `;
-const CloseButton = styled(Button)`
-  margin-bottom: 10px;
-`;
 const UncommittedHeader = styled.View`
   flex-direction: row;
   align-items: center;
@@ -536,9 +528,22 @@ const HistoryCard = styled(Card)`
 const DetailsCard = styled(Card)`
   max-height: 80%;
   overflow: hidden;
+  background-color: ${({ theme }) => theme.colors.elevation.level2};
+`;
+const PreviewDetailsCard = styled(Card)`
+  max-height: 80%;
+  overflow: hidden;
+  background-color: ${({ theme }) => theme.colors.elevation.level2};
+  align-self: center;
+  width: 92%;
 `;
 const FilesList = styled(FlatList)`
   flex: 1;
+  max-height: 80px;
+` as typeof FlatList;
+const CommitsFlatList = styled(FlatList)`
+  flex: 1;
+  min-height: 120px;
 ` as typeof FlatList;
 const ModalFilesList = styled(FlatList)`
   max-height: 450px;
@@ -547,6 +552,36 @@ const ModalFilesList = styled(FlatList)`
 
 const LoadingIndicator = styled(ActivityIndicator)`
   margin-top: 10px;
+`;
+
+const HeaderActions = styled(View)`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const SmallActivityIndicator = styled(ActivityIndicator).attrs({ size: 'small' })`
+  margin-right: 8px;
+`;
+
+const PaddedCardContent = styled(Card.Content)`
+  padding-top: 4px;
+`;
+
+const DetailSegmentedButtons = styled(SegmentedButtons)`
+  margin-bottom: 12px;
+`;
+
+const FilesTitleText = styled(Text)`
+  margin-top: 8px;
+`;
+
+const ActionsView = styled(View)`
+  gap: 12px;
+  padding-vertical: 8px;
+`;
+
+const MessageTextInput = styled(TextInput)`
+  margin-bottom: 16px;
 `;
 
 const styles = StyleSheet.create({

@@ -40,10 +40,16 @@ const SavedServerButton = styled(Button)`
   margin-top: 8px;
 `;
 
+const AdvancedToggleButton = styled(Button)`
+  margin-top: 8px;
+  align-self: flex-start;
+`;
+
 const ButtonLabelPadding = 30;
 
 interface IImporterServerConfigsProps {
   allServers: IServerInfo[];
+  customWikiFolderPath: string | null;
   handleBarcodeScanned: (scanningResult: BarcodeScanningResult) => void;
   importStatus: string;
   isLoadingServerInfo: boolean;
@@ -59,11 +65,16 @@ interface IImporterServerConfigsProps {
   setSelectedSubWikiIds: React.Dispatch<React.SetStateAction<string[]>>;
   showSavedServers: boolean;
   t: (key: string) => string;
+  useExternalStorage: boolean;
+  setUseExternalStorage: React.Dispatch<React.SetStateAction<boolean>>;
+  useStandardGitProtocol: boolean;
+  setUseStandardGitProtocol: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.Element {
   const {
     allServers,
+    customWikiFolderPath,
     handleBarcodeScanned,
     importStatus,
     isLoadingServerInfo,
@@ -79,7 +90,14 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
     setSelectedSubWikiIds,
     showSavedServers,
     t,
+    useExternalStorage,
+    setUseExternalStorage,
+    useStandardGitProtocol,
+    setUseStandardGitProtocol,
   } = props;
+
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const externalStorageGloballyEnabled = customWikiFolderPath !== null;
 
   return (
     <>
@@ -180,6 +198,38 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
               <Text>{server.name} ({server.uri})</Text>
             </SavedServerButton>
           ))}
+        </Collapsible>
+
+        {/* Advanced section — hidden by default */}
+        <AdvancedToggleButton
+          mode='text'
+          compact
+          icon={showAdvanced ? 'chevron-up' : 'chevron-down'}
+          onPress={() => {
+            setShowAdvanced(previous => !previous);
+          }}
+        >
+          <Text>{t('Import.Advanced')}</Text>
+        </AdvancedToggleButton>
+        <Collapsible collapsed={!showAdvanced}>
+          {externalStorageGloballyEnabled && (
+            <Checkbox.Item
+              label={t('Import.UseExternalStorage')}
+              status={useExternalStorage ? 'checked' : 'unchecked'}
+              onPress={() => {
+                setUseExternalStorage(previous => !previous);
+              }}
+              mode='android'
+            />
+          )}
+          <Checkbox.Item
+            label={t('Import.UseStandardGitProtocol')}
+            status={useStandardGitProtocol ? 'checked' : 'unchecked'}
+            onPress={() => {
+              setUseStandardGitProtocol(previous => !previous);
+            }}
+            mode='android'
+          />
         </Collapsible>
       </Collapsible>
     </>

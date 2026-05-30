@@ -250,7 +250,9 @@ export function makeSkinnyTiddler(fields: ITiddlerFields): Omit<ITiddlerFields, 
  * Tiddlers that must keep full text even during quick load, otherwise boot can
  * end up with empty module registrations or missing startup state.
  */
-export function shouldPreserveFullTextInQuickLoad(fields: ITiddlerFields): boolean {
+export function shouldPreserveFullTextInQuickLoad(
+  fields: Pick<ITiddlerFields, 'title'> & Partial<Pick<ITiddlerFields, 'type'>> & Record<string, unknown>,
+): boolean {
   const title = fields.title;
   const type = fields.type;
 

@@ -22,6 +22,7 @@ function ToggleItemRenderer({ item }: { item: ToggleItemSchema }) {
       <SwitchContainer>
         <FlexibleText>{item.descriptionKey ? t(item.descriptionKey) : ''}</FlexibleText>
         <Switch
+          testID={item.testID}
           value={value}
           onValueChange={(newValue) => {
             setConfig({ [item.configKey]: newValue });
@@ -49,7 +50,7 @@ function SegmentedItemRenderer({ item }: { item: SegmentedItemSchema }) {
   return (
     <View>
       <Text variant='titleLarge'>{t(item.titleKey)}</Text>
-      <View style={SegmentedOuter}>
+      <View testID={item.testID} style={SegmentedOuter}>
         <SegmentedButtons
           value={value}
           onValueChange={(newValue) => {
@@ -89,6 +90,7 @@ function TextInputItemRenderer({ item }: { item: TextInputItemSchema }) {
   return (
     <View>
       <TextInput
+        testID={item.testID}
         label={t(item.titleKey)}
         value={localValue}
         onChangeText={handleChange}

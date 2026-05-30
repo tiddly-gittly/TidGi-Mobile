@@ -25,17 +25,32 @@ export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'Creat
       <Tab.Screen
         name='ScanQRCode'
         component={ScanQRCodeTab}
-        options={{ title: t('AddWorkspace.ScanFromWiki'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='qr-code' color={color} size={26} /> }}
+        options={{
+          title: t('AddWorkspace.ScanFromWiki'),
+          tabBarAccessibilityLabel: 'create-workspace-tab-scan-qr',
+          tabBarIcon: ({ color }: { color: string }) => <Ionicons name='qr-code' color={color} size={26} />,
+          tabBarTestID: 'create-workspace-tab-scan-qr',
+        }}
       />
       <Tab.Screen
         name='CreateFromTemplate'
         component={CreateFromTemplateTab}
-        options={{ title: t('AddWorkspace.CreateFromTemplate'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='copy' color={color} size={26} /> }}
+        options={{
+          title: t('AddWorkspace.CreateFromTemplate'),
+          tabBarAccessibilityLabel: 'create-workspace-tab-template',
+          tabBarIcon: ({ color }: { color: string }) => <Ionicons name='copy' color={color} size={26} />,
+          tabBarTestID: 'create-workspace-tab-template',
+        }}
       />
       <Tab.Screen
         name='CreateWebpageShortcut'
         component={CreateWebpageShortcutTab}
-        options={{ title: t('AddWorkspace.CreateWebpageShortcut'), tabBarIcon: ({ color }: { color: string }) => <Ionicons name='bookmark' color={color} size={26} /> }}
+        options={{
+          title: t('AddWorkspace.CreateWebpageShortcut'),
+          tabBarAccessibilityLabel: 'create-workspace-tab-webpage',
+          tabBarIcon: ({ color }: { color: string }) => <Ionicons name='bookmark' color={color} size={26} />,
+          tabBarTestID: 'create-workspace-tab-webpage',
+        }}
       />
     </Tab.Navigator>
   );

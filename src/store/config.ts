@@ -5,6 +5,7 @@ import { immer } from 'zustand/middleware/immer';
 import { expoFileSystemStorage } from '../utils/expoFileSystemStorage';
 
 export interface ConfigState {
+  analyticsOptOut: boolean;
   androidHardwareAcceleration?: boolean;
   /** the initial value should be undefined, so an initial true value won't immediately trigger autoOpen */
   autoOpenDefaultWiki?: boolean;
@@ -26,6 +27,7 @@ export interface ConfigState {
   userName: string;
 }
 const defaultConfig: ConfigState = {
+  analyticsOptOut: false,
   androidHardwareAcceleration: true,
   autoOpenDefaultWiki: undefined,
   fastImport: true,

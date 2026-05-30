@@ -27,8 +27,8 @@ jobs:
     name: Build dev-client + Detox test APK
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
         with:
           version: 10
       - uses: actions/setup-node@v6
@@ -36,12 +36,12 @@ jobs:
           node-version: 22.x
           cache: pnpm
       - name: Set Up JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v5
         with:
           distribution: "zulu"
           java-version: "17"
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.10.2
       - name: Set Build Tools Version
@@ -53,7 +53,7 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
@@ -64,7 +64,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - uses: actions/cache@v4
+      - name: Type check and lint
+        run: |
+          pnpm run check
+          pnpm run lint
+
+      - uses: actions/cache@v5
         name: Cache Gradle Wrapper and Dependencies
         with:
           path: |
@@ -97,10 +102,12 @@ jobs:
       - name: Expo prebuild (dev-client)
         run: pnpm exec expo prebuild -p android --clean
 
-      - name: Save AndroidManifest (dev-client prebuild)
+      - name: Save Android prebuild diagnostics (dev-client)
         run: |
           mkdir -p /tmp/apk-artifacts
           cp android/app/src/main/AndroidManifest.xml /tmp/apk-artifacts/AndroidManifest-dev-client.xml
+          cp android/app/build.gradle /tmp/apk-artifacts/app-build.gradle
+          grep -nE "coreLibraryDesugaring|desugar_jdk_libs|compileOptions" android/app/build.gradle || true
 
       - name: Build dev-client APK (debug + androidTest)
         run: |
@@ -114,7 +121,7 @@ jobs:
           mv android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /tmp/apk-artifacts/app-debug-androidTest.apk
 
       - name: Upload dev-client APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dev-client-apks-${{ github.run_number }}-${{ github.sha }}
           path: /tmp/apk-artifacts/

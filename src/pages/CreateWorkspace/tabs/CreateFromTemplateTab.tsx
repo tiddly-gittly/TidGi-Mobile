@@ -15,8 +15,10 @@ export const CreateFromTemplateTab = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>['navigation']>();
 
-  const [webPages, loading] = useLoadOnlineSources(wikiTemplates.onlineSources, templateListCachePath);
+  const [webPages, loading] = useLoadOnlineSources(wikiTemplates.onlineSources, templateListCachePath, wikiTemplates.defaultTemplates);
   const serverHosts = wikiTemplates.onlineSources.map((url) => new URL(url).host);
+  const filteredTemplates = useMemo(() => filterTemplate(webPages), [webPages]);
+
   const renderItem = useMemo(() =>
     function CreateFromTemplateTabListItem({ item }: { item: ITemplateListItem }) {
       return (
@@ -25,7 +27,17 @@ export const CreateFromTemplateTab = () => {
           onPreviewPress={(uri: string) => {
             navigation.navigate('PreviewWebView', { uri });
           }}
-          onUsePress={(uri: string) => {
+          onUsePress={(templateItem: ITemplateListItem, uri: string) => {
+            if (typeof templateItem.gitUrl === 'string' && templateItem.gitUrl.length > 0) {
+              navigation.navigate('Importer', {
+                gitUrl: templateItem.gitUrl,
+                workspaceName: templateItem.title,
+                autoStartImport: true,
+                addAsServer: true,
+              });
+              return;
+            }
+
             navigation.navigate('Importer', { uri, autoStartImport: true, addAsServer: false });
           }}
         />
@@ -43,7 +55,7 @@ export const CreateFromTemplateTab = () => {
   }
   return (
     <FlatList
-      data={filterTemplate(webPages)}
+      data={filteredTemplates}
       renderItem={renderItem}
       keyExtractor={(_item, index) => `template-${index}`}
     />

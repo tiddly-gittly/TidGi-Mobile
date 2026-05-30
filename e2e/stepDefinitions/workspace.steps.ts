@@ -10,10 +10,17 @@
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
-import { by, element } from 'detox';
-import { waitForElement } from '../support/diagnostics';
+import { by, device, element } from 'detox';
+import { diagnosticError, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
+const TEMPLATE_IMPORT_TIMEOUT = 3 * 60 * 1000;
+const DEFAULT_TEMPLATE_USE_BUTTON_IDS = [
+  'template-use-tidgi-default-template',
+  'template-use-template',
+] as const;
+
+const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 // ── Guards ────────────────────────────────────────────────────────────────────
 
@@ -52,18 +59,147 @@ function getFirstWikiWorkspaceId(): string | undefined {
   }
 }
 
+function tapBottomCenterViaAdb(): void {
+  const raw = execSync(
+    'adb shell wm size',
+    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
+  );
+  const match = raw.match(/Physical size:\s*(\d+)x(\d+)/);
+  const width = match ? Number(match[1]) : 1080;
+  const height = match ? Number(match[2]) : 2400;
+  const x = Math.floor(width / 2);
+  const y = Math.floor(height * 0.87);
+  execSync(`adb shell input tap ${x} ${y}`, { stdio: 'ignore', timeout: 5_000 });
+}
+
+function grantCameraPermissionIfNeeded(): void {
+  try {
+    execSync(
+      'adb shell pm grant ren.onetwo.tidgi.mobile.test android.permission.CAMERA',
+      { stdio: 'ignore', timeout: 5_000 },
+    );
+  } catch {
+    // Ignore on devices/OS versions where the permission is already granted or cannot be changed.
+  }
+}
+
+function isMiuiPermissionDialogVisible(): boolean {
+  try {
+    const raw = execSync(
+      'adb shell dumpsys window',
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
+    );
+    return raw.includes('GrantPermissionsActivity');
+  } catch {
+    return false;
+  }
+}
+
+function denyMiuiPermissionDialog(): void {
+  // Based on the observed MIUI dialog bounds on the connected device:
+  // [80,1710][1000,1850] for the deny button.
+  execSync('adb shell input tap 540 1780', { stdio: 'ignore', timeout: 5_000 });
+}
+
+async function createWikiWorkspaceFromTemplate(): Promise<void> {
+  let createdWikiId: string | undefined;
+
+  grantCameraPermissionIfNeeded();
+
+  await waitForElement(by.id('create-workspace-button'), UI_TIMEOUT, 'create-workspace-button on main menu', 'visible');
+  try {
+    await element(by.id('create-workspace-button')).tap();
+  } catch {
+    tapBottomCenterViaAdb();
+  }
+  await delay(1_000);
+
+  await waitForElement(by.id('create-workspace-tab-template'), UI_TIMEOUT, 'Create From Template tab button', 'visible');
+  await element(by.id('create-workspace-tab-template')).tap();
+  await delay(1_000);
+
+  const startedAt = Date.now();
+  let tapped = false;
+  while (Date.now() - startedAt < 30_000) {
+    for (const testID of DEFAULT_TEMPLATE_USE_BUTTON_IDS) {
+      try {
+        await waitForElement(by.id(testID), 2_000, `${testID} on template list`, 'visible');
+        await element(by.id(testID)).tap();
+        tapped = true;
+        break;
+      } catch {
+        // Try the next candidate id.
+      }
+    }
+    if (tapped) break;
+    await delay(1_000);
+  }
+
+  if (!tapped) {
+    throw diagnosticError(
+      `${DEFAULT_TEMPLATE_USE_BUTTON_IDS.join(' or ')} on template list`,
+      30_000,
+    );
+  }
+
+  const creationStartedAt = Date.now();
+  while (Date.now() - creationStartedAt < TEMPLATE_IMPORT_TIMEOUT) {
+    if (isMiuiPermissionDialogVisible()) {
+      denyMiuiPermissionDialog();
+      await delay(1_000);
+    }
+
+    createdWikiId = getFirstWikiWorkspaceId();
+    if (createdWikiId) break;
+    await delay(1_000);
+  }
+
+  if (!createdWikiId) {
+    throw diagnosticError('first wiki workspace created from default template', TEMPLATE_IMPORT_TIMEOUT);
+  }
+
+  for (let index = 0; index < 4; index++) {
+    if (await isMainMenuVisible()) return;
+    await device.pressBack();
+    await delay(1_000);
+  }
+
+  if (!(await isMainMenuVisible())) {
+    throw diagnosticError('main-menu-screen after template import completed', 4_000);
+  }
+
+  await waitForElement(
+    by.id(`workspace-settings-icon-${createdWikiId}`),
+    30_000,
+    `workspace-settings-icon-${createdWikiId} after template import`,
+    'visible',
+  );
+}
+
+async function isMainMenuVisible(timeoutMs = 2_000): Promise<boolean> {
+  try {
+    await waitForElement(by.id('main-menu-screen'), timeoutMs, 'main-menu-screen', 'visible');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Matches a wiki workspace (type=wiki). The help workspace is type=webpage. */
-Given('at least one wiki workspace exists', () => {
+Given('at least one wiki workspace exists', async () => {
   // Pure adb storage check — no Espresso/Detox interaction.
   // git I/O (WorkspaceList useEffect) blocks the Espresso idle resource for
   // extended periods, making any UI-based check unreliable regardless of
   // disableSynchronization(). Subsequent steps verify UI by interacting with
   // specific workspace elements.
-  const wikiId = getFirstWikiWorkspaceId();
+  let wikiId = getFirstWikiWorkspaceId();
   if (!wikiId) {
-    throw new Error(
-      'No wiki workspace found in device storage. Please run the @import scenario first.',
-    );
+    await createWikiWorkspaceFromTemplate();
+    wikiId = getFirstWikiWorkspaceId();
+  }
+
+  if (!wikiId) {
+    throw new Error('No wiki workspace found in device storage after importing the default git template.');
   }
 });
 

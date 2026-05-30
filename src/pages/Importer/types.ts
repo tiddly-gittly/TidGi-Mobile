@@ -1,5 +1,6 @@
 export interface GitQRData {
   baseUrl: string;
+  gitUrl?: string;
   token?: string;
   tokenAuthHeaderName?: string;
   tokenAuthHeaderValue?: string;
