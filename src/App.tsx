@@ -1,5 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, type StackNavigationProp } from '@react-navigation/stack';
 import { Buffer } from 'buffer';
 import i18n from 'i18next';
 import './i18n/index';
@@ -20,6 +20,7 @@ import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
 import { WikiWebView, type WikiWebViewProps } from './pages/WikiWebView';
 import {
+  WebPageDetailPage,
   WorkspaceAddServerPage,
   WorkspaceChangesPage,
   WorkspaceDetailPage,
@@ -39,6 +40,7 @@ if (typeof global.Buffer === 'undefined') {
 const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
 `;
+import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
 import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
@@ -50,6 +52,7 @@ export type RootStackParameterList = {
   Importer: ImporterProps;
   MainMenu: MainMenuProps | undefined;
   PreviewWebView: PreviewWebViewProps;
+  WebPageDetail: { id: string };
   WorkspaceAddServer: { id: string };
   WorkspaceChanges: { id: string };
   WorkspaceDetail: { id: string };
@@ -61,6 +64,9 @@ export type RootStackParameterList = {
   WorkspaceSync: { id: string };
   WikiWebView: WikiWebViewProps;
 };
+
+type RootStackNavigation<RouteName extends keyof RootStackParameterList> = StackNavigationProp<RootStackParameterList, RouteName>;
+
 const Stack = createStackNavigator<RootStackParameterList>();
 
 export const App: React.FC = () => {
@@ -73,6 +79,10 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     initializeMobileLogger();
+    const cleanupAnalytics = initializeMobileAnalytics();
+    void trackMobileAppLaunch();
+
+    return cleanupAnalytics;
   }, []);
 
   return (
@@ -86,7 +96,7 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='Config'
                 component={Config}
-                options={({ navigation }) => ({
+                options={({ navigation }: { navigation: RootStackNavigation<'Config'> }) => ({
                   headerTitle: t('Preference.Title'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerLeft: () => (
@@ -106,7 +116,7 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='MainMenu'
                 component={MainMenu}
-                options={({ navigation }) => ({
+                options={({ navigation }: { navigation: RootStackNavigation<'MainMenu'> }) => ({
                   headerTitle: t('Sidebar.Main'),
                   headerTitleStyle: { color: theme.colors.primary },
                   headerRight: () => (
@@ -116,7 +126,7 @@ export const App: React.FC = () => {
                       size={32}
                       color={theme.colors.primary}
                       onPress={() => {
-                        navigation.navigate('Config' as never);
+                        navigation.navigate('Config');
                       }}
                     />
                   ),
@@ -141,6 +151,11 @@ export const App: React.FC = () => {
               <Stack.Screen
                 name='WorkspaceDetail'
                 component={WorkspaceDetailPage}
+                options={{ headerTitleStyle: { color: theme.colors.primary } }}
+              />
+              <Stack.Screen
+                name='WebPageDetail'
+                component={WebPageDetailPage}
                 options={{ headerTitleStyle: { color: theme.colors.primary } }}
               />
               <Stack.Screen

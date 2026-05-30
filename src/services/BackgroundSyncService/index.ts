@@ -6,12 +6,25 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { AppState } from 'react-native';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-import { gitCommit, gitDiffChangedFiles, gitFetchAndReset, gitGetAheadCommitCount, gitHasChanges, gitPushToIncoming, IGitRemote, triggerDesktopMerge } from '../GitService';
+import {
+  ensureGitConfigForMobile,
+  getCurrentBranch,
+  gitCommit,
+  gitDiffChangedFiles,
+  gitFetchAndReset,
+  gitGetAheadCommitCount,
+  gitHasChanges,
+  gitPushToIncoming,
+  headersToJson,
+  IGitRemote,
+  triggerDesktopMerge,
+} from '../GitService';
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
@@ -355,45 +368,16 @@ export class GitBackgroundSyncService {
       this.setServerActive(workspace.id, server.id, true);
 
       // ──────────────────────────────────────────────────────────
-      // Step 1: Commit local changes first.
+      // Route to the correct sync strategy based on server config.
       // ──────────────────────────────────────────────────────────
-      const hasLocalChanges = await gitHasChanges(workspace);
-      if (hasLocalChanges) {
-        await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
-        workspaceLogger.log('Local changes committed before sync');
-      }
-
-      // ──────────────────────────────────────────────────────────
-      // Step 2: Push to mobile-incoming branch + trigger desktop merge.
-      // Desktop handles all merge/conflict resolution, saving mobile battery.
-      // Also push if there are unpushed commits from a previous failed push.
-      // ──────────────────────────────────────────────────────────
-      const aheadCount = await gitGetAheadCommitCount(workspace);
-      const needsPush = hasLocalChanges || aheadCount > 0;
-      if (needsPush) {
-        workspaceLogger.log('Pushing to mobile-incoming', {
-          baseUrl: remote.baseUrl,
-          remoteWorkspaceId: remote.workspaceId,
-          serverId: server.id,
-          hasLocalChanges,
-          aheadCount,
-        });
-        await gitPushToIncoming(workspace, remote);
-        await triggerDesktopMerge(remote);
-        workspaceLogger.log('Desktop merge complete');
-      }
-
-      // ──────────────────────────────────────────────────────────
-      // Step 3: Fetch desktop's merged main and reset local to match.
-      // ──────────────────────────────────────────────────────────
-      workspaceLogger.log('Fetching merged result from desktop');
-      haveUpdate = await gitFetchAndReset(workspace, remote);
-      if (haveUpdate) {
-        workspaceLogger.log('Remote changes detected');
+      if (server.useStandardGitProtocol === true) {
+        haveUpdate = await this.syncWithStandardGitProtocol(workspace, server, remote, workspaceLogger);
+      } else {
+        haveUpdate = await this.syncWithBundleProtocol(workspace, server, remote, workspaceLogger);
       }
 
       this.updateLastSync(workspace.id, server.id);
-      if (needsPush) {
+      if (haveUpdate) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
@@ -416,6 +400,140 @@ export class GitBackgroundSyncService {
     } finally {
       this.setServerActive(workspace.id, server.id, false);
     }
+  }
+
+  /**
+   * Custom TidGi bundle protocol:
+   * 1. Commit local changes
+   * 2. Push via BundleWriter → /receive-bundle → desktop merge
+   * 3. Fetch via /create-bundle → local bundle file → JGit fetch
+   *
+   * This avoids JGit's SmartHttpPushConnection MultiRequestService bug and is
+   * optimised for TidGi Desktop (custom endpoints required).
+   */
+  private async syncWithBundleProtocol(
+    workspace: IWikiWorkspace,
+    server: IServerInfo,
+    remote: IGitRemote,
+    workspaceLogger: ReturnType<typeof logFor>,
+  ): Promise<boolean> {
+    // ──────────────────────────────────────────────────────────
+    // Step 1: Commit local changes first.
+    // ──────────────────────────────────────────────────────────
+    const hasLocalChanges = await gitHasChanges(workspace);
+    if (hasLocalChanges) {
+      await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+      workspaceLogger.log('Local changes committed before sync');
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Step 2: Push to mobile-incoming branch + trigger desktop merge.
+    // Desktop handles all merge/conflict resolution, saving mobile battery.
+    // Also push if there are unpushed commits from a previous failed push.
+    // ──────────────────────────────────────────────────────────
+    const aheadCount = await gitGetAheadCommitCount(workspace);
+    const needsPush = hasLocalChanges || aheadCount > 0;
+    if (needsPush) {
+      workspaceLogger.log('Pushing to mobile-incoming', {
+        baseUrl: remote.baseUrl,
+        remoteWorkspaceId: remote.workspaceId,
+        serverId: server.id,
+        hasLocalChanges,
+        aheadCount,
+      });
+      await gitPushToIncoming(workspace, remote);
+      await triggerDesktopMerge(remote);
+      workspaceLogger.log('Desktop merge complete');
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Step 3: Fetch desktop's merged main and reset local to match.
+    // ──────────────────────────────────────────────────────────
+    workspaceLogger.log('Fetching merged result from desktop');
+    const haveUpdate = await gitFetchAndReset(workspace, remote);
+    if (haveUpdate) {
+      workspaceLogger.log('Remote changes detected');
+    }
+
+    return haveUpdate;
+  }
+
+  /**
+   * Standard git HTTP protocol (git-upload-pack / git-receive-pack) via JGit.
+   *
+   * Used when `server.useStandardGitProtocol` is true, e.g. for GitHub, Gitea,
+   * or any standard git host that does not implement TidGi's custom endpoints.
+   *
+   * Strategy:
+   *   1. Commit local changes.
+   *   2. gitFetch to update the remote-tracking branch (origin/<branch>).
+   *   3. If we are behind or diverged: hard-reset local branch to origin/<branch>
+   *      (remote wins — suitable for personal notes sync where both sides belong
+   *      to the same user; local commits are preserved in reflog).
+   *   4. gitPush to origin/<branch> (fast-forward; should always succeed after reset).
+   */
+  private async syncWithStandardGitProtocol(
+    workspace: IWikiWorkspace,
+    _server: IServerInfo,
+    remote: IGitRemote,
+    workspaceLogger: ReturnType<typeof logFor>,
+  ): Promise<boolean> {
+    const directory = toPlainPath(workspace.wikiFolderLocation);
+    const headers = headersToJson(remote);
+
+    // Step 1: Commit local changes
+    const hasLocalChanges = await gitHasChanges(workspace);
+    if (hasLocalChanges) {
+      await gitCommit(workspace, `Mobile sync at ${new Date().toISOString()}`);
+      workspaceLogger.log('Standard git: local changes committed');
+    }
+
+    await ensureGitConfigForMobile(directory);
+    const branch = await getCurrentBranch(directory);
+
+    // Record HEAD before fetch to detect remote changes
+    const headBeforeJson = await ExternalStorage.gitResolveRef(directory, 'HEAD');
+    const headBefore = (JSON.parse(headBeforeJson) as { ok: boolean; oid?: string }).oid ?? '';
+
+    // Step 2: Fetch remote tracking branch
+    workspaceLogger.log(`Standard git: fetching origin/${branch}`);
+    const fetchJson = await ExternalStorage.gitFetch(directory, 'origin', branch, headers);
+    const fetchResult = JSON.parse(fetchJson) as { ok: boolean; error?: string };
+    if (!fetchResult.ok) {
+      throw new Error(`git fetch failed: ${fetchResult.error ?? 'unknown'}`);
+    }
+
+    // Step 3: If remote has new commits, hard-reset to remote (remote wins)
+    const remoteReferenceJson = await ExternalStorage.gitResolveRef(directory, `origin/${branch}`);
+    const remoteOid = (JSON.parse(remoteReferenceJson) as { ok: boolean; oid?: string }).oid ?? '';
+
+    let haveUpdate = false;
+    if (remoteOid !== '' && remoteOid !== headBefore) {
+      workspaceLogger.log(`Standard git: remote has new commits, resetting to origin/${branch}`);
+      const resetJson = await ExternalStorage.gitReset(directory, `origin/${branch}`, 'hard');
+      const resetResult = JSON.parse(resetJson) as { ok: boolean; error?: string };
+      if (!resetResult.ok) {
+        throw new Error(`git reset to origin/${branch} failed: ${resetResult.error ?? 'unknown'}`);
+      }
+      haveUpdate = true;
+    }
+
+    // Step 4: Push (fast-forward after reset above)
+    const aheadCount = await gitGetAheadCommitCount(workspace);
+    if (aheadCount > 0 || hasLocalChanges) {
+      workspaceLogger.log(`Standard git: pushing ${aheadCount} commits to origin/${branch}`);
+      const pushJson = await ExternalStorage.gitPush(directory, 'origin', branch, `refs/heads/${branch}`, false, headers);
+      const pushResult = JSON.parse(pushJson) as { ok: boolean; error?: string };
+      if (!pushResult.ok) {
+        workspaceLogger.warn(`Standard git: push rejected: ${pushResult.error ?? 'unknown'}`);
+        console.warn(`[BackgroundSync] standard git push rejected for ${workspace.name}: ${pushResult.error}`);
+        // Don't throw — fetch succeeded so local is at least up-to-date
+      } else {
+        workspaceLogger.log('Standard git: push succeeded');
+      }
+    }
+
+    return haveUpdate;
   }
 
   /**

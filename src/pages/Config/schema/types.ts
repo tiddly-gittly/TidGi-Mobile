@@ -4,6 +4,8 @@ export interface BaseItemSchema {
   key: string;
   titleKey: string;
   descriptionKey?: string;
+  /** Optional native testID used by Detox E2E tests. */
+  testID?: string;
   /** Restrict this item to a specific platform. Filtered out at section-data build time. */
   platform?: 'android' | 'ios';
 }

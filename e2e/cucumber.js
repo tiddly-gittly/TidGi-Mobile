@@ -8,15 +8,18 @@
  *   CUCUMBER_TAGS='@workspace'          – only workspace navigation tests
  *   CUCUMBER_TAGS='@mobilesync'         – only desktop-sync tests (requires desktop)
  *   CUCUMBER_TAGS='@smoke or @settings' – smoke + settings
- *   (default) smoke + settings + workspace (no desktop required)
+ *   CUCUMBER_TAGS='@workspace'          – workspace navigation (requires a pre-existing wiki workspace)
+ *   (default) smoke + settings (works on a clean device)
  */
+const hasCliTags = process.argv.includes('--tags') || process.argv.some(arg => arg.startsWith('--tags='));
+
 module.exports = {
   default: {
     require: ['e2e/support/hooks.ts', 'e2e/stepDefinitions/**/*.ts'],
     paths: ['e2e/features/**/*.feature'],
     format: ['progress-bar', 'html:e2e/reports/cucumber-report.html'],
     formatOptions: { snippetInterface: 'async-await' },
-    tags: process.env.CUCUMBER_TAGS ?? '@smoke or @settings or @workspace',
+    tags: hasCliTags ? undefined : (process.env.CUCUMBER_TAGS ?? '@smoke or @settings'),
     loader: 'ts-node/esm',
     requireModule: ['ts-node/register'],
     // Allow Detox waitFor() calls with up to 120 s to complete inside a step.

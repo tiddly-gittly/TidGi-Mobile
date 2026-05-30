@@ -20,6 +20,7 @@ const ButtonButtonsContainer = styled.View`
   display: flex;
   flex-direction: row;
   justify-content: space-around;
+  padding-bottom: 24px;
 `;
 
 export interface MainMenuProps {
@@ -54,6 +55,8 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         onPressSettings={(wiki) => {
           if (wiki.type === 'wiki') {
             navigation.navigate('WorkspaceDetail', { id: wiki.id });
+          } else if (wiki.type === 'webpage') {
+            navigation.navigate('WebPageDetail', { id: wiki.id });
           }
         }}
         onReorderEnd={(workspaces) => {

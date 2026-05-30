@@ -1,5 +1,4 @@
 import { Paths } from 'expo-file-system';
-import { toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { useWorkspaceStore } from '../../store/workspace';
 import { deleteFileOrDirectory, ensureDirectory, listDirectory, readTextFile, writeTextFile } from '../WikiStorageService/fileOperations';
 
@@ -99,9 +98,12 @@ async function flushLogBuffer(): Promise<void> {
     try {
       const logDirectory = getLogDirectory();
       await ensureDirectory(logDirectory);
+      // Use the raw logDirectory URI (which may contain a file:// prefix for internal storage).
+      // Do NOT call toPlainPath here — writeTextFile / readTextFile handle routing.
+      const logDirectoryNormalized = logDirectory.endsWith('/') ? logDirectory : `${logDirectory}/`;
       await Promise.all(
         Object.entries(chunksByFileName).map(async ([fileName, lines]) => {
-          const filePath = `${toPlainPath(logDirectory)}/${fileName}`;
+          const filePath = `${logDirectoryNormalized}${fileName}`;
           let previousContent = '';
           try {
             previousContent = await readTextFile(filePath);
@@ -111,8 +113,9 @@ async function flushLogBuffer(): Promise<void> {
           await writeTextFile(filePath, `${previousContent}${lines.join('')}`);
         }),
       );
-    } catch {
-      // Best-effort; don't break the app
+    } catch (error) {
+      // Best-effort; don't break the app, but log to console so dev can see
+      console.warn('[LoggerService] flushLogBuffer failed:', error);
     }
   };
 
@@ -240,7 +243,8 @@ export async function listWorkspaceLogFiles(workspaceID: string): Promise<string
  */
 export function getLogFilePath(fileName: string): string {
   const directory = getLogDirectory();
-  return `${toPlainPath(directory)}/${fileName}`;
+  const normalized = directory.endsWith('/') ? directory : `${directory}/`;
+  return `${normalized}${fileName}`;
 }
 
 /**
@@ -249,7 +253,8 @@ export function getLogFilePath(fileName: string): string {
 export async function readLogFile(fileName: string): Promise<string | undefined> {
   await flushLogBuffer();
   const directory = getLogDirectory();
-  const filePath = `${toPlainPath(directory)}/${fileName}`;
+  const normalized = directory.endsWith('/') ? directory : `${directory}/`;
+  const filePath = `${normalized}${fileName}`;
   try {
     return await readTextFile(filePath);
   } catch {
@@ -262,7 +267,8 @@ export async function readLogFile(fileName: string): Promise<string | undefined>
  */
 export async function deleteLogFile(fileName: string): Promise<void> {
   const directory = getLogDirectory();
-  const filePath = `${toPlainPath(directory)}/${fileName}`;
+  const normalized = directory.endsWith('/') ? directory : `${directory}/`;
+  const filePath = `${normalized}${fileName}`;
   await deleteFileOrDirectory(filePath);
 }
 

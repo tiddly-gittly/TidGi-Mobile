@@ -10,6 +10,7 @@ export const preferenceSections: PreferenceSectionSchema[] = [
         type: 'segmented',
         key: 'theme',
         titleKey: 'Preference.Theme',
+        testID: 'theme-segmented-buttons',
         configKey: 'theme',
         options: [
           { labelKey: 'Preference.SystemDefault', value: 'default' },
@@ -22,6 +23,7 @@ export const preferenceSections: PreferenceSectionSchema[] = [
         key: 'translucentStatusBar',
         titleKey: 'Preference.TranslucentStatusBar',
         descriptionKey: 'Preference.TranslucentStatusBarDescription',
+        testID: 'translucent-status-bar-switch',
         configKey: 'translucentStatusBar',
       },
       {
@@ -29,6 +31,7 @@ export const preferenceSections: PreferenceSectionSchema[] = [
         key: 'hideStatusBar',
         titleKey: 'Preference.HideStatusBar',
         descriptionKey: 'Preference.HideStatusBarDescription',
+        testID: 'hide-status-bar-switch',
         configKey: 'hideStatusBar',
       },
     ],
@@ -70,6 +73,7 @@ export const preferenceSections: PreferenceSectionSchema[] = [
         key: 'userName',
         titleKey: 'Preference.DefaultUserName',
         descriptionKey: 'Preference.DefaultUserNameDetail',
+        testID: 'username-input',
         configKey: 'userName',
         debounce: true,
       },
@@ -110,6 +114,19 @@ export const preferenceSections: PreferenceSectionSchema[] = [
         buttonTitleKey: 'Preference.ClearServerList',
         buttonMode: 'text',
         actionId: 'clear-server-list',
+      },
+    ],
+  },
+  {
+    id: 'privacy',
+    titleKey: 'Preference.PrivacyAndSecurity',
+    items: [
+      {
+        type: 'toggle',
+        key: 'analytics-opt-out',
+        titleKey: 'Preference.AnalyticsOptOut',
+        descriptionKey: 'Preference.AnalyticsOptOutDescription',
+        configKey: 'analyticsOptOut',
       },
     ],
   },

@@ -398,7 +398,7 @@ export class FileSystemTiddlersReadStream extends Readable {
           metaFields.title = getTitleFromFilename(filename.replace(/\.meta$/, ''));
         }
         if (await fileExists(companionPath)) {
-          const tiddlerType = (metaFields as Record<string, string>).type ?? 'text/vnd.tiddlywiki';
+          const tiddlerType = (metaFields.type as string | undefined) ?? 'text/vnd.tiddlywiki';
           // Determine if the companion is a text-based file whose content should
           // be loaded as the tiddler's "text" field. JS modules (.js), stylesheets
           // (.css), JSON (.json), and other text formats must have their content
@@ -419,7 +419,10 @@ export class FileSystemTiddlersReadStream extends Readable {
           if (isTextCompanion) {
             const textContent = await readText(companionPath);
             // For skinny loading, only include text for boot-critical tiddlers
-            const headerFields = metaFields as Record<string, unknown>;
+            if (typeof metaFields.title !== 'string') {
+              throw new Error('.meta file must have a title');
+            }
+            const headerFields = metaFields as Record<string, unknown> & { title: string; type?: string };
             if (this.quickLoadMode && !shouldPreserveFullTextInQuickLoad(headerFields)) {
               (metaFields as Record<string, string>)._is_skinny = 'yes';
             } else {

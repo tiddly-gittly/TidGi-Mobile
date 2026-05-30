@@ -172,6 +172,14 @@
     "Preview": "Preview",
     "LoadingFromServer": "Loading List From Server"
   },
+  "ServerList": {
+    "LastSync": "Last sync",
+    "AheadCommits": "ahead",
+    "Settings": "Server settings",
+    "StandardGitProtocol": "Standard git protocol",
+    "UseStandardGitProtocol": "Use standard git protocol",
+    "UseStandardGitProtocolDescription": "Enable to use the standard git HTTP protocol (git-upload-pack / git-receive-pack) instead of TidGi's custom bundle protocol. Use this for GitHub, Gitea, or any host without TidGi Desktop."
+  },
   "EditWorkspace": {
     "Path": "Wiki Path",
     "Save": "Save",
@@ -358,6 +366,8 @@
     "RememberLastVisitState": "Remember last page visited, restore last visit state on open",
     "Network": "Network",
     "PrivacyAndSecurity": "Privacy & Security",
+    "AnalyticsOptOut": "Opt out of usage analytics",
+    "AnalyticsOptOutDescription": "Turn this on to stop sending privacy-safe product analytics from TidGi Mobile.",
     "ShareBrowsingData": "Share browsing data (cookies, cache) between workspaces, if this is off, you can login into different 3rd party service in each workspace.",
     "IgnoreCertificateErrors": "Ignore network certificate errors",
     "ClearBrowsingDataDescription": "Clear cookies, cache, and more",
@@ -543,7 +553,7 @@
     "TagForSharedContent": "Tag for shared content",
     "Clipped": "Clipped",
     "FastImport": "Fast Import",
-    "FastImportDescription": "Import to default workspace without opening the wiki, but no popup box to confirm. You can manually open the wiki and view the imported results in “Recent”.",
+    "FastImportDescription": "Import directly into the currently open wiki when available, otherwise into the default workspace, without waiting for the wiki UI. No confirmation dialog will be shown.",
     "SaveMediaAsAttachment": "Save Media as Attachment",
     "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content."
   },
@@ -606,7 +616,10 @@
       "Succeeded": "Successfully imported",
       "Failed": "Failed to import"
     },
-    "RetryFailed": "Retry failed ({{count}})"
+    "RetryFailed": "Retry failed ({{count}})",
+    "Advanced": "Advanced",
+    "UseExternalStorage": "Store in external (device-visible) storage",
+    "UseStandardGitProtocol": "Use standard Git protocol (GitHub / Gitea)"
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -683,6 +696,8 @@
     "ShareLog": "Share Log File",
     "OpenLogFile": "Open Log File",
     "GeneralSettings": "General Settings",
+    "DefaultWorkspace": "Default Workspace",
+    "SetAsDefault": "Set as default workspace",
     "SubWikiRouting": "Content Routing Rules",
     "RoutingDescription": "Route tiddlers to the appropriate workspace by tags and rules.",
     "TagNames": "Tag Rules",
@@ -694,7 +709,18 @@
     "FiltersDescription": "Use file system path filters to control where tiddlers are saved.",
     "EnablePathFilter": "Enable Path Filter",
     "EnablePathFilterDescription": "When enabled, save path follows filter output.",
-    "FileSystemPathFilter": "File System Path Filter"
+    "FileSystemPathFilter": "File System Path Filter",
+    "StorageType": "Storage Location",
+    "UseExternalStorage": "Store in device-visible external storage",
+    "UseExternalStorageHintExternal": "Files are stored in /sdcard/Documents/TidGi/ (visible to other apps).",
+    "UseExternalStorageHintInternal": "Files are stored in app internal storage (private).",
+    "MigratingStorage": "Migrating Storage",
+    "MigrationConfirm": "Move all wiki files {{direction}}? This may take a while.",
+    "ToExternal": "to external storage",
+    "ToInternal": "to internal storage",
+    "Performance": "Performance",
+    "EnableQuickLoad": "Enable Directory Lazy Load",
+    "EnableQuickLoadDescription": "When enabled, only tiddler directory metadata is loaded first. Tiddler text content is loaded lazily when opening a tiddler. When disabled, text content is loaded together when opening the wiki."
   },
   "StorageLocation": {
     "PermissionDenied": "Permission Required",
@@ -713,6 +739,7 @@
   "Common": {
     "OK": "OK",
     "Cancel": "Cancel",
+    "Confirm": "Confirm",
     "Save": "Save"
   },
   "Settings": {

@@ -190,6 +190,14 @@
     "PreviewWebView": "预览网页",
     "LoadingFromServer": "正在从服务器加载列表"
   },
+  "ServerList": {
+    "LastSync": "最近同步",
+    "AheadCommits": "个超前提交",
+    "Settings": "服务器设置",
+    "StandardGitProtocol": "标准 Git 协议",
+    "UseStandardGitProtocol": "使用 Git 默认协议",
+    "UseStandardGitProtocolDescription": "开启后使用标准 Git HTTP 协议（git-upload-pack / git-receive-pack）进行同步，而不是 TidGi 自定义的 Bundle 协议。适用于 GitHub、Gitea 或其他不运行 TidGi Desktop 的服务器。"
+  },
   "EditWorkspace": {
     "Path": "Wiki的位置",
     "Save": "保存",
@@ -395,6 +403,8 @@
     "Languages": "语言/Lang",
     "Performance": "性能",
     "PrivacyAndSecurity": "隐私和安全",
+    "AnalyticsOptOut": "退出使用分析统计",
+    "AnalyticsOptOutDescription": "开启后，太记移动端将停止发送不含内容和隐私数据的产品使用统计。",
     "AskDownloadLocation": "下载前询问每个文件的保存位置",
     "ClearBrowsingDataDescription": "清除Cookie、缓存等",
     "DeveloperTools": "开发者工具",
@@ -526,7 +536,7 @@
     "TagForSharedContentDescription": "分享给太记移动端的内容，会自动加上这个标签。留空时表示不加任何标签。",
     "Clipped": "剪藏",
     "FastImport": "快速导入",
-    "FastImportDescription": "无需打开Wiki即可导入内容到默认工作区，但不会有弹框确认。可以手动打开Wiki后到「最近」里查看导入的结果。",
+    "FastImportDescription": "如果当前已有打开的 Wiki，则直接导入到当前 Wiki；否则导入到默认工作区，无需等待 Wiki 界面加载，也不会弹出确认框。",
     "SaveMediaAsAttachment": "媒体文件保存为附件",
     "SaveMediaAsAttachmentDescription": "启用后，媒体和文件将保存到文件系统，在wiki中只保存 _canonical_uri，而不是嵌入完整内容。"
   },
@@ -672,6 +682,8 @@
     "ShareLog": "分享日志文件",
     "OpenLogFile": "打开日志文件",
     "GeneralSettings": "通用设置",
+    "DefaultWorkspace": "默认工作区",
+    "SetAsDefault": "设为默认工作区",
     "SubWikiRouting": "内容路由规则",
     "RoutingDescription": "按标签与规则将条目保存到对应工作区。",
     "TagNames": "标签规则",
@@ -683,7 +695,18 @@
     "FiltersDescription": "使用文件系统路径过滤器控制条目落盘路径。",
     "EnablePathFilter": "启用路径过滤器",
     "EnablePathFilterDescription": "启用后按过滤器结果决定保存路径。",
-    "FileSystemPathFilter": "文件系统路径过滤器"
+    "FileSystemPathFilter": "文件系统路径过滤器",
+    "StorageType": "存储位置",
+    "UseExternalStorage": "存储到设备可见的外部存储",
+    "UseExternalStorageHintExternal": "文件存储在 /sdcard/Documents/TidGi/（对其他应用可见）。",
+    "UseExternalStorageHintInternal": "文件存储在应用内部存储（私有）。",
+    "MigratingStorage": "迁移存储中",
+    "MigrationConfirm": "将所有 wiki 文件{{direction}}？这可能需要一些时间。",
+    "ToExternal": "迁移到外部存储",
+    "ToInternal": "迁移到内部存储",
+    "Performance": "性能",
+    "EnableQuickLoad": "启用目录懒加载",
+    "EnableQuickLoadDescription": "启用后仅加载条目目录，条目内容将在打开条目时才懒加载。关闭后会在打开知识库时一起读取并加载条目文本。"
   },
   "StorageLocation": {
     "PermissionDenied": "需要权限",

@@ -11,6 +11,7 @@ declare global {
 }
 
 export const getWebviewSideReceiver = () => {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
   return createWebViewStreamChunksPreloadScript({
     receiverReadyCallbackPath: 'service.wikiHookService.setWebviewReceiverReady',
   });

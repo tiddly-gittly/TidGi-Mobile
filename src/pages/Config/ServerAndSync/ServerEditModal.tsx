@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Checkbox, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
@@ -147,6 +147,7 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   const [editedUri, setEditedUri] = useState(server?.uri ?? '');
   const [editedProvider, setEditedProvider] = useState<ServerProvider>(server?.provider ?? ServerProvider.TidGiDesktop);
   const [editedStatus, setEditedStatus] = useState<ServerStatus>(server?.status ?? ServerStatus.online);
+  const [editedUseStandardGitProtocol, setEditedUseStandardGitProtocol] = useState(server?.useStandardGitProtocol ?? false);
 
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -185,6 +186,7 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       uri: editedUri,
       provider: editedProvider,
       status: editedStatus,
+      useStandardGitProtocol: editedUseStandardGitProtocol,
     });
     onClose();
   };
@@ -208,6 +210,16 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
         setEditedStatus={setEditedStatus}
         pickerStyle={pickerStyle}
       />
+      <Checkbox.Item
+        label={t('ServerList.UseStandardGitProtocol')}
+        status={editedUseStandardGitProtocol ? 'checked' : 'unchecked'}
+        onPress={() => {
+          setEditedUseStandardGitProtocol(previous => !previous);
+        }}
+      />
+      <ProtocolHintText variant='bodySmall'>
+        {t('ServerList.UseStandardGitProtocolDescription')}
+      </ProtocolHintText>
       <ActionButtons
         handleSave={handleSave}
         onRemoveServer={onRemoveServer}
@@ -231,4 +243,10 @@ const ButtonsContainer = styled.View`
   flex-direction: row;
   justify-content: space-between;
   margin-top: 15px;
+`;
+
+const ProtocolHintText = styled(Text)`
+  margin-horizontal: 8px;
+  margin-bottom: 8px;
+  opacity: 0.7;
 `;

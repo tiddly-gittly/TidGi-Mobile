@@ -15,6 +15,7 @@ import { IWikiWorkspace } from '../../store/workspace';
 
 export interface IGitRemote {
   baseUrl: string;
+  gitUrl?: string;
   token?: string;
   tokenAuthHeaderName?: string;
   tokenAuthHeaderValue?: string;
@@ -46,6 +47,8 @@ export interface IGitFileContent {
 export const GIT_CLONE_ERROR_OOM = 'WIKI_OOM';
 export const GIT_CLONE_ERROR_TOO_LARGE_PREFIX = 'WIKI_TOO_LARGE:';
 export const GIT_CLONE_ERROR_CONNECTION_ABORT = 'WIKI_CONNECTION_ABORT';
+export const GIT_CLONE_ERROR_NATIVE_UNAVAILABLE =
+  'Native git clone is unavailable in this dev-client APK. Rebuild and reinstall the dev-client APK after updating expo-tiddlywiki-filesystem-android-external-storage.';
 
 function isOOMError(message: string): boolean {
   return (
@@ -69,6 +72,14 @@ function isConnectionAbortError(message: string): boolean {
   );
 }
 
+function isMissingNativeGitCloneError(message: string): boolean {
+  return message.includes('gitClone') && (
+    message.includes('not a function') ||
+    message.includes('it is undefined') ||
+    message.includes('undefined')
+  );
+}
+
 // ── Constants ──────────────────────────────────────────────────────
 
 const CLONE_MAX_RETRIES = 2;
@@ -76,6 +87,7 @@ const CLONE_RETRY_DELAY_MS = 3_000;
 const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
+const LOCAL_GIT_INFO_ATTRIBUTES_RULE = '* text=auto eol=lf';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -93,6 +105,7 @@ function toFileUri(plainPath: string): string {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 function parseNativeResult<T>(json: string): T {
   return JSON.parse(json) as T;
 }
@@ -110,9 +123,18 @@ function createAuthHeader(remote: Pick<IGitRemote, 'token' | 'tokenAuthHeaderNam
   const tokenAuthHeaderName = typeof remote.tokenAuthHeaderName === 'string' && remote.tokenAuthHeaderName.length > 0
     ? remote.tokenAuthHeaderName
     : (remote.token ? `${DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX}-${remote.token}` : undefined);
-  const tokenAuthHeaderValue = typeof remote.tokenAuthHeaderValue === 'string' && remote.tokenAuthHeaderValue.length > 0
+  const rawTokenAuthHeaderValue = typeof remote.tokenAuthHeaderValue === 'string' && remote.tokenAuthHeaderValue.length > 0
     ? remote.tokenAuthHeaderValue
     : (remote.token ? DEFAULT_TIDGI_USER_NAME : undefined);
+
+  // HTTP header values must be printable ASCII (RFC 7230). Encode non-ASCII
+  // characters (e.g. CJK display names used as tokenAuthHeaderValue) with
+  // percent-encoding so OkHttp / native HTTP stacks don't reject the request.
+  const tokenAuthHeaderValue = rawTokenAuthHeaderValue === undefined
+    ? undefined
+    : /[^\x20-\x7E]/.test(rawTokenAuthHeaderValue)
+    ? encodeURIComponent(rawTokenAuthHeaderValue)
+    : rawTokenAuthHeaderValue;
 
   if (tokenAuthHeaderName && tokenAuthHeaderValue) {
     headers[tokenAuthHeaderName] = tokenAuthHeaderValue;
@@ -125,12 +147,12 @@ function normalizeHeaders(headers: Record<string, string | undefined>): Record<s
   return Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined)) as Record<string, string>;
 }
 
-function headersToJson(remote: IGitRemote): string | null {
+export function headersToJson(remote: IGitRemote): string | null {
   const headers = normalizeHeaders(createAuthHeader(remote));
   return Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
 }
 
-async function getCurrentBranch(directory: string): Promise<string> {
+export async function getCurrentBranch(directory: string): Promise<string> {
   try {
     const json = await ExternalStorage.gitCurrentBranch(directory);
     const result = parseNativeResult<{
@@ -185,6 +207,16 @@ async function preflightInfoReferences(url: string, headers: Record<string, stri
   }
 }
 
+function shouldIgnorePreflightFailure(message: string): boolean {
+  return (
+    message === 'Network request failed' ||
+    message.startsWith('Git info/refs timeout:') ||
+    isConnectionAbortError(message) ||
+    /ssl/i.test(message) ||
+    /handshake/i.test(message)
+  );
+}
+
 function deduplicateNFC(
   rawChanges: Array<{ path: string; type: 'add' | 'modify' | 'delete' }>,
 ): Array<{ path: string; type: 'add' | 'modify' | 'delete' }> {
@@ -204,11 +236,19 @@ function deduplicateNFC(
 
 const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_FILE_EXTENSIONS = new Set(['.tid', '.js', '.ts', '.tsx', '.json', '.md', '.txt', '.css', '.html', '.xml', '.yml', '.yaml', '.meta']);
+const LINE_ENDING_NORMALIZATION_EXTENSIONS = new Set([...TEXT_FILE_EXTENSIONS, '.info', '.ini', '.svg', '.toml']);
+const LINE_ENDING_NORMALIZATION_FILE_NAMES = new Set(['.editorconfig', '.gitattributes', '.gitignore', '.gitmodules']);
 
 function getFileExtension(filePath: string): string {
   const dotIndex = filePath.lastIndexOf('.');
   if (dotIndex < 0) return '';
   return filePath.slice(dotIndex).toLowerCase();
+}
+
+function getFileName(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const slashIndex = normalizedPath.lastIndexOf('/');
+  return slashIndex >= 0 ? normalizedPath.slice(slashIndex + 1) : normalizedPath;
 }
 
 function getImageMimeType(filePath: string): string {
@@ -238,29 +278,180 @@ function isImageFile(filePath: string): boolean {
   return IMAGE_FILE_EXTENSIONS.has(getFileExtension(filePath));
 }
 
+function shouldNormalizeLineEndings(filePath: string): boolean {
+  const fileName = getFileName(filePath).toLowerCase();
+  if (LINE_ENDING_NORMALIZATION_FILE_NAMES.has(fileName)) return true;
+  return LINE_ENDING_NORMALIZATION_EXTENSIONS.has(getFileExtension(fileName));
+}
+
+function normalizeLineEndingsToLF(content: string): string {
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+async function readUtf8File(path: string): Promise<string> {
+  if (isExternalPath(path)) {
+    return ExternalStorage.readFileUtf8(path);
+  }
+  return FileSystemLegacy.readAsStringAsync(toFileUri(path), { encoding: FileSystemLegacy.EncodingType.UTF8 });
+}
+
+async function writeUtf8File(path: string, content: string): Promise<void> {
+  if (isExternalPath(path)) {
+    await ExternalStorage.writeFileUtf8(path, content);
+    return;
+  }
+  await FileSystemLegacy.writeAsStringAsync(toFileUri(path), content, { encoding: FileSystemLegacy.EncodingType.UTF8 });
+}
+
+async function ensureDirectoryExists(path: string): Promise<void> {
+  if (isExternalPath(path)) {
+    const info = await ExternalStorage.getInfo(path).catch(() => ({ exists: false, isDirectory: false }));
+    if (!info.exists) {
+      await ExternalStorage.mkdir(path);
+    }
+    return;
+  }
+
+  const info = await FileSystemLegacy.getInfoAsync(toFileUri(path));
+  if (!info.exists) {
+    await FileSystemLegacy.makeDirectoryAsync(toFileUri(path), { intermediates: true });
+  }
+}
+
+async function listAllFilesInternal(directory: string): Promise<string[]> {
+  const results: string[] = [];
+  const directoryUri = `${toFileUri(directory).replace(/\/+$/, '')}/`;
+
+  let entries: string[] = [];
+  try {
+    entries = await FileSystemLegacy.readDirectoryAsync(directoryUri);
+  } catch {
+    return results;
+  }
+
+  for (const entry of entries) {
+    if (entry === '.git') continue;
+    const entryUri = `${directoryUri}${entry}`;
+    const info = await FileSystemLegacy.getInfoAsync(entryUri);
+    if (!info.exists) continue;
+    if (info.isDirectory) {
+      results.push(...await listAllFilesInternal(toPlainPath(entryUri)));
+      continue;
+    }
+    results.push(toPlainPath(entryUri));
+  }
+
+  return results;
+}
+
+async function listAllRepositoryFiles(directory: string): Promise<string[]> {
+  if (isExternalPath(directory)) {
+    const plainDirectory = directory.replace(/\/+$/, '');
+    const relativePaths = await ExternalStorage.readDirRecursive(plainDirectory).catch(() => [] as string[]);
+    return relativePaths
+      .filter(relativePath => !relativePath.startsWith('.git/'))
+      .map(relativePath => `${plainDirectory}/${relativePath}`);
+  }
+
+  return listAllFilesInternal(directory);
+}
+
+async function normalizeRepositoryTextFilesToLF(directory: string): Promise<number> {
+  const filePaths = await listAllRepositoryFiles(directory);
+  let normalizedCount = 0;
+
+  for (const filePath of filePaths) {
+    if (!shouldNormalizeLineEndings(filePath)) continue;
+
+    let content: string;
+    try {
+      content = await readUtf8File(filePath);
+    } catch {
+      continue;
+    }
+
+    const normalizedContent = normalizeLineEndingsToLF(content);
+    if (normalizedContent === content) continue;
+
+    await writeUtf8File(filePath, normalizedContent);
+    normalizedCount += 1;
+  }
+
+  return normalizedCount;
+}
+
+const gitAttributesAppliedDirectories = new Set<string>();
+const clearGitTextCheckoutPolicyCache = (directory: string) => {
+  gitAttributesAppliedDirectories.delete(directory);
+  gitConfigAppliedDirectories.delete(directory);
+};
+
+async function ensureGitAttributesForMobile(directory: string): Promise<void> {
+  if (gitAttributesAppliedDirectories.has(directory)) return;
+
+  const infoDirectory = `${directory}/.git/info`;
+  const attributesPath = `${infoDirectory}/attributes`;
+  await ensureDirectoryExists(infoDirectory);
+
+  let existing = '';
+  try {
+    existing = normalizeLineEndingsToLF(await readUtf8File(attributesPath));
+  } catch {
+    existing = '';
+  }
+
+  const existingRules = existing.split('\n').map(line => line.trim());
+  if (!existingRules.includes(LOCAL_GIT_INFO_ATTRIBUTES_RULE)) {
+    const updated = existing === '' || existing.endsWith('\n')
+      ? `${existing}${LOCAL_GIT_INFO_ATTRIBUTES_RULE}\n`
+      : `${existing}\n${LOCAL_GIT_INFO_ATTRIBUTES_RULE}\n`;
+    await writeUtf8File(attributesPath, updated);
+  }
+
+  gitAttributesAppliedDirectories.add(directory);
+}
+
+async function ensureGitTextCheckoutPolicy(directory: string, options: { normalizeWorkingTreeTextFiles?: boolean } = {}): Promise<void> {
+  await ensureGitAttributesForMobile(directory);
+  await ensureGitConfigForMobile(directory);
+
+  if (options.normalizeWorkingTreeTextFiles === true) {
+    const normalizedCount = await normalizeRepositoryTextFilesToLF(directory);
+    console.log(`[ensureGitTextCheckoutPolicy] Normalized ${normalizedCount} files to LF in ${directory}`);
+  }
+}
+
 // ── Clone ──────────────────────────────────────────────────────────
 
 export async function gitClone(
   workspace: IWikiWorkspace,
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
+  options: { useStandardGitProtocol?: boolean } = {},
 ): Promise<void> {
   const baseUrl = remote.baseUrl.replace(/\/$/, '');
-  const url = `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
+  const url = typeof remote.gitUrl === 'string' && remote.gitUrl.length > 0
+    ? remote.gitUrl
+    : `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
   const directory = toPlainPath(workspace.wikiFolderLocation);
+
+  clearGitTextCheckoutPolicyCache(directory);
 
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
 
-  // Fast path: tar archive download (TidGi Desktop only)
-  if (typeof ExternalStorage.extractTar === 'function') {
+  // Fast path: tar archive download (TidGi Desktop only). Skip it when the
+  // caller explicitly requests the standard Git HTTP protocol.
+  if (options.useStandardGitProtocol !== true && typeof ExternalStorage.extractTar === 'function') {
     try {
       const didArchive = await tryArchiveClone(remote, url, directory, onProgress);
       if (didArchive) {
         console.log('[gitClone] Fast archive clone succeeded');
         return;
       }
+      clearGitTextCheckoutPolicyCache(directory);
     } catch (error) {
+      clearGitTextCheckoutPolicyCache(directory);
       const message = (error as Error).message;
       if (isConnectionAbortError(message)) {
         console.warn('[gitClone] Archive download interrupted:', message);
@@ -270,7 +461,20 @@ export async function gitClone(
     }
   }
 
-  // Native JGit clone
+  // Native JGit clone — ensure directory is empty before first attempt.
+  // tryArchiveClone may have left partial files on failure.
+  try {
+    if (isExternalPath(directory)) {
+      const info = await ExternalStorage.getInfo(directory);
+      if (info.exists) await ExternalStorage.rmdir(directory);
+      await ExternalStorage.mkdir(directory);
+    } else {
+      await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+      await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+    }
+  } catch (cleanupError) {
+    console.warn('[gitClone] Failed to prepare directory before native clone:', cleanupError);
+  }
   console.log('Git clone strategy: native JGit');
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= CLONE_MAX_RETRIES; attempt++) {
@@ -293,6 +497,11 @@ export async function gitClone(
     }
     try {
       await gitCloneNative(remote, url, directory, onProgress);
+      try {
+        await ensureGitTextCheckoutPolicy(directory);
+      } catch (policyError) {
+        console.warn('[gitClone] Failed to apply local git text checkout policy after native clone:', (policyError as Error).message);
+      }
       return;
     } catch (error) {
       lastError = error as Error;
@@ -311,8 +520,21 @@ async function gitCloneNative(
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   try {
+    if (typeof ExternalStorage.gitClone !== 'function') {
+      throw new Error(GIT_CLONE_ERROR_NATIVE_UNAVAILABLE);
+    }
+
     const headers = normalizeHeaders(createAuthHeader(remote));
-    await preflightInfoReferences(url, headers);
+    try {
+      await preflightInfoReferences(url, headers);
+    } catch (error) {
+      const message = (error as Error).message;
+      if (!shouldIgnorePreflightFailure(message)) {
+        throw error;
+      }
+
+      console.warn(`[gitCloneNative] info/refs preflight failed, falling back to native clone: ${message}`);
+    }
     const estimatedBytes = await tryGetRemotePackSize(url, headers);
     if (estimatedBytes !== null) {
       const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
@@ -330,7 +552,16 @@ async function gitCloneNative(
     onProgress?.('Clone complete', 1, 1);
   } catch (error) {
     const message = (error as Error).message;
-    if (message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) || message === GIT_CLONE_ERROR_OOM) throw error;
+    if (
+      message.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX) ||
+      message === GIT_CLONE_ERROR_OOM ||
+      message === GIT_CLONE_ERROR_NATIVE_UNAVAILABLE
+    ) {
+      throw error;
+    }
+    if (isMissingNativeGitCloneError(message)) {
+      throw new Error(GIT_CLONE_ERROR_NATIVE_UNAVAILABLE);
+    }
     if (isOOMError(message)) throw new Error(GIT_CLONE_ERROR_OOM);
     if (isConnectionAbortError(message)) throw new Error(GIT_CLONE_ERROR_CONNECTION_ABORT);
     throw new Error(`Failed to clone repository: ${message}`);
@@ -391,15 +622,36 @@ async function tryArchiveClone(
   } catch { /* ignore */ }
 
   await configureGitRemote(directory, remote);
+  await ensureGitTextCheckoutPolicy(directory, { normalizeWorkingTreeTextFiles: true });
 
   console.log('[archiveClone] Rebuilding .git/index…');
   onProgress?.('Building git index…', 0, 0);
   try {
     const indexResult = parseNativeResult<{ ok: boolean; entries?: number; error?: string }>(await ExternalStorage.buildGitIndex(directory));
-    if (indexResult.ok) console.log(`[archiveClone] .git/index rebuilt: ${indexResult.entries} entries`);
-    else console.warn(`[archiveClone] buildGitIndex failed: ${indexResult.error}`);
+    if (indexResult.ok) {
+      console.log(`[archiveClone] .git/index rebuilt: ${indexResult.entries} entries`);
+    } else {
+      // If the index cannot be rebuilt, the working tree and HEAD will be out of sync:
+      // git status will report every file as a modification.
+      // Throw here so the caller falls back to a native JGit clone that sets up the
+      // index correctly, rather than silently leaving the workspace in a dirty state.
+      throw new Error(`buildGitIndex failed: ${indexResult.error ?? 'unknown'}`);
+    }
   } catch (error) {
-    console.warn('[archiveClone] Failed to rebuild .git/index:', (error as Error).message);
+    console.warn('[archiveClone] Failed to rebuild .git/index, falling back to native clone:', (error as Error).message);
+    // Clean up the partially-extracted directory so the fallback clone can proceed.
+    try {
+      if (isExternalPath(directory)) {
+        await ExternalStorage.rmdir(directory);
+        await ExternalStorage.mkdir(directory);
+      } else {
+        await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+        await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
+      }
+    } catch (cleanupError) {
+      console.warn('[archiveClone] Cleanup before fallback failed (non-fatal):', cleanupError);
+    }
+    return false;
   }
   return true;
 }
@@ -461,9 +713,20 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
  * These are set via gitSetConfig (JS-side) so changes take effect
  * immediately without rebuilding the native APK.
  */
-async function ensureGitConfigForMobile(directory: string): Promise<void> {
+/**
+ * Tracks directories where mobile git config has already been applied this session.
+ * These settings (protocol version, pack limits) never change at runtime, so there is
+ * no need to write them on every push/fetch — each write is a JNI→Kotlin→JGit→file-I/O
+ * round trip that adds tens of milliseconds of pure overhead.
+ */
+const gitConfigAppliedDirectories = new Set<string>();
+
+export async function ensureGitConfigForMobile(directory: string): Promise<void> {
+  if (gitConfigAppliedDirectories.has(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
+    ['core', null, 'autocrlf', 'false'],
+    ['core', null, 'eol', 'lf'],
     // Disable delta compression entirely — mobile only pushes small changes,
     // and delta search over large object stores causes OOM.
     ['pack', null, 'window', '2'],
@@ -484,6 +747,7 @@ async function ensureGitConfigForMobile(directory: string): Promise<void> {
     }
   }
   console.log('[ensureGitConfig] Applied mobile git config settings');
+  gitConfigAppliedDirectories.add(directory);
 }
 
 export async function gitPushToIncoming(
@@ -494,7 +758,6 @@ export async function gitPushToIncoming(
   const directory = toPlainPath(workspace.wikiFolderLocation);
   await ensureGitConfigForMobile(directory);
   const branch = await getCurrentBranch(directory);
-  const headersJson = headersToJson(remote);
 
   // Use bundle-based push to avoid JGit's HTTP push protocol bug:
   // SmartHttpPushConnection's MultiRequestService throws
@@ -564,7 +827,7 @@ export async function gitFetchAndReset(
   );
   const headBefore = headBeforeResult.ok ? (headBeforeResult.oid ?? '') : '';
 
-  await ensureGitConfigForMobile(directory);
+  await ensureGitTextCheckoutPolicy(directory);
 
   // Request a bundle from the desktop containing commits we don't have
   const bundleUrl = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}/create-bundle`;
@@ -743,15 +1006,60 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
   if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
   try {
     const branch = await getCurrentBranch(directory);
+    const remoteReference = `origin/${branch}`;
+
+    // Fast path: if local HEAD and remote tracking reference resolve to the same OID, we are
+    // already up-to-date. This avoids loading any commit objects via JNI.
+    const [localReferenceResult, remoteReferenceResult] = await Promise.all([
+      ExternalStorage.gitResolveRef(directory, branch).then(json => parseNativeResult<{ ok: boolean; oid?: string }>(json)).catch(() => ({ ok: false as const, oid: undefined })),
+      ExternalStorage.gitResolveRef(directory, remoteReference).then(json => parseNativeResult<{ ok: boolean; oid?: string }>(json)).catch(() => ({
+        ok: false as const,
+        oid: undefined,
+      })),
+    ]);
+    const localOid = localReferenceResult.ok ? (localReferenceResult.oid ?? '') : '';
+    const remoteOid = remoteReferenceResult.ok ? (remoteReferenceResult.oid ?? '') : '';
+    if (localOid.length > 0 && localOid === remoteOid) return 0;
+
+    // Slow path: walk the local commit graph until we hit a commit that exists in
+    // the remote branch. We cap at 100 commits — any more indicates a large divergence
+    // where the exact count is less important than knowing "there are many". Using a
+    // smaller depth than the previous 300 reduces JNI data transfer and JSON parsing.
+    const LOG_DEPTH = 100;
     let localResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }>; error?: string }>(
-      await ExternalStorage.gitLog(directory, branch, 300),
+      await ExternalStorage.gitLog(directory, branch, LOG_DEPTH),
     );
     if (!localResult.ok || !localResult.commits) {
-      localResult = parseNativeResult(await ExternalStorage.gitLog(directory, 'HEAD', 300));
+      localResult = parseNativeResult(await ExternalStorage.gitLog(directory, 'HEAD', LOG_DEPTH));
     }
     const localCommits = localResult.ok ? (localResult.commits ?? []) : [];
+
+    // If remote ref resolved to a known OID we can short-circuit without a second gitLog:
+    // walk local commits and stop as soon as we see the remote tip.
+    // If remoteOid is not found in the local list it means either:
+    //   a) remote is ahead of local (local is behind), or
+    //   b) diverged and the common base is outside LOG_DEPTH.
+    // In case (a) we should return 0 (nothing to push) but we can't distinguish
+    // it from (b) with only the local log. Load the remote log to do a proper
+    // intersection so we don't mistakenly report all local commits as unpushed.
+    if (remoteOid.length > 0) {
+      let aheadCount = 0;
+      let foundRemote = false;
+      for (const commit of localCommits) {
+        if (commit.oid === remoteOid) {
+          foundRemote = true;
+          break;
+        }
+        aheadCount += 1;
+      }
+      // Common case: remote tip is somewhere in local history → aheadCount is exact.
+      if (foundRemote) return aheadCount;
+      // Remote tip not found — fall through to the set-intersection path below.
+    }
+
+    // Fallback: remote reference couldn't be resolved — load remote log and do set intersection.
     const remoteResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }> }>(
-      await ExternalStorage.gitLog(directory, `origin/${branch}`, 300),
+      await ExternalStorage.gitLog(directory, remoteReference, LOG_DEPTH),
     );
     const remoteCommits = remoteResult.ok ? (remoteResult.commits ?? []) : [];
     const remoteOids = new Set(remoteCommits.map(c => c.oid));
@@ -878,7 +1186,6 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
 // ── Unsynced commit count ──────────────────────────────────────────
 
 export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Promise<number> {
-  const directory = toPlainPath(workspace.wikiFolderLocation);
   if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
   try {
     const aheadCount = await gitGetAheadCommitCount(workspace);
@@ -943,6 +1250,7 @@ export async function gitInit(workspace: IWikiWorkspace): Promise<void> {
     const resultJson = await ExternalStorage.gitInit(directory, 'main');
     const result = parseNativeResult<{ ok: boolean; error?: string }>(resultJson);
     if (!result.ok) throw new Error(result.error ?? 'Unknown init error');
+    await ensureGitTextCheckoutPolicy(directory);
     console.log(`Initialized git repository at ${directory}`);
   } catch (error) {
     console.error(`Git init failed: ${(error as Error).message}`);

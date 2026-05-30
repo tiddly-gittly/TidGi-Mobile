@@ -60,7 +60,7 @@ function ServerListItem() {
   return (
     <View style={styles.customItemContainer}>
       <ServerList
-        onLongPress={onEditServer}
+        onSettings={onEditServer}
         onPress={onEditServer}
         activeIDs={activeIDs}
       />
@@ -144,7 +144,8 @@ function ViewAppLogItem() {
 
 function DebugInfoItem() {
   // Lazy import to keep the bundle chunk small when not on the developer page
-  const { CopyDebugInfoButton } = require('../Developer/CopyDebugInfoButton');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { CopyDebugInfoButton } = require('../Developer/CopyDebugInfoButton') as typeof import('../Developer/CopyDebugInfoButton');
   return (
     <View style={styles.customItemContainer}>
       <CopyDebugInfoButton />

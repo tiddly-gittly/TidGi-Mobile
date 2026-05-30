@@ -27,6 +27,21 @@ The test runner needs two APKs built by CI.
 You do **not** need a local Android SDK or Gradle — only `adb`.
 
 1. Trigger the **Build Dev Client APK** GitHub Actions workflow (push a commit or run `workflow_dispatch`)
+
+   > **Monitoring CI from the terminal (PowerShell):**  
+   > `gh run watch` blocks the terminal in a way that prevents reading output in
+   > non-interactive agents. Use a `do-until` polling loop instead:
+   >
+   > ```powershell
+   > # Wait for the run to appear for a given commit SHA
+   > $repo = 'tiddly-gittly/TidGi-Mobile'; $sha = 'abc1234'
+   > do { Start-Sleep 15; $runId = gh run list --repo $repo --limit 30 --json databaseId,headSha,workflowName | ConvertFrom-Json | Where-Object { $_.headSha -like "$sha*" -and $_.workflowName -eq 'Build Dev Client APK' } | Select-Object -First 1 -ExpandProperty databaseId } until ($runId)
+   > Write-Host "Run ID: $runId"
+   >
+   > # Poll until completed
+   > do { Start-Sleep 30; $r = gh run view $runId --repo $repo --json status,conclusion | ConvertFrom-Json; Write-Host "$(Get-Date -Format HH:mm:ss) status=$($r.status) conclusion=$($r.conclusion)" } until ($r.status -eq 'completed')
+   > Write-Host "DONE: $($r.conclusion)"
+   > ```
 2. Download the artifact `dev-client-apks-*` from the Actions run
 3. Extract the two APKs into `e2e/artifacts/apks/`:
    ```
@@ -58,20 +73,21 @@ pnpm start
 
 Metro serves the JS bundle to the device. `expo start` also runs `adb reverse tcp:8081 tcp:8081` so the Android device can reach `localhost:8081` on your Mac.
 
-> **Do not run `adb reverse --remove-all`** before or during tests — it removes Metro's port mapping and causes the Expo dev client to show the "Connect to development server" screen.
+> **Do not run `adb reverse --remove-all` manually** before or during tests — it removes Metro's port mapping and causes the Expo dev client to show the "Connect to development server" screen. The scripted `pnpm detox:test` command resets and then immediately re-adds the Metro mapping for you.
 
 ---
 
 ## Running tests
 
 ```bash
-# Run all E2E tests (physical device connected via USB)
+# Run the default E2E suite on a clean device (smoke + settings)
 pnpm detox:test
 
 # Run only a specific tag (same @ tag as in the .feature file)
 # Note: the `--` separator is required to pass flags through pnpm to detox/cucumber
 pnpm detox:test -- --tags "@smoke"
 pnpm detox:test -- --tags "@settings"
+pnpm detox:test -- --tags "@workspace"
 pnpm detox:test -- --tags "@mobilesync"
 
 # Run tests against an emulator instead of a physical device
@@ -83,6 +99,41 @@ pnpm detox:test -- --name "App launches and shows main menu"
 
 > **Note:** The `--` is required so pnpm forwards the flags to the underlying detox/cucumber process rather than consuming them itself.
 
+> **Note:** `@workspace` requires at least one existing **wiki** workspace on the device. On a clean device, run `@import` first or create/import a wiki manually before running `@workspace`.
+
+## When A Test Fails
+
+Check failures in this order:
+
+1. **Open the latest failure screenshot first**:
+   ```bash
+   artifacts/latest-fail-screen.png
+   ```
+   This is the fastest way to see the real mobile-side error message. React Native screens do not always expose visible text reliably through `adb uiautomator dump`, so the screenshot is often more informative than the textual device snapshot.
+
+2. **Open the latest failed-step note**:
+   ```bash
+   artifacts/latest-fail-step.txt
+   ```
+   This tells you which step produced the screenshot.
+
+3. **If you need the scenario-specific artifact bundle**, inspect the timestamped Detox artifact directory under:
+   ```bash
+   artifacts/android.usb.dev-client.*/
+   ```
+   Each failed scenario contains its own screenshot such as `fail-at-least-one-wiki-workspace-exists.png`.
+
+4. **Then read the terminal logs**:
+   - Detox/Cucumber output in the test terminal
+   - Metro output in the `pnpm start` terminal
+
+For mobile import/sync failures, this usually gives the best signal:
+- Screenshot: shows the exact on-screen error text
+- Metro log: shows the JS/native stack or clone URL
+- Detox snapshot: shows current activity / visible IDs / recent JS errors
+
+If the screenshot shows an error like `ExternalStorage.gitClone is not a function` or says native git clone is unavailable, the installed dev-client APK is stale. JavaScript from Metro can update instantly, but new native module methods only appear after a fresh dev-client APK is built and installed. Trigger the dev-client CI build, download the APK pair, reinstall both APKs, then rerun the test.
+
 ---
 
 ## When do you need to rebuild the APK?
@@ -93,6 +144,10 @@ pnpm detox:test -- --name "App launches and shows main menu"
 | `src/` TypeScript / React Native code | None — Metro fast-refresh handles it |
 | `expo-plugins/`, `app.json`, native modules | Trigger CI → download new APKs → reinstall |
 
+Native-module JavaScript calls can compile even when the installed APK is stale. When adding or calling a new native method such as `ExternalStorage.gitClone`, verify the dev-client APK was rebuilt after the native module version changed.
+
+If `adb install -r e2e/artifacts/apks/app-release-dev-client.apk` fails with `INSTALL_FAILED_VERSION_DOWNGRADE`, the device already has a newer dev-client APK installed. Either keep the newer installed app and only update the matching test APK, or uninstall the app and install a matching pair of APKs.
+
 ---
 
 ## Project structure
@@ -102,7 +157,7 @@ e2e/
 ├── features/            # Gherkin scenarios (.feature)
 │   ├── smoke.feature             # @smoke — app launch & basic navigation
 │   ├── settings.feature          # @settings — theme, toggles, username
-│   ├── workspace.feature         # @workspace — workspace detail pages
+│   ├── workspace.feature         # @workspace — workspace detail pages (requires an existing wiki workspace)
 │   ├── desktop-sync.feature      # @mobilesync — import, open, sync with Desktop
 │   └── conflict-resolution.feature  # @conflict — concurrent-edit merge tests
 ├── stepDefinitions/     # TypeScript step implementations
