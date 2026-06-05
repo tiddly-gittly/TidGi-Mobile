@@ -3,7 +3,7 @@
     "name": "TidGi",
     "scheme": "tidgi",
     "slug": "tidgi-mobile",
-    "version": "0.10.1",
+    "version": "0.10.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -31,7 +31,7 @@
       "bundleIdentifier": "ren.onetwo.tidgi.mobile"
     },
     "android": {
-      "versionCode": 12,
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
