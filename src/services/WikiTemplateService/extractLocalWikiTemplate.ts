@@ -11,6 +11,7 @@
 
 import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system/legacy';
+import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 
 interface ZipEntry {
   path: string;
@@ -281,14 +282,23 @@ function getSafeZipEntryPath(entryPath: string): string | null {
  *
  * @param zipData - The ZIP file content as Uint8Array
  * @param targetDirectory - The target directory path (e.g., 'file:///data/.../wikis/my-wiki/')
+ * @param useExternalStorage - Whether the target is on external SD card / user-accessible storage
  */
-export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory: string): Promise<void> {
+export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory: string, useExternalStorage = false): Promise<void> {
   const normalizedTargetDirectory = targetDirectory.endsWith('/') ? targetDirectory : `${targetDirectory}/`;
 
   // Ensure target directory exists
-  const directoryInfo = await FileSystem.getInfoAsync(normalizedTargetDirectory);
-  if (!directoryInfo.exists) {
-    await FileSystem.makeDirectoryAsync(normalizedTargetDirectory, { intermediates: true });
+  if (useExternalStorage) {
+    const plainPath = toPlainPath(normalizedTargetDirectory);
+    const info = await ExternalStorage.getInfo(plainPath);
+    if (!info.exists) {
+      await ExternalStorage.mkdir(plainPath);
+    }
+  } else {
+    const directoryInfo = await FileSystem.getInfoAsync(normalizedTargetDirectory);
+    if (!directoryInfo.exists) {
+      await FileSystem.makeDirectoryAsync(normalizedTargetDirectory, { intermediates: true });
+    }
   }
 
   // Parse ZIP
@@ -333,17 +343,29 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory
 
     // Ensure parent directory exists
     const parentDirectory = targetPath.substring(0, targetPath.lastIndexOf('/'));
-    const parentInfo = await FileSystem.getInfoAsync(parentDirectory);
-    if (!parentInfo.exists) {
-      await FileSystem.makeDirectoryAsync(parentDirectory, { intermediates: true });
+
+    if (useExternalStorage) {
+      const parentPlain = toPlainPath(parentDirectory);
+      const parentInfo = await ExternalStorage.getInfo(parentPlain);
+      if (!parentInfo.exists) {
+        await ExternalStorage.mkdir(parentPlain);
+      }
+    } else {
+      const parentInfo = await FileSystem.getInfoAsync(parentDirectory);
+      if (!parentInfo.exists) {
+        await FileSystem.makeDirectoryAsync(parentDirectory, { intermediates: true });
+      }
     }
 
     // Write file
-    // Convert to base64 for expo-file-system write
     const base64 = Buffer.from(fileContent).toString('base64');
-    await FileSystem.writeAsStringAsync(targetPath, base64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    if (useExternalStorage) {
+      await ExternalStorage.writeFileBase64(toPlainPath(targetPath), base64);
+    } else {
+      await FileSystem.writeAsStringAsync(targetPath, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    }
   }
 
   console.log(`[extractZipToDirectory] Extraction complete: ${fileEntries.length} files to ${normalizedTargetDirectory}`);

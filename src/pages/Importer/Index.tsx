@@ -423,7 +423,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
       // 4. Extract ZIP to wiki folder location
       const targetDirectory = newWorkspace.wikiFolderLocation;
-      await extractZipToDirectory(zipBytes, targetDirectory);
+      await extractZipToDirectory(zipBytes, targetDirectory, newWorkspace.useExternalStorage === true);
 
       setLocalTemplateCreatedWorkspace(newWorkspace);
       setLocalTemplateStatus('success');
