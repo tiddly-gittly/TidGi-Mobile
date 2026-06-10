@@ -13,6 +13,7 @@ import { useShallow } from 'zustand/react/shallow';
 import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
+import { gitCommit, gitInit } from '../../services/GitService';
 import { extractZipToDirectory } from '../../services/WikiTemplateService/extractLocalWikiTemplate';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
@@ -428,8 +429,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       const zipBytes = Uint8Array.from(Buffer.from(zipBase64, 'base64'));
 
       // 4. Extract ZIP to wiki folder location
+      const useExternal = newWorkspace.useExternalStorage === true;
       const targetDirectory = newWorkspace.wikiFolderLocation;
-      await extractZipToDirectory(zipBytes, targetDirectory, newWorkspace.useExternalStorage === true);
+      await extractZipToDirectory(zipBytes, targetDirectory, useExternal);
+
+      // 5. Initialize git repository if using external storage (native git)
+      if (useExternal) {
+        await gitInit(newWorkspace);
+        await gitCommit(newWorkspace, 'Initial Commit with TidGi Mobile');
+      }
 
       setLocalTemplateCreatedWorkspace(newWorkspace);
       setLocalTemplateStatus('success');
