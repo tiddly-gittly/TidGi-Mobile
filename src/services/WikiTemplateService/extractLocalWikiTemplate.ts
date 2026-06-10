@@ -9,6 +9,7 @@
  * Used to extract the bundled wiki-template.zip into a new wiki workspace folder.
  */
 
+import { Buffer } from 'buffer';
 import * as FileSystem from 'expo-file-system/legacy';
 
 interface ZipEntry {
@@ -28,7 +29,6 @@ interface ZipEntry {
  */
 function inflate(input: Uint8Array): Uint8Array {
   const output: number[] = [];
-  let pos = 0;
 
   function readBits(n: number): number {
     let value = 0;
@@ -53,13 +53,16 @@ function inflate(input: Uint8Array): Uint8Array {
 
     if (btype === 0) {
       // No compression
-      bitPos = 0; // Skip to byte boundary
-      bytePos++; // Actually we need to align to byte
+      if (bitPos !== 0) {
+        bitPos = 0;
+        bytePos++;
+      }
       if (bytePos + 4 > input.length) throw new Error('Unexpected end of stored block');
       const len = input[bytePos] | (input[bytePos + 1] << 8);
       const nlen = input[bytePos + 2] | (input[bytePos + 3] << 8);
       bytePos += 4;
       if ((len ^ nlen) !== 0xFFFF) throw new Error('Stored block length check failed');
+      if (bytePos + len > input.length) throw new Error('Unexpected end of stored block payload');
       for (let i = 0; i < len; i++) {
         output.push(input[bytePos++]);
       }
@@ -257,6 +260,19 @@ function parseLocalHeader(data: Uint8Array, offset: number): LocalHeader {
   return { nameLength, extraLength, dataOffset };
 }
 
+function getSafeZipEntryPath(entryPath: string): string | null {
+  const normalizedPath = entryPath.replace(/\\/g, '/');
+  if (
+    normalizedPath.startsWith('/') ||
+    /^[A-Za-z]:\//.test(normalizedPath) ||
+    normalizedPath.split('/').some(segment => segment === '' || segment === '.' || segment === '..')
+  ) {
+    return null;
+  }
+
+  return normalizedPath;
+}
+
 // ─── Main Extraction ────────────────────────────────────────────────────────────
 
 /**
@@ -267,17 +283,19 @@ function parseLocalHeader(data: Uint8Array, offset: number): LocalHeader {
  * @param targetDir - The target directory path (e.g., 'file:///data/.../wikis/my-wiki/')
  */
 export async function extractZipToDirectory(zipData: Uint8Array, targetDir: string): Promise<void> {
+  const normalizedTargetDir = targetDir.endsWith('/') ? targetDir : `${targetDir}/`;
+
   // Ensure target directory exists
-  const dirInfo = await FileSystem.getInfoAsync(targetDir);
+  const dirInfo = await FileSystem.getInfoAsync(normalizedTargetDir);
   if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(targetDir, { intermediates: true });
+    await FileSystem.makeDirectoryAsync(normalizedTargetDir, { intermediates: true });
   }
 
   // Parse ZIP
   const { entries, cdOffset } = parseZipEndRecord(zipData);
   const fileEntries = parseCentralDirectory(zipData, cdOffset, entries);
 
-  console.log(`[extractZipToDirectory] Extracting ${fileEntries.length} files to ${targetDir}`);
+  console.log(`[extractZipToDirectory] Extracting ${fileEntries.length} files to ${normalizedTargetDir}`);
 
   for (const entry of fileEntries) {
     // Skip directory entries (those ending with /)
@@ -286,6 +304,12 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDir: stri
     if (entry.path.includes('/.git/') || entry.path.startsWith('.git/')) continue;
     // Skip tidgi.config.json from template (let the app create its own)
     if (entry.path.endsWith('tidgi.config.json')) continue;
+
+    const safeEntryPath = getSafeZipEntryPath(entry.path);
+    if (!safeEntryPath) {
+      console.warn(`[extractZipToDirectory] Skipping unsafe path: ${entry.path}`);
+      continue;
+    }
 
     // Parse local header to find data
     const localHeader = parseLocalHeader(zipData, entry.offset);
@@ -305,7 +329,7 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDir: stri
     }
 
     // Build target file path
-    const targetPath = `${targetDir}${entry.path}`;
+    const targetPath = `${normalizedTargetDir}${safeEntryPath}`;
 
     // Ensure parent directory exists
     const parentDir = targetPath.substring(0, targetPath.lastIndexOf('/'));
@@ -316,11 +340,11 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDir: stri
 
     // Write file
     // Convert to base64 for expo-file-system write
-    const base64 = btoa(String.fromCharCode(...fileContent));
+    const base64 = Buffer.from(fileContent).toString('base64');
     await FileSystem.writeAsStringAsync(targetPath, base64, {
       encoding: FileSystem.EncodingType.Base64,
     });
   }
 
-  console.log(`[extractZipToDirectory] Extraction complete: ${fileEntries.length} files to ${targetDir}`);
+  console.log(`[extractZipToDirectory] Extraction complete: ${fileEntries.length} files to ${normalizedTargetDir}`);
 }

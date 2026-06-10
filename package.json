@@ -19,7 +19,7 @@
     "check": "tsc --noEmit --skipLibCheck",
     "init-submodules": "git submodule update --init --recursive",
     "build:wiki-template": "zx scripts/buildWikiTemplateZip.mjs",
-    "postinstall": "npm run init-submodules",
+    "postinstall": "pnpm run init-submodules && pnpm run build:wiki-template",
     "detox:test": "node scripts/runDetox.mjs android.usb.dev-client",
     "detox:test:ios": "node scripts/runDetox.mjs ios.simulator.dev-client"
   },

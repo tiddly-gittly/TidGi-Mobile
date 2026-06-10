@@ -1,4 +1,6 @@
 import { StackScreenProps } from '@react-navigation/stack';
+import { Buffer } from 'buffer';
+import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { Asset } from 'expo-asset';
 import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
@@ -402,7 +404,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       createdWorkspace = newWorkspace;
 
       // 2. Load bundled ZIP asset
-      const zipAsset = Asset.fromModule(require('../../../assets/wiki-template.zip'));
+      const zipAsset = Asset.fromModule(bundledWikiTemplateZip);
       await zipAsset.downloadAsync();
       const zipUri = zipAsset.localUri;
       if (!zipUri) {
@@ -413,11 +415,11 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       const zipBase64 = await FileSystem.readAsStringAsync(zipUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      const zipBytes = Uint8Array.from(atob(zipBase64), c => c.charCodeAt(0));
+      const zipBytes = Uint8Array.from(Buffer.from(zipBase64, 'base64'));
 
       // 4. Extract ZIP to wiki folder location
-      const targetDir = newWorkspace.wikiFolderLocation;
-      await extractZipToDirectory(zipBytes, targetDir);
+      const targetDirectory = newWorkspace.wikiFolderLocation;
+      await extractZipToDirectory(zipBytes, targetDirectory);
 
       setLocalTemplateCreatedWorkspace(newWorkspace);
       setLocalTemplateStatus('success');

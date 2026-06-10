@@ -10,7 +10,7 @@
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
-import { by, device, element } from 'detox';
+import { by, device, element, waitFor } from 'detox';
 import { diagnosticError, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
@@ -21,6 +21,24 @@ const DEFAULT_TEMPLATE_USE_BUTTON_IDS = [
 ] as const;
 
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+async function getFirstRealCommitTestId(timeoutMs = 30_000): Promise<'commit-item-0' | 'commit-item-1'> {
+  const candidates = ['commit-item-0', 'commit-item-1'] as const;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    for (const candidate of candidates) {
+      try {
+        await waitFor(element(by.id(candidate))).toBeVisible().withTimeout(1_000);
+        return candidate;
+      } catch {
+        // Keep polling until one of the real commit cards becomes visible.
+      }
+    }
+  }
+
+  throw diagnosticError('first real commit item', timeoutMs);
+}
 
 // ── Guards ────────────────────────────────────────────────────────────────────
 
@@ -269,14 +287,12 @@ Then('I should see the unsynced commit count label', async () => {
 // ── Commit detail / file diff ─────────────────────────────────────────────────
 
 Then('the commit list has loaded', async () => {
-  // Wait for at least one commit card to render. Use commit-item-0 if there
-  // are no uncommitted changes, fall back to commit-item-uncommitted.
-  await waitForElement(by.id('commit-item-0'), 30_000, 'commit-item-0', 'visible');
+  await getFirstRealCommitTestId();
 });
 
 When('I tap the first commit in the history', async () => {
-  // commit-item-0 is the first real commit when no uncommitted changes exist.
-  await element(by.id('commit-item-0')).tap();
+  const commitTestId = await getFirstRealCommitTestId();
+  await element(by.id(commitTestId)).tap();
   // Give the native module (gitGetChangedFilesForCommit) time to respond.
   await delay(3_000);
 });

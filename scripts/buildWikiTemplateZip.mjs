@@ -28,13 +28,12 @@ const outZip = resolve(outDir, 'wiki-template.zip');
 console.log('Pulling git submodule: template/wiki...');
 if (!existsSync(templateDir)) {
   console.log('Submodule not initialized, running git submodule update --init...');
-  execSync('git submodule update --init --recursive', { cwd: projectRoot, stdio: 'inherit' });
+  execSync('git submodule update --init --recursive --depth 1', { cwd: projectRoot, stdio: 'inherit' });
 } else {
   console.log('Updating submodule...');
-  execSync('git submodule update --init --recursive', { cwd: projectRoot, stdio: 'inherit' });
+  execSync('git submodule update --init --recursive --depth 1', { cwd: projectRoot, stdio: 'inherit' });
 }
 
-// Verify the template directory exists
 if (!existsSync(templateDir)) {
   console.error('ERROR: template/wiki directory not found after submodule update');
   process.exit(1);
