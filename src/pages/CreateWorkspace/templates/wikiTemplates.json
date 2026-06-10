@@ -9,6 +9,16 @@
       "title": "太记默认模板",
       "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
       "isLocalDefault": true
+    },
+    {
+      "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "description": "Create a clean new wiki workspace from the built-in TidGi default template (offline capable)",
+      "language": "en",
+      "tags": "WikiTemplates LocalTemplate",
+      "testIdKey": "tidgi-default-template",
+      "title": "TidGi Default Template",
+      "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "isLocalDefault": true
     }
   ],
   "onlineSources": [
