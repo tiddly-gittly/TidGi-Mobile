@@ -407,8 +407,14 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       }
       createdWorkspace = newWorkspace;
 
-      // 2. Load bundled ZIP asset
-      const zipAsset = Asset.fromModule(bundledWikiTemplateZip);
+      // 2. Load bundled ZIP asset by name
+      let zipModule;
+      if (assetName === 'wiki-template.zip') {
+        zipModule = bundledWikiTemplateZip;
+      } else {
+        throw new Error(`Unknown local template asset: ${assetName}`);
+      }
+      const zipAsset = Asset.fromModule(zipModule);
       await zipAsset.downloadAsync();
       const zipUri = zipAsset.localUri;
       if (!zipUri) {
