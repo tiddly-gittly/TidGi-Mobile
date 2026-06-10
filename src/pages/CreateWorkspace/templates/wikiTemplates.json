@@ -1,14 +1,14 @@
 {
   "defaultTemplates": [
     {
-      "contribute": "",
-      "description": "从太记默认模板 Git 仓库创建一个干净的新 wiki 工作区",
-      "gitUrl": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "description": "使用内置的太记默认模板创建一个干净的新 wiki 工作区（离线可用）",
       "language": "zh_CN",
-      "tags": "WikiTemplates GitTemplate",
+      "tags": "WikiTemplates LocalTemplate",
       "testIdKey": "tidgi-default-template",
       "title": "太记默认模板",
-      "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template"
+      "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
+      "isLocalDefault": true
     }
   ],
   "onlineSources": [

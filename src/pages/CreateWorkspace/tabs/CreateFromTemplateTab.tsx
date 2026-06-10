@@ -28,6 +28,16 @@ export const CreateFromTemplateTab = () => {
             navigation.navigate('PreviewWebView', { uri });
           }}
           onUsePress={(templateItem: ITemplateListItem, uri: string) => {
+            if (templateItem.isLocalDefault === true) {
+              navigation.navigate('Importer', {
+                workspaceName: templateItem.title,
+                autoStartImport: true,
+                addAsServer: false,
+                localTemplateZip: true,
+              });
+              return;
+            }
+
             if (typeof templateItem.gitUrl === 'string' && templateItem.gitUrl.length > 0) {
               navigation.navigate('Importer', {
                 gitUrl: templateItem.gitUrl,

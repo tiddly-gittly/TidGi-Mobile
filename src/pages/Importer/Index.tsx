@@ -1,6 +1,8 @@
 import { StackScreenProps } from '@react-navigation/stack';
+import { Asset } from 'expo-asset';
 import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Pressable } from 'react-native';
@@ -9,8 +11,9 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
+import { extractZipToDirectory } from '../../services/WikiTemplateService/extractLocalWikiTemplate';
 import { IServerInfo, useServerStore } from '../../store/server';
-import { useWorkspaceStore } from '../../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
 import { GitQRData } from './types';
 
@@ -75,6 +78,11 @@ export interface ImporterProps {
    * Direct standard-git repository URL used for template-based imports.
    */
   gitUrl?: string;
+  /**
+   * When true, use the bundled local wiki template ZIP instead of cloning from a remote git repository.
+   * The ZIP is built by `scripts/buildWikiTemplateZip.mjs` and placed in assets/wiki-template.zip.
+   */
+  localTemplateZip?: boolean;
   /**
    * Save the URI as a server to workspace. Default to `true`.
    */
@@ -362,6 +370,72 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     batchFailedItems,
   } = useGitImport();
 
+  // ─── Local template import ─────────────────────────────────────────────────
+
+  const [localTemplateStatus, setLocalTemplateStatus] = useState<'idle' | 'extracting' | 'success' | 'error'>('idle');
+  const [localTemplateError, setLocalTemplateError] = useState<string | undefined>();
+  const [localTemplateCreatedWorkspace, setLocalTemplateCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
+
+  const importLocalWikiTemplate = useCallback(async (templateName: string) => {
+    setLocalTemplateStatus('extracting');
+    setLocalTemplateError(undefined);
+
+    let createdWorkspace: IWikiWorkspace | undefined;
+
+    try {
+      // 1. Create workspace record
+      const workspaceId = `wiki-${Date.now().toString(36)}`;
+      const addWiki = useWorkspaceStore.getState().add;
+      const { customWikiFolderPath } = useWorkspaceStore.getState();
+
+      const newWorkspace = addWiki({
+        type: 'wiki',
+        id: workspaceId,
+        name: templateName,
+        syncedServers: [],
+        useExternalStorage: customWikiFolderPath !== null,
+      }) as IWikiWorkspace | undefined;
+
+      if (!newWorkspace) {
+        throw new Error('Failed to create workspace');
+      }
+      createdWorkspace = newWorkspace;
+
+      // 2. Load bundled ZIP asset
+      const zipAsset = Asset.fromModule(require('../../../assets/wiki-template.zip'));
+      await zipAsset.downloadAsync();
+      const zipUri = zipAsset.localUri;
+      if (!zipUri) {
+        throw new Error('Failed to load bundled wiki template ZIP');
+      }
+
+      // 3. Read ZIP as base64, then convert to Uint8Array
+      const zipBase64 = await FileSystem.readAsStringAsync(zipUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const zipBytes = Uint8Array.from(atob(zipBase64), c => c.charCodeAt(0));
+
+      // 4. Extract ZIP to wiki folder location
+      const targetDir = newWorkspace.wikiFolderLocation;
+      await extractZipToDirectory(zipBytes, targetDir);
+
+      setLocalTemplateCreatedWorkspace(newWorkspace);
+      setLocalTemplateStatus('success');
+    } catch (error) {
+      const errorMessage = (error as Error).message;
+      console.error('Local template import failed:', errorMessage);
+      setLocalTemplateError(errorMessage);
+      setLocalTemplateStatus('error');
+
+      // Cleanup workspace entry on failure
+      if (createdWorkspace) {
+        useWorkspaceStore.getState().remove(createdWorkspace.id);
+      }
+    }
+  }, []);
+
+  // ─── End local template import ─────────────────────────────────────────────
+
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
 
@@ -439,6 +513,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     });
   }, [addServerAndImport, importStatus, qrData, route.params.autoStartImport]);
 
+  // Auto-start local template import
+  useEffect(() => {
+    if (route.params.localTemplateZip !== true) return;
+    if (localTemplateStatus !== 'idle') return;
+
+    const workspaceName = route.params.workspaceName ?? 'wiki';
+    void importLocalWikiTemplate(workspaceName);
+  }, [importLocalWikiTemplate, localTemplateStatus, route.params.localTemplateZip, route.params.workspaceName]);
+
   const serverConfigs = (
     <ImporterServerConfigs
       allServers={reachableServers}
@@ -497,8 +580,60 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }
 
   const autoStartImport = route.params.autoStartImport;
+  const isLocalTemplate = route.params.localTemplateZip === true;
+
   return (
     <Container testID='importer-screen'>
+      {/* ── Local template import UI ─────────────────────────────────────── */}
+      {isLocalTemplate && (
+        <>
+          {localTemplateStatus === 'extracting' && (
+            <>
+              <Text variant='titleMedium'>{t('Import.ExtractingLocalTemplate')}</Text>
+              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+            </>
+          )}
+          {localTemplateStatus === 'success' && localTemplateCreatedWorkspace && (
+            <>
+              <DoneImportActionsTitleText variant='titleMedium'>
+                {t('ImportSuccess')}
+              </DoneImportActionsTitleText>
+              <SuccessWikiNameText variant='bodyLarge'>
+                {localTemplateCreatedWorkspace.name}
+              </SuccessWikiNameText>
+              <OpenWikiButton
+                mode='contained'
+                icon='open-in-new'
+                onPress={() => {
+                  navigation.navigate('MainMenu', { fromWikiID: localTemplateCreatedWorkspace.id });
+                  navigation.navigate('WikiWebView', { id: localTemplateCreatedWorkspace.id });
+                }}
+                labelStyle={{ padding: ButtonLabelPadding }}
+              >
+                {t('Open')} {localTemplateCreatedWorkspace.name}
+              </OpenWikiButton>
+            </>
+          )}
+          {localTemplateStatus === 'error' && (
+            <>
+              <FailedWikiNameText variant='bodyLarge'>
+                {t('ErrorMessage')}: {localTemplateError}
+              </FailedWikiNameText>
+              <RetryButton
+                mode='contained'
+                onPress={() => {
+                  setLocalTemplateStatus('idle');
+                  setLocalTemplateError(undefined);
+                }}
+              >
+                {t('Import.Retry')}
+              </RetryButton>
+            </>
+          )}
+        </>
+      )}
+      {/* ── Git import UI ────────────────────────────────────────────────── */}
+      {!isLocalTemplate && (<>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
       {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
       {importStatus === 'idle' && !qrScannerOpen && qrData && (
@@ -712,6 +847,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             ))}
         </>
       )}
+      </>)}
     </Container>
   );
 };

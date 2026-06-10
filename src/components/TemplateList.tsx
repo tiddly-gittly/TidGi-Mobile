@@ -13,6 +13,8 @@ export interface ITemplateListItem {
   description: string;
   fallbackUrls?: string | undefined;
   gitUrl?: string | undefined;
+  /** When true, this template is bundled with the app and doesn't need network to import. */
+  isLocalDefault?: boolean | undefined;
   language: string;
   tags: string;
   testIdKey?: string | undefined;

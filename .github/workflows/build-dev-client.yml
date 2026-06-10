@@ -83,6 +83,7 @@ jobs:
         run: |
           pnpm run build:plugin
           pnpm run build:tw-assets
+          pnpm run build:wiki-template
 
       - name: Install expo-dev-client
         run: pnpm install expo-dev-client -w

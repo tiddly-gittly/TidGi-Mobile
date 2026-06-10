@@ -569,6 +569,8 @@
     "ImportWikis": "Import Wikis",
     "BatchProgress": "Importing",
     "GitImportComplete": "Git import completed",
+    "ExtractingLocalTemplate": "Creating wiki from built-in template...",
+    "Retry": "Retry",
     "RequestingCameraPermission": "Requesting camera permission",
     "NoCameraAccess": "No access to camera",
     "GitSyncRequiresQRCode": "Git synchronization requires QR code data. Please scan the QR code from TidGi Desktop.",

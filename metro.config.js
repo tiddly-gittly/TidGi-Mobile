@@ -5,7 +5,7 @@ const path = require('path');
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 const {
-  resolver: { sourceExts },
+  resolver: { sourceExts, assetExts },
   resolver,
 } = config;
 
@@ -20,6 +20,7 @@ module.exports = {
     ...resolver,
     unstable_enableSymlinks: true,
     sourceExts: [...sourceExts, 'mjs', 'sql'],
+    assetExts: [...assetExts, 'zip'],
     extraNodeModules: new Proxy(
       {
         buffer: require.resolve('buffer'),
