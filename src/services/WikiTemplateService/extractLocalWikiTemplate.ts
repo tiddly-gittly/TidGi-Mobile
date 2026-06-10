@@ -32,9 +32,9 @@ function inflate(input: Uint8Array): Uint8Array {
 
   function readBits(n: number): number {
     let value = 0;
-    for (let i = 0; i < n; i++) {
+    for (let index = 0; index < n; index++) {
       if (bytePos >= input.length) throw new Error('Unexpected end of input');
-      value |= ((input[bytePos] >> bitPos) & 1) << i;
+      value |= ((input[bytePos] >> bitPos) & 1) << index;
       bitPos++;
       if (bitPos === 8) {
         bitPos = 0;
@@ -47,7 +47,7 @@ function inflate(input: Uint8Array): Uint8Array {
   let bytePos = 0;
   let bitPos = 0;
 
-  while (true) {
+  for (;;) {
     const bfinal = readBits(1);
     const btype = readBits(2);
 
@@ -58,27 +58,27 @@ function inflate(input: Uint8Array): Uint8Array {
         bytePos++;
       }
       if (bytePos + 4 > input.length) throw new Error('Unexpected end of stored block');
-      const len = input[bytePos] | (input[bytePos + 1] << 8);
-      const nlen = input[bytePos + 2] | (input[bytePos + 3] << 8);
+      const length = input[bytePos] | (input[bytePos + 1] << 8);
+      const invertedLength = input[bytePos + 2] | (input[bytePos + 3] << 8);
       bytePos += 4;
-      if ((len ^ nlen) !== 0xFFFF) throw new Error('Stored block length check failed');
-      if (bytePos + len > input.length) throw new Error('Unexpected end of stored block payload');
-      for (let i = 0; i < len; i++) {
+      if ((length ^ invertedLength) !== 0xFFFF) throw new Error('Stored block length check failed');
+      if (bytePos + length > input.length) throw new Error('Unexpected end of stored block payload');
+      for (let index = 0; index < length; index++) {
         output.push(input[bytePos++]);
       }
     } else if (btype === 1) {
       // Fixed Huffman codes
       // Build fixed Huffman tree
       const lengths: number[] = [];
-      for (let i = 0; i <= 143; i++) lengths.push(8);
-      for (let i = 144; i <= 255; i++) lengths.push(9);
-      for (let i = 256; i <= 279; i++) lengths.push(7);
-      for (let i = 280; i <= 287; i++) lengths.push(8);
+      for (let index = 0; index <= 143; index++) lengths.push(8);
+      for (let index = 144; index <= 255; index++) lengths.push(9);
+      for (let index = 256; index <= 279; index++) lengths.push(7);
+      for (let index = 280; index <= 287; index++) lengths.push(8);
 
       const litTree = buildHuffmanTree(lengths);
-      const distTree = buildHuffmanTree(new Array(32).fill(5));
+      const distributionTree = buildHuffmanTree(Array<number>(32).fill(5));
 
-      decompressBlock(readBits, litTree, distTree, output);
+      decompressBlock(readBits, litTree, distributionTree, output);
     } else {
       throw new Error(`Unsupported block type: ${btype} (dynamic Huffman not implemented)`);
     }
@@ -96,16 +96,16 @@ interface HuffmanNode {
 
 function buildHuffmanTree(lengths: number[]): HuffmanNode {
   // Count codes per length
-  const blCount = new Array(16).fill(0);
-  for (const len of lengths) {
-    if (len > 0) blCount[len]++;
+  const bitLengthCounts: number[] = Array<number>(16).fill(0);
+  for (const length of lengths) {
+    if (length > 0) bitLengthCounts[length]++;
   }
 
   // Find numerical value of smallest code for each length
   let code = 0;
-  const nextCode = new Array(16).fill(0);
+  const nextCode: number[] = Array<number>(16).fill(0);
   for (let bits = 1; bits <= 15; bits++) {
-    code = (code + blCount[bits - 1]) << 1;
+    code = (code + bitLengthCounts[bits - 1]) << 1;
     nextCode[bits] = code;
   }
 
@@ -113,13 +113,13 @@ function buildHuffmanTree(lengths: number[]): HuffmanNode {
   const root: HuffmanNode = { children: [null, null], symbol: null };
 
   for (let symbol = 0; symbol < lengths.length; symbol++) {
-    const len = lengths[symbol];
-    if (len === 0) continue;
+    const length = lengths[symbol];
+    if (length === 0) continue;
 
-    const codeValue = nextCode[len]++;
+    const codeValue = nextCode[length]++;
     // Insert into tree
     let node = root;
-    for (let bit = len - 1; bit >= 0; bit--) {
+    for (let bit = length - 1; bit >= 0; bit--) {
       const direction = (codeValue >> bit) & 1;
       if (!node.children[direction]) {
         node.children[direction] = { children: [null, null], symbol: null };
@@ -135,13 +135,13 @@ function buildHuffmanTree(lengths: number[]): HuffmanNode {
 function decompressBlock(
   readBits: (n: number) => number,
   litTree: HuffmanNode,
-  distTree: HuffmanNode,
+  distributionTree: HuffmanNode,
   output: number[],
 ): void {
   const lengthExtraBits = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
   const lengthBase = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
-  const distExtraBits = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
-  const distBase = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  const distributionExtraBits = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+  const distributionBase = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
 
   function decodeSymbol(tree: HuffmanNode): number {
     let node = tree;
@@ -152,7 +152,7 @@ function decompressBlock(
     return node.symbol;
   }
 
-  while (true) {
+  for (;;) {
     const symbol = decodeSymbol(litTree);
 
     if (symbol < 256) {
@@ -168,16 +168,16 @@ function decompressBlock(
         length += readBits(lengthExtraBits[lengthIndex]);
       }
 
-      const distIndex = decodeSymbol(distTree);
-      let distance = distBase[distIndex];
-      if (distExtraBits[distIndex] > 0) {
-        distance += readBits(distExtraBits[distIndex]);
+      const distributionIndex = decodeSymbol(distributionTree);
+      let distance = distributionBase[distributionIndex];
+      if (distributionExtraBits[distributionIndex] > 0) {
+        distance += readBits(distributionExtraBits[distributionIndex]);
       }
 
       // Copy from output
       const start = output.length - distance;
-      for (let i = 0; i < length; i++) {
-        output.push(output[start + i]);
+      for (let index = 0; index < length; index++) {
+        output.push(output[start + index]);
       }
     }
   }
@@ -208,9 +208,9 @@ function parseCentralDirectory(data: Uint8Array, cdOffset: number, entryCount: n
   const entries: ZipEntry[] = [];
   let pos = cdOffset;
 
-  for (let i = 0; i < entryCount; i++) {
+  for (let index = 0; index < entryCount; index++) {
     if (view.getUint32(pos, true) !== 0x02014b50) {
-      throw new Error(`Central directory entry ${i} not found at offset ${pos}`);
+      throw new Error(`Central directory entry ${index} not found at offset ${pos}`);
     }
 
     const compressionMethod = view.getUint16(pos + 10, true);
@@ -280,22 +280,22 @@ function getSafeZipEntryPath(entryPath: string): string | null {
  * Creates directories as needed.
  *
  * @param zipData - The ZIP file content as Uint8Array
- * @param targetDir - The target directory path (e.g., 'file:///data/.../wikis/my-wiki/')
+ * @param targetDirectory - The target directory path (e.g., 'file:///data/.../wikis/my-wiki/')
  */
-export async function extractZipToDirectory(zipData: Uint8Array, targetDir: string): Promise<void> {
-  const normalizedTargetDir = targetDir.endsWith('/') ? targetDir : `${targetDir}/`;
+export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory: string): Promise<void> {
+  const normalizedTargetDirectory = targetDirectory.endsWith('/') ? targetDirectory : `${targetDirectory}/`;
 
   // Ensure target directory exists
-  const dirInfo = await FileSystem.getInfoAsync(normalizedTargetDir);
-  if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(normalizedTargetDir, { intermediates: true });
+  const directoryInfo = await FileSystem.getInfoAsync(normalizedTargetDirectory);
+  if (!directoryInfo.exists) {
+    await FileSystem.makeDirectoryAsync(normalizedTargetDirectory, { intermediates: true });
   }
 
   // Parse ZIP
   const { entries, cdOffset } = parseZipEndRecord(zipData);
   const fileEntries = parseCentralDirectory(zipData, cdOffset, entries);
 
-  console.log(`[extractZipToDirectory] Extracting ${fileEntries.length} files to ${normalizedTargetDir}`);
+  console.log(`[extractZipToDirectory] Extracting ${fileEntries.length} files to ${normalizedTargetDirectory}`);
 
   for (const entry of fileEntries) {
     // Skip directory entries (those ending with /)
@@ -329,13 +329,13 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDir: stri
     }
 
     // Build target file path
-    const targetPath = `${normalizedTargetDir}${safeEntryPath}`;
+    const targetPath = `${normalizedTargetDirectory}${safeEntryPath}`;
 
     // Ensure parent directory exists
-    const parentDir = targetPath.substring(0, targetPath.lastIndexOf('/'));
-    const parentInfo = await FileSystem.getInfoAsync(parentDir);
+    const parentDirectory = targetPath.substring(0, targetPath.lastIndexOf('/'));
+    const parentInfo = await FileSystem.getInfoAsync(parentDirectory);
     if (!parentInfo.exists) {
-      await FileSystem.makeDirectoryAsync(parentDir, { intermediates: true });
+      await FileSystem.makeDirectoryAsync(parentDirectory, { intermediates: true });
     }
 
     // Write file
@@ -346,5 +346,5 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDir: stri
     });
   }
 
-  console.log(`[extractZipToDirectory] Extraction complete: ${fileEntries.length} files to ${normalizedTargetDir}`);
+  console.log(`[extractZipToDirectory] Extraction complete: ${fileEntries.length} files to ${normalizedTargetDirectory}`);
 }

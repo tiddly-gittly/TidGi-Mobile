@@ -1,6 +1,5 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import { Buffer } from 'buffer';
-import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { Asset } from 'expo-asset';
 import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
@@ -11,6 +10,7 @@ import { Alert, Pressable } from 'react-native';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
+import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
 import { extractZipToDirectory } from '../../services/WikiTemplateService/extractLocalWikiTemplate';
@@ -39,6 +39,9 @@ const ImportWikiButton = styled(Button)`
   display: flex;
   flex-direction: column;
   justify-content: center;
+`;
+const LocalTemplateProgressBar = styled(ProgressBar)`
+  margin-top: 16px;
 `;
 /** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
 const ButtonLabelPadding = 30;
@@ -592,7 +595,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           {localTemplateStatus === 'extracting' && (
             <>
               <Text variant='titleMedium'>{t('Import.ExtractingLocalTemplate')}</Text>
-              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+              <LocalTemplateProgressBar indeterminate={true} color={MD3Colors.primary40} />
             </>
           )}
           {localTemplateStatus === 'success' && localTemplateCreatedWorkspace && (
@@ -635,221 +638,223 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         </>
       )}
       {/* ── Git import UI ────────────────────────────────────────────────── */}
-      {!isLocalTemplate && (<>
-      {/* Hide server config if is importing from template, for simplicity for new users. */}
-      {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
-      {importStatus === 'idle' && !qrScannerOpen && qrData && (
+      {!isLocalTemplate && (
         <>
-          <WorkspaceNameInput
-            label={t('EditWorkspace.Name')}
-            value={wikiName}
-            onChangeText={(newText: string) => {
-              setWikiName(newText);
-            }}
-          />
-          <ImportWikiButton
-            testID='import-wiki-confirm-button'
-            mode='elevated'
-            onPress={addServerAndImport}
-            labelStyle={{ padding: ButtonLabelPadding }}
-          >
-            <Text>
-              {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
-            </Text>
-          </ImportWikiButton>
-        </>
-      )}
-      {!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) && (
-        <>
-          {/* Overall batch progress — shown when multiple wikis are being imported */}
-          {isBatchImporting && (
+          {/* Hide server config if is importing from template, for simplicity for new users. */}
+          {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
+          {importStatus === 'idle' && !qrScannerOpen && qrData && (
             <>
-              <Text variant='titleSmall'>
-                {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
-                {batchProgress.currentName ? ` — ${batchProgress.currentName}` : ''}
-              </Text>
-              <ProgressBar
-                animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
-                color={MD3Colors.tertiary40}
-              />
-            </>
-          )}
-          {/* Per-step progress */}
-          {importStatus === 'cloning'
-            ? (
-              <>
-                <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
-                {cloneProgress.phase !== '' && (
-                  <Text variant='bodySmall'>
-                    {cloneProgress.phase === 'Creating work tree'
-                      ? t('Import.Phase.CreatingWorkTree')
-                      : cloneProgress.phase === 'Downloading pack'
-                      ? t('Import.Phase.DownloadingPack')
-                      : cloneProgress.phase === 'Receiving pack data'
-                      ? t('Import.Phase.ReceivingPackData')
-                      : cloneProgress.phase.startsWith('Indexing pack')
-                      ? t('Import.Phase.IndexingPack')
-                      : cloneProgress.phase.startsWith('Reconnecting')
-                      ? t('Import.Phase.Reconnecting')
-                      : cloneProgress.phase.startsWith('Checking server')
-                      ? t('Import.Phase.CheckingCapabilities')
-                      : cloneProgress.phase.startsWith('Downloading archive')
-                      ? t('Import.Phase.DownloadingArchive')
-                      : cloneProgress.phase.startsWith('Extracting')
-                      ? t('Import.Phase.ExtractingFiles')
-                      : cloneProgress.phase}
-                    {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
-                  </Text>
-                )}
-                {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
-                {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
-                {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
-                {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
-                {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
-                {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
-                <ProgressBar
-                  animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
-                  indeterminate={cloneProgress.total === 0}
-                  color={MD3Colors.primary40}
-                />
-              </>
-            )
-            : (
-              <ImportStatusText>
-                <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
-              </ImportStatusText>
-            )}
-        </>
-      )}
-      {importStatus === 'error' && (
-        <>
-          {importErrorKind === 'oom' && (
-            <ImportStatusText style={{ color: MD3Colors.error50 }}>
-              <Text>{t('Import.Error.OOM')}</Text>
-            </ImportStatusText>
-          )}
-          {importErrorKind === 'tooLarge' && (
-            <ImportStatusText style={{ color: MD3Colors.error50 }}>
-              <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
-            </ImportStatusText>
-          )}
-          {importErrorKind === 'connectionAbort' && (
-            <ImportStatusText style={{ color: MD3Colors.error50 }}>
-              <Text>{t('Import.Error.ConnectionAbort')}</Text>
-            </ImportStatusText>
-          )}
-          {importErrorKind === 'generic' && (
-            <Pressable
-              onLongPress={() => {
-                if (importError) {
-                  void Clipboard.setStringAsync(importError);
-                  Alert.alert(t('Import.Error.CopiedToClipboard'));
-                }
-              }}
-            >
-              <ImportStatusText style={{ color: MD3Colors.error50 }}>
-                <Text selectable>{t('ErrorMessage')} {importError}</Text>
-              </ImportStatusText>
-            </Pressable>
-          )}
-          <Button
-            mode='elevated'
-            onPress={() => {
-              autoImportTriggeredReference.current = false;
-              resetState();
-            }}
-          >
-            <Text>{t('AddWorkspace.Reset')}</Text>
-          </Button>
-        </>
-      )}
-      {importStatus === 'partialSuccess' && !isBatchImporting && (
-        <>
-          {/* Show successfully imported wikis */}
-          {batchCreatedWorkspaces.length > 0 && (
-            <>
-              <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
-              {batchCreatedWorkspaces.map((ws) => (
-                <SuccessWikiNameText key={ws.id} variant='bodyMedium'>
-                  ✓ {ws.name}
-                </SuccessWikiNameText>
-              ))}
-            </>
-          )}
-          {/* Show failed wikis with error details */}
-          {batchFailedItems.length > 0 && (
-            <>
-              <DoneImportActionsTitleText variant='titleLarge' style={{ color: MD3Colors.error50 }}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
-              {batchFailedItems.map((f, index) => (
-                <Pressable
-                  key={index}
-                  onLongPress={() => {
-                    void Clipboard.setStringAsync(f.errorMessage);
-                    Alert.alert(t('Import.Error.CopiedToClipboard'));
-                  }}
-                >
-                  <FailedWikiNameText variant='bodyMedium' selectable>
-                    ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
-                  </FailedWikiNameText>
-                </Pressable>
-              ))}
-            </>
-          )}
-          {/* Action buttons */}
-          <RetryButton
-            mode='elevated'
-            onPress={retryFailedImports}
-          >
-            <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
-          </RetryButton>
-          {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
-            <OpenWikiButton
-              key={ws.id}
-              testID={`open-wiki-button-${ws.id}`}
-              mode='elevated'
-              onPress={() => {
-                navigation.navigate('MainMenu', { fromWikiID: ws.id });
-                navigation.navigate('WikiWebView', { id: ws.id });
-              }}
-              labelStyle={{ padding: ButtonLabelPadding }}
-            >
-              <Text>{`${t('Open')} ${ws.name}`}</Text>
-            </OpenWikiButton>
-          ))}
-          <ResetButton
-            mode='text'
-            onPress={() => {
-              autoImportTriggeredReference.current = false;
-              resetState();
-            }}
-          >
-            <Text>{t('AddWorkspace.Reset')}</Text>
-          </ResetButton>
-        </>
-      )}
-      {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
-        <>
-          <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
-
-          {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : [createdWikiWorkspace!])
-            .filter(ws => ws.isSubWiki !== true)
-            .map((ws) => (
-              <OpenWikiButton
-                key={ws.id}
-                testID={`open-wiki-button-${ws.id}`}
-                mode='elevated'
-                onPress={() => {
-                  navigation.navigate('MainMenu', { fromWikiID: ws.id });
-                  navigation.navigate('WikiWebView', { id: ws.id });
+              <WorkspaceNameInput
+                label={t('EditWorkspace.Name')}
+                value={wikiName}
+                onChangeText={(newText: string) => {
+                  setWikiName(newText);
                 }}
+              />
+              <ImportWikiButton
+                testID='import-wiki-confirm-button'
+                mode='elevated'
+                onPress={addServerAndImport}
                 labelStyle={{ padding: ButtonLabelPadding }}
               >
-                <Text>{`${t('Open')} ${ws.name}`}</Text>
-              </OpenWikiButton>
-            ))}
+                <Text>
+                  {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
+                </Text>
+              </ImportWikiButton>
+            </>
+          )}
+          {!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) && (
+            <>
+              {/* Overall batch progress — shown when multiple wikis are being imported */}
+              {isBatchImporting && (
+                <>
+                  <Text variant='titleSmall'>
+                    {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
+                    {batchProgress.currentName ? ` — ${batchProgress.currentName}` : ''}
+                  </Text>
+                  <ProgressBar
+                    animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
+                    color={MD3Colors.tertiary40}
+                  />
+                </>
+              )}
+              {/* Per-step progress */}
+              {importStatus === 'cloning'
+                ? (
+                  <>
+                    <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
+                    {cloneProgress.phase !== '' && (
+                      <Text variant='bodySmall'>
+                        {cloneProgress.phase === 'Creating work tree'
+                          ? t('Import.Phase.CreatingWorkTree')
+                          : cloneProgress.phase === 'Downloading pack'
+                          ? t('Import.Phase.DownloadingPack')
+                          : cloneProgress.phase === 'Receiving pack data'
+                          ? t('Import.Phase.ReceivingPackData')
+                          : cloneProgress.phase.startsWith('Indexing pack')
+                          ? t('Import.Phase.IndexingPack')
+                          : cloneProgress.phase.startsWith('Reconnecting')
+                          ? t('Import.Phase.Reconnecting')
+                          : cloneProgress.phase.startsWith('Checking server')
+                          ? t('Import.Phase.CheckingCapabilities')
+                          : cloneProgress.phase.startsWith('Downloading archive')
+                          ? t('Import.Phase.DownloadingArchive')
+                          : cloneProgress.phase.startsWith('Extracting')
+                          ? t('Import.Phase.ExtractingFiles')
+                          : cloneProgress.phase}
+                        {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
+                      </Text>
+                    )}
+                    {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
+                    {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
+                    {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
+                    {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
+                    {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
+                    {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
+                    <ProgressBar
+                      animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+                      indeterminate={cloneProgress.total === 0}
+                      color={MD3Colors.primary40}
+                    />
+                  </>
+                )
+                : (
+                  <ImportStatusText>
+                    <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
+                  </ImportStatusText>
+                )}
+            </>
+          )}
+          {importStatus === 'error' && (
+            <>
+              {importErrorKind === 'oom' && (
+                <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                  <Text>{t('Import.Error.OOM')}</Text>
+                </ImportStatusText>
+              )}
+              {importErrorKind === 'tooLarge' && (
+                <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                  <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
+                </ImportStatusText>
+              )}
+              {importErrorKind === 'connectionAbort' && (
+                <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                  <Text>{t('Import.Error.ConnectionAbort')}</Text>
+                </ImportStatusText>
+              )}
+              {importErrorKind === 'generic' && (
+                <Pressable
+                  onLongPress={() => {
+                    if (importError) {
+                      void Clipboard.setStringAsync(importError);
+                      Alert.alert(t('Import.Error.CopiedToClipboard'));
+                    }
+                  }}
+                >
+                  <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                    <Text selectable>{t('ErrorMessage')} {importError}</Text>
+                  </ImportStatusText>
+                </Pressable>
+              )}
+              <Button
+                mode='elevated'
+                onPress={() => {
+                  autoImportTriggeredReference.current = false;
+                  resetState();
+                }}
+              >
+                <Text>{t('AddWorkspace.Reset')}</Text>
+              </Button>
+            </>
+          )}
+          {importStatus === 'partialSuccess' && !isBatchImporting && (
+            <>
+              {/* Show successfully imported wikis */}
+              {batchCreatedWorkspaces.length > 0 && (
+                <>
+                  <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
+                  {batchCreatedWorkspaces.map((ws) => (
+                    <SuccessWikiNameText key={ws.id} variant='bodyMedium'>
+                      ✓ {ws.name}
+                    </SuccessWikiNameText>
+                  ))}
+                </>
+              )}
+              {/* Show failed wikis with error details */}
+              {batchFailedItems.length > 0 && (
+                <>
+                  <DoneImportActionsTitleText variant='titleLarge' style={{ color: MD3Colors.error50 }}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
+                  {batchFailedItems.map((f, index) => (
+                    <Pressable
+                      key={index}
+                      onLongPress={() => {
+                        void Clipboard.setStringAsync(f.errorMessage);
+                        Alert.alert(t('Import.Error.CopiedToClipboard'));
+                      }}
+                    >
+                      <FailedWikiNameText variant='bodyMedium' selectable>
+                        ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
+                      </FailedWikiNameText>
+                    </Pressable>
+                  ))}
+                </>
+              )}
+              {/* Action buttons */}
+              <RetryButton
+                mode='elevated'
+                onPress={retryFailedImports}
+              >
+                <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
+              </RetryButton>
+              {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
+                <OpenWikiButton
+                  key={ws.id}
+                  testID={`open-wiki-button-${ws.id}`}
+                  mode='elevated'
+                  onPress={() => {
+                    navigation.navigate('MainMenu', { fromWikiID: ws.id });
+                    navigation.navigate('WikiWebView', { id: ws.id });
+                  }}
+                  labelStyle={{ padding: ButtonLabelPadding }}
+                >
+                  <Text>{`${t('Open')} ${ws.name}`}</Text>
+                </OpenWikiButton>
+              ))}
+              <ResetButton
+                mode='text'
+                onPress={() => {
+                  autoImportTriggeredReference.current = false;
+                  resetState();
+                }}
+              >
+                <Text>{t('AddWorkspace.Reset')}</Text>
+              </ResetButton>
+            </>
+          )}
+          {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
+            <>
+              <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
+
+              {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : [createdWikiWorkspace!])
+                .filter(ws => ws.isSubWiki !== true)
+                .map((ws) => (
+                  <OpenWikiButton
+                    key={ws.id}
+                    testID={`open-wiki-button-${ws.id}`}
+                    mode='elevated'
+                    onPress={() => {
+                      navigation.navigate('MainMenu', { fromWikiID: ws.id });
+                      navigation.navigate('WikiWebView', { id: ws.id });
+                    }}
+                    labelStyle={{ padding: ButtonLabelPadding }}
+                  >
+                    <Text>{`${t('Open')} ${ws.name}`}</Text>
+                  </OpenWikiButton>
+                ))}
+            </>
+          )}
         </>
       )}
-      </>)}
     </Container>
   );
 };
