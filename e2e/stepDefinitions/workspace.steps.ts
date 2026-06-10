@@ -265,3 +265,33 @@ Then('I should see the commit history page', async () => {
 Then('I should see the unsynced commit count label', async () => {
   await waitForElement(by.id('workspace-unsynced-count'), UI_TIMEOUT, 'workspace-unsynced-count label', 'visible');
 });
+
+// ── Commit detail / file diff ─────────────────────────────────────────────────
+
+Then('the commit list has loaded', async () => {
+  // Wait for at least one commit card to render. Use commit-item-0 if there
+  // are no uncommitted changes, fall back to commit-item-uncommitted.
+  await waitForElement(by.id('commit-item-0'), 30_000, 'commit-item-0', 'visible');
+});
+
+When('I tap the first commit in the history', async () => {
+  // commit-item-0 is the first real commit when no uncommitted changes exist.
+  await element(by.id('commit-item-0')).tap();
+  // Give the native module (gitGetChangedFilesForCommit) time to respond.
+  await delay(3_000);
+});
+
+Then('I should see the commit details card', async () => {
+  await waitForElement(by.id('commit-details-card'), 10_000, 'commit-details-card', 'visible');
+});
+
+When('I tap the first file in the commit details', async () => {
+  await waitForElement(by.id('commit-detail-file-0'), 10_000, 'commit-detail-file-0', 'visible');
+  await element(by.id('commit-detail-file-0')).tap();
+  // Let the native file-content reads complete.
+  await delay(2_000);
+});
+
+Then('I should see the file diff content', async () => {
+  await waitForElement(by.id('file-preview-diff-text'), 10_000, 'file-preview-diff-text', 'visible');
+});

@@ -174,9 +174,9 @@ export function GitFilePreviewModal({
         )
         : (
           <ContentScrollView scrollViewHeight={scrollViewHeight}>
-            {panelMode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText>{renderTextDiff(beforeText, afterText)}</CodeText>}
+            {panelMode === 'diff' && beforeContent.kind === 'text' && afterContent.kind === 'text' && <CodeText testID='file-preview-diff-text'>{renderTextDiff(beforeText, afterText)}</CodeText>}
 
-            {panelMode === 'full' && afterContent.kind === 'text' && <CodeText>{afterText}</CodeText>}
+            {panelMode === 'full' && afterContent.kind === 'text' && <CodeText testID='file-preview-full-text'>{afterText}</CodeText>}
 
             {panelMode === 'full' && afterContent.kind === 'image' && afterContent.dataUri && <PreviewImage source={{ uri: afterContent.dataUri }} />}
 
