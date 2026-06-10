@@ -7,8 +7,7 @@
       "tags": "WikiTemplates LocalTemplate",
       "testIdKey": "tidgi-default-template",
       "title": "太记默认模板",
-      "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
-      "isLocalDefault": true
+      "url": "https://tiddly-gittly.github.io/Tiddlywiki-NodeJS-Github-Template/"
     },
     {
       "contribute": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
@@ -17,8 +16,7 @@
       "tags": "WikiTemplates LocalTemplate",
       "testIdKey": "tidgi-default-template",
       "title": "TidGi Default Template",
-      "url": "https://github.com/tiddly-gittly/Tiddlywiki-NodeJS-Github-Template",
-      "isLocalDefault": true
+      "url": "https://tiddly-gittly.github.io/Tiddlywiki-NodeJS-Github-Template/"
     }
   ],
   "onlineSources": [
