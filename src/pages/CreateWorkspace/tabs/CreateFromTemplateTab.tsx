@@ -45,20 +45,23 @@ export const CreateFromTemplateTab = () => {
       );
     }, [navigation]);
 
-  if (loading) {
-    return (
-      <LoadingContainer>
-        <ActivityIndicator animating={true} color={MD2Colors.red800} />
-        <Text>{t('AddWorkspace.LoadingFromServer')}</Text>
-        {serverHosts.map((host) => <Text key={host}>{host}</Text>)}
-      </LoadingContainer>
-    );
-  }
+  const renderFooter = useMemo(() => loading
+    ? () => (
+        <LoadingContainer>
+          <ActivityIndicator animating={true} color={MD2Colors.red800} />
+          <Text>{t('AddWorkspace.LoadingFromServer')}</Text>
+          {serverHosts.map((host) => <Text key={host}>{host}</Text>)}
+        </LoadingContainer>
+      )
+    : undefined,
+  [loading, serverHosts, t]);
+
   return (
     <FlatList
       data={filteredTemplates}
       renderItem={renderItem}
       keyExtractor={(_item, index) => `template-${index}`}
+      ListFooterComponent={renderFooter}
     />
   );
 };
