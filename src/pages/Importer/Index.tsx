@@ -596,60 +596,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   return (
     <Container testID='importer-screen'>
-      {/* ── Local template import UI ─────────────────────────────────────── */}
-      {isLocalTemplate && (
-        <>
-          {localTemplateStatus === 'extracting' && (
-            <>
-              <Text variant='titleMedium'>{t('Import.ExtractingLocalTemplate')}</Text>
-              <LocalTemplateProgressBar indeterminate={true} color={MD3Colors.primary40} />
-            </>
-          )}
-          {localTemplateStatus === 'success' && localTemplateCreatedWorkspace && (
-            <>
-              <DoneImportActionsTitleText variant='titleMedium'>
-                {t('ImportSuccess')}
-              </DoneImportActionsTitleText>
-              <SuccessWikiNameText variant='bodyLarge'>
-                {localTemplateCreatedWorkspace.name}
-              </SuccessWikiNameText>
-              <OpenWikiButton
-                mode='contained'
-                icon='open-in-new'
-                onPress={() => {
-                  navigation.navigate('MainMenu', { fromWikiID: localTemplateCreatedWorkspace.id });
-                  navigation.navigate('WikiWebView', { id: localTemplateCreatedWorkspace.id });
-                }}
-                labelStyle={{ padding: ButtonLabelPadding }}
-              >
-                {t('Open')} {localTemplateCreatedWorkspace.name}
-              </OpenWikiButton>
-            </>
-          )}
-          {localTemplateStatus === 'error' && (
-            <>
-              <FailedWikiNameText variant='bodyLarge'>
-                {t('ErrorMessage')}: {localTemplateError}
-              </FailedWikiNameText>
-              <RetryButton
-                mode='contained'
-                onPress={() => {
-                  setLocalTemplateStatus('idle');
-                  setLocalTemplateError(undefined);
-                }}
-              >
-                {t('Import.Retry')}
-              </RetryButton>
-            </>
-          )}
-        </>
-      )}
-      {/* ── Git import UI ────────────────────────────────────────────────── */}
-      {!isLocalTemplate && (
-        <>
-          {/* Hide server config if is importing from template, for simplicity for new users. */}
-          {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
-          {importStatus === 'idle' && !qrScannerOpen && qrData && (
+      {/* Hide server config if is importing from template, for simplicity for new users. */}
+      {!isLocalTemplate && autoStartImport !== true && importStatus === 'idle' && serverConfigs}
+      {!isLocalTemplate && importStatus === 'idle' && !qrScannerOpen && qrData && (
             <>
               <WorkspaceNameInput
                 label={t('EditWorkspace.Name')}
@@ -670,8 +619,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               </ImportWikiButton>
             </>
           )}
-          {!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) && (
+          {(!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) || localTemplateStatus === 'extracting') && (
             <>
+              {/* Local template extraction progress */}
+              {localTemplateStatus === 'extracting' && (
+                <>
+                  <Text variant='titleMedium'>{t('Import.ExtractingLocalTemplate')}</Text>
+                  <LocalTemplateProgressBar indeterminate={true} color={MD3Colors.primary40} />
+                </>
+              )}
               {/* Overall batch progress — shown when multiple wikis are being imported */}
               {isBatchImporting && (
                 <>
@@ -732,7 +688,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 )}
             </>
           )}
-          {importStatus === 'error' && (
+          {(importStatus === 'error' || localTemplateStatus === 'error') && (
             <>
               {importErrorKind === 'oom' && (
                 <ImportStatusText style={{ color: MD3Colors.error50 }}>
@@ -772,6 +728,23 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               >
                 <Text>{t('AddWorkspace.Reset')}</Text>
               </Button>
+              {/* Local template error */}
+              {localTemplateStatus === 'error' && (
+                <>
+                  <FailedWikiNameText variant='bodyLarge'>
+                    {t('ErrorMessage')}: {localTemplateError}
+                  </FailedWikiNameText>
+                  <RetryButton
+                    mode='contained'
+                    onPress={() => {
+                      setLocalTemplateStatus('idle');
+                      setLocalTemplateError(undefined);
+                    }}
+                  >
+                    {t('Import.Retry')}
+                  </RetryButton>
+                </>
+              )}
             </>
           )}
           {importStatus === 'partialSuccess' && !isBatchImporting && (
@@ -838,11 +811,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               </ResetButton>
             </>
           )}
-          {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
+          {(importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0)) || localTemplateCreatedWorkspace !== undefined ? (
             <>
               <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
 
-              {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : [createdWikiWorkspace!])
+              {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : createdWikiWorkspace ? [createdWikiWorkspace] : [])
+                .concat(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : [])
                 .filter(ws => ws.isSubWiki !== true)
                 .map((ws) => (
                   <OpenWikiButton
@@ -859,9 +833,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                   </OpenWikiButton>
                 ))}
             </>
-          )}
-        </>
-      )}
+          ) : null}
     </Container>
   );
 };
