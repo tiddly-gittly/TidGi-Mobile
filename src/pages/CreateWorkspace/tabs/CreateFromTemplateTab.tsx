@@ -28,22 +28,17 @@ export const CreateFromTemplateTab = () => {
             navigation.navigate('PreviewWebView', { uri });
           }}
           onUsePress={(templateItem: ITemplateListItem, uri: string) => {
-            if (typeof templateItem.gitUrl === 'string' && templateItem.gitUrl.length > 0) {
-              navigation.navigate('Importer', {
-                gitUrl: templateItem.gitUrl,
-                workspaceName: templateItem.title,
-                autoStartImport: true,
-                addAsServer: true,
-              });
+            if (uri.startsWith('http://') || uri.startsWith('https://')) {
+              navigation.navigate('Importer', { uri, autoStartImport: true, addAsServer: false });
               return;
             }
 
-            // No gitUrl means bundled local template (ZIP extracted at runtime)
+            // Non-http url = local bundled template asset name (e.g. wiki-template.zip)
             navigation.navigate('Importer', {
               workspaceName: templateItem.title,
               autoStartImport: true,
               addAsServer: false,
-              localTemplateZip: true,
+              localTemplateAsset: uri,
             });
           }}
         />

@@ -84,10 +84,11 @@ export interface ImporterProps {
    */
   gitUrl?: string;
   /**
-   * When true, use the bundled local wiki template ZIP instead of cloning from a remote git repository.
-   * The ZIP is built by `scripts/buildWikiTemplateZip.mjs` and placed in assets/wiki-template.zip.
+   * Asset name (without path) of a bundled local wiki template ZIP.
+   * When specified, the template is extracted from the app bundle instead of
+   * cloning from a remote repository. Currently supported: "wiki-template.zip".
    */
-  localTemplateZip?: boolean;
+  localTemplateAsset?: string;
   /**
    * Save the URI as a server to workspace. Default to `true`.
    */
@@ -381,7 +382,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [localTemplateError, setLocalTemplateError] = useState<string | undefined>();
   const [localTemplateCreatedWorkspace, setLocalTemplateCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
 
-  const importLocalWikiTemplate = useCallback(async (templateName: string) => {
+  const importLocalWikiTemplate = useCallback(async (templateName: string, assetName: string) => {
     setLocalTemplateStatus('extracting');
     setLocalTemplateError(undefined);
 
@@ -520,12 +521,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   // Auto-start local template import
   useEffect(() => {
-    if (route.params.localTemplateZip !== true) return;
+    if (typeof route.params.localTemplateAsset !== 'string') return;
     if (localTemplateStatus !== 'idle') return;
 
     const workspaceName = route.params.workspaceName ?? 'wiki';
-    void importLocalWikiTemplate(workspaceName);
-  }, [importLocalWikiTemplate, localTemplateStatus, route.params.localTemplateZip, route.params.workspaceName]);
+    void importLocalWikiTemplate(workspaceName, route.params.localTemplateAsset);
+  }, [importLocalWikiTemplate, localTemplateStatus, route.params.localTemplateAsset, route.params.workspaceName]);
 
   const serverConfigs = (
     <ImporterServerConfigs
@@ -585,7 +586,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }
 
   const autoStartImport = route.params.autoStartImport;
-  const isLocalTemplate = route.params.localTemplateZip === true;
+  const isLocalTemplate = typeof route.params.localTemplateAsset === 'string';
 
   return (
     <Container testID='importer-screen'>
