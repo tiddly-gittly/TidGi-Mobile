@@ -21,7 +21,7 @@ function toFileUri(plainPath: string): string {
   return plainPath.startsWith('file://') ? plainPath : `file://${plainPath}`;
 }
 
-export { normalizeGitCloneUrl } from './gitCloneCacheUtils';
+export { normalizeGitCloneUrl } from './gitCloneCacheUtilities';
 
 export function resolveWikiFolderLocation(workspaceId: string, useExternalStorage: boolean): string | undefined {
   const { customWikiFolderPath } = useWorkspaceStore.getState();

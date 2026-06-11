@@ -2,7 +2,7 @@ import {
   buildGitCloneCacheDirectory,
   normalizeGitCloneUrl,
   toFileCloneUrl,
-} from '../src/services/WikiImportService/gitCloneCacheUtils';
+} from '../src/services/WikiImportService/gitCloneCacheUtilities';
 
 function assertEqual(actual: string, expected: string, label: string): void {
   if (actual !== expected) {

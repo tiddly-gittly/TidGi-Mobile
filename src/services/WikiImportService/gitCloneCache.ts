@@ -1,11 +1,11 @@
 import { Paths } from 'expo-file-system';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
-import { buildGitCloneCacheDirectory, normalizeGitCloneUrl, toFileCloneUrl } from './gitCloneCacheUtils';
+import { buildGitCloneCacheDirectory } from './gitCloneCacheUtilities';
 
 const GIT_CLONE_CACHE_ROOT = `${Paths.cache.uri}git-clone-cache/`;
 
-export { normalizeGitCloneUrl, toFileCloneUrl } from './gitCloneCacheUtils';
+export { normalizeGitCloneUrl, toFileCloneUrl } from './gitCloneCacheUtilities';
 
 export function getGitCloneCacheDirectory(cloneUrl: string): string {
   return buildGitCloneCacheDirectory(GIT_CLONE_CACHE_ROOT, cloneUrl);
