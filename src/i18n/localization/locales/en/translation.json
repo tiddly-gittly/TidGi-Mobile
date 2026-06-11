@@ -570,6 +570,11 @@
     "BatchProgress": "Importing",
     "GitImportComplete": "Git import completed",
     "ExtractingLocalTemplate": "Creating wiki from built-in template...",
+    "LocalTemplateStep": {
+      "Loading": "Preparing template...",
+      "Extracting": "Extracting files",
+      "InitializingGit": "Initializing git repository..."
+    },
     "Retry": "Retry",
     "RequestingCameraPermission": "Requesting camera permission",
     "NoCameraAccess": "No access to camera",

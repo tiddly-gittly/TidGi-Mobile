@@ -546,6 +546,11 @@
     "BatchProgress": "正在导入",
     "GitImportComplete": "Git 导入完成",
     "ExtractingLocalTemplate": "正在从内置模板创建 Wiki...",
+    "LocalTemplateStep": {
+      "Loading": "正在准备模板...",
+      "Extracting": "正在解压文件",
+      "InitializingGit": "正在初始化 Git 仓库..."
+    },
     "Retry": "重试",
     "RequestingCameraPermission": "正在请求相机权限",
     "NoCameraAccess": "无法访问相机",

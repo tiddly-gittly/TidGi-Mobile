@@ -284,7 +284,7 @@ function getSafeZipEntryPath(entryPath: string): string | null {
  * @param targetDirectory - The target directory path (e.g., 'file:///data/.../wikis/my-wiki/')
  * @param useExternalStorage - Whether the target is on external SD card / user-accessible storage
  */
-export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory: string, useExternalStorage = false): Promise<void> {
+export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory: string, useExternalStorage = false, onProgress?: (current: number, total: number) => void): Promise<void> {
   const normalizedTargetDirectory = targetDirectory.endsWith('/') ? targetDirectory : `${targetDirectory}/`;
 
   // Ensure target directory exists
@@ -305,7 +305,16 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory
   const { entries, cdOffset } = parseZipEndRecord(zipData);
   const fileEntries = parseCentralDirectory(zipData, cdOffset, entries);
 
-  console.log(`[extractZipToDirectory] Extracting ${fileEntries.length} files to ${normalizedTargetDirectory}`);
+  let extracted = 0;
+  let totalFiles = 0;
+  for (const entry of fileEntries) {
+    if (entry.path.endsWith('/')) continue;
+    if (entry.path.includes('/.git/') || entry.path.startsWith('.git/')) continue;
+    if (entry.path.endsWith('tidgi.config.json')) continue;
+    totalFiles++;
+  }
+
+  console.log(`[extractZipToDirectory] Extracting ${totalFiles} files to ${normalizedTargetDirectory}`);
 
   for (const entry of fileEntries) {
     // Skip directory entries (those ending with /)
@@ -366,7 +375,9 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory
         encoding: FileSystem.EncodingType.Base64,
       });
     }
+    extracted++;
+    onProgress?.(extracted, totalFiles);
   }
 
-  console.log(`[extractZipToDirectory] Extraction complete: ${fileEntries.length} files to ${normalizedTargetDirectory}`);
+  console.log(`[extractZipToDirectory] Extraction complete: ${totalFiles} files to ${normalizedTargetDirectory}`);
 }

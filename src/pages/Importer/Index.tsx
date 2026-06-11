@@ -41,9 +41,6 @@ const ImportWikiButton = styled(Button)`
   flex-direction: column;
   justify-content: center;
 `;
-const LocalTemplateProgressBar = styled(ProgressBar)`
-  margin-top: 16px;
-`;
 /** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
 const ButtonLabelPadding = 30;
 const OpenWikiButton = styled(Button)`
@@ -379,13 +376,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   // ─── Local template import ─────────────────────────────────────────────────
 
-  const [localTemplateStatus, setLocalTemplateStatus] = useState<'idle' | 'extracting' | 'success' | 'error'>('idle');
+  const [localTemplateStatus, setLocalTemplateStatus] = useState<'idle' | 'loading' | 'extracting' | 'initializingGit' | 'success' | 'error'>('idle');
   const [localTemplateError, setLocalTemplateError] = useState<string | undefined>();
   const [localTemplateCreatedWorkspace, setLocalTemplateCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
+  const [localTemplateProgress, setLocalTemplateProgress] = useState({ current: 0, total: 0 });
 
   const importLocalWikiTemplate = useCallback(async (templateName: string, assetName: string) => {
-    setLocalTemplateStatus('extracting');
+    setLocalTemplateStatus('loading');
     setLocalTemplateError(undefined);
+    setLocalTemplateProgress({ current: 0, total: 0 });
 
     let createdWorkspace: IWikiWorkspace | undefined;
 
@@ -428,13 +427,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       });
       const zipBytes = Uint8Array.from(Buffer.from(zipBase64, 'base64'));
 
-      // 4. Extract ZIP to wiki folder location
+      // 4. Extract ZIP to wiki folder location (with real file-by-file progress)
+      setLocalTemplateStatus('extracting');
       const useExternal = newWorkspace.useExternalStorage === true;
       const targetDirectory = newWorkspace.wikiFolderLocation;
-      await extractZipToDirectory(zipBytes, targetDirectory, useExternal);
+      await extractZipToDirectory(zipBytes, targetDirectory, useExternal, (current, total) => {
+        setLocalTemplateProgress({ current, total });
+      });
 
       // 5. Initialize git repository if using external storage (native git)
       if (useExternal) {
+        setLocalTemplateStatus('initializingGit');
         await gitInit(newWorkspace);
         await gitCommit(newWorkspace, 'Initial Commit with TidGi Mobile');
       }
@@ -627,13 +630,35 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               </ImportWikiButton>
             </>
           )}
-          {(!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) || localTemplateStatus === 'extracting') && (
+          {(!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) || (localTemplateStatus !== 'idle' && localTemplateStatus !== 'success' && localTemplateStatus !== 'error')) && (
             <>
-              {/* Local template extraction progress */}
+              {/* ── Local template import steps ────────────────────────── */}
+              {localTemplateStatus === 'loading' && (
+                <>
+                  <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
+                  <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+                </>
+              )}
               {localTemplateStatus === 'extracting' && (
                 <>
-                  <Text variant='titleMedium'>{t('Import.ExtractingLocalTemplate')}</Text>
-                  <LocalTemplateProgressBar indeterminate={true} color={MD3Colors.primary40} />
+                  <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Extracting')}</Text>
+                  <Text variant='bodySmall' style={{ marginTop: 8 }}>
+                    {localTemplateProgress.total > 0
+                      ? `${localTemplateProgress.current} / ${localTemplateProgress.total} files`
+                      : ''}
+                  </Text>
+                  <ProgressBar
+                    animatedValue={localTemplateProgress.total > 0 ? localTemplateProgress.current / localTemplateProgress.total : 0}
+                    indeterminate={localTemplateProgress.total === 0}
+                    color={MD3Colors.primary40}
+                    style={{ marginTop: 8 }}
+                  />
+                </>
+              )}
+              {localTemplateStatus === 'initializingGit' && (
+                <>
+                  <Text variant='titleMedium'>{t('Import.LocalTemplateStep.InitializingGit')}</Text>
+                  <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
                 </>
               )}
               {/* Overall batch progress — shown when multiple wikis are being imported */}
