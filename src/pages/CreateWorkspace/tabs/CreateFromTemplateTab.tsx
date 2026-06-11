@@ -28,36 +28,45 @@ export const CreateFromTemplateTab = () => {
             navigation.navigate('PreviewWebView', { uri });
           }}
           onUsePress={(templateItem: ITemplateListItem, uri: string) => {
-            if (typeof templateItem.gitUrl === 'string' && templateItem.gitUrl.length > 0) {
+            if (uri.startsWith('http://') || uri.startsWith('https://')) {
               navigation.navigate('Importer', {
-                gitUrl: templateItem.gitUrl,
+                uri,
                 workspaceName: templateItem.title,
                 autoStartImport: true,
-                addAsServer: true,
+                addAsServer: false,
               });
               return;
             }
 
-            navigation.navigate('Importer', { uri, autoStartImport: true, addAsServer: false });
+            // Non-http url = local bundled template asset name (e.g. wiki-template.zip)
+            navigation.navigate('Importer', {
+              workspaceName: templateItem.title,
+              autoStartImport: true,
+              addAsServer: false,
+              localTemplateAsset: uri,
+            });
           }}
         />
       );
     }, [navigation]);
 
-  if (loading) {
-    return (
-      <LoadingContainer>
-        <ActivityIndicator animating={true} color={MD2Colors.red800} />
-        <Text>{t('AddWorkspace.LoadingFromServer')}</Text>
-        {serverHosts.map((host) => <Text key={host}>{host}</Text>)}
-      </LoadingContainer>
-    );
-  }
+  const renderFooter = useMemo(() =>
+    loading
+      ? () => (
+        <LoadingContainer>
+          <ActivityIndicator animating={true} color={MD2Colors.red800} />
+          <Text>{t('AddWorkspace.LoadingFromServer')}</Text>
+          {serverHosts.map((host) => <Text key={host}>{host}</Text>)}
+        </LoadingContainer>
+      )
+      : undefined, [loading, serverHosts, t]);
+
   return (
     <FlatList
       data={filteredTemplates}
       renderItem={renderItem}
       keyExtractor={(_item, index) => `template-${index}`}
+      ListFooterComponent={renderFooter}
     />
   );
 };

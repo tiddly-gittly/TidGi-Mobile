@@ -88,6 +88,7 @@ jobs:
           cd plugins && pnpm i && cd ..
           pnpm run build:plugin
           pnpm run build:tw-assets
+          pnpm run build:wiki-template
 
       - name: Build by eject eas and remove debug signing key for aab
         run: |

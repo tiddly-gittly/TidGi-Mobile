@@ -12,7 +12,6 @@ export interface ITemplateListItem {
   contribute: string;
   description: string;
   fallbackUrls?: string | undefined;
-  gitUrl?: string | undefined;
   language: string;
   tags: string;
   testIdKey?: string | undefined;
@@ -31,7 +30,7 @@ function toTemplateTestIdSegment(item: ITemplateListItem): string {
     return item.testIdKey;
   }
 
-  const source = item.gitUrl ?? item.url;
+  const source = item.url;
   let candidate = item.title;
 
   try {
@@ -79,6 +78,7 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
   const fallbackUrls = item.fallbackUrls ? item.fallbackUrls.split(' ').filter(Boolean) : [];
   const [selectedUrl, setSelectedUrl] = useState(item.url);
   const templateTestIdSegment = toTemplateTestIdSegment(item);
+  const isOnlineTemplate = item.url.startsWith('http://') || item.url.startsWith('https://');
 
   const handleSelectUrl = useCallback((url: string) => {
     setSelectedUrl(url);
@@ -92,32 +92,36 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
         <Text>{item.description}</Text>
       </Card.Content>
       <Card.Actions>
-        <Button
-          testID={`template-preview-${templateTestIdSegment}`}
-          icon='eye-outline'
-          mode='text'
-          onPress={() => {
-            onPreviewPress(selectedUrl);
-          }}
-        >
-          {t('AddWorkspace.Preview')}
-        </Button>
-        <Menu
-          visible={visible}
-          onDismiss={closeMenu}
-          anchor={<Button icon='dots-vertical' onPress={openMenu}>{t('AddWorkspace.SelectSource')}</Button>}
-        >
-          {[item.url, ...fallbackUrls].map((url, index) => (
-            <Menu.Item
-              key={index}
-              style={url === selectedUrl ? { backgroundColor: theme.colors.primaryContainer } : undefined}
-              title={new URL(url).hostname}
-              onPress={() => {
-                handleSelectUrl(url);
-              }}
-            />
-          ))}
-        </Menu>
+        {isOnlineTemplate && (
+          <Button
+            testID={`template-preview-${templateTestIdSegment}`}
+            icon='eye-outline'
+            mode='text'
+            onPress={() => {
+              onPreviewPress(selectedUrl);
+            }}
+          >
+            {t('AddWorkspace.Preview')}
+          </Button>
+        )}
+        {isOnlineTemplate && (
+          <Menu
+            visible={visible}
+            onDismiss={closeMenu}
+            anchor={<Button icon='dots-vertical' onPress={openMenu}>{t('AddWorkspace.SelectSource')}</Button>}
+          >
+            {[item.url, ...fallbackUrls].map((url, index) => (
+              <Menu.Item
+                key={index}
+                style={url === selectedUrl ? { backgroundColor: theme.colors.primaryContainer } : undefined}
+                title={new URL(url).hostname}
+                onPress={() => {
+                  handleSelectUrl(url);
+                }}
+              />
+            ))}
+          </Menu>
+        )}
         <Button
           testID={`template-use-${templateTestIdSegment}`}
           icon='plus'

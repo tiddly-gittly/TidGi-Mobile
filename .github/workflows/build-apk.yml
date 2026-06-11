@@ -88,6 +88,7 @@ jobs:
         run: |
           pnpm run build:plugin
           pnpm run build:tw-assets
+          pnpm run build:wiki-template
 
       - name: Build by eject eas and not remove debug signing key for apk
         run: pnpm exec expo prebuild -p android --clean

@@ -545,6 +545,12 @@
     "ImportWikis": "导入多个 Wiki",
     "BatchProgress": "正在导入",
     "GitImportComplete": "Git 导入完成",
+    "ExtractingLocalTemplate": "正在从内置模板创建 Wiki...",
+    "LocalTemplateStep": {
+      "Loading": "正在准备模板...",
+      "Extracting": "正在解压文件"
+    },
+    "Retry": "重试",
     "RequestingCameraPermission": "正在请求相机权限",
     "NoCameraAccess": "无法访问相机",
     "GitSyncRequiresQRCode": "Git 同步需要二维码数据。请扫描太记桌面版的二维码。",
@@ -586,7 +592,8 @@
       "DownloadingArchive": "正在下载归档文件",
       "DownloadingArchiveHint": "正在以归档格式下载完整 Wiki，这比 git clone 快得多。如果中断可以自动恢复。",
       "ExtractingFiles": "正在解压文件",
-      "ExtractingFilesHint": "正在将归档解压到磁盘。大多数 Wiki 只需几秒。"
+      "ExtractingFilesHint": "正在将归档解压到磁盘。大多数 Wiki 只需几秒。",
+      "RestoringFromCache": "正在从本地缓存恢复"
     },
     "PartialSuccess": {
       "Succeeded": "已成功导入",

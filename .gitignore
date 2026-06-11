@@ -34,6 +34,8 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 assets/emptyWiki.html
+assets/wiki-template.zip
+assets/wiki-template-version.json
 
 # result of fetchHTML.mjs for debugging
 scripts/fetchHTML/

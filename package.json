@@ -17,7 +17,12 @@
     "lint": "eslint \"./src/**/*.{js,ts,tsx,json}\"",
     "lint:fix": "eslint \"./src/**/*.{ts,tsx,json}\" --fix",
     "check": "tsc --noEmit --skipLibCheck",
+    "prepush": "pnpm run check && pnpm run lint",
+    "test:wiki-import": "tsx scripts/testWikiImportService.ts",
     "init-submodules": "git submodule update --init --recursive",
+    "build:wiki-template": "zx scripts/buildWikiTemplateZip.mjs",
+    "setup:git-hooks": "zx scripts/setupGitHooks.mjs",
+    "postinstall": "pnpm run init-submodules && pnpm run build:wiki-template && pnpm run setup:git-hooks",
     "detox:test": "node scripts/runDetox.mjs android.usb.dev-client",
     "detox:test:ios": "node scripts/runDetox.mjs ios.simulator.dev-client"
   },

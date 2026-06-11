@@ -6,3 +6,8 @@ declare module '*.html' {
    */
   export default value;
 }
+
+declare module '*.zip' {
+  const value: number;
+  export default value;
+}

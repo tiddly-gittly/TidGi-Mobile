@@ -3,18 +3,12 @@
  * Replaces HTML download with git clone
  */
 
-import * as FileSystemLegacy from 'expo-file-system/legacy';
-import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { useState } from 'react';
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
-import { GIT_CLONE_ERROR_CONNECTION_ABORT, GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, gitClone, IGitRemote } from '../../services/GitService';
+import { GIT_CLONE_ERROR_CONNECTION_ABORT, GIT_CLONE_ERROR_OOM, GIT_CLONE_ERROR_TOO_LARGE_PREFIX, IGitRemote } from '../../services/GitService';
 import { logFor } from '../../services/LoggerService';
+import { prepareGitRepositoryContent, registerWikiWorkspaceWithCleanup, removeWikiDirectory, resolveWikiFolderLocation } from '../../services/WikiImportService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
-
-function isExternalPath(filepath: string): boolean {
-  const plain = toPlainPath(filepath);
-  return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
-}
 
 export interface IGitImportQRCode {
   baseUrl: string;
@@ -49,6 +43,19 @@ export interface IBatchFailedItem {
 
 const DEFER_STATUS_SCAN_AFTER_IMPORT_MS = 60_000;
 
+function classifyImportError(errorMessage: string): { errorKind: GitImportErrorKind; error?: string } {
+  if (errorMessage === GIT_CLONE_ERROR_OOM) {
+    return { errorKind: 'oom' };
+  }
+  if (errorMessage.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX)) {
+    return { errorKind: 'tooLarge', error: errorMessage.slice(GIT_CLONE_ERROR_TOO_LARGE_PREFIX.length) };
+  }
+  if (errorMessage === GIT_CLONE_ERROR_CONNECTION_ABORT) {
+    return { errorKind: 'connectionAbort' };
+  }
+  return { errorKind: 'generic', error: errorMessage };
+}
+
 export function useGitImport() {
   const [status, setStatus] = useState<GitImportStatus>('idle');
   const [error, setError] = useState<string | undefined>();
@@ -61,15 +68,12 @@ export function useGitImport() {
   const [batchCreatedWorkspaces, setBatchCreatedWorkspaces] = useState<IWikiWorkspace[]>([]);
   const [batchFailedItems, setBatchFailedItems] = useState<IBatchFailedItem[]>([]);
 
-  const addWiki = useWorkspaceStore(state => state.add);
-  const removeWiki = useWorkspaceStore(state => state.remove);
   const [createdWorkspace, setCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
 
   /**
-   * Import wiki from server via git clone
+   * Import wiki: clone (or restore from cache) first, register workspace only on success.
    */
   const importWiki = async (qrData: IGitImportQRCode, wikiName: string, serverID: string, useExternalStorage = false, useStandardGitProtocol = false) => {
-    // Reset individual operation state
     setError(undefined);
     setCreatedWorkspace(undefined);
     setCloneProgress({ phase: '', loaded: 0, total: 0 });
@@ -81,81 +85,41 @@ export function useGitImport() {
       throw new Error(message);
     }
 
-    setStatus('creating');
-    let workspaceId: string | undefined;
-    let workspaceFolderLocation: string | undefined;
-    let workspaceLogger = logFor(qrData.workspaceId);
+    if (useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === qrData.workspaceId)) {
+      const message = `Workspace id already exists: ${qrData.workspaceId}`;
+      setError(message);
+      setStatus('error');
+      throw new Error(message);
+    }
+
+    const wikiFolderLocation = resolveWikiFolderLocation(qrData.workspaceId, useExternalStorage);
+    if (wikiFolderLocation === undefined) {
+      const message = 'Wiki folder path not available';
+      setError(message);
+      setStatus('error');
+      throw new Error(message);
+    }
+
+    const workspaceLogger = logFor(qrData.workspaceId);
+    setStatus('cloning');
 
     try {
-      // 1. Create workspace
-      // Use getState() to read live store state, avoiding stale closure from React hook snapshot
-      if (useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === qrData.workspaceId)) {
-        throw new Error(`Workspace id already exists: ${qrData.workspaceId}`);
-      }
-      // Sub-wikis inherit synced servers from their main workspace.
       const mainWorkspace = qrData.mainWikiID !== undefined
         ? useWorkspaceStore.getState().workspaces.find(w => w.type === 'wiki' && w.id === qrData.mainWikiID)
         : undefined;
-      const inheritedServers = (qrData.isSubWiki === true && mainWorkspace?.type === 'wiki')
+      const syncedServers = (qrData.isSubWiki === true && mainWorkspace?.type === 'wiki')
         ? mainWorkspace.syncedServers.map(s => ({ ...s, lastSync: Date.now(), syncActive: false }))
-        : [{
+        : serverID.length > 0
+        ? [{
           serverID,
           lastSync: Date.now(),
           syncActive: false,
           token: qrData.token,
           tokenAuthHeaderName: qrData.tokenAuthHeaderName,
           tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
-        }];
-      const newWorkspace = addWiki({
-        type: 'wiki',
-        id: qrData.workspaceId,
-        name: wikiName,
-        deferStatusScanUntil: Date.now() + DEFER_STATUS_SCAN_AFTER_IMPORT_MS,
-        isSubWiki: qrData.isSubWiki === true,
-        mainWikiID: qrData.mainWikiID ?? null,
-        syncedServers: inheritedServers,
-        useExternalStorage,
-      }) as IWikiWorkspace | undefined;
+        }]
+        : [];
 
-      if (newWorkspace === undefined) {
-        throw new Error('Failed to create workspace');
-      }
-
-      workspaceId = newWorkspace.id;
-      workspaceFolderLocation = newWorkspace.wikiFolderLocation;
-      workspaceLogger = logFor(workspaceId);
-      setCreatedWorkspace(newWorkspace);
-
-      console.log('[import] wikiFolderLocation:', workspaceFolderLocation);
-      workspaceLogger.log('Import workspace created', {
-        isSubWiki: newWorkspace.isSubWiki,
-        mainWikiID: newWorkspace.mainWikiID,
-        wikiFolderLocation: workspaceFolderLocation,
-      });
-
-      // Prepare directory for git clone
-      const wikiFolder = newWorkspace.wikiFolderLocation;
-      if (isExternalPath(wikiFolder)) {
-        const plainPath = toPlainPath(wikiFolder);
-        const info = await ExternalStorage.getInfo(plainPath);
-        if (info.exists) {
-          console.log('[import] Removing existing directory before clone:', wikiFolder);
-          await ExternalStorage.rmdir(plainPath);
-        }
-        console.log('[import] Creating empty directory for git clone:', wikiFolder);
-        await ExternalStorage.mkdir(plainPath);
-      } else {
-        const directoryInfo = await FileSystemLegacy.getInfoAsync(wikiFolder);
-        if (directoryInfo.exists) {
-          console.log('[import] Removing existing directory before clone:', wikiFolder);
-          await FileSystemLegacy.deleteAsync(wikiFolder, { idempotent: true });
-        }
-        console.log('[import] Creating empty directory for git clone:', wikiFolder);
-        await FileSystemLegacy.makeDirectoryAsync(wikiFolder, { intermediates: true });
-      }
-
-      // 2. Clone repository
-      setStatus('cloning');
       const remote: IGitRemote = {
         baseUrl: qrData.baseUrl,
         gitUrl: qrData.gitUrl,
@@ -165,81 +129,54 @@ export function useGitImport() {
         tokenAuthHeaderValue: qrData.tokenAuthHeaderValue,
       };
 
-      console.log('[import] Starting git clone...');
       workspaceLogger.log('Start git clone', {
         baseUrl: remote.baseUrl,
         remoteWorkspaceId: remote.workspaceId,
+        wikiFolderLocation,
       });
-      await gitClone(newWorkspace, remote, (phase, loaded, total) => {
-        setCloneProgress({ phase, loaded, total });
-      }, { useStandardGitProtocol });
-      console.log('[import] Git clone completed');
+
+      await prepareGitRepositoryContent({
+        targetDirectory: wikiFolderLocation,
+        remote,
+        useStandardGitProtocol,
+        onProgress: (phase, loaded, total) => {
+          setCloneProgress({ phase, loaded, total });
+        },
+      });
+
       workspaceLogger.log('Git clone completed');
 
+      setStatus('creating');
+      const newWorkspace = await registerWikiWorkspaceWithCleanup({
+        workspaceId: qrData.workspaceId,
+        name: wikiName,
+        useExternalStorage,
+        syncedServers,
+        deferStatusScanUntil: Date.now() + DEFER_STATUS_SCAN_AFTER_IMPORT_MS,
+        isSubWiki: qrData.isSubWiki === true,
+        mainWikiID: qrData.mainWikiID ?? null,
+      }, wikiFolderLocation);
+
+      setCreatedWorkspace(newWorkspace);
       setStatus('success');
       return newWorkspace;
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-      console.error('Git import failed:', errorMessage, (error as Error).stack);
-      workspaceLogger.error('Git import failed', error);
+    } catch (importError) {
+      const errorMessage = (importError as Error).message;
+      console.error('Git import failed:', errorMessage, (importError as Error).stack);
+      workspaceLogger.error('Git import failed', importError);
 
-      // Classify error kind for targeted UI messaging.
-      if (errorMessage === GIT_CLONE_ERROR_OOM) {
-        setErrorKind('oom');
-        setError(undefined); // message comes from i18n
-      } else if (errorMessage.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX)) {
-        const mb = errorMessage.slice(GIT_CLONE_ERROR_TOO_LARGE_PREFIX.length);
-        setErrorKind('tooLarge');
-        setError(mb); // mb string, displayed by UI
-      } else if (errorMessage === GIT_CLONE_ERROR_CONNECTION_ABORT) {
-        setErrorKind('connectionAbort');
-        setError(undefined); // message comes from i18n
-      } else {
-        setErrorKind('generic');
-        setError(errorMessage);
-      }
+      const classified = classifyImportError(errorMessage);
+      setErrorKind(classified.errorKind);
+      setError(classified.error);
       setStatus('error');
 
-      // Clean up on error: remove workspace entry and created folder
-      if (workspaceId !== undefined) {
-        removeWiki(workspaceId);
-
-        // Only clean up if workspaceFolderLocation was set to a real URI
-        // (for SAF, it's only set after createDirectory succeeds)
-        if (workspaceFolderLocation !== undefined) {
-          try {
-            if (isExternalPath(workspaceFolderLocation)) {
-              const plainPath = toPlainPath(workspaceFolderLocation);
-              const info = await ExternalStorage.getInfo(plainPath);
-              if (info.exists) {
-                console.log('Cleaning up created directory:', workspaceFolderLocation);
-                await ExternalStorage.rmdir(plainPath);
-              }
-            } else {
-              const cleanupInfo = await FileSystemLegacy.getInfoAsync(workspaceFolderLocation);
-              if (cleanupInfo.exists) {
-                console.log('Cleaning up created directory:', workspaceFolderLocation);
-                await FileSystemLegacy.deleteAsync(workspaceFolderLocation, { idempotent: true });
-              }
-            }
-          } catch (cleanupError) {
-            console.warn('Failed to cleanup folder (non-fatal):', cleanupError);
-          }
-        }
-      }
-
-      throw error;
+      await removeWikiDirectory(wikiFolderLocation);
+      throw importError;
     }
   };
 
   /**
    * Batch import multiple wikis **sequentially**.
-   *
-   * Sequential execution avoids race conditions on the shared
-   * `status` / `cloneProgress` state that caused the old parallel
-   * `Promise.allSettled` approach to flicker and report "success"
-   * prematurely when the first item finished while others were still
-   * cloning.
    */
   const batchImportWikis = async (items: IBatchImportItem[]) => {
     setIsBatchImporting(true);
@@ -253,22 +190,21 @@ export function useGitImport() {
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
-      // Show 1-based index of the item currently being imported + its name
       setBatchProgress(previous => ({ ...previous, current: index + 1, currentName: item.wikiName }));
       try {
-        const workspace = await importWiki({ ...item.qrData }, item.wikiName, item.serverID, item.useExternalStorage ?? false, item.useStandardGitProtocol ?? false);
+        const workspace = await importWiki(
+          { ...item.qrData },
+          item.wikiName,
+          item.serverID,
+          item.useExternalStorage ?? false,
+          item.useStandardGitProtocol ?? false,
+        );
         created.push(workspace);
-      } catch (error) {
-        const errorMessage = (error as Error).message;
-        let failedErrorKind: GitImportErrorKind = 'generic';
-        if (errorMessage === GIT_CLONE_ERROR_OOM) failedErrorKind = 'oom';
-        else if (errorMessage.startsWith(GIT_CLONE_ERROR_TOO_LARGE_PREFIX)) failedErrorKind = 'tooLarge';
-        else if (errorMessage === GIT_CLONE_ERROR_CONNECTION_ABORT) failedErrorKind = 'connectionAbort';
-
-        failed.push({ item, errorMessage, errorKind: failedErrorKind });
+      } catch (importError) {
+        const errorMessage = (importError as Error).message;
+        const classified = classifyImportError(errorMessage);
+        failed.push({ item, errorMessage, errorKind: classified.errorKind });
         setBatchProgress(previous => ({ ...previous, failed: failed.length }));
-        // If the first item (main wiki) fails, abort the batch.
-        // Sub-wikis depend on the main wiki existing; importing them would create orphan workspaces.
         if (index === 0) {
           console.error('[batchImport] Main wiki import failed, aborting sub-wiki imports:', errorMessage);
           break;
@@ -287,18 +223,23 @@ export function useGitImport() {
     if (failed.length === 0) {
       setStatus('success');
     } else if (created.length > 0) {
-      // Some succeeded, some failed — show partial success with details
       setStatus('partialSuccess');
     } else {
       setStatus('error');
       setErrorKind(failed[0].errorKind);
-      setError(failed[0].errorMessage);
+      const firstFailure = failed[0];
+      setError(
+        firstFailure.errorKind === 'tooLarge'
+          ? firstFailure.errorMessage.slice(GIT_CLONE_ERROR_TOO_LARGE_PREFIX.length)
+          : firstFailure.errorKind === 'generic'
+          ? firstFailure.errorMessage
+          : undefined,
+      );
     }
     setIsBatchImporting(false);
     return created;
   };
 
-  /** Retry only the previously failed items from a batch import. */
   const retryFailedImports = async () => {
     const itemsToRetry = batchFailedItems.map(f => f.item);
     if (itemsToRetry.length === 0) return;
