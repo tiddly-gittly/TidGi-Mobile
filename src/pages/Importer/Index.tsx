@@ -675,6 +675,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 </>
               )}
               {/* Per-step progress */}
+              {!isLocalTemplate && (<>
               {importStatus === 'cloning'
                 ? (
                   <>
@@ -719,6 +720,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                     <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
                   </ImportStatusText>
                 )}
+            </>)}
             </>
           )}
           {(importStatus === 'error' || localTemplateStatus === 'error') && (
