@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "pre-push: running check + lint..."
+pnpm run prepush
+echo "pre-push: all checks passed."

@@ -10,7 +10,7 @@
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
-import { by, device, element } from 'detox';
+import { by, device, element, waitFor } from 'detox';
 import { diagnosticError, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
@@ -21,6 +21,24 @@ const DEFAULT_TEMPLATE_USE_BUTTON_IDS = [
 ] as const;
 
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+async function getFirstRealCommitTestId(timeoutMs = 30_000): Promise<'commit-item-0' | 'commit-item-1'> {
+  const candidates = ['commit-item-0', 'commit-item-1'] as const;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    for (const candidate of candidates) {
+      try {
+        await waitFor(element(by.id(candidate))).toBeVisible().withTimeout(1_000);
+        return candidate;
+      } catch {
+        // Keep polling until one of the real commit cards becomes visible.
+      }
+    }
+  }
+
+  throw diagnosticError('first real commit item', timeoutMs);
+}
 
 // ── Guards ────────────────────────────────────────────────────────────────────
 
@@ -264,4 +282,32 @@ Then('I should see the commit history page', async () => {
 
 Then('I should see the unsynced commit count label', async () => {
   await waitForElement(by.id('workspace-unsynced-count'), UI_TIMEOUT, 'workspace-unsynced-count label', 'visible');
+});
+
+// ── Commit detail / file diff ─────────────────────────────────────────────────
+
+Then('the commit list has loaded', async () => {
+  await getFirstRealCommitTestId();
+});
+
+When('I tap the first commit in the history', async () => {
+  const commitTestId = await getFirstRealCommitTestId();
+  await element(by.id(commitTestId)).tap();
+  // Give the native module (gitGetChangedFilesForCommit) time to respond.
+  await delay(3_000);
+});
+
+Then('I should see the commit details card', async () => {
+  await waitForElement(by.id('commit-details-card'), 10_000, 'commit-details-card', 'visible');
+});
+
+When('I tap the first file in the commit details', async () => {
+  await waitForElement(by.id('commit-detail-file-0'), 10_000, 'commit-detail-file-0', 'visible');
+  await element(by.id('commit-detail-file-0')).tap();
+  // Let the native file-content reads complete.
+  await delay(2_000);
+});
+
+Then('I should see the file diff content', async () => {
+  await waitForElement(by.id('file-preview-diff-text'), 10_000, 'file-preview-diff-text', 'visible');
 });

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ITemplateListItem } from '../../../components/TemplateList';
 
 export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileLocation: string, defaultList?: ITemplateListItem[]): [ITemplateListItem[], boolean] {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [webPages, webPagesSetter] = useState<ITemplateListItem[]>(defaultList ?? []);
   const fetchJSON = useCallback(async (sourceUrl: string) => {
     setLoading(true);
@@ -51,7 +51,7 @@ export function useLoadOnlineSources(onlineSourcesUrls: string[], temporaryFileL
           return [];
         }
       }));
-      webPagesSetter(uniqBy([...(defaultList ?? []), ...flatten(fetchedLists)], 'title'));
+      webPagesSetter(uniqBy([...(defaultList ?? []), ...flatten(fetchedLists)], 'url'));
     };
     void loadOnlineSources();
   }, [defaultList, fetchJSON, onlineSourcesUrls, temporaryFileLocation]);

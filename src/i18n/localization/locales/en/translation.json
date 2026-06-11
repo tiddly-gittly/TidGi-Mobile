@@ -569,6 +569,12 @@
     "ImportWikis": "Import Wikis",
     "BatchProgress": "Importing",
     "GitImportComplete": "Git import completed",
+    "ExtractingLocalTemplate": "Creating wiki from built-in template...",
+    "LocalTemplateStep": {
+      "Loading": "Preparing template...",
+      "Extracting": "Extracting files"
+    },
+    "Retry": "Retry",
     "RequestingCameraPermission": "Requesting camera permission",
     "NoCameraAccess": "No access to camera",
     "GitSyncRequiresQRCode": "Git synchronization requires QR code data. Please scan the QR code from TidGi Desktop.",
@@ -610,7 +616,8 @@
       "DownloadingArchive": "Downloading archive",
       "DownloadingArchiveHint": "Downloading the complete wiki as an archive. This is much faster than git clone. Supports resume if interrupted.",
       "ExtractingFiles": "Extracting files",
-      "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis."
+      "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis.",
+      "RestoringFromCache": "Restoring from local cache"
     },
     "PartialSuccess": {
       "Succeeded": "Successfully imported",

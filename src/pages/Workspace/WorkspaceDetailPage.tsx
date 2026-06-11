@@ -29,6 +29,10 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteSubWorkspacesTogether, setDeleteSubWorkspacesTogether] = useState(false);
   const [workspaceLogVisible, setWorkspaceLogVisible] = useState(false);
+  const subWorkspaces = allWorkspaces.filter((workspace): workspace is IWikiWorkspace =>
+    workspace.type === 'wiki' && workspace.isSubWiki === true && workspace.mainWikiID === wiki?.id
+  );
+  const canDeleteSubWorkspacesTogether = wiki?.isSubWiki !== true && subWorkspaces.length > 0;
 
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.Title'));
 
@@ -146,7 +150,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
           <Dialog.Title>{t('ConfirmDelete')}</Dialog.Title>
           <Dialog.Content>
             <Text>{t('ConfirmDeleteDescription')}</Text>
-            {wiki.isSubWiki !== true && (
+            {canDeleteSubWorkspacesTogether && (
               <Checkbox.Item
                 label={t('WorkspaceSettings.DeleteWithSubWorkspaces')}
                 status={deleteSubWorkspacesTogether ? 'checked' : 'unchecked'}
@@ -167,10 +171,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
             </Button>
             <Button
               onPress={() => {
-                if (deleteSubWorkspacesTogether && wiki.isSubWiki !== true) {
-                  const subWorkspaces = allWorkspaces.filter((workspace): workspace is IWikiWorkspace =>
-                    workspace.type === 'wiki' && workspace.isSubWiki === true && workspace.mainWikiID === wiki.id
-                  );
+                if (deleteSubWorkspacesTogether && canDeleteSubWorkspacesTogether) {
                   subWorkspaces.forEach((subWorkspace) => {
                     deleteWikiFile(subWorkspace);
                     removeWorkspace(subWorkspace.id);

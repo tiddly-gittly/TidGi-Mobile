@@ -1,16 +1,21 @@
 import { StackScreenProps } from '@react-navigation/stack';
+import { Buffer } from 'buffer';
+import { Asset } from 'expo-asset';
 import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Pressable } from 'react-native';
 import { Button, MD3Colors, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
+import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
+import { importBundledWikiTemplate, normalizeGitCloneUrl } from '../../services/WikiImportService';
 import { IServerInfo, useServerStore } from '../../store/server';
-import { useWorkspaceStore } from '../../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
 import { GitQRData } from './types';
 
@@ -72,9 +77,11 @@ const ResetButton = styled(Button)`
 
 export interface ImporterProps {
   /**
-   * Direct standard-git repository URL used for template-based imports.
+   * Asset name (without path) of a bundled local wiki template ZIP.
+   * When specified, the template is extracted from the app bundle instead of
+   * cloning from a remote repository. Currently supported: "wiki-template.zip".
    */
-  gitUrl?: string;
+  localTemplateAsset?: string;
   /**
    * Save the URI as a server to workspace. Default to `true`.
    */
@@ -84,24 +91,27 @@ export interface ImporterProps {
    */
   autoStartImport?: boolean;
   /**
-   * The URI to auto fill the server URI input
+   * Template or server URI.
+   * - http(s) URI + autoStartImport: clone from this git repository (e.g. GitHub repo URL)
+   * - non-http URI + localTemplateAsset: bundled ZIP asset name
+   * - otherwise: pre-fill the server URI input for QR/desktop sync import
    */
   uri?: string;
   /**
-   * Preferred workspace name when importing directly from a git repository URL.
+   * Preferred workspace name when importing from a template URI.
    */
   workspaceName?: string;
 }
 
-function normalizeGitRepositoryUrl(rawUrl: string): string {
-  const parsed = new URL(rawUrl);
-  parsed.hash = '';
-  parsed.search = '';
-  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-  if (parsed.hostname.toLowerCase() === 'github.com' && !parsed.pathname.endsWith('.git')) {
-    parsed.pathname = `${parsed.pathname}.git`;
-  }
-  return parsed.toString();
+function deriveTemplateCloneUri(
+  uri: string | undefined,
+  localTemplateAsset: string | undefined,
+  autoStartImport: boolean | undefined,
+): string | undefined {
+  if (autoStartImport !== true || typeof uri !== 'string') return undefined;
+  if (typeof localTemplateAsset === 'string') return undefined;
+  if (!uri.startsWith('http://') && !uri.startsWith('https://')) return undefined;
+  return normalizeGitCloneUrl(uri);
 }
 
 function deriveWorkspaceNameFromGitUrl(gitUrl: string): string {
@@ -125,9 +135,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const autoImportTriggeredReference = useRef(false);
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const directGitUrl = route.params.gitUrl === undefined ? undefined : normalizeGitRepositoryUrl(route.params.gitUrl);
+  const templateCloneUri = deriveTemplateCloneUri(
+    route.params.uri,
+    route.params.localTemplateAsset,
+    route.params.autoStartImport,
+  );
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(() => {
-    const initialUrl = directGitUrl ?? route.params.uri;
+    const initialUrl = templateCloneUri ?? route.params.uri;
     return initialUrl === undefined ? undefined : new URL(new URL(initialUrl).origin);
   });
   const [wikiName, setWikiName] = useState('');
@@ -230,20 +244,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }, [fillFromQRCodeData]);
 
   useEffect(() => {
-    if (directGitUrl === undefined) return;
+    if (templateCloneUri === undefined) return;
 
-    const preferredWorkspaceName = route.params.workspaceName ?? deriveWorkspaceNameFromGitUrl(directGitUrl);
+    const preferredWorkspaceName = route.params.workspaceName ?? deriveWorkspaceNameFromGitUrl(templateCloneUri);
     fillFromQRCodeData({
-      baseUrl: new URL(directGitUrl).origin,
-      gitUrl: directGitUrl,
-      workspaceId: deriveWorkspaceIdFromGitUrl(directGitUrl, preferredWorkspaceName),
+      baseUrl: new URL(templateCloneUri).origin,
+      gitUrl: templateCloneUri,
+      workspaceId: deriveWorkspaceIdFromGitUrl(templateCloneUri, preferredWorkspaceName),
       workspaceName: preferredWorkspaceName,
     });
     setUseStandardGitProtocol(true);
     setManualEdit(false);
     setShowSavedServers(false);
     setQrScannerOpen(false);
-  }, [directGitUrl, fillFromQRCodeData, route.params.workspaceName]);
+  }, [templateCloneUri, fillFromQRCodeData, route.params.workspaceName]);
 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
@@ -362,6 +376,64 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     batchFailedItems,
   } = useGitImport();
 
+  // ─── Local template import ─────────────────────────────────────────────────
+
+  const [localTemplateStatus, setLocalTemplateStatus] = useState<'idle' | 'loading' | 'extracting' | 'success' | 'error'>('idle');
+  const [localTemplateError, setLocalTemplateError] = useState<string | undefined>();
+  const [localTemplateCreatedWorkspace, setLocalTemplateCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
+  const [localTemplateProgress, setLocalTemplateProgress] = useState({ current: 0, total: 0 });
+
+  const importLocalWikiTemplate = useCallback(async (templateName: string, assetName: string) => {
+    setLocalTemplateStatus('loading');
+    setLocalTemplateError(undefined);
+    setLocalTemplateProgress({ current: 0, total: 0 });
+
+    const workspaceId = `wiki-${Date.now().toString(36)}`;
+    const { customWikiFolderPath } = useWorkspaceStore.getState();
+    const useExternal = customWikiFolderPath !== null;
+
+    try {
+      let zipModule;
+      if (assetName === 'wiki-template.zip') {
+        zipModule = bundledWikiTemplateZip;
+      } else {
+        throw new Error(`Unknown local template asset: ${assetName}`);
+      }
+      const zipAsset = Asset.fromModule(zipModule);
+      await zipAsset.downloadAsync();
+      const zipUri = zipAsset.localUri;
+      if (!zipUri) {
+        throw new Error('Failed to load bundled wiki template ZIP');
+      }
+
+      const zipBase64 = await FileSystem.readAsStringAsync(zipUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const zipBytes = Uint8Array.from(Buffer.from(zipBase64, 'base64'));
+
+      setLocalTemplateStatus('extracting');
+      const newWorkspace = await importBundledWikiTemplate({
+        workspaceId,
+        templateName,
+        zipBytes,
+        useExternalStorage: useExternal,
+        onProgress: (current, total) => {
+          setLocalTemplateProgress({ current, total });
+        },
+      });
+
+      setLocalTemplateCreatedWorkspace(newWorkspace);
+      setLocalTemplateStatus('success');
+    } catch (error) {
+      const errorMessage = (error as Error).message;
+      console.error('Local template import failed:', errorMessage);
+      setLocalTemplateError(errorMessage);
+      setLocalTemplateStatus('error');
+    }
+  }, []);
+
+  // ─── End local template import ─────────────────────────────────────────────
+
   const addServerAndImport = useCallback(async () => {
     if (wikiUrl?.origin === undefined) return;
 
@@ -417,6 +489,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         Alert.alert(t('Import.GitSyncRequiresQRCode'));
         return;
       }
+    } else if (qrData) {
+      await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
     } else {
       Alert.alert(t('Import.ServerRequired'));
       return;
@@ -438,6 +512,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       console.error('Auto-start import failed:', error);
     });
   }, [addServerAndImport, importStatus, qrData, route.params.autoStartImport]);
+
+  // Auto-start local template import
+  useEffect(() => {
+    if (typeof route.params.localTemplateAsset !== 'string') return;
+    if (localTemplateStatus !== 'idle') return;
+
+    const workspaceName = route.params.workspaceName ?? 'wiki';
+    void importLocalWikiTemplate(workspaceName, route.params.localTemplateAsset);
+  }, [importLocalWikiTemplate, localTemplateStatus, route.params.localTemplateAsset, route.params.workspaceName]);
 
   const serverConfigs = (
     <ImporterServerConfigs
@@ -497,11 +580,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }
 
   const autoStartImport = route.params.autoStartImport;
+  const isLocalTemplate = typeof route.params.localTemplateAsset === 'string';
+
   return (
     <Container testID='importer-screen'>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
-      {autoStartImport !== true && importStatus === 'idle' && serverConfigs}
-      {importStatus === 'idle' && !qrScannerOpen && qrData && (
+      {!isLocalTemplate && autoStartImport !== true && importStatus === 'idle' && serverConfigs}
+      {!isLocalTemplate && importStatus === 'idle' && !qrScannerOpen && qrData && (
         <>
           <WorkspaceNameInput
             label={t('EditWorkspace.Name')}
@@ -522,8 +607,38 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ImportWikiButton>
         </>
       )}
-      {!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) && (
+      {(!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) || (autoStartImport === true && !isLocalTemplate && importStatus === 'idle') ||
+        (localTemplateStatus !== 'idle' && localTemplateStatus !== 'success' && localTemplateStatus !== 'error')) && (
         <>
+          {autoStartImport === true && !isLocalTemplate && importStatus === 'idle' && (
+            <>
+              <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
+              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+            </>
+          )}
+          {/* ── Local template import steps ────────────────────────── */}
+          {localTemplateStatus === 'loading' && (
+            <>
+              <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
+              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+            </>
+          )}
+          {localTemplateStatus === 'extracting' && (
+            <>
+              <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Extracting')}</Text>
+              <Text variant='bodySmall' style={{ marginTop: 8 }}>
+                {localTemplateProgress.total > 0
+                  ? `${localTemplateProgress.current} / ${localTemplateProgress.total} files`
+                  : ''}
+              </Text>
+              <ProgressBar
+                animatedValue={localTemplateProgress.total > 0 ? localTemplateProgress.current / localTemplateProgress.total : 0}
+                indeterminate={localTemplateProgress.total === 0}
+                color={MD3Colors.primary40}
+                style={{ marginTop: 8 }}
+              />
+            </>
+          )}
           {/* Overall batch progress — shown when multiple wikis are being imported */}
           {isBatchImporting && (
             <>
@@ -538,53 +653,59 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             </>
           )}
           {/* Per-step progress */}
-          {importStatus === 'cloning'
-            ? (
-              <>
-                <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
-                {cloneProgress.phase !== '' && (
-                  <Text variant='bodySmall'>
-                    {cloneProgress.phase === 'Creating work tree'
-                      ? t('Import.Phase.CreatingWorkTree')
-                      : cloneProgress.phase === 'Downloading pack'
-                      ? t('Import.Phase.DownloadingPack')
-                      : cloneProgress.phase === 'Receiving pack data'
-                      ? t('Import.Phase.ReceivingPackData')
-                      : cloneProgress.phase.startsWith('Indexing pack')
-                      ? t('Import.Phase.IndexingPack')
-                      : cloneProgress.phase.startsWith('Reconnecting')
-                      ? t('Import.Phase.Reconnecting')
-                      : cloneProgress.phase.startsWith('Checking server')
-                      ? t('Import.Phase.CheckingCapabilities')
-                      : cloneProgress.phase.startsWith('Downloading archive')
-                      ? t('Import.Phase.DownloadingArchive')
-                      : cloneProgress.phase.startsWith('Extracting')
-                      ? t('Import.Phase.ExtractingFiles')
-                      : cloneProgress.phase}
-                    {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
-                  </Text>
+          {!isLocalTemplate && (
+            <>
+              {importStatus === 'cloning'
+                ? (
+                  <>
+                    <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
+                    {cloneProgress.phase !== '' && (
+                      <Text variant='bodySmall'>
+                        {cloneProgress.phase === 'Creating work tree'
+                          ? t('Import.Phase.CreatingWorkTree')
+                          : cloneProgress.phase === 'Downloading pack'
+                          ? t('Import.Phase.DownloadingPack')
+                          : cloneProgress.phase === 'Receiving pack data'
+                          ? t('Import.Phase.ReceivingPackData')
+                          : cloneProgress.phase.startsWith('Indexing pack')
+                          ? t('Import.Phase.IndexingPack')
+                          : cloneProgress.phase.startsWith('Reconnecting')
+                          ? t('Import.Phase.Reconnecting')
+                          : cloneProgress.phase.startsWith('Checking server')
+                          ? t('Import.Phase.CheckingCapabilities')
+                          : cloneProgress.phase.startsWith('Downloading archive')
+                          ? t('Import.Phase.DownloadingArchive')
+                          : cloneProgress.phase.startsWith('Extracting')
+                          ? t('Import.Phase.ExtractingFiles')
+                          : cloneProgress.phase.startsWith('Restoring from cache')
+                          ? t('Import.Phase.RestoringFromCache')
+                          : cloneProgress.phase}
+                        {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
+                      </Text>
+                    )}
+                    {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
+                    {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
+                    {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
+                    {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
+                    {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
+                    {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
+                    <ProgressBar
+                      animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
+                      indeterminate={cloneProgress.total === 0}
+                      color={MD3Colors.primary40}
+                    />
+                  </>
+                )
+                : (
+                  <ImportStatusText>
+                    <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
+                  </ImportStatusText>
                 )}
-                {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
-                {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
-                {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
-                {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
-                {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
-                {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
-                <ProgressBar
-                  animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
-                  indeterminate={cloneProgress.total === 0}
-                  color={MD3Colors.primary40}
-                />
-              </>
-            )
-            : (
-              <ImportStatusText>
-                <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
-              </ImportStatusText>
-            )}
+            </>
+          )}
         </>
       )}
-      {importStatus === 'error' && (
+      {(importStatus === 'error' || localTemplateStatus === 'error') && (
         <>
           {importErrorKind === 'oom' && (
             <ImportStatusText style={{ color: MD3Colors.error50 }}>
@@ -624,6 +745,23 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           >
             <Text>{t('AddWorkspace.Reset')}</Text>
           </Button>
+          {/* Local template error */}
+          {localTemplateStatus === 'error' && (
+            <>
+              <FailedWikiNameText variant='bodyLarge'>
+                {t('ErrorMessage')}: {localTemplateError}
+              </FailedWikiNameText>
+              <RetryButton
+                mode='contained'
+                onPress={() => {
+                  setLocalTemplateStatus('idle');
+                  setLocalTemplateError(undefined);
+                }}
+              >
+                {t('Import.Retry')}
+              </RetryButton>
+            </>
+          )}
         </>
       )}
       {importStatus === 'partialSuccess' && !isBatchImporting && (
@@ -690,28 +828,31 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ResetButton>
         </>
       )}
-      {importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0) && (
-        <>
-          <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
+      {(importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0)) || localTemplateCreatedWorkspace !== undefined
+        ? (
+          <>
+            <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
 
-          {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : [createdWikiWorkspace!])
-            .filter(ws => ws.isSubWiki !== true)
-            .map((ws) => (
-              <OpenWikiButton
-                key={ws.id}
-                testID={`open-wiki-button-${ws.id}`}
-                mode='elevated'
-                onPress={() => {
-                  navigation.navigate('MainMenu', { fromWikiID: ws.id });
-                  navigation.navigate('WikiWebView', { id: ws.id });
-                }}
-                labelStyle={{ padding: ButtonLabelPadding }}
-              >
-                <Text>{`${t('Open')} ${ws.name}`}</Text>
-              </OpenWikiButton>
-            ))}
-        </>
-      )}
+            {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : createdWikiWorkspace ? [createdWikiWorkspace] : [])
+              .concat(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : [])
+              .filter(ws => ws.isSubWiki !== true)
+              .map((ws) => (
+                <OpenWikiButton
+                  key={ws.id}
+                  testID={`open-wiki-button-${ws.id}`}
+                  mode='elevated'
+                  onPress={() => {
+                    navigation.navigate('MainMenu', { fromWikiID: ws.id });
+                    navigation.navigate('WikiWebView', { id: ws.id });
+                  }}
+                  labelStyle={{ padding: ButtonLabelPadding }}
+                >
+                  <Text>{`${t('Open')} ${ws.name}`}</Text>
+                </OpenWikiButton>
+              ))}
+          </>
+        )
+        : null}
     </Container>
   );
 };

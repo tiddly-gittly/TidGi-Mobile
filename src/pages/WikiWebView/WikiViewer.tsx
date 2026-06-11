@@ -7,7 +7,6 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { detectedLanguage } from '../../i18n';
 import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
-import { useRequestNativePermissions } from '../../services/NativeService/hooks';
 import { useRegisterService } from '../../services/registerServiceOnWebView';
 import { useSetWebViewReferenceToService } from '../../services/WikiHookService/hooks';
 import { useConfigStore } from '../../store/config';
@@ -55,7 +54,8 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const theme = useTheme();
   // TODO: prevent swipe back work, then enable "use notification go back", maybe make this a config option. And let swipe go back become navigate back in the webview
   // useWikiWebViewNotification({ id: wikiWorkspace.id });
-  useRequestNativePermissions();
+  // Camera permission is requested on-demand in the Importer and ServerEditModal QR scanners.
+  // Don't request it here — opening a wiki does not need camera access.
 
   const [loaded, setLoaded] = useState(false);
   const onLoadEnd = useCallback(() => {

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Dialog, IconButton, List, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
@@ -259,8 +259,9 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
         keyExtractor={(item) => item.oid}
         maxToRenderPerBatch={20}
         removeClippedSubviews
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <HistoryCard
+            testID={item.oid === '' ? 'commit-item-uncommitted' : `commit-item-${index}`}
             onPress={() => {
               setSelectedCommit(item);
               setCurrentTab('details');
@@ -332,7 +333,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
               setDetailsError(undefined);
             }}
           >
-            <DetailsCard onStartShouldSetResponder={() => true}>
+            <DetailsCard testID='commit-details-card' style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.CommitDetails')} />
               <PaddedCardContent>
                 <DetailSegmentedButtons
@@ -347,7 +348,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
                 />
 
                 {currentTab === 'details' && (
-                  <View>
+                  <DetailsContentView>
                     <Text>{selectedCommit?.message}</Text>
                     <Text variant='bodySmall'>{selectedCommit?.authorName} &lt;{selectedCommit?.authorEmail}&gt;</Text>
                     <Text variant='bodySmall'>{selectedCommit?.oid ? new Date(selectedCommit.timestamp).toLocaleString() : ''}</Text>
@@ -359,11 +360,11 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
                     {!loadingDetails && detailsError && <Text variant='bodySmall'>{detailsError}</Text>}
                     {!loadingDetails && !detailsError && isShallowSnapshot && <Text variant='bodySmall'>{t('GitHistory.ShallowCloneSnapshot')}</Text>}
                     {!loadingDetails && !detailsError && !isShallowSnapshot && changedFiles.length === 0 && <Text>{t('GitHistory.NoFiles')}</Text>}
-                    <ModalFilesList
-                      data={changedFiles}
-                      keyExtractor={(item) => `${item.type}-${item.path}`}
-                      renderItem={({ item }) => (
+                    <ModalFilesScrollView>
+                      {changedFiles.map((item, index) => (
                         <List.Item
+                          key={`${item.type}-${item.path}`}
+                          testID={`commit-detail-file-${index}`}
                           title={item.path}
                           description={item.type.toUpperCase()}
                           left={(props) => <List.Icon {...props} icon='file-document-outline' />}
@@ -371,9 +372,9 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
                             void openFilePreview(item.path, item.type, selectedCommit);
                           }}
                         />
-                      )}
-                    />
-                  </View>
+                      ))}
+                    </ModalFilesScrollView>
+                  </DetailsContentView>
                 )}
 
                 {currentTab === 'actions' && (
@@ -444,7 +445,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
               setSelectedUncommittedItem(undefined);
             }}
           />
-          <PreviewDetailsCard pointerEvents='box-none'>
+          <PreviewDetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} pointerEvents='box-none'>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
@@ -527,13 +528,9 @@ const HistoryCard = styled(Card)`
 `;
 const DetailsCard = styled(Card)`
   max-height: 80%;
-  overflow: hidden;
-  background-color: ${({ theme }) => theme.colors.elevation.level2};
 `;
 const PreviewDetailsCard = styled(Card)`
   max-height: 80%;
-  overflow: hidden;
-  background-color: ${({ theme }) => theme.colors.elevation.level2};
   align-self: center;
   width: 92%;
 `;
@@ -545,10 +542,12 @@ const CommitsFlatList = styled(FlatList)`
   flex: 1;
   min-height: 120px;
 ` as typeof FlatList;
-const ModalFilesList = styled(FlatList)`
-  max-height: 450px;
-  flex-shrink: 1;
-` as typeof FlatList;
+const ModalFilesScrollView = styled(ScrollView)`
+  max-height: 300px;
+`;
+
+const DetailsContentView = styled(View)`
+`;
 
 const LoadingIndicator = styled(ActivityIndicator)`
   margin-top: 10px;

@@ -82,6 +82,8 @@ function isMissingNativeGitCloneError(message: string): boolean {
 
 // ── Constants ──────────────────────────────────────────────────────
 
+/** Shallow clone depth — mobile only needs the latest tree, not full remote history. */
+const GIT_CLONE_DEPTH = 1;
 const CLONE_MAX_RETRIES = 2;
 const CLONE_RETRY_DELAY_MS = 3_000;
 const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
@@ -423,8 +425,8 @@ async function ensureGitTextCheckoutPolicy(directory: string, options: { normali
 
 // ── Clone ──────────────────────────────────────────────────────────
 
-export async function gitClone(
-  workspace: IWikiWorkspace,
+export async function gitCloneToDirectory(
+  directoryInput: string,
   remote: IGitRemote,
   onProgress?: (phase: string, loaded: number, total: number) => void,
   options: { useStandardGitProtocol?: boolean } = {},
@@ -433,7 +435,7 @@ export async function gitClone(
   const url = typeof remote.gitUrl === 'string' && remote.gitUrl.length > 0
     ? remote.gitUrl
     : `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
-  const directory = toPlainPath(workspace.wikiFolderLocation);
+  const directory = toPlainPath(directoryInput);
 
   clearGitTextCheckoutPolicyCache(directory);
 
@@ -513,6 +515,15 @@ export async function gitClone(
   throw lastError ?? new Error('Git clone failed');
 }
 
+export async function gitClone(
+  workspace: IWikiWorkspace,
+  remote: IGitRemote,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+  options: { useStandardGitProtocol?: boolean } = {},
+): Promise<void> {
+  return gitCloneToDirectory(workspace.wikiFolderLocation, remote, onProgress, options);
+}
+
 async function gitCloneNative(
   remote: IGitRemote,
   url: string,
@@ -545,7 +556,7 @@ async function gitCloneNative(
       }
     }
     onProgress?.('Cloning repository…', 0, 0);
-    const resultJson = await ExternalStorage.gitClone(url, directory, null, 1, true, true, JSON.stringify(headers));
+    const resultJson = await ExternalStorage.gitClone(url, directory, null, GIT_CLONE_DEPTH, true, true, JSON.stringify(headers));
     const result = parseNativeResult<{ ok: boolean; head?: string; error?: string }>(resultJson);
     if (!result.ok) throw new Error(result.error ?? 'Native git clone failed');
     console.log(`Successfully cloned repository to ${directory}, HEAD=${result.head}`);

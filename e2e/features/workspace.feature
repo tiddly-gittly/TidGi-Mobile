@@ -35,3 +35,14 @@ Feature: Workspace detail, sync and settings navigation
     Then I should see the workspace detail screen
     When I tap the workspace changes button
     Then I should see the commit history page
+
+  Scenario: View commit details and file diff
+    When I tap the settings icon on the first workspace
+    Then I should see the workspace detail screen
+    When I tap the workspace changes button
+    Then I should see the commit history page
+    And the commit list has loaded
+    When I tap the first commit in the history
+    Then I should see the commit details card
+    When I tap the first file in the commit details
+    Then I should see the file diff content
