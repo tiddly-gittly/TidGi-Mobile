@@ -29,7 +29,12 @@ export const CreateFromTemplateTab = () => {
           }}
           onUsePress={(templateItem: ITemplateListItem, uri: string) => {
             if (uri.startsWith('http://') || uri.startsWith('https://')) {
-              navigation.navigate('Importer', { uri, autoStartImport: true, addAsServer: false });
+              navigation.navigate('Importer', {
+                uri,
+                workspaceName: templateItem.title,
+                autoStartImport: true,
+                addAsServer: false,
+              });
               return;
             }
 
@@ -45,16 +50,16 @@ export const CreateFromTemplateTab = () => {
       );
     }, [navigation]);
 
-  const renderFooter = useMemo(() => loading
-    ? () => (
+  const renderFooter = useMemo(() =>
+    loading
+      ? () => (
         <LoadingContainer>
           <ActivityIndicator animating={true} color={MD2Colors.red800} />
           <Text>{t('AddWorkspace.LoadingFromServer')}</Text>
           {serverHosts.map((host) => <Text key={host}>{host}</Text>)}
         </LoadingContainer>
       )
-    : undefined,
-  [loading, serverHosts, t]);
+      : undefined, [loading, serverHosts, t]);
 
   return (
     <FlatList

@@ -572,8 +572,7 @@
     "ExtractingLocalTemplate": "Creating wiki from built-in template...",
     "LocalTemplateStep": {
       "Loading": "Preparing template...",
-      "Extracting": "Extracting files",
-      "InitializingGit": "Initializing git repository..."
+      "Extracting": "Extracting files"
     },
     "Retry": "Retry",
     "RequestingCameraPermission": "Requesting camera permission",
@@ -617,7 +616,8 @@
       "DownloadingArchive": "Downloading archive",
       "DownloadingArchiveHint": "Downloading the complete wiki as an archive. This is much faster than git clone. Supports resume if interrupted.",
       "ExtractingFiles": "Extracting files",
-      "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis."
+      "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis.",
+      "RestoringFromCache": "Restoring from local cache"
     },
     "PartialSuccess": {
       "Succeeded": "Successfully imported",

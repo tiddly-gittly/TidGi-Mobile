@@ -17,6 +17,7 @@
     "lint": "eslint \"./src/**/*.{js,ts,tsx,json}\"",
     "lint:fix": "eslint \"./src/**/*.{ts,tsx,json}\" --fix",
     "check": "tsc --noEmit --skipLibCheck",
+    "test:wiki-import": "tsx scripts/testWikiImportService.ts",
     "init-submodules": "git submodule update --init --recursive",
     "build:wiki-template": "zx scripts/buildWikiTemplateZip.mjs",
     "postinstall": "pnpm run init-submodules && pnpm run build:wiki-template",

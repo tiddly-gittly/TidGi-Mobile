@@ -7,6 +7,7 @@
  *   - UTF-8 file names (bit 11 flag)
  *
  * Used to extract the bundled wiki-template.zip into a new wiki workspace folder.
+ * The ZIP may include a pre-baked `.git` directory (single initial commit from CI build).
  */
 
 import { Buffer } from 'buffer';
@@ -284,7 +285,12 @@ function getSafeZipEntryPath(entryPath: string): string | null {
  * @param targetDirectory - The target directory path (e.g., 'file:///data/.../wikis/my-wiki/')
  * @param useExternalStorage - Whether the target is on external SD card / user-accessible storage
  */
-export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory: string, useExternalStorage = false, onProgress?: (current: number, total: number) => void): Promise<void> {
+export async function extractZipToDirectory(
+  zipData: Uint8Array,
+  targetDirectory: string,
+  useExternalStorage = false,
+  onProgress?: (current: number, total: number) => void,
+): Promise<void> {
   const normalizedTargetDirectory = targetDirectory.endsWith('/') ? targetDirectory : `${targetDirectory}/`;
 
   // Ensure target directory exists
@@ -309,7 +315,6 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory
   let totalFiles = 0;
   for (const entry of fileEntries) {
     if (entry.path.endsWith('/')) continue;
-    if (entry.path.includes('/.git/') || entry.path.startsWith('.git/')) continue;
     if (entry.path.endsWith('tidgi.config.json')) continue;
     totalFiles++;
   }
@@ -319,8 +324,6 @@ export async function extractZipToDirectory(zipData: Uint8Array, targetDirectory
   for (const entry of fileEntries) {
     // Skip directory entries (those ending with /)
     if (entry.path.endsWith('/')) continue;
-    // Skip .git entries (we don't want git history in new workspace)
-    if (entry.path.includes('/.git/') || entry.path.startsWith('.git/')) continue;
     // Skip tidgi.config.json from template (let the app create its own)
     if (entry.path.endsWith('tidgi.config.json')) continue;
 

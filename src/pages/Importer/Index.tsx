@@ -13,8 +13,7 @@ import { useShallow } from 'zustand/react/shallow';
 import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
-import { gitCommit, gitInit } from '../../services/GitService';
-import { extractZipToDirectory } from '../../services/WikiTemplateService/extractLocalWikiTemplate';
+import { importBundledWikiTemplate, normalizeGitCloneUrl } from '../../services/WikiImportService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
@@ -78,10 +77,6 @@ const ResetButton = styled(Button)`
 
 export interface ImporterProps {
   /**
-   * Direct standard-git repository URL used for template-based imports.
-   */
-  gitUrl?: string;
-  /**
    * Asset name (without path) of a bundled local wiki template ZIP.
    * When specified, the template is extracted from the app bundle instead of
    * cloning from a remote repository. Currently supported: "wiki-template.zip".
@@ -96,24 +91,27 @@ export interface ImporterProps {
    */
   autoStartImport?: boolean;
   /**
-   * The URI to auto fill the server URI input
+   * Template or server URI.
+   * - http(s) URI + autoStartImport: clone from this git repository (e.g. GitHub repo URL)
+   * - non-http URI + localTemplateAsset: bundled ZIP asset name
+   * - otherwise: pre-fill the server URI input for QR/desktop sync import
    */
   uri?: string;
   /**
-   * Preferred workspace name when importing directly from a git repository URL.
+   * Preferred workspace name when importing from a template URI.
    */
   workspaceName?: string;
 }
 
-function normalizeGitRepositoryUrl(rawUrl: string): string {
-  const parsed = new URL(rawUrl);
-  parsed.hash = '';
-  parsed.search = '';
-  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
-  if (parsed.hostname.toLowerCase() === 'github.com' && !parsed.pathname.endsWith('.git')) {
-    parsed.pathname = `${parsed.pathname}.git`;
-  }
-  return parsed.toString();
+function deriveTemplateCloneUri(
+  uri: string | undefined,
+  localTemplateAsset: string | undefined,
+  autoStartImport: boolean | undefined,
+): string | undefined {
+  if (autoStartImport !== true || typeof uri !== 'string') return undefined;
+  if (typeof localTemplateAsset === 'string') return undefined;
+  if (!uri.startsWith('http://') && !uri.startsWith('https://')) return undefined;
+  return normalizeGitCloneUrl(uri);
 }
 
 function deriveWorkspaceNameFromGitUrl(gitUrl: string): string {
@@ -137,9 +135,13 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const autoImportTriggeredReference = useRef(false);
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const directGitUrl = route.params.gitUrl === undefined ? undefined : normalizeGitRepositoryUrl(route.params.gitUrl);
+  const templateCloneUri = deriveTemplateCloneUri(
+    route.params.uri,
+    route.params.localTemplateAsset,
+    route.params.autoStartImport,
+  );
   const [wikiUrl, setWikiUrl] = useState<undefined | URL>(() => {
-    const initialUrl = directGitUrl ?? route.params.uri;
+    const initialUrl = templateCloneUri ?? route.params.uri;
     return initialUrl === undefined ? undefined : new URL(new URL(initialUrl).origin);
   });
   const [wikiName, setWikiName] = useState('');
@@ -242,20 +244,20 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }, [fillFromQRCodeData]);
 
   useEffect(() => {
-    if (directGitUrl === undefined) return;
+    if (templateCloneUri === undefined) return;
 
-    const preferredWorkspaceName = route.params.workspaceName ?? deriveWorkspaceNameFromGitUrl(directGitUrl);
+    const preferredWorkspaceName = route.params.workspaceName ?? deriveWorkspaceNameFromGitUrl(templateCloneUri);
     fillFromQRCodeData({
-      baseUrl: new URL(directGitUrl).origin,
-      gitUrl: directGitUrl,
-      workspaceId: deriveWorkspaceIdFromGitUrl(directGitUrl, preferredWorkspaceName),
+      baseUrl: new URL(templateCloneUri).origin,
+      gitUrl: templateCloneUri,
+      workspaceId: deriveWorkspaceIdFromGitUrl(templateCloneUri, preferredWorkspaceName),
       workspaceName: preferredWorkspaceName,
     });
     setUseStandardGitProtocol(true);
     setManualEdit(false);
     setShowSavedServers(false);
     setQrScannerOpen(false);
-  }, [directGitUrl, fillFromQRCodeData, route.params.workspaceName]);
+  }, [templateCloneUri, fillFromQRCodeData, route.params.workspaceName]);
 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
@@ -376,7 +378,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
 
   // ─── Local template import ─────────────────────────────────────────────────
 
-  const [localTemplateStatus, setLocalTemplateStatus] = useState<'idle' | 'loading' | 'extracting' | 'initializingGit' | 'success' | 'error'>('idle');
+  const [localTemplateStatus, setLocalTemplateStatus] = useState<'idle' | 'loading' | 'extracting' | 'success' | 'error'>('idle');
   const [localTemplateError, setLocalTemplateError] = useState<string | undefined>();
   const [localTemplateCreatedWorkspace, setLocalTemplateCreatedWorkspace] = useState<IWikiWorkspace | undefined>();
   const [localTemplateProgress, setLocalTemplateProgress] = useState({ current: 0, total: 0 });
@@ -386,28 +388,11 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setLocalTemplateError(undefined);
     setLocalTemplateProgress({ current: 0, total: 0 });
 
-    let createdWorkspace: IWikiWorkspace | undefined;
+    const workspaceId = `wiki-${Date.now().toString(36)}`;
+    const { customWikiFolderPath } = useWorkspaceStore.getState();
+    const useExternal = customWikiFolderPath !== null;
 
     try {
-      // 1. Create workspace record
-      const workspaceId = `wiki-${Date.now().toString(36)}`;
-      const addWiki = useWorkspaceStore.getState().add;
-      const { customWikiFolderPath } = useWorkspaceStore.getState();
-
-      const newWorkspace = addWiki({
-        type: 'wiki',
-        id: workspaceId,
-        name: templateName,
-        syncedServers: [],
-        useExternalStorage: customWikiFolderPath !== null,
-      }) as IWikiWorkspace | undefined;
-
-      if (!newWorkspace) {
-        throw new Error('Failed to create workspace');
-      }
-      createdWorkspace = newWorkspace;
-
-      // 2. Load bundled ZIP asset by name
       let zipModule;
       if (assetName === 'wiki-template.zip') {
         zipModule = bundledWikiTemplateZip;
@@ -421,26 +406,21 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         throw new Error('Failed to load bundled wiki template ZIP');
       }
 
-      // 3. Read ZIP as base64, then convert to Uint8Array
       const zipBase64 = await FileSystem.readAsStringAsync(zipUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
       const zipBytes = Uint8Array.from(Buffer.from(zipBase64, 'base64'));
 
-      // 4. Extract ZIP to wiki folder location (with real file-by-file progress)
       setLocalTemplateStatus('extracting');
-      const useExternal = newWorkspace.useExternalStorage === true;
-      const targetDirectory = newWorkspace.wikiFolderLocation;
-      await extractZipToDirectory(zipBytes, targetDirectory, useExternal, (current, total) => {
-        setLocalTemplateProgress({ current, total });
+      const newWorkspace = await importBundledWikiTemplate({
+        workspaceId,
+        templateName,
+        zipBytes,
+        useExternalStorage: useExternal,
+        onProgress: (current, total) => {
+          setLocalTemplateProgress({ current, total });
+        },
       });
-
-      // 5. Initialize git repository if using external storage (native git)
-      if (useExternal) {
-        setLocalTemplateStatus('initializingGit');
-        await gitInit(newWorkspace);
-        await gitCommit(newWorkspace, 'Initial Commit with TidGi Mobile');
-      }
 
       setLocalTemplateCreatedWorkspace(newWorkspace);
       setLocalTemplateStatus('success');
@@ -449,11 +429,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       console.error('Local template import failed:', errorMessage);
       setLocalTemplateError(errorMessage);
       setLocalTemplateStatus('error');
-
-      // Cleanup workspace entry on failure
-      if (createdWorkspace) {
-        useWorkspaceStore.getState().remove(createdWorkspace.id);
-      }
     }
   }, []);
 
@@ -514,6 +489,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         Alert.alert(t('Import.GitSyncRequiresQRCode'));
         return;
       }
+    } else if (qrData) {
+      await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
     } else {
       Alert.alert(t('Import.ServerRequired'));
       return;
@@ -610,72 +587,74 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       {/* Hide server config if is importing from template, for simplicity for new users. */}
       {!isLocalTemplate && autoStartImport !== true && importStatus === 'idle' && serverConfigs}
       {!isLocalTemplate && importStatus === 'idle' && !qrScannerOpen && qrData && (
+        <>
+          <WorkspaceNameInput
+            label={t('EditWorkspace.Name')}
+            value={wikiName}
+            onChangeText={(newText: string) => {
+              setWikiName(newText);
+            }}
+          />
+          <ImportWikiButton
+            testID='import-wiki-confirm-button'
+            mode='elevated'
+            onPress={addServerAndImport}
+            labelStyle={{ padding: ButtonLabelPadding }}
+          >
+            <Text>
+              {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
+            </Text>
+          </ImportWikiButton>
+        </>
+      )}
+      {(!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) || (autoStartImport === true && !isLocalTemplate && importStatus === 'idle') ||
+        (localTemplateStatus !== 'idle' && localTemplateStatus !== 'success' && localTemplateStatus !== 'error')) && (
+        <>
+          {autoStartImport === true && !isLocalTemplate && importStatus === 'idle' && (
             <>
-              <WorkspaceNameInput
-                label={t('EditWorkspace.Name')}
-                value={wikiName}
-                onChangeText={(newText: string) => {
-                  setWikiName(newText);
-                }}
-              />
-              <ImportWikiButton
-                testID='import-wiki-confirm-button'
-                mode='elevated'
-                onPress={addServerAndImport}
-                labelStyle={{ padding: ButtonLabelPadding }}
-              >
-                <Text>
-                  {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
-                </Text>
-              </ImportWikiButton>
+              <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
+              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
             </>
           )}
-          {(!['idle', 'error', 'success', 'partialSuccess'].includes(importStatus) || (localTemplateStatus !== 'idle' && localTemplateStatus !== 'success' && localTemplateStatus !== 'error')) && (
+          {/* ── Local template import steps ────────────────────────── */}
+          {localTemplateStatus === 'loading' && (
             <>
-              {/* ── Local template import steps ────────────────────────── */}
-              {localTemplateStatus === 'loading' && (
-                <>
-                  <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
-                  <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
-                </>
-              )}
-              {localTemplateStatus === 'extracting' && (
-                <>
-                  <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Extracting')}</Text>
-                  <Text variant='bodySmall' style={{ marginTop: 8 }}>
-                    {localTemplateProgress.total > 0
-                      ? `${localTemplateProgress.current} / ${localTemplateProgress.total} files`
-                      : ''}
-                  </Text>
-                  <ProgressBar
-                    animatedValue={localTemplateProgress.total > 0 ? localTemplateProgress.current / localTemplateProgress.total : 0}
-                    indeterminate={localTemplateProgress.total === 0}
-                    color={MD3Colors.primary40}
-                    style={{ marginTop: 8 }}
-                  />
-                </>
-              )}
-              {localTemplateStatus === 'initializingGit' && (
-                <>
-                  <Text variant='titleMedium'>{t('Import.LocalTemplateStep.InitializingGit')}</Text>
-                  <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
-                </>
-              )}
-              {/* Overall batch progress — shown when multiple wikis are being imported */}
-              {isBatchImporting && (
-                <>
-                  <Text variant='titleSmall'>
-                    {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
-                    {batchProgress.currentName ? ` — ${batchProgress.currentName}` : ''}
-                  </Text>
-                  <ProgressBar
-                    animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
-                    color={MD3Colors.tertiary40}
-                  />
-                </>
-              )}
-              {/* Per-step progress */}
-              {!isLocalTemplate && (<>
+              <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
+              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+            </>
+          )}
+          {localTemplateStatus === 'extracting' && (
+            <>
+              <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Extracting')}</Text>
+              <Text variant='bodySmall' style={{ marginTop: 8 }}>
+                {localTemplateProgress.total > 0
+                  ? `${localTemplateProgress.current} / ${localTemplateProgress.total} files`
+                  : ''}
+              </Text>
+              <ProgressBar
+                animatedValue={localTemplateProgress.total > 0 ? localTemplateProgress.current / localTemplateProgress.total : 0}
+                indeterminate={localTemplateProgress.total === 0}
+                color={MD3Colors.primary40}
+                style={{ marginTop: 8 }}
+              />
+            </>
+          )}
+          {/* Overall batch progress — shown when multiple wikis are being imported */}
+          {isBatchImporting && (
+            <>
+              <Text variant='titleSmall'>
+                {`${t('Import.BatchProgress')} ${batchProgress.current}/${batchProgress.total}`}
+                {batchProgress.currentName ? ` — ${batchProgress.currentName}` : ''}
+              </Text>
+              <ProgressBar
+                animatedValue={batchProgress.total > 0 ? batchProgress.current / batchProgress.total : 0}
+                color={MD3Colors.tertiary40}
+              />
+            </>
+          )}
+          {/* Per-step progress */}
+          {!isLocalTemplate && (
+            <>
               {importStatus === 'cloning'
                 ? (
                   <>
@@ -698,6 +677,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                           ? t('Import.Phase.DownloadingArchive')
                           : cloneProgress.phase.startsWith('Extracting')
                           ? t('Import.Phase.ExtractingFiles')
+                          : cloneProgress.phase.startsWith('Restoring from cache')
+                          ? t('Import.Phase.RestoringFromCache')
                           : cloneProgress.phase}
                         {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
                       </Text>
@@ -720,108 +701,142 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                     <Text>{importStatus === 'creating' ? t('Import.Status.Creating') : `${t('Loading')} ${importStatus}`}</Text>
                   </ImportStatusText>
                 )}
-            </>)}
             </>
           )}
-          {(importStatus === 'error' || localTemplateStatus === 'error') && (
+        </>
+      )}
+      {(importStatus === 'error' || localTemplateStatus === 'error') && (
+        <>
+          {importErrorKind === 'oom' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.OOM')}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'tooLarge' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'connectionAbort' && (
+            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <Text>{t('Import.Error.ConnectionAbort')}</Text>
+            </ImportStatusText>
+          )}
+          {importErrorKind === 'generic' && (
+            <Pressable
+              onLongPress={() => {
+                if (importError) {
+                  void Clipboard.setStringAsync(importError);
+                  Alert.alert(t('Import.Error.CopiedToClipboard'));
+                }
+              }}
+            >
+              <ImportStatusText style={{ color: MD3Colors.error50 }}>
+                <Text selectable>{t('ErrorMessage')} {importError}</Text>
+              </ImportStatusText>
+            </Pressable>
+          )}
+          <Button
+            mode='elevated'
+            onPress={() => {
+              autoImportTriggeredReference.current = false;
+              resetState();
+            }}
+          >
+            <Text>{t('AddWorkspace.Reset')}</Text>
+          </Button>
+          {/* Local template error */}
+          {localTemplateStatus === 'error' && (
             <>
-              {importErrorKind === 'oom' && (
-                <ImportStatusText style={{ color: MD3Colors.error50 }}>
-                  <Text>{t('Import.Error.OOM')}</Text>
-                </ImportStatusText>
-              )}
-              {importErrorKind === 'tooLarge' && (
-                <ImportStatusText style={{ color: MD3Colors.error50 }}>
-                  <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
-                </ImportStatusText>
-              )}
-              {importErrorKind === 'connectionAbort' && (
-                <ImportStatusText style={{ color: MD3Colors.error50 }}>
-                  <Text>{t('Import.Error.ConnectionAbort')}</Text>
-                </ImportStatusText>
-              )}
-              {importErrorKind === 'generic' && (
-                <Pressable
-                  onLongPress={() => {
-                    if (importError) {
-                      void Clipboard.setStringAsync(importError);
-                      Alert.alert(t('Import.Error.CopiedToClipboard'));
-                    }
-                  }}
-                >
-                  <ImportStatusText style={{ color: MD3Colors.error50 }}>
-                    <Text selectable>{t('ErrorMessage')} {importError}</Text>
-                  </ImportStatusText>
-                </Pressable>
-              )}
-              <Button
-                mode='elevated'
+              <FailedWikiNameText variant='bodyLarge'>
+                {t('ErrorMessage')}: {localTemplateError}
+              </FailedWikiNameText>
+              <RetryButton
+                mode='contained'
                 onPress={() => {
-                  autoImportTriggeredReference.current = false;
-                  resetState();
+                  setLocalTemplateStatus('idle');
+                  setLocalTemplateError(undefined);
                 }}
               >
-                <Text>{t('AddWorkspace.Reset')}</Text>
-              </Button>
-              {/* Local template error */}
-              {localTemplateStatus === 'error' && (
-                <>
-                  <FailedWikiNameText variant='bodyLarge'>
-                    {t('ErrorMessage')}: {localTemplateError}
-                  </FailedWikiNameText>
-                  <RetryButton
-                    mode='contained'
-                    onPress={() => {
-                      setLocalTemplateStatus('idle');
-                      setLocalTemplateError(undefined);
-                    }}
-                  >
-                    {t('Import.Retry')}
-                  </RetryButton>
-                </>
-              )}
+                {t('Import.Retry')}
+              </RetryButton>
             </>
           )}
-          {importStatus === 'partialSuccess' && !isBatchImporting && (
+        </>
+      )}
+      {importStatus === 'partialSuccess' && !isBatchImporting && (
+        <>
+          {/* Show successfully imported wikis */}
+          {batchCreatedWorkspaces.length > 0 && (
             <>
-              {/* Show successfully imported wikis */}
-              {batchCreatedWorkspaces.length > 0 && (
-                <>
-                  <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
-                  {batchCreatedWorkspaces.map((ws) => (
-                    <SuccessWikiNameText key={ws.id} variant='bodyMedium'>
-                      ✓ {ws.name}
-                    </SuccessWikiNameText>
-                  ))}
-                </>
-              )}
-              {/* Show failed wikis with error details */}
-              {batchFailedItems.length > 0 && (
-                <>
-                  <DoneImportActionsTitleText variant='titleLarge' style={{ color: MD3Colors.error50 }}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
-                  {batchFailedItems.map((f, index) => (
-                    <Pressable
-                      key={index}
-                      onLongPress={() => {
-                        void Clipboard.setStringAsync(f.errorMessage);
-                        Alert.alert(t('Import.Error.CopiedToClipboard'));
-                      }}
-                    >
-                      <FailedWikiNameText variant='bodyMedium' selectable>
-                        ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
-                      </FailedWikiNameText>
-                    </Pressable>
-                  ))}
-                </>
-              )}
-              {/* Action buttons */}
-              <RetryButton
-                mode='elevated'
-                onPress={retryFailedImports}
-              >
-                <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
-              </RetryButton>
-              {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
+              <DoneImportActionsTitleText variant='titleLarge'>{t('Import.PartialSuccess.Succeeded')}</DoneImportActionsTitleText>
+              {batchCreatedWorkspaces.map((ws) => (
+                <SuccessWikiNameText key={ws.id} variant='bodyMedium'>
+                  ✓ {ws.name}
+                </SuccessWikiNameText>
+              ))}
+            </>
+          )}
+          {/* Show failed wikis with error details */}
+          {batchFailedItems.length > 0 && (
+            <>
+              <DoneImportActionsTitleText variant='titleLarge' style={{ color: MD3Colors.error50 }}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
+              {batchFailedItems.map((f, index) => (
+                <Pressable
+                  key={index}
+                  onLongPress={() => {
+                    void Clipboard.setStringAsync(f.errorMessage);
+                    Alert.alert(t('Import.Error.CopiedToClipboard'));
+                  }}
+                >
+                  <FailedWikiNameText variant='bodyMedium' selectable>
+                    ✗ {f.item.wikiName}: {f.errorKind === 'tooLarge' ? t('Import.Error.TooLarge', { mb: f.errorMessage.split(':')[1] ?? '?' }) : f.errorMessage}
+                  </FailedWikiNameText>
+                </Pressable>
+              ))}
+            </>
+          )}
+          {/* Action buttons */}
+          <RetryButton
+            mode='elevated'
+            onPress={retryFailedImports}
+          >
+            <Text>{t('Import.RetryFailed', { count: batchFailedItems.length })}</Text>
+          </RetryButton>
+          {batchCreatedWorkspaces.filter(ws => ws.isSubWiki !== true).map((ws) => (
+            <OpenWikiButton
+              key={ws.id}
+              testID={`open-wiki-button-${ws.id}`}
+              mode='elevated'
+              onPress={() => {
+                navigation.navigate('MainMenu', { fromWikiID: ws.id });
+                navigation.navigate('WikiWebView', { id: ws.id });
+              }}
+              labelStyle={{ padding: ButtonLabelPadding }}
+            >
+              <Text>{`${t('Open')} ${ws.name}`}</Text>
+            </OpenWikiButton>
+          ))}
+          <ResetButton
+            mode='text'
+            onPress={() => {
+              autoImportTriggeredReference.current = false;
+              resetState();
+            }}
+          >
+            <Text>{t('AddWorkspace.Reset')}</Text>
+          </ResetButton>
+        </>
+      )}
+      {(importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0)) || localTemplateCreatedWorkspace !== undefined
+        ? (
+          <>
+            <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
+
+            {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : createdWikiWorkspace ? [createdWikiWorkspace] : [])
+              .concat(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : [])
+              .filter(ws => ws.isSubWiki !== true)
+              .map((ws) => (
                 <OpenWikiButton
                   key={ws.id}
                   testID={`open-wiki-button-${ws.id}`}
@@ -835,40 +850,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                   <Text>{`${t('Open')} ${ws.name}`}</Text>
                 </OpenWikiButton>
               ))}
-              <ResetButton
-                mode='text'
-                onPress={() => {
-                  autoImportTriggeredReference.current = false;
-                  resetState();
-                }}
-              >
-                <Text>{t('AddWorkspace.Reset')}</Text>
-              </ResetButton>
-            </>
-          )}
-          {(importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0)) || localTemplateCreatedWorkspace !== undefined ? (
-            <>
-              <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
-
-              {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : createdWikiWorkspace ? [createdWikiWorkspace] : [])
-                .concat(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : [])
-                .filter(ws => ws.isSubWiki !== true)
-                .map((ws) => (
-                  <OpenWikiButton
-                    key={ws.id}
-                    testID={`open-wiki-button-${ws.id}`}
-                    mode='elevated'
-                    onPress={() => {
-                      navigation.navigate('MainMenu', { fromWikiID: ws.id });
-                      navigation.navigate('WikiWebView', { id: ws.id });
-                    }}
-                    labelStyle={{ padding: ButtonLabelPadding }}
-                  >
-                    <Text>{`${t('Open')} ${ws.name}`}</Text>
-                  </OpenWikiButton>
-                ))}
-            </>
-          ) : null}
+          </>
+        )
+        : null}
     </Container>
   );
 };
