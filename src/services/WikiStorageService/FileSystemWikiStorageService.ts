@@ -25,14 +25,14 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
-import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTidFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
-import { processFields } from './tiddlerFileParser';
+import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTiddlerIndexFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
+import { getBodyFilePathFromMetaPath, getTiddlerFileExtensionForType, isMarkdownTiddlerType, parseMetadataFile, processFields } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
 
 /**
- * Service for reading/writing tiddlers to filesystem as .tid/.meta files
+ * Service for reading/writing tiddlers to filesystem as .tid/.meta or .md/.md.meta files
  * Used by expo-file-system-syncadaptor in WebView
  */
 export class FileSystemWikiStorageService {
@@ -95,7 +95,7 @@ export class FileSystemWikiStorageService {
     try {
       const startedAt = Date.now();
       const workspaces = this.#getRelatedWorkspaces();
-      this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid files`);
+      this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid/.meta files`);
 
       // Try native batch parsing first — a single bridge call that parses all
       // files in parallel using Java ForkJoinPool, ~100x faster than per-file
@@ -158,10 +158,17 @@ export class FileSystemWikiStorageService {
           const title = tiddlers[index].title;
           if (typeof title === 'string' && title.length > 0) {
             const plainPath = batch[index];
+            const isMetaFile = plainPath.endsWith('.meta');
+            // For .meta companions, register the body file path, not the .meta file.
+            const bodyPlainPath = isMetaFile ? getBodyFilePathFromMetaPath(plainPath) : plainPath;
             // Store file:// URI for internal paths so ensureDirectory / File() work
-            const storedPath = isExternal ? plainPath : `file://${plainPath}`;
+            const storedPath = isExternal ? bodyPlainPath : `file://${bodyPlainPath}`;
             this.#tiddlerFilePathByTitle.set(title, storedPath);
-            this.#titleByFilePath.set(plainPath, title);
+            this.#titleByFilePath.set(bodyPlainPath, title);
+            // Also map the .meta path so metadata-only changes are detected.
+            if (isMetaFile) {
+              this.#titleByFilePath.set(plainPath, title);
+            }
           }
         }
       }
@@ -171,14 +178,14 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Recursively scan a directory for .tid files and register their titles.
-   * Reads only the header of each file to extract the `title:` field.
+   * Recursively scan a directory for .tid and .meta files and register their titles.
+   * For .meta companions, the body file path is registered instead.
    */
   async #indexDirectory(directoryPath: string): Promise<void> {
     try {
-      const tidFilePaths = await listTidFilesRecursively(directoryPath);
+      const tidFilePaths = await listTiddlerIndexFilesRecursively(directoryPath);
       for (const filePath of tidFilePaths) {
-        await this.#indexTidFile(filePath);
+        await this.#indexTiddlerFile(filePath);
       }
     } catch (error) {
       console.warn(`buildFileIndex: failed to scan ${directoryPath}: ${(error as Error).message}`);
@@ -186,17 +193,46 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Read the `title:` header from a .tid file and register it.
+   * Read the `title:` field from a .tid file or .meta companion and register it.
+   * For .meta files, register the companion body path (e.g. `.md`) so later
+   * reads/writes operate on the body file.
    */
-  async #indexTidFile(filePath: string): Promise<void> {
+  async #indexTiddlerFile(filePath: string): Promise<void> {
     try {
       const content = await readTextFile(filePath);
-      const title = this.#extractTitleFromHeader(content);
+      const isMetaFile = filePath.endsWith('.meta');
+      const title = isMetaFile
+        ? this.#extractTitleFromMeta(content)
+        : this.#extractTitleFromHeader(content);
       if (title) {
-        this.#tiddlerFilePathByTitle.set(title, filePath);
-        this.#titleByFilePath.set(toPlainPath(filePath), title);
+        const storedPath = isMetaFile
+          ? this.#toStoredFilePath(getBodyFilePathFromMetaPath(filePath))
+          : filePath;
+        this.#tiddlerFilePathByTitle.set(title, storedPath);
+        this.#titleByFilePath.set(toPlainPath(storedPath), title);
+        // Also map the .meta path so metadata-only changes are detected.
+        if (isMetaFile) {
+          this.#titleByFilePath.set(toPlainPath(filePath), title);
+        }
       }
     } catch { /* skip unreadable files */ }
+  }
+
+  /**
+   * Convert a plain file path to the stored format:
+   * - file:// URIs for internal storage
+   * - plain paths for external storage
+   */
+  #toStoredFilePath(filePath: string): string {
+    return isExternalPath(filePath) ? filePath : `file://${toPlainPath(filePath)}`;
+  }
+
+  /**
+   * Extract the `title:` field value from a .meta file.
+   */
+  #extractTitleFromMeta(content: string): string | undefined {
+    const fields = parseMetadataFile(content);
+    return typeof fields.title === 'string' ? fields.title.trim() : undefined;
   }
 
   /**
@@ -257,7 +293,7 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Save tiddler to filesystem as .tid file.
+   * Save tiddler to filesystem as .tid file, or as .md + .md.meta for Markdown.
    * Returns e-tag for the saved tiddler.
    *
    * Mirrors desktop's saveTiddler flow:
@@ -283,6 +319,9 @@ export class FileSystemWikiStorageService {
       });
 
       const processedFields = processFields({ title, ...mutableFields });
+      const tiddlerType = processedFields.type as string | undefined;
+      const isMarkdown = isMarkdownTiddlerType(tiddlerType);
+      const expectedExtension = getTiddlerFileExtensionForType(tiddlerType);
       const changeCount = '0';
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
@@ -291,18 +330,19 @@ export class FileSystemWikiStorageService {
       this.#logger.log(`saveTiddler "${title}" target workspace=${targetWorkspace.id}`);
 
       // ─── Desktop getTiddlerFileInfo equivalent ───────────────────────
-      // Check if the existing file is already in the correct target directory.
-      // If yes → overwrite in place (reuse existing path). This prevents
-      // unnecessary file moves and echo loops, matching desktop behavior.
+      // Check if the existing file is already in the correct target directory
+      // AND uses the correct extension for this tiddler type. If yes → overwrite
+      // in place. If the type changed (e.g. default → markdown), generate a new
+      // path and delete the old file to match desktop's move semantic.
       const oldPath = this.#tiddlerFilePathByTitle.get(title);
       const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
       let fullPath: string;
 
-      if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory)) {
-        // File is already in the correct workspace directory — overwrite in place
+      if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension)) {
+        // File is already in the correct workspace directory with the right extension — overwrite in place
         fullPath = oldPath;
       } else {
-        // Directory changed (or no existing file) — generate new path
+        // Directory changed, type changed, or no existing file — generate new path
         const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
         await ensureDirectory(tiddlerFolderPath);
 
@@ -319,7 +359,11 @@ export class FileSystemWikiStorageService {
       if (processedFields._canonical_uri) {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
-      await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
+      if (isMarkdown) {
+        await this.#saveMarkdownTiddler(title, text ?? '', allFields, fullPath);
+      } else {
+        await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
+      }
       const plainSavePath = toPlainPath(fullPath);
       this.#logger.log(`saveTiddler "${title}" → ${plainSavePath}`);
       console.log(`${new Date().toISOString()} [WikiStorageService] saveTiddler "${title}" written to ${plainSavePath}`);
@@ -347,6 +391,11 @@ export class FileSystemWikiStorageService {
       // Update registries (≈ desktop boot.files[title] = savedFileInfo)
       this.#tiddlerFilePathByTitle.set(title, fullPath);
       this.#titleByFilePath.set(toPlainPath(fullPath), title);
+      // For Markdown companions, also map the .meta path so metadata-only
+      // changes are detected by the change observer.
+      if (isMarkdown) {
+        this.#titleByFilePath.set(`${toPlainPath(fullPath)}.meta`, title);
+      }
 
       if (shouldTrackCreatedUserTiddler) {
         void trackNewUserTiddlerCreated(targetWorkspace.isSubWiki === true);
@@ -422,10 +471,10 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Save text tiddler as .tid file
+   * Build TiddlyWiki header lines from a tiddler's fields.
+   * Excludes the `text`, `title`, and `bag` fields; title is added separately.
    */
-  async #saveTextTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
-    // Build header lines (exclude text, title, and bag fields)
+  #buildTiddlerHeaderLines(title: string, fields: Record<string, unknown>): string[] {
     const headerLines: string[] = [];
     for (const key of Object.keys(fields)) {
       if (key !== 'text' && key !== 'title' && key !== 'bag') {
@@ -446,11 +495,30 @@ export class FileSystemWikiStorageService {
 
     // Add title field
     headerLines.unshift(`title: ${title}`);
+    return headerLines;
+  }
 
+  /**
+   * Save text tiddler as .tid file
+   */
+  async #saveTextTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
+    const headerLines = this.#buildTiddlerHeaderLines(title, fields);
     // Combine header and text with blank line separator
     // Note: Consider atomic write (write-to-temp-then-rename) for crash safety
     const content = text ? headerLines.join('\n') + '\n\n' + text : headerLines.join('\n');
     await writeTextFile(filePath, content);
+  }
+
+  /**
+   * Save Markdown tiddler as .md body + .md.meta metadata.
+   * Matches TiddlyWiki Desktop's behavior for text/markdown tiddlers.
+   */
+  async #saveMarkdownTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
+    const headerLines = this.#buildTiddlerHeaderLines(title, fields);
+    // Body file: raw markdown text only
+    await writeTextFile(filePath, text);
+    // Companion .meta file: all fields except text
+    await writeTextFile(`${filePath}.meta`, headerLines.join('\n'));
   }
 
   // ─── Delete (≈ desktop FileSystemAdaptor.deleteTiddler) ─────────────
@@ -526,8 +594,10 @@ export class FileSystemWikiStorageService {
 
     this.#tiddlerFilePathByTitle.delete(title);
     this.#titleByFilePath.delete(toPlainPath(filePath));
+    this.#titleByFilePath.delete(`${toPlainPath(filePath)}.meta`);
     if (typeof registryPath === 'string' && registryPath !== filePath) {
       this.#titleByFilePath.delete(toPlainPath(registryPath));
+      this.#titleByFilePath.delete(`${toPlainPath(registryPath)}.meta`);
     }
     return true;
   }
@@ -535,8 +605,10 @@ export class FileSystemWikiStorageService {
   // ─── Load ──────────────────────────────────────────────────────────────
 
   /**
-   * Load the text body of a tiddler from its .tid file.
+   * Load the text body of a tiddler from its on-disk file.
    * Uses the registry for direct path lookup — no searching needed.
+   * - .tid files: body is everything after the first blank line.
+   * - .md/.markdown files: the entire file is the body.
    */
   async loadTiddlerText(title: string): Promise<string | undefined> {
     const filePath = this.#tiddlerFilePathByTitle.get(title);
@@ -545,6 +617,10 @@ export class FileSystemWikiStorageService {
     }
     try {
       const content = await readTextFile(filePath);
+      // Markdown body files are raw text
+      if (filePath.toLowerCase().endsWith('.md') || filePath.toLowerCase().endsWith('.markdown')) {
+        return content;
+      }
       // .tid format: header fields separated by blank line from body
       const blankLineMatch = /\r?\n\r?\n/.exec(content);
       if (blankLineMatch !== null) {

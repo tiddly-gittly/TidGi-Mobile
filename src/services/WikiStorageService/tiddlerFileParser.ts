@@ -7,6 +7,33 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 
+const MARKDOWN_TIDDLER_TYPES = new Set(['text/markdown', 'text/x-markdown']);
+
+/**
+ * Check whether a tiddler's `type` field should be saved as a Markdown file
+ * (`.md` body + `.md.meta` metadata) to match TiddlyWiki Desktop behavior.
+ */
+export function isMarkdownTiddlerType(type: string | undefined): boolean {
+  return type !== undefined && MARKDOWN_TIDDLER_TYPES.has(type);
+}
+
+/**
+ * Return the file body extension used for a tiddler's on-disk representation.
+ * - Markdown tiddlers → `.md`
+ * - Everything else (including untyped) → `.tid`
+ */
+export function getTiddlerFileExtensionForType(type: string | undefined): '.tid' | '.md' {
+  return isMarkdownTiddlerType(type) ? '.md' : '.tid';
+}
+
+/**
+ * Given a `.meta` file path, return the path of its companion body file.
+ * For example, `tiddlers/Foo.md.meta` → `tiddlers/Foo.md`.
+ */
+export function getBodyFilePathFromMetaPath(metaPath: string): string {
+  return metaPath.replace(/\.meta$/, '');
+}
+
 /**
  * Parse a tiddler DIV in a *.tid file. It looks like this:
  *

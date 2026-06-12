@@ -210,14 +210,19 @@ export async function findFileRecursively(
   return search(new Directory(directoryPath));
 }
 
-export async function listTidFilesRecursively(directoryPath: string): Promise<string[]> {
+/**
+ * Recursively list tiddler index files: .tid files and .meta companion files.
+ * .meta files are needed to locate Markdown/binary tiddlers whose metadata
+ * is stored separately from their body file.
+ */
+export async function listTiddlerIndexFilesRecursively(directoryPath: string): Promise<string[]> {
   if (isExternalPath(directoryPath)) {
     const plainPath = toPlainPath(directoryPath);
     const info = await ExternalStorage.getInfo(plainPath).catch(() => ({ exists: false, isDirectory: false }));
     if (!info.exists || !info.isDirectory) return [];
     const relativePaths = await ExternalStorage.readDirRecursive(plainPath).catch(() => [] as string[]);
     return relativePaths
-      .filter(relativePath => relativePath.endsWith('.tid'))
+      .filter(relativePath => relativePath.endsWith('.tid') || relativePath.endsWith('.meta'))
       .map(relativePath => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${relativePath}`);
   }
 
@@ -235,7 +240,7 @@ export async function listTidFilesRecursively(directoryPath: string): Promise<st
         const name = entry.name.replace(/\/$/, '');
         if (name === '.git' || name === 'node_modules' || name === '.DS_Store' || name === 'output') continue;
         walkDirectory(entry);
-      } else if (entry instanceof File && entry.name.endsWith('.tid')) {
+      } else if (entry instanceof File && (entry.name.endsWith('.tid') || entry.name.endsWith('.meta'))) {
         result.push(entry.uri);
       }
     }

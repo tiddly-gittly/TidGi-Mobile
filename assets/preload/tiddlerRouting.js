@@ -154,6 +154,13 @@
   }
 
   /**
+   * Determine whether a tiddler type should be saved as Markdown.
+   */
+  function isMarkdownType(type) {
+    return type === 'text/markdown' || type === 'text/x-markdown';
+  }
+
+  /**
    * Get relative file path for a tiddler in a workspace
    * Uses fileSystemPathFilters if available
    */
@@ -183,7 +190,8 @@
 
     // Default: use sanitized title as filename
     const sanitized = tiddlerTitle.replace(/["#%&'*/:<=>?\\{}]/g, '_');
-    return `tiddlers/${sanitized}.tid`;
+    const extension = isMarkdownType(tiddlerFields?.type) ? '.md' : '.tid';
+    return `tiddlers/${sanitized}${extension}`;
   }
 
   // Expose functions to native layer via message passing
