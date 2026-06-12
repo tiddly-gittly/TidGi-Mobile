@@ -26,7 +26,7 @@ import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
 import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTiddlerIndexFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
-import { getBodyFilePathFromMetaPath, getTiddlerFileExtensionForType, isMarkdownTiddlerType, parseMetadataFile, processFields } from './tiddlerFileParser';
+import { getBodyFilePathFromMetaPath, getExtensionForType, parseMetadataFile, processFields, usesSeparateMetaFile } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
@@ -293,7 +293,9 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Save tiddler to filesystem as .tid file, or as .md + .md.meta for Markdown.
+   * Save tiddler to filesystem.
+   * - .tid types → single self-contained file (header + body)
+   * - Non-.tid types (e.g. .md, .txt, .svg) → body file + .meta companion
    * Returns e-tag for the saved tiddler.
    *
    * Mirrors desktop's saveTiddler flow:
@@ -320,8 +322,8 @@ export class FileSystemWikiStorageService {
 
       const processedFields = processFields({ title, ...mutableFields });
       const tiddlerType = processedFields.type as string | undefined;
-      const isMarkdown = isMarkdownTiddlerType(tiddlerType);
-      const expectedExtension = getTiddlerFileExtensionForType(tiddlerType);
+      const isSeparateMetaType = usesSeparateMetaFile(tiddlerType);
+      const expectedExtension = getExtensionForType(tiddlerType);
       const changeCount = '0';
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
@@ -359,8 +361,8 @@ export class FileSystemWikiStorageService {
       if (processedFields._canonical_uri) {
         allFields._canonical_uri = processedFields._canonical_uri;
       }
-      if (isMarkdown) {
-        await this.#saveMarkdownTiddler(title, text ?? '', allFields, fullPath);
+      if (isSeparateMetaType) {
+        await this.#saveSeparateMetaTiddler(title, text ?? '', allFields, fullPath);
       } else {
         await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
       }
@@ -391,9 +393,9 @@ export class FileSystemWikiStorageService {
       // Update registries (≈ desktop boot.files[title] = savedFileInfo)
       this.#tiddlerFilePathByTitle.set(title, fullPath);
       this.#titleByFilePath.set(toPlainPath(fullPath), title);
-      // For Markdown companions, also map the .meta path so metadata-only
-      // changes are detected by the change observer.
-      if (isMarkdown) {
+      // For non-tid companions (.md, .txt, .svg, etc.), also map the .meta path
+      // so metadata-only changes are detected by the change observer.
+      if (isSeparateMetaType) {
         this.#titleByFilePath.set(`${toPlainPath(fullPath)}.meta`, title);
       }
 
@@ -510,12 +512,12 @@ export class FileSystemWikiStorageService {
   }
 
   /**
-   * Save Markdown tiddler as .md body + .md.meta metadata.
-   * Matches TiddlyWiki Desktop's behavior for text/markdown tiddlers.
+   * Save tiddler whose body and metadata are separate files (.md+.meta, .txt+.meta, etc.).
+   * Matches TiddlyWiki Desktop's behavior for non-.tid types.
    */
-  async #saveMarkdownTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
+  async #saveSeparateMetaTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
     const headerLines = this.#buildTiddlerHeaderLines(title, fields);
-    // Body file: raw markdown text only
+    // Body file: raw content only
     await writeTextFile(filePath, text);
     // Companion .meta file: all fields except text
     await writeTextFile(`${filePath}.meta`, headerLines.join('\n'));
@@ -608,7 +610,8 @@ export class FileSystemWikiStorageService {
    * Load the text body of a tiddler from its on-disk file.
    * Uses the registry for direct path lookup — no searching needed.
    * - .tid files: body is everything after the first blank line.
-   * - .md/.markdown files: the entire file is the body.
+   * - Non-.tid files (any extension registered via contentTypeInfo): body-only,
+   *   the metadata lives in the companion .meta file.
    */
   async loadTiddlerText(title: string): Promise<string | undefined> {
     const filePath = this.#tiddlerFilePathByTitle.get(title);
@@ -617,8 +620,8 @@ export class FileSystemWikiStorageService {
     }
     try {
       const content = await readTextFile(filePath);
-      // Markdown body files are raw text
-      if (filePath.toLowerCase().endsWith('.md') || filePath.toLowerCase().endsWith('.markdown')) {
+      // Non-.tid body files are raw text with no inline header
+      if (!filePath.toLowerCase().endsWith('.tid')) {
         return content;
       }
       // .tid format: header fields separated by blank line from body

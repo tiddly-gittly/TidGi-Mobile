@@ -154,10 +154,17 @@
   }
 
   /**
-   * Determine whether a tiddler type should be saved as Markdown.
+   * Get the file extension (without dot) for a tiddler type,
+   * using TiddlyWiki's own contentTypeInfo registry (generic for all types).
+   * Falls back to "tid" for unknown/untyped tiddlers.
    */
-  function isMarkdownType(type) {
-    return type === 'text/markdown' || type === 'text/x-markdown';
+  function getExtensionForType(type) {
+    if (!type) return 'tid';
+    // Use TW5's built-in contentTypeInfo registry (populated by registerFileType calls in boot)
+    var info = $tw.config.contentTypeInfo[type];
+    if (!info) return 'tid';
+    var ext = Array.isArray(info.extension) ? info.extension[0] : info.extension;
+    return (ext || '').replace(/^\./, '');
   }
 
   /**
@@ -190,8 +197,8 @@
 
     // Default: use sanitized title as filename
     const sanitized = tiddlerTitle.replace(/["#%&'*/:<=>?\\{}]/g, '_');
-    const extension = isMarkdownType(tiddlerFields?.type) ? '.md' : '.tid';
-    return `tiddlers/${sanitized}${extension}`;
+    const extension = getExtensionForType(tiddlerFields?.type);
+    return `tiddlers/${sanitized}.${extension}`;
   }
 
   // Expose functions to native layer via message passing
