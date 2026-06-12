@@ -626,7 +626,8 @@
     "RetryFailed": "Retry failed ({{count}})",
     "Advanced": "Advanced",
     "UseExternalStorage": "Store in external (device-visible) storage",
-    "UseStandardGitProtocol": "Use standard Git protocol (GitHub / Gitea)"
+    "UseStandardGitProtocol": "Use standard Git protocol (GitHub / Gitea)",
+    "UseStandardGitProtocolDescription": "Use standard Git HTTP protocol to sync with any Git host such as GitHub or Gitea. Mobile devices have limited RAM, so large wikis may run out of memory and fail. Leave this off to use TidGi Desktop's bundle protocol, which lets the desktop handle packing."
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",

@@ -599,7 +599,11 @@
       "Succeeded": "已成功导入",
       "Failed": "导入失败"
     },
-    "RetryFailed": "重试失败项 ({{count}})"
+    "RetryFailed": "重试失败项 ({{count}})",
+    "Advanced": "高级",
+    "UseExternalStorage": "存储到外部（设备可见）存储",
+    "UseStandardGitProtocol": "使用标准 Git 协议（GitHub / Gitea）",
+    "UseStandardGitProtocolDescription": "勾选后使用标准 Git HTTP 协议，可向 GitHub、Gitea 等任意 Git 服务同步；但手机内存有限，大型 Wiki 容易因此耗尽内存而失败。不勾选则配合太记桌面端，由桌面端打包传输，无需标准 Git 协议。"
   },
   "ConfirmDelete": "是否删除？",
   "ConfirmDeleteDescription": "此操作无法撤销。",

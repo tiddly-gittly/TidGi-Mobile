@@ -36,6 +36,12 @@ const ManualConfigHint = styled(Text)`
   color: #999;
 `;
 
+const StandardGitProtocolHint = styled(Text)`
+  margin-horizontal: 8px;
+  margin-bottom: 8px;
+  color: #666;
+`;
+
 const SavedServerButton = styled(Button)`
   margin-top: 8px;
 `;
@@ -230,6 +236,9 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
             }}
             mode='android'
           />
+          <StandardGitProtocolHint variant='bodySmall'>
+            {t('Import.UseStandardGitProtocolDescription')}
+          </StandardGitProtocolHint>
         </Collapsible>
       </Collapsible>
     </>
