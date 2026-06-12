@@ -57,6 +57,15 @@ const ImportStatusText = styled.Text`
 const HintText = styled(Text)`
   opacity: 0.65;
 `;
+const ProgressBarTop = styled(ProgressBar)`
+  margin-top: 16px;
+`;
+const ExtractText = styled(Text)`
+  margin-top: 8px;
+`;
+const ExtractProgressBar = styled(ProgressBar)`
+  margin-top: 8px;
+`;
 const WorkspaceNameInput = styled(TextInput)`
   margin-top: 10px;
 `;
@@ -613,29 +622,28 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           {autoStartImport === true && !isLocalTemplate && importStatus === 'idle' && (
             <>
               <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
-              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+              <ProgressBarTop indeterminate={true} color={MD3Colors.primary40} />
             </>
           )}
           {/* ── Local template import steps ────────────────────────── */}
           {localTemplateStatus === 'loading' && (
             <>
               <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Loading')}</Text>
-              <ProgressBar indeterminate={true} color={MD3Colors.primary40} style={{ marginTop: 16 }} />
+              <ProgressBarTop indeterminate={true} color={MD3Colors.primary40} />
             </>
           )}
           {localTemplateStatus === 'extracting' && (
             <>
               <Text variant='titleMedium'>{t('Import.LocalTemplateStep.Extracting')}</Text>
-              <Text variant='bodySmall' style={{ marginTop: 8 }}>
+              <ExtractText variant='bodySmall'>
                 {localTemplateProgress.total > 0
                   ? `${localTemplateProgress.current} / ${localTemplateProgress.total} files`
                   : ''}
-              </Text>
-              <ProgressBar
+              </ExtractText>
+              <ExtractProgressBar
                 animatedValue={localTemplateProgress.total > 0 ? localTemplateProgress.current / localTemplateProgress.total : 0}
                 indeterminate={localTemplateProgress.total === 0}
                 color={MD3Colors.primary40}
-                style={{ marginTop: 8 }}
               />
             </>
           )}
