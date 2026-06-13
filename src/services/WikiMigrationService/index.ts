@@ -112,15 +112,17 @@ function getParentDirectory(path: string): string {
 /**
  * Migrate all workspace files from their current location to the target base path.
  *
- * @param workspace      The workspace to migrate
- * @param toExternalPath The external storage base (customWikiFolderPath from store), or null to migrate to internal
- * @param onProgress     Progress callback
- * @returns              New wikiFolderLocation after migration
+ * @param workspace       The workspace to migrate
+ * @param toExternalPath  The external storage base (customWikiFolderPath from store), or null to migrate to internal
+ * @param onProgress      Progress callback
+ * @param extraWorkspaces Additional workspaces (e.g. sub-wikis) to migrate in the same direction
+ * @returns               New wikiFolderLocation of the primary workspace after migration
  */
 export async function migrateWorkspaceStorage(
   workspace: IWikiWorkspace,
   toExternalPath: string | null,
   onProgress: (progress: IMigrationProgress) => void,
+  extraWorkspaces?: IWikiWorkspace[],
 ): Promise<string> {
   const currentLocation = workspace.wikiFolderLocation;
   const isCurrentExternal = isExternalPath(currentLocation);
@@ -243,5 +245,37 @@ export async function migrateWorkspaceStorage(
   }
 
   onProgress({ fraction: 1, phase: 'Done', done: total, total });
+
+  // Step 6: Migrate extra workspaces (e.g. sub-wikis) in the same direction
+  if (extraWorkspaces && extraWorkspaces.length > 0) {
+    for (let index = 0; index < extraWorkspaces.length; index++) {
+      const extra = extraWorkspaces[index];
+      onProgress({
+        fraction: (index + 1) / (extraWorkspaces.length + 1),
+        phase: `Migrating sub-wiki (${index + 1}/${extraWorkspaces.length}): ${extra.name}…`,
+        done: index + 1,
+        total: extraWorkspaces.length + 1,
+      });
+      try {
+        // Recursively call migrateWorkspaceStorage for each extra workspace,
+        // but without further extraWorkspaces to avoid infinite recursion.
+        const subOnProgress = (subProgress: IMigrationProgress) => {
+          // fold sub-progress into the overall progress
+          const overallFraction = (index + subProgress.fraction) / (extraWorkspaces.length + 1);
+          onProgress({
+            fraction: overallFraction,
+            phase: `Sub-wiki (${index + 1}/${extraWorkspaces.length}): ${extra.name} — ${subProgress.phase}`,
+            done: index + 1,
+            total: extraWorkspaces.length + 1,
+          });
+        };
+        await migrateWorkspaceStorage(extra, toExternalPath, subOnProgress);
+      } catch (error) {
+        console.warn(`[migration] Failed to migrate extra workspace ${extra.id}: ${(error as Error).message}`);
+      }
+    }
+    onProgress({ fraction: 1, phase: 'Done', done: extraWorkspaces.length + 1, total: extraWorkspaces.length + 1 });
+  }
+
   return persistedLocation;
 }

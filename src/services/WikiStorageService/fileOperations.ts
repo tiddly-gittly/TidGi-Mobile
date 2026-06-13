@@ -124,6 +124,39 @@ export async function writeTextFile(path: string, content: string): Promise<void
   new File(path).write(content);
 }
 
+/**
+ * Read a base64-encoded binary file and return the base64 string.
+ * Matches desktop TW's behavior for image/pdf/zip etc. tiddlers.
+ * External storage: uses native readFileBase64.
+ * Internal storage: uses expo-file-system's File.base64().
+ */
+export async function readBinaryFileAsBase64(path: string): Promise<string> {
+  if (isExternalPath(path)) {
+    return ExternalStorage.readFileBase64(toPlainPath(path));
+  }
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      return file.base64();
+    }
+  }
+  return new File(path).base64();
+}
+
+/**
+ * Write a base64 string to disk as decoded binary bytes.
+ * Matches desktop TW's `fs.writeFile(path, text, "base64")` behavior.
+ * External storage: uses native writeFileBase64 (Kotlin Base64.decode + writeBytes).
+ * Internal storage: uses expo-file-system's native base64 encoding support.
+ */
+export async function writeBinaryFileFromBase64(path: string, base64Content: string): Promise<void> {
+  if (isExternalPath(path)) {
+    return ExternalStorage.writeFileBase64(toPlainPath(path), base64Content);
+  }
+  // expo-file-system's File.write() natively supports base64 encoding — no JS-side decode needed
+  new File(path).write(base64Content, { encoding: 'base64' });
+}
+
 export async function deleteFileOrDirectory(path: string): Promise<void> {
   if (isExternalPath(path)) {
     const plain = toPlainPath(path);
@@ -210,14 +243,19 @@ export async function findFileRecursively(
   return search(new Directory(directoryPath));
 }
 
-export async function listTidFilesRecursively(directoryPath: string): Promise<string[]> {
+/**
+ * Recursively list tiddler index files: .tid files and .meta companion files.
+ * .meta files are needed to locate Markdown/binary tiddlers whose metadata
+ * is stored separately from their body file.
+ */
+export async function listTiddlerIndexFilesRecursively(directoryPath: string): Promise<string[]> {
   if (isExternalPath(directoryPath)) {
     const plainPath = toPlainPath(directoryPath);
     const info = await ExternalStorage.getInfo(plainPath).catch(() => ({ exists: false, isDirectory: false }));
     if (!info.exists || !info.isDirectory) return [];
     const relativePaths = await ExternalStorage.readDirRecursive(plainPath).catch(() => [] as string[]);
     return relativePaths
-      .filter(relativePath => relativePath.endsWith('.tid'))
+      .filter(relativePath => relativePath.endsWith('.tid') || relativePath.endsWith('.meta'))
       .map(relativePath => `${plainPath}${plainPath.endsWith('/') ? '' : '/'}${relativePath}`);
   }
 
@@ -235,7 +273,7 @@ export async function listTidFilesRecursively(directoryPath: string): Promise<st
         const name = entry.name.replace(/\/$/, '');
         if (name === '.git' || name === 'node_modules' || name === '.DS_Store' || name === 'output') continue;
         walkDirectory(entry);
-      } else if (entry instanceof File && entry.name.endsWith('.tid')) {
+      } else if (entry instanceof File && (entry.name.endsWith('.tid') || entry.name.endsWith('.meta'))) {
         result.push(entry.uri);
       }
     }

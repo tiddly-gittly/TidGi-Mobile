@@ -3,7 +3,7 @@ import { compact } from 'lodash';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TouchableOpacity, View } from 'react-native';
-import { Card, IconButton, Text, useTheme } from 'react-native-paper';
+import { IconButton, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
@@ -159,10 +159,13 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
   );
 };
 
-const ServerCard = styled(Card)`
+const ServerCard = styled.View`
   margin: 6px 8px;
   flex-direction: row;
   align-items: center;
+  background-color: ${({ theme }) => theme.colors.surface};
+  border-radius: 12px;
+  elevation: 1;
 `;
 
 const CardInner = styled(View)`
