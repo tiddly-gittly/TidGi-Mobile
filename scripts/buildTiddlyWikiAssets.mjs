@@ -127,6 +127,18 @@ const tsContent = [
   'export function usesSeparateMetaFile(tiddlerType: string | undefined): boolean {',
   "  return getExtensionForType(tiddlerType) !== '.tid';",
   '}',
+  '',
+  '/**',
+  " * Get the file encoding for a tiddler type's body file.",
+  ' * Desktop TW passes this to fs.writeFile for binary-safe writes.',
+  " * Falls back to 'utf8' for unknown types.",
+  ' */',
+  "export function getTypeEncoding(tiddlerType: string | undefined): 'utf8' | 'base64' {",
+  '  if (!tiddlerType) return \'utf8\';',
+  '  const entry = contentTypeInfo[tiddlerType] as ContentTypeInfoEntry | undefined;',
+  '  if (!entry) return \'utf8\';',
+  "  return entry.encoding === 'base64' ? 'base64' : 'utf8';",
+  '}',
   '',].join('\n');
 writeFileSync(contentTypeInfoPath, tsContent, 'utf8');
 console.log(`Wrote ${contentTypeInfoPath} (${Object.keys(contentTypeInfo).length} entries)`);

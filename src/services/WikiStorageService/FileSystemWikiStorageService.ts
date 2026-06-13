@@ -25,8 +25,8 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
-import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTiddlerIndexFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
-import { getBodyFilePathFromMetaPath, getTiddlerFileExtension, parseMetadataFile, processFields, shouldUseSeparateMetaFile } from './tiddlerFileParser';
+import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTiddlerIndexFilesRecursively, readBinaryFileAsBase64, readTextFile, writeBinaryFileFromBase64, writeTextFile } from './fileOperations';
+import { getBodyFilePathFromMetaPath, getTiddlerFileExtension, getTypeEncoding, isBase64EncodedBodyFile, parseMetadataFile, processFields, shouldUseSeparateMetaFile } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
@@ -512,13 +512,20 @@ export class FileSystemWikiStorageService {
 
   /**
    * Save tiddler whose body and metadata are separate files (.md+.meta, .txt+.meta, etc.).
-   * Matches TiddlyWiki Desktop's behavior for non-.tid types.
+   * Matches TiddlyWiki Desktop's behavior: uses the encoding from contentTypeInfo
+   * so base64 types (images, PDFs, etc.) are written as decoded binary bytes.
    */
   async #saveSeparateMetaTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
     const headerLines = this.#buildTiddlerHeaderLines(title, fields);
-    // Body file: raw content only
-    await writeTextFile(filePath, text);
-    // Companion .meta file: all fields except text
+    const tiddlerType = (fields.type ?? 'text/plain') as string;
+    const encoding = getTypeEncoding(tiddlerType);
+    // Body file: write with correct encoding (utf8 text or decoded base64 binary)
+    if (encoding === 'base64') {
+      await writeBinaryFileFromBase64(filePath, text);
+    } else {
+      await writeTextFile(filePath, text);
+    }
+    // Companion .meta file: always UTF-8 headers
     await writeTextFile(`${filePath}.meta`, headerLines.join('\n'));
   }
 
@@ -609,8 +616,8 @@ export class FileSystemWikiStorageService {
    * Load the text body of a tiddler from its on-disk file.
    * Uses the registry for direct path lookup — no searching needed.
    * - .tid files: body is everything after the first blank line.
-   * - Non-.tid files (any extension registered via contentTypeInfo): body-only,
-   *   the metadata lives in the companion .meta file.
+   * - Non-.tid files: body-only file, encoding determined by contentTypeInfo.
+   *   base64 types (images, PDFs, etc.) return the base64 string matching TW.
    */
   async loadTiddlerText(title: string): Promise<string | undefined> {
     const filePath = this.#tiddlerFilePathByTitle.get(title);
@@ -618,17 +625,18 @@ export class FileSystemWikiStorageService {
       return undefined;
     }
     try {
-      const content = await readTextFile(filePath);
-      // Non-.tid body files are raw text with no inline header
+      // Non-.tid body files: encoding matters for binary types
       if (!filePath.toLowerCase().endsWith('.tid')) {
-        return content;
+        return isBase64EncodedBodyFile(filePath)
+          ? await readBinaryFileAsBase64(filePath)
+          : await readTextFile(filePath);
       }
-      // .tid format: header fields separated by blank line from body
+      // .tid files are always UTF-8 with inline header
+      const content = await readTextFile(filePath);
       const blankLineMatch = /\r?\n\r?\n/.exec(content);
       if (blankLineMatch !== null) {
         return content.substring(blankLineMatch.index + blankLineMatch[0].length);
       }
-      // No blank line — file has only headers, no body text
       return '';
     } catch (error) {
       console.warn(`loadTiddlerText "${title}": failed to read ${filePath}: ${(error as Error).message}`);

@@ -7,8 +7,25 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 
-import { getExtensionForType, usesSeparateMetaFile } from './contentTypeInfo';
-export { getExtensionForType, usesSeparateMetaFile };
+import contentTypeInfo, { getExtensionForType, getTypeEncoding, usesSeparateMetaFile } from './contentTypeInfo';
+export { getExtensionForType, getTypeEncoding, usesSeparateMetaFile };
+
+/**
+ * Determine whether a body file (by path) is base64-encoded binary content.
+ * Looks up the file extension in contentTypeInfo to match TW's registerFileType.
+ * Returns true for extensions like .jpg, .png, .pdf, .wasm, etc.
+ */
+export function isBase64EncodedBodyFile(bodyFilePath: string): boolean {
+  const extension = bodyFilePath.slice(bodyFilePath.lastIndexOf('.'));
+  if (!extension || extension === '.tid' || extension === '.meta') return false;
+  for (const info of Object.values(contentTypeInfo)) {
+    const extensions = Array.isArray(info.extension) ? info.extension : [info.extension];
+    if (extensions.includes(extension)) {
+      return info.encoding === 'base64';
+    }
+  }
+  return false;
+}
 
 /**
  * Determine the on-disk storage strategy for a tiddler, mirroring the official

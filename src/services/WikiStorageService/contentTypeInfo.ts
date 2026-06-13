@@ -3,7 +3,7 @@
 // This is generated at build time by extracting the registerFileType() registrations
 // from the bundled TW core, so plugin-added types are automatically included.
 
-// Generated: 2026-06-13T06:11:58.897Z
+// Generated: 2026-06-13T06:23:43.749Z
 // TiddlyWiki version: 5.4.0
 
 export interface ContentTypeInfoEntry {
@@ -86,4 +86,16 @@ export function getExtensionForType(tiddlerType: string | undefined): string {
  */
 export function usesSeparateMetaFile(tiddlerType: string | undefined): boolean {
   return getExtensionForType(tiddlerType) !== '.tid';
+}
+
+/**
+ * Get the file encoding for a tiddler type's body file.
+ * Desktop TW passes this to fs.writeFile for binary-safe writes.
+ * Falls back to 'utf8' for unknown types.
+ */
+export function getTypeEncoding(tiddlerType: string | undefined): 'utf8' | 'base64' {
+  if (!tiddlerType) return 'utf8';
+  const entry = contentTypeInfo[tiddlerType] as ContentTypeInfoEntry | undefined;
+  if (!entry) return 'utf8';
+  return entry.encoding === 'base64' ? 'base64' : 'utf8';
 }

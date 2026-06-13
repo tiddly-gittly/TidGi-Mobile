@@ -124,6 +124,52 @@ export async function writeTextFile(path: string, content: string): Promise<void
   new File(path).write(content);
 }
 
+/**
+ * Read a base64-encoded binary file and return the base64 string.
+ * Matches desktop TW's behavior for image/pdf/zip etc. tiddlers.
+ * External storage: uses native readFileBase64.
+ * Internal storage: uses expo-file-system's File.base64().
+ */
+export async function readBinaryFileAsBase64(path: string): Promise<string> {
+  if (isExternalPath(path)) {
+    return ExternalStorage.readFileBase64(toPlainPath(path));
+  }
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      return file.base64();
+    }
+  }
+  return new File(path).base64();
+}
+
+/**
+ * Write a base64 string to disk as decoded binary bytes.
+ * Matches desktop TW's `fs.writeFile(path, text, "base64")` behavior.
+ * External storage: uses native writeFileBase64.
+ * Internal storage: decodes base64 → Uint8Array → File.write(bytes).
+ */
+export async function writeBinaryFileFromBase64(path: string, base64Content: string): Promise<void> {
+  if (isExternalPath(path)) {
+    return ExternalStorage.writeFileBase64(toPlainPath(path), base64Content);
+  }
+  // Decode base64 to binary and write as Uint8Array
+  const binaryString = atob(base64Content);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let index = 0; index < binaryString.length; index++) {
+    bytes[index] = binaryString.charCodeAt(index);
+  }
+  // Prefer preserving existing scheme when possible
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      file.write(bytes);
+      return;
+    }
+  }
+  new File(path).write(bytes);
+}
+
 export async function deleteFileOrDirectory(path: string): Promise<void> {
   if (isExternalPath(path)) {
     const plain = toPlainPath(path);
