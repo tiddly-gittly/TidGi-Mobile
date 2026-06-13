@@ -340,7 +340,7 @@ export class FileSystemWikiStorageService {
       const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
       let fullPath: string;
 
-      if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension)) {
+      if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension.toLowerCase())) {
         // File is already in the correct workspace directory with the right extension — overwrite in place
         fullPath = oldPath;
       } else {

@@ -3,7 +3,7 @@
 // This is generated at build time by extracting the registerFileType() registrations
 // from the bundled TW core, so plugin-added types are automatically included.
 
-// Generated: 2026-06-12T17:33:25.282Z
+// Generated: 2026-06-13T06:11:58.897Z
 // TiddlyWiki version: 5.4.0
 
 export interface ContentTypeInfoEntry {
@@ -69,15 +69,14 @@ const contentTypeInfo: Record<string, ContentTypeInfoEntry> = {
 export default contentTypeInfo;
 
 /**
- * Get the file extension (without dot) for a tiddler type.
- * Falls back to 'tid' for unknown or untyped tiddlers.
+ * Get the file extension (with leading dot, e.g. `.tid`, `.md`) for a tiddler type.
+ * Falls back to '.tid' for unknown or untyped tiddlers.
  */
 export function getExtensionForType(tiddlerType: string | undefined): string {
-  if (!tiddlerType) return 'tid';
+  if (!tiddlerType) return '.tid';
   const entry = contentTypeInfo[tiddlerType] as ContentTypeInfoEntry | undefined;
-  if (!entry) return 'tid';
-  const rawExtension = Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
-  return rawExtension.replace(/^\./, '');
+  if (!entry) return '.tid';
+  return Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
 }
 
 /**
@@ -86,5 +85,5 @@ export function getExtensionForType(tiddlerType: string | undefined): string {
  * extension as body-only + .meta companion.
  */
 export function usesSeparateMetaFile(tiddlerType: string | undefined): boolean {
-  return getExtensionForType(tiddlerType) !== 'tid';
+  return getExtensionForType(tiddlerType) !== '.tid';
 }

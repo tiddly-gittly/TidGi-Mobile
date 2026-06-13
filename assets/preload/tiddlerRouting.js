@@ -198,7 +198,7 @@
     // Default: use sanitized title as filename
     const sanitized = tiddlerTitle.replace(/["#%&'*/:<=>?\\{}]/g, '_');
     const extension = getExtensionForType(tiddlerFields?.type);
-    return `tiddlers/${sanitized}.${extension}`;
+    return `tiddlers/${sanitized}${extension}`;
   }
 
   // Expose functions to native layer via message passing
