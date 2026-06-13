@@ -5,7 +5,7 @@
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView } from 'react-native';
-import { Button, Card, Checkbox, Dialog, ProgressBar, Text, TextInput } from 'react-native-paper';
+import { Button, Checkbox, Dialog, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { IMigrationProgress, migrateWorkspaceStorage } from '../../services/WikiMigrationService';
@@ -23,7 +23,7 @@ const SaveButton = styled(Button)`
   margin-bottom: 32px;
 `;
 
-const Section = styled(Card)`
+const Section = styled.View`
   margin-bottom: 16px;
   padding: 16px;
 `;
@@ -146,6 +146,8 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
           value={workspace.wikiFolderLocation}
           mode='outlined'
           editable={false}
+          multiline
+          numberOfLines={3}
           right={
             <TextInput.Icon
               icon='folder-open'
