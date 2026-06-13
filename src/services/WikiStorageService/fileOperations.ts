@@ -146,28 +146,15 @@ export async function readBinaryFileAsBase64(path: string): Promise<string> {
 /**
  * Write a base64 string to disk as decoded binary bytes.
  * Matches desktop TW's `fs.writeFile(path, text, "base64")` behavior.
- * External storage: uses native writeFileBase64.
- * Internal storage: decodes base64 → Uint8Array → File.write(bytes).
+ * External storage: uses native writeFileBase64 (Kotlin Base64.decode + writeBytes).
+ * Internal storage: uses expo-file-system's native base64 encoding support.
  */
 export async function writeBinaryFileFromBase64(path: string, base64Content: string): Promise<void> {
   if (isExternalPath(path)) {
     return ExternalStorage.writeFileBase64(toPlainPath(path), base64Content);
   }
-  // Decode base64 to binary and write as Uint8Array
-  const binaryString = atob(base64Content);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let index = 0; index < binaryString.length; index++) {
-    bytes[index] = binaryString.charCodeAt(index);
-  }
-  // Prefer preserving existing scheme when possible
-  for (const candidate of getInternalPathCandidates(path)) {
-    const file = new File(candidate);
-    if (file.exists) {
-      file.write(bytes);
-      return;
-    }
-  }
-  new File(path).write(bytes);
+  // expo-file-system's File.write() natively supports base64 encoding — no JS-side decode needed
+  new File(path).write(base64Content, { encoding: 'base64' });
 }
 
 export async function deleteFileOrDirectory(path: string): Promise<void> {
