@@ -25,8 +25,26 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
-import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTiddlerIndexFilesRecursively, readBinaryFileAsBase64, readTextFile, writeBinaryFileFromBase64, writeTextFile } from './fileOperations';
-import { getBodyFilePathFromMetaPath, getTiddlerFileExtension, getTypeEncoding, isBase64EncodedBodyFile, parseMetadataFile, processFields, shouldUseSeparateMetaFile } from './tiddlerFileParser';
+import {
+  deleteFileWithEmptyParentsCleanup,
+  ensureDirectory,
+  fileExists,
+  isExternalPath,
+  listTiddlerIndexFilesRecursively,
+  readBinaryFileAsBase64,
+  readTextFile,
+  writeBinaryFileFromBase64,
+  writeTextFile,
+} from './fileOperations';
+import {
+  getBodyFilePathFromMetaPath,
+  getTiddlerFileExtension,
+  getTypeEncoding,
+  isBase64EncodedBodyFile,
+  parseMetadataFile,
+  processFields,
+  shouldUseSeparateMetaFile,
+} from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
@@ -61,10 +79,27 @@ export class FileSystemWikiStorageService {
    */
   indexReady: Promise<void> = Promise.resolve();
 
+  #operationQueue: Promise<void> = Promise.resolve();
+
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
     this.#routingService = new TiddlerRoutingService();
     this.#logger = logFor(workspace.id);
+  }
+
+  async #runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const previousOperation = this.#operationQueue;
+    let releaseCurrentOperation!: () => void;
+    const currentOperation = new Promise<void>((resolve) => {
+      releaseCurrentOperation = resolve;
+    });
+    this.#operationQueue = previousOperation.then(() => currentOperation, () => currentOperation);
+    await previousOperation.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      releaseCurrentOperation();
+    }
   }
 
   getWorkspace(): IWikiWorkspace {
@@ -83,45 +118,47 @@ export class FileSystemWikiStorageService {
    * Must be called once after construction, before any save/delete.
    */
   async buildFileIndex(): Promise<void> {
-    if (this.#tiddlerFilePathByTitle.size > 0) {
-      this.#logger.log(`buildFileIndex: index already built (${this.#tiddlerFilePathByTitle.size} entries), skipping.`);
-      return;
-    }
-    if (this.#isBuildingFileIndex) {
-      return this.indexReady;
-    }
-
-    this.#isBuildingFileIndex = true;
-    try {
-      const startedAt = Date.now();
-      const workspaces = this.#getRelatedWorkspaces();
-      this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid/.meta files`);
-
-      // Try native batch parsing first — a single bridge call that parses all
-      // files in parallel using Java ForkJoinPool, ~100x faster than per-file
-      // JS reads through the bridge.
-      const nativeBatchParser = Platform.OS === 'android'
-        ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
-        : undefined;
-
-      for (const workspace of workspaces) {
-        const folderPath = getWikiTiddlerFolderPath(workspace);
-        const plainFolderPath = toPlainPath(folderPath);
-        this.#logger.log(`buildFileIndex: scanning ${plainFolderPath}`);
-
-        if (nativeBatchParser !== undefined) {
-          await this.#indexDirectoryNative(plainFolderPath, nativeBatchParser);
-        } else {
-          await this.#indexDirectory(folderPath);
-        }
+    await this.#runExclusive(async () => {
+      if (this.#tiddlerFilePathByTitle.size > 0) {
+        this.#logger.log(`buildFileIndex: index already built (${this.#tiddlerFilePathByTitle.size} entries), skipping.`);
+        return;
+      }
+      if (this.#isBuildingFileIndex) {
+        return this.indexReady;
       }
 
-      const elapsed = Date.now() - startedAt;
-      this.#logger.log(`buildFileIndex: completed in ${elapsed}ms. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
-      console.log(`${new Date().toISOString()} [WikiStorageService] buildFileIndex completed in ${elapsed}ms, ${this.#tiddlerFilePathByTitle.size} tiddlers`);
-    } finally {
-      this.#isBuildingFileIndex = false;
-    }
+      this.#isBuildingFileIndex = true;
+      try {
+        const startedAt = Date.now();
+        const workspaces = this.#getRelatedWorkspaces();
+        this.#logger.log(`buildFileIndex: scanning ${workspaces.length} workspace(s) for .tid/.meta files`);
+
+        // Try native batch parsing first — a single bridge call that parses all
+        // files in parallel using Java ForkJoinPool, ~100x faster than per-file
+        // JS reads through the bridge.
+        const nativeBatchParser = Platform.OS === 'android'
+          ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
+          : undefined;
+
+        for (const workspace of workspaces) {
+          const folderPath = getWikiTiddlerFolderPath(workspace);
+          const plainFolderPath = toPlainPath(folderPath);
+          this.#logger.log(`buildFileIndex: scanning ${plainFolderPath}`);
+
+          if (nativeBatchParser !== undefined) {
+            await this.#indexDirectoryNative(plainFolderPath, nativeBatchParser);
+          } else {
+            await this.#indexDirectory(folderPath);
+          }
+        }
+
+        const elapsed = Date.now() - startedAt;
+        this.#logger.log(`buildFileIndex: completed in ${elapsed}ms. Indexed ${this.#tiddlerFilePathByTitle.size} tiddler(s)`);
+        console.log(`${new Date().toISOString()} [WikiStorageService] buildFileIndex completed in ${elapsed}ms, ${this.#tiddlerFilePathByTitle.size} tiddlers`);
+      } finally {
+        this.#isBuildingFileIndex = false;
+      }
+    });
   }
 
   /**
@@ -308,105 +345,107 @@ export class FileSystemWikiStorageService {
    */
   async saveTiddler(title: string, fields: ITiddlerFieldsParameter, targetWorkspaceId?: string): Promise<string> {
     await this.indexReady;
-    try {
-      const { text, title: _, ...fieldsToSave } = fields as (ITiddlerFieldsParameter & { text?: string; title: string });
+    return this.#runExclusive(async () => {
+      try {
+        const { text, title: _, ...fieldsToSave } = fields as (ITiddlerFieldsParameter & { text?: string; title: string });
 
-      // Remove null/undefined fields (create new object to avoid readonly issues)
-      const mutableFields: Record<string, unknown> = {};
-      Object.keys(fieldsToSave).forEach(key => {
-        const value = fieldsToSave[key];
-        if (value !== null && value !== undefined) {
-          mutableFields[key] = value;
-        }
-      });
-
-      const processedFields = processFields({ title, ...mutableFields });
-      const isSeparateMetaType = shouldUseSeparateMetaFile(processedFields);
-      const expectedExtension = getTiddlerFileExtension(processedFields);
-      const changeCount = '0';
-      const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
-
-      const targetWorkspace = this.#resolveTargetWorkspace(targetWorkspaceId);
-      const targetDirectory = targetWorkspace.wikiFolderLocation;
-      this.#logger.log(`saveTiddler "${title}" target workspace=${targetWorkspace.id}`);
-
-      // ─── Desktop getTiddlerFileInfo equivalent ───────────────────────
-      // Check if the existing file is already in the correct target directory
-      // AND uses the correct extension for this tiddler type. If yes → overwrite
-      // in place. If the type changed (e.g. default → markdown), generate a new
-      // path and delete the old file to match desktop's move semantic.
-      const oldPath = this.#tiddlerFilePathByTitle.get(title);
-      const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
-      let fullPath: string;
-
-      if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension.toLowerCase())) {
-        // File is already in the correct workspace directory with the right extension — overwrite in place
-        fullPath = oldPath;
-      } else {
-        // Directory changed, type changed, or no existing file — generate new path
-        const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
-        await ensureDirectory(tiddlerFolderPath);
-
-        const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
-        fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
-      }
-
-      // Ensure parent directory exists
-      const parentDirectory = fullPath.substring(0, fullPath.lastIndexOf('/'));
-      await ensureDirectory(parentDirectory);
-
-      // Write the tiddler file
-      const allFields = { ...fieldsToSave } as Record<string, unknown>;
-      if (processedFields._canonical_uri) {
-        allFields._canonical_uri = processedFields._canonical_uri;
-      }
-      if (isSeparateMetaType) {
-        await this.#saveSeparateMetaTiddler(title, text ?? '', allFields, fullPath);
-      } else {
-        await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
-      }
-      const plainSavePath = toPlainPath(fullPath);
-      this.#logger.log(`saveTiddler "${title}" → ${plainSavePath}`);
-      console.log(`${new Date().toISOString()} [WikiStorageService] saveTiddler "${title}" written to ${plainSavePath}`);
-
-      // ─── Desktop cleanupTiddlerFiles equivalent ──────────────────────
-      // If the file moved to a different location (routing changed),
-      // delete the old file. This implements the MOVE semantic.
-      if (oldPath && oldPath !== fullPath) {
-        // Remove old reverse index entry
-        this.#titleByFilePath.delete(toPlainPath(oldPath));
-        try {
-          if (await fileExists(oldPath)) {
-            await deleteFileWithEmptyParentsCleanup(oldPath, this.#getCleanupStopDirectory(oldPath));
+        // Remove null/undefined fields (create new object to avoid readonly issues)
+        const mutableFields: Record<string, unknown> = {};
+        Object.keys(fieldsToSave).forEach(key => {
+          const value = fieldsToSave[key];
+          if (value !== null && value !== undefined) {
+            mutableFields[key] = value;
           }
-          // Best-effort .meta companion cleanup
-          const oldMetaPath = `${oldPath}.meta`;
-          if (await fileExists(oldMetaPath)) {
-            await deleteFileWithEmptyParentsCleanup(oldMetaPath, this.#getCleanupStopDirectory(oldMetaPath));
-          }
-        } catch (error) {
-          console.warn(`saveTiddler cleanup: failed to remove old file ${oldPath}: ${(error as Error).message}`);
+        });
+
+        const processedFields = processFields({ title, ...mutableFields });
+        const isSeparateMetaType = shouldUseSeparateMetaFile(processedFields);
+        const expectedExtension = getTiddlerFileExtension(processedFields);
+        const changeCount = '0';
+        const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
+
+        const targetWorkspace = this.#resolveTargetWorkspace(targetWorkspaceId);
+        const targetDirectory = targetWorkspace.wikiFolderLocation;
+        this.#logger.log(`saveTiddler "${title}" target workspace=${targetWorkspace.id}`);
+
+        // ─── Desktop getTiddlerFileInfo equivalent ───────────────────────
+        // Check if the existing file is already in the correct target directory
+        // AND uses the correct extension for this tiddler type. If yes → overwrite
+        // in place. If the type changed (e.g. default → markdown), generate a new
+        // path and delete the old file to match desktop's move semantic.
+        const oldPath = this.#tiddlerFilePathByTitle.get(title);
+        const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
+        let fullPath: string;
+
+        if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension.toLowerCase())) {
+          // File is already in the correct workspace directory with the right extension — overwrite in place
+          fullPath = oldPath;
+        } else {
+          // Directory changed, type changed, or no existing file — generate new path
+          const tiddlerFolderPath = getWikiTiddlerFolderPath(targetWorkspace);
+          await ensureDirectory(tiddlerFolderPath);
+
+          const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
+          fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
         }
-      }
 
-      // Update registries (≈ desktop boot.files[title] = savedFileInfo)
-      this.#tiddlerFilePathByTitle.set(title, fullPath);
-      this.#titleByFilePath.set(toPlainPath(fullPath), title);
-      // For non-tid companions (.md, .txt, .svg, etc.), also map the .meta path
-      // so metadata-only changes are detected by the change observer.
-      if (isSeparateMetaType) {
-        this.#titleByFilePath.set(`${toPlainPath(fullPath)}.meta`, title);
-      }
+        // Ensure parent directory exists
+        const parentDirectory = fullPath.substring(0, fullPath.lastIndexOf('/'));
+        await ensureDirectory(parentDirectory);
 
-      if (shouldTrackCreatedUserTiddler) {
-        void trackNewUserTiddlerCreated(targetWorkspace.isSubWiki === true);
-      }
+        // Write the tiddler file
+        const allFields = { ...fieldsToSave } as Record<string, unknown>;
+        if (processedFields._canonical_uri) {
+          allFields._canonical_uri = processedFields._canonical_uri;
+        }
+        if (isSeparateMetaType) {
+          await this.#saveSeparateMetaTiddler(title, text ?? '', allFields, fullPath);
+        } else {
+          await this.#saveTextTiddler(title, text ?? '', allFields, fullPath);
+        }
+        const plainSavePath = toPlainPath(fullPath);
+        this.#logger.log(`saveTiddler "${title}" → ${plainSavePath}`);
+        console.log(`${new Date().toISOString()} [WikiStorageService] saveTiddler "${title}" written to ${plainSavePath}`);
 
-      return Etag;
-    } catch (error) {
-      this.#logger.error(`Failed to save tiddler "${title}":`, error);
-      throw error;
-    }
+        // ─── Desktop cleanupTiddlerFiles equivalent ──────────────────────
+        // If the file moved to a different location (routing changed),
+        // delete the old file. This implements the MOVE semantic.
+        if (oldPath && oldPath !== fullPath) {
+          // Remove old reverse index entry
+          this.#titleByFilePath.delete(toPlainPath(oldPath));
+          try {
+            if (await fileExists(oldPath)) {
+              await deleteFileWithEmptyParentsCleanup(oldPath, this.#getCleanupStopDirectory(oldPath));
+            }
+            // Best-effort .meta companion cleanup
+            const oldMetaPath = `${oldPath}.meta`;
+            if (await fileExists(oldMetaPath)) {
+              await deleteFileWithEmptyParentsCleanup(oldMetaPath, this.#getCleanupStopDirectory(oldMetaPath));
+            }
+          } catch (error) {
+            console.warn(`saveTiddler cleanup: failed to remove old file ${oldPath}: ${(error as Error).message}`);
+          }
+        }
+
+        // Update registries (≈ desktop boot.files[title] = savedFileInfo)
+        this.#tiddlerFilePathByTitle.set(title, fullPath);
+        this.#titleByFilePath.set(toPlainPath(fullPath), title);
+        // For non-tid companions (.md, .txt, .svg, etc.), also map the .meta path
+        // so metadata-only changes are detected by the change observer.
+        if (isSeparateMetaType) {
+          this.#titleByFilePath.set(`${toPlainPath(fullPath)}.meta`, title);
+        }
+
+        if (shouldTrackCreatedUserTiddler) {
+          void trackNewUserTiddlerCreated(targetWorkspace.isSubWiki === true);
+        }
+
+        return Etag;
+      } catch (error) {
+        this.#logger.error(`Failed to save tiddler "${title}":`, error);
+        throw error;
+      }
+    });
   }
 
   /**
@@ -420,6 +459,39 @@ export class FileSystemWikiStorageService {
     // Ensure directory ends with / for proper prefix matching
     const directoryWithSlash = normalizedDirectory.endsWith('/') ? normalizedDirectory : `${normalizedDirectory}/`;
     return normalizedFile.startsWith(directoryWithSlash);
+  }
+
+  #isSameFilePath(firstPath: string, secondPath: string): boolean {
+    return toPlainPath(firstPath).replace(/\/$/, '') === toPlainPath(secondPath).replace(/\/$/, '');
+  }
+
+  #getIndexedTitleForPath(filePath: string): string | undefined {
+    return this.#titleByFilePath.get(toPlainPath(filePath));
+  }
+
+  #resolveDeleteFilePath(title: string, exactFilePath: string | undefined, registryPath: string | undefined): string | undefined {
+    if (typeof exactFilePath !== 'string' || exactFilePath.length === 0) {
+      return registryPath;
+    }
+
+    if (typeof registryPath === 'string' && registryPath.length > 0) {
+      if (this.#isSameFilePath(exactFilePath, registryPath)) {
+        return registryPath;
+      }
+      const exactPathOwner = this.#getIndexedTitleForPath(exactFilePath);
+      if (exactPathOwner === title) {
+        return exactFilePath;
+      }
+      this.#logger.warn(`deleteTiddler "${title}": ignoring caller filepath owned by ${exactPathOwner ?? 'unknown title'}: ${toPlainPath(exactFilePath)}`);
+      return registryPath;
+    }
+
+    const exactPathOwner = this.#getIndexedTitleForPath(exactFilePath);
+    if (exactPathOwner !== undefined && exactPathOwner !== title) {
+      this.#logger.warn(`deleteTiddler "${title}": refusing to delete filepath owned by ${exactPathOwner}: ${toPlainPath(exactFilePath)}`);
+      return undefined;
+    }
+    return exactFilePath;
   }
 
   /**
@@ -545,69 +617,69 @@ export class FileSystemWikiStorageService {
    */
   async deleteTiddler(title: string, exactFilePath?: string): Promise<boolean> {
     await this.indexReady;
-    // Resolve the file path: prefer caller-supplied path, then registry
-    const registryPath = this.#tiddlerFilePathByTitle.get(title);
-    const filePath = (typeof exactFilePath === 'string' && exactFilePath.length > 0)
-      ? exactFilePath
-      : registryPath;
+    return this.#runExclusive(async () => {
+      // Resolve the file path: prefer caller-supplied path, then registry
+      const registryPath = this.#tiddlerFilePathByTitle.get(title);
+      const filePath = this.#resolveDeleteFilePath(title, exactFilePath, registryPath);
 
-    if (!filePath) {
-      // Not in registry — tiddler was never on disk (e.g. in-memory draft).
-      // Desktop: callback(null, null);  Mobile: return true.
-      this.#logger.log(`deleteTiddler "${title}": not in registry, nothing to delete`);
-      return true;
-    }
+      if (!filePath) {
+        // Not in registry — tiddler was never on disk (e.g. in-memory draft).
+        // Desktop: callback(null, null);  Mobile: return true.
+        this.#logger.log(`deleteTiddler "${title}": not in registry, nothing to delete`);
+        return true;
+      }
 
-    this.#logger.log(`deleteTiddler "${title}" → ${toPlainPath(filePath)}`);
-    this.#logger.log('deleteTiddler input details', {
-      exactFilePath,
-      registryPath,
-      resolvedPath: filePath,
-      title,
-    });
+      this.#logger.log(`deleteTiddler "${title}" → ${toPlainPath(filePath)}`);
+      this.#logger.log('deleteTiddler input details', {
+        exactFilePath,
+        registryPath,
+        resolvedPath: filePath,
+        title,
+      });
 
-    try {
-      const exists = await fileExists(filePath);
-      this.#logger.log(`deleteTiddler exists(${toPlainPath(filePath)}) => ${String(exists)}`);
-      if (exists) {
-        await deleteFileWithEmptyParentsCleanup(filePath, this.#getCleanupStopDirectory(filePath));
-        // Verify deletion succeeded
-        const stillExists = await fileExists(filePath);
-        this.#logger.log(`deleteTiddler verify exists(${toPlainPath(filePath)}) => ${String(stillExists)}`);
-        if (stillExists) {
-          this.#logger.error(`deleteTiddler "${title}": file still exists after delete! path=${toPlainPath(filePath)}`);
-        }
-      } else {
-        // The file was not found at the registered path. This can happen when
-        // the path format (URI vs plain) drifted between save and delete.
-        // Try with the normalized plain path as a fallback.
-        const plainPath = toPlainPath(filePath);
-        const existsPlain = await fileExists(plainPath);
-        this.#logger.log(`deleteTiddler fallback exists(${plainPath}) => ${String(existsPlain)}`);
-        if (existsPlain) {
-          this.#logger.warn(`deleteTiddler "${title}": file not found at registered path, but found via plain path. Deleting ${plainPath}`);
-          await deleteFileWithEmptyParentsCleanup(plainPath, this.#getCleanupStopDirectory(filePath));
+      try {
+        const exists = await fileExists(filePath);
+        this.#logger.log(`deleteTiddler exists(${toPlainPath(filePath)}) => ${String(exists)}`);
+        if (exists) {
+          await deleteFileWithEmptyParentsCleanup(filePath, this.#getCleanupStopDirectory(filePath));
+          // Verify deletion succeeded
+          const stillExists = await fileExists(filePath);
+          this.#logger.log(`deleteTiddler verify exists(${toPlainPath(filePath)}) => ${String(stillExists)}`);
+          if (stillExists) {
+            this.#logger.error(`deleteTiddler "${title}": file still exists after delete! path=${toPlainPath(filePath)}`);
+          }
         } else {
-          this.#logger.warn(`deleteTiddler "${title}": file not found at ${toPlainPath(filePath)} (may have been externally removed)`);
+          // The file was not found at the registered path. This can happen when
+          // the path format (URI vs plain) drifted between save and delete.
+          // Try with the normalized plain path as a fallback.
+          const plainPath = toPlainPath(filePath);
+          const existsPlain = await fileExists(plainPath);
+          this.#logger.log(`deleteTiddler fallback exists(${plainPath}) => ${String(existsPlain)}`);
+          if (existsPlain) {
+            this.#logger.warn(`deleteTiddler "${title}": file not found at registered path, but found via plain path. Deleting ${plainPath}`);
+            await deleteFileWithEmptyParentsCleanup(plainPath, this.#getCleanupStopDirectory(filePath));
+          } else {
+            this.#logger.warn(`deleteTiddler "${title}": file not found at ${toPlainPath(filePath)} (may have been externally removed)`);
+          }
         }
+        // Best-effort .meta companion cleanup
+        const metaPath = `${filePath}.meta`;
+        if (await fileExists(metaPath)) {
+          await deleteFileWithEmptyParentsCleanup(metaPath, this.#getCleanupStopDirectory(metaPath));
+        }
+      } catch (error) {
+        this.#logger.error(`deleteTiddler "${title}": failed to remove ${toPlainPath(filePath)}:`, error);
       }
-      // Best-effort .meta companion cleanup
-      const metaPath = `${filePath}.meta`;
-      if (await fileExists(metaPath)) {
-        await deleteFileWithEmptyParentsCleanup(metaPath, this.#getCleanupStopDirectory(metaPath));
-      }
-    } catch (error) {
-      this.#logger.error(`deleteTiddler "${title}": failed to remove ${toPlainPath(filePath)}:`, error);
-    }
 
-    this.#tiddlerFilePathByTitle.delete(title);
-    this.#titleByFilePath.delete(toPlainPath(filePath));
-    this.#titleByFilePath.delete(`${toPlainPath(filePath)}.meta`);
-    if (typeof registryPath === 'string' && registryPath !== filePath) {
-      this.#titleByFilePath.delete(toPlainPath(registryPath));
-      this.#titleByFilePath.delete(`${toPlainPath(registryPath)}.meta`);
-    }
-    return true;
+      this.#tiddlerFilePathByTitle.delete(title);
+      this.#titleByFilePath.delete(toPlainPath(filePath));
+      this.#titleByFilePath.delete(`${toPlainPath(filePath)}.meta`);
+      if (typeof registryPath === 'string' && registryPath !== filePath) {
+        this.#titleByFilePath.delete(toPlainPath(registryPath));
+        this.#titleByFilePath.delete(`${toPlainPath(registryPath)}.meta`);
+      }
+      return true;
+    });
   }
 
   // ─── Load ──────────────────────────────────────────────────────────────
