@@ -9,7 +9,7 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 import { IWikiWorkspace } from '../../store/workspace';
-import { getExtensionForType } from './tiddlerFileParser';
+import { getTiddlerFileExtension } from './tiddlerFileParser';
 import { readTidgiConfig } from './tidgiConfigManager';
 
 /**
@@ -42,7 +42,7 @@ export class TiddlerRoutingService {
     if (sanitized.length > 200) {
       sanitized = sanitized.substring(0, 200);
     }
-    const extension = getExtensionForType(fields.type);
+    const extension = getTiddlerFileExtension(fields);
     if (workspace.isSubWiki === true) {
       return `${sanitized}${extension}`;
     }
@@ -67,7 +67,7 @@ export class TiddlerRoutingService {
       sanitized = sanitized.substring(0, 200);
     }
 
-    const extension = getExtensionForType(fields.type);
+    const extension = getTiddlerFileExtension(fields);
 
     // Apply fileSystemPathFilter if configured and enabled
     if (config.fileSystemPathFilterEnable && typeof config.fileSystemPathFilter === 'string' && config.fileSystemPathFilter.length > 0) {

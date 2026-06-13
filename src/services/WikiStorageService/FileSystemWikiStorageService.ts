@@ -26,7 +26,7 @@ import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
 import { deleteFileWithEmptyParentsCleanup, ensureDirectory, fileExists, isExternalPath, listTiddlerIndexFilesRecursively, readTextFile, writeTextFile } from './fileOperations';
-import { getBodyFilePathFromMetaPath, getExtensionForType, parseMetadataFile, processFields, usesSeparateMetaFile } from './tiddlerFileParser';
+import { getBodyFilePathFromMetaPath, getTiddlerFileExtension, parseMetadataFile, processFields, shouldUseSeparateMetaFile } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
@@ -321,9 +321,8 @@ export class FileSystemWikiStorageService {
       });
 
       const processedFields = processFields({ title, ...mutableFields });
-      const tiddlerType = processedFields.type as string | undefined;
-      const isSeparateMetaType = usesSeparateMetaFile(tiddlerType);
-      const expectedExtension = getExtensionForType(tiddlerType);
+      const isSeparateMetaType = shouldUseSeparateMetaFile(processedFields);
+      const expectedExtension = getTiddlerFileExtension(processedFields);
       const changeCount = '0';
       const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 

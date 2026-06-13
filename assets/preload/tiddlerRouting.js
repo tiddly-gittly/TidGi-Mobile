@@ -154,17 +154,25 @@
   }
 
   /**
-   * Get the file extension (without dot) for a tiddler type,
+   * Get the file extension (with leading dot, e.g. ".tid", ".md") for a tiddler,
    * using TiddlyWiki's own contentTypeInfo registry (generic for all types).
-   * Falls back to "tid" for unknown/untyped tiddlers.
+   * Falls back to ".tid" for unknown/untyped tiddlers.
+   * Tiddlers with _canonical_uri always use .tid (matching official TW behavior).
    */
-  function getExtensionForType(type) {
-    if (!type) return 'tid';
+  function getExtensionForFields(fields) {
+    // _canonical_uri tiddlers use .tid format (no separate body file)
+    if (fields && typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
+      return '.tid';
+    }
+    var type = fields && fields.type ? fields.type : 'text/vnd.tiddlywiki';
+    // text/vnd.tiddlywiki(-multiple) always .tid
+    if (type === 'text/vnd.tiddlywiki' || type === 'text/vnd.tiddlywiki-multiple') {
+      return '.tid';
+    }
     // Use TW5's built-in contentTypeInfo registry (populated by registerFileType calls in boot)
     var info = $tw.config.contentTypeInfo[type];
-    if (!info) return 'tid';
-    var ext = Array.isArray(info.extension) ? info.extension[0] : info.extension;
-    return (ext || '').replace(/^\./, '');
+    if (!info) return '.tid';
+    return Array.isArray(info.extension) ? info.extension[0] : (info.extension || '.tid');
   }
 
   /**
@@ -197,7 +205,7 @@
 
     // Default: use sanitized title as filename
     const sanitized = tiddlerTitle.replace(/["#%&'*/:<=>?\\{}]/g, '_');
-    const extension = getExtensionForType(tiddlerFields?.type);
+    const extension = getExtensionForFields(tiddlerFields);
     return `tiddlers/${sanitized}${extension}`;
   }
 
