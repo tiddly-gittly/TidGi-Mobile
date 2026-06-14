@@ -190,11 +190,16 @@ export class FileSystemWikiStorageService {
       for (let index = 0; index < absolutePaths.length; index += BATCH_SIZE) {
         const batch = absolutePaths.slice(index, index + BATCH_SIZE);
         const jsonString = await batchParser(batch, true);
-        const tiddlers = JSON.parse(jsonString) as Array<{ title?: string; [key: string]: unknown }>;
+        const tiddlers = JSON.parse(jsonString) as Array<{ title?: string; _filepath?: string; [key: string]: unknown }>;
         for (let index = 0; index < tiddlers.length; index++) {
           const title = tiddlers[index].title;
           if (typeof title === 'string' && title.length > 0) {
-            const plainPath = batch[index];
+            // Use _filepath from the native result (authoritative) as the primary source,
+            // fall back to batch[index] for backward compatibility with older native modules
+            // that don't include _filepath in the result.
+            const plainPath: string = (typeof tiddlers[index]._filepath === 'string' && tiddlers[index]._filepath!.length > 0)
+              ? tiddlers[index]._filepath!
+              : batch[index];
             const isMetaFile = plainPath.endsWith('.meta');
             // For .meta companions, register the body file path, not the .meta file.
             const bodyPlainPath = isMetaFile ? getBodyFilePathFromMetaPath(plainPath) : plainPath;
@@ -374,10 +379,20 @@ export class FileSystemWikiStorageService {
         // in place. If the type changed (e.g. default → markdown), generate a new
         // path and delete the old file to match desktop's move semantic.
         const oldPath = this.#tiddlerFilePathByTitle.get(title);
+        // Safety: if index is corrupted (e.g. native batch parser ordering bug),
+        // the oldPath might belong to a different title. Verify via reverse index.
+        const oldPathOwner = oldPath ? this.#getIndexedTitleForPath(oldPath) : undefined;
+        const oldPathIsValid = oldPath === undefined || oldPathOwner === undefined || oldPathOwner === title;
+        if (!oldPathIsValid) {
+          this.#logger.warn(
+            `saveTiddler "${title}": index corruption detected — oldPath belongs to "${oldPathOwner}": ${toPlainPath(oldPath!)}. ` +
+            `Falling back to generating a new path.`,
+          );
+        }
         const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
         let fullPath: string;
 
-        if (oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension.toLowerCase())) {
+        if (oldPathIsValid && oldPath && this.#isPathWithinDirectory(oldPath, targetDirectory) && oldPath.toLowerCase().endsWith(expectedExtension.toLowerCase())) {
           // File is already in the correct workspace directory with the right extension — overwrite in place
           fullPath = oldPath;
         } else {
@@ -411,19 +426,31 @@ export class FileSystemWikiStorageService {
         // If the file moved to a different location (routing changed),
         // delete the old file. This implements the MOVE semantic.
         if (oldPath && oldPath !== fullPath) {
-          // Remove old reverse index entry
-          this.#titleByFilePath.delete(toPlainPath(oldPath));
-          try {
-            if (await fileExists(oldPath)) {
-              await deleteFileWithEmptyParentsCleanup(oldPath, this.#getCleanupStopDirectory(oldPath));
+          // Safety check: verify oldPath actually belongs to this title.
+          // A corrupted index (e.g. from native batch parsing order issues)
+          // could map a different tiddler's path to this title, and blindly
+          // deleting it would destroy data.
+          const oldPathOwner = this.#getIndexedTitleForPath(oldPath);
+          if (oldPathOwner !== undefined && oldPathOwner !== title) {
+            this.#logger.warn(
+              `saveTiddler "${title}": refusing to cleanup oldPath owned by "${oldPathOwner}": ${toPlainPath(oldPath)}. ` +
+              `This indicates a corrupted file index — consider rebuilding.`,
+            );
+          } else {
+            // Remove old reverse index entry
+            this.#titleByFilePath.delete(toPlainPath(oldPath));
+            try {
+              if (await fileExists(oldPath)) {
+                await deleteFileWithEmptyParentsCleanup(oldPath, this.#getCleanupStopDirectory(oldPath));
+              }
+              // Best-effort .meta companion cleanup
+              const oldMetaPath = `${oldPath}.meta`;
+              if (await fileExists(oldMetaPath)) {
+                await deleteFileWithEmptyParentsCleanup(oldMetaPath, this.#getCleanupStopDirectory(oldMetaPath));
+              }
+            } catch (error) {
+              console.warn(`saveTiddler cleanup: failed to remove old file ${oldPath}: ${(error as Error).message}`);
             }
-            // Best-effort .meta companion cleanup
-            const oldMetaPath = `${oldPath}.meta`;
-            if (await fileExists(oldMetaPath)) {
-              await deleteFileWithEmptyParentsCleanup(oldMetaPath, this.#getCleanupStopDirectory(oldMetaPath));
-            }
-          } catch (error) {
-            console.warn(`saveTiddler cleanup: failed to remove old file ${oldPath}: ${(error as Error).message}`);
           }
         }
 
