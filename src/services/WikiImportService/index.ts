@@ -62,16 +62,21 @@ export async function removeWikiDirectory(directory: string | undefined): Promis
       const info = await ExternalStorage.getInfo(plainPath);
       if (info.exists) {
         await ExternalStorage.rmdir(plainPath);
+        console.log(`[WikiImportService] Removed external wiki directory: ${plainPath}`);
       }
       return;
     }
 
-    const directoryInfo = await FileSystemLegacy.getInfoAsync(toFileUri(directory));
+    const directoryUri = toFileUri(directory);
+    const directoryInfo = await FileSystemLegacy.getInfoAsync(directoryUri);
     if (directoryInfo.exists) {
-      await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+      await FileSystemLegacy.deleteAsync(directoryUri, { idempotent: true });
+      console.log(`[WikiImportService] Removed wiki directory: ${directory}`);
     }
   } catch (error) {
-    console.warn('[WikiImportService] Failed to remove wiki directory:', (error as Error).message);
+    // Log loudly so we know cleanup failed, but don't throw — the caller is
+    // usually already handling an import error and we don't want to mask it.
+    console.error(`[WikiImportService] Failed to remove wiki directory '${directory}':`, (error as Error).message);
   }
 }
 

@@ -170,7 +170,18 @@ export function useGitImport() {
       setError(classified.error);
       setStatus('error');
 
+      // Clean up the partially-created directory on disk.
       await removeWikiDirectory(wikiFolderLocation);
+
+      // Defensive: if the workspace was somehow registered to the store before
+      // the clone threw (e.g. a stale persist restore), remove it so the user
+      // doesn't see an empty ghost workspace.
+      const workspaceStore = useWorkspaceStore.getState();
+      if (workspaceStore.workspaces.some(w => w.id === qrData.workspaceId)) {
+        console.warn('[importWiki] Removing zombie workspace entry from store:', qrData.workspaceId);
+        workspaceStore.remove(qrData.workspaceId);
+      }
+
       throw importError;
     }
   };

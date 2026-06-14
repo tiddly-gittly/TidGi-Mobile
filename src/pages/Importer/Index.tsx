@@ -484,63 +484,68 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setShowSavedServers(false);
     setQrScannerOpen(false);
 
-    if (addAsServer) {
-      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
+    try {
+      if (addAsServer) {
+        const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
 
-      if (qrData) {
-        // Collect batch items
-        const batchItems: IBatchImportItem[] = [];
+        if (qrData) {
+          // Collect batch items
+          const batchItems: IBatchImportItem[] = [];
 
-        // 1. Add main wiki
-        batchItems.push({
-          qrData: qrData,
-          wikiName: wikiName,
-          serverID: newServer.id,
-          useExternalStorage,
-          useStandardGitProtocol,
-        });
-
-        // 2. Add selected sub-wikis
-        if (qrData.subWorkspaces && selectedSubWikiIds.length > 0) {
-          qrData.subWorkspaces.forEach(sub => {
-            if (selectedSubWikiIds.includes(sub.id)) {
-              batchItems.push({
-                qrData: {
-                  ...qrData,
-                  workspaceId: sub.id,
-                  workspaceName: sub.name,
-                  isSubWiki: true,
-                  mainWikiID: sub.mainWikiID ?? qrData.workspaceId,
-                },
-                wikiName: sub.name,
-                serverID: newServer.id,
-                useExternalStorage,
-                useStandardGitProtocol,
-              });
-            }
+          // 1. Add main wiki
+          batchItems.push({
+            qrData: qrData,
+            wikiName: wikiName,
+            serverID: newServer.id,
+            useExternalStorage,
+            useStandardGitProtocol,
           });
-        }
 
-        if (batchItems.length > 1) {
-          await batchImportWikis(batchItems);
+          // 2. Add selected sub-wikis
+          if (qrData.subWorkspaces && selectedSubWikiIds.length > 0) {
+            qrData.subWorkspaces.forEach(sub => {
+              if (selectedSubWikiIds.includes(sub.id)) {
+                batchItems.push({
+                  qrData: {
+                    ...qrData,
+                    workspaceId: sub.id,
+                    workspaceName: sub.name,
+                    isSubWiki: true,
+                    mainWikiID: sub.mainWikiID ?? qrData.workspaceId,
+                  },
+                  wikiName: sub.name,
+                  serverID: newServer.id,
+                  useExternalStorage,
+                  useStandardGitProtocol,
+                });
+              }
+            });
+          }
+
+          if (batchItems.length > 1) {
+            await batchImportWikis(batchItems);
+          } else {
+            // Single import (fallback to original behavior for better UX if used alone)
+            await importWiki(qrData, wikiName, newServer.id, useExternalStorage, useStandardGitProtocol);
+          }
         } else {
-          // Single import (fallback to original behavior for better UX if used alone)
-          await importWiki(qrData, wikiName, newServer.id, useExternalStorage, useStandardGitProtocol);
+          // No valid QR data - cannot use Git sync
+          Alert.alert(t('Import.GitSyncRequiresQRCode'));
+          return;
         }
+      } else if (qrData) {
+        await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
       } else {
-        // No valid QR data - cannot use Git sync
-        Alert.alert(t('Import.GitSyncRequiresQRCode'));
+        Alert.alert(t('Import.ServerRequired'));
         return;
       }
-    } else if (qrData) {
-      await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
-    } else {
-      Alert.alert(t('Import.ServerRequired'));
-      return;
+    } finally {
+      // Always clear input state after import attempt (success or failure),
+      // so stale qrData / wikiUrl don't accidentally re-trigger the auto-start
+      // effect on a subsequent re-render.
+      setWikiUrl(undefined);
+      setQrData(undefined);
     }
-
-    setWikiUrl(undefined);
-    setQrData(undefined);
   }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, useExternalStorage, useStandardGitProtocol, t]);
 
   useEffect(() => {
