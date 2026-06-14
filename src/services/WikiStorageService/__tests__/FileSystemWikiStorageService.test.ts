@@ -467,4 +467,48 @@ describe('FileSystemWikiStorageService storage safety', () => {
     await expect(service.loadTiddlerText('Images/Logo')).resolves.toBe(pngBase64);
     expect(mockExternalStorage.readFileBase64).toHaveBeenCalledWith(pngPath);
   });
+
+  it('correctly maps titles to files when batchParseTidFiles returns out-of-order results', async () => {
+    // Regression test for the Android parallelStream() ordering bug.
+    //
+    // The native Kotlin batchParseTidFiles used parallelStream() which does
+    // NOT guarantee result order. If results return [B, A] for input [A, B],
+    // the JS index builder must use _filepath (authoritative, tagged inside
+    // each result by the native parser) instead of batch[index] (order-dependent).
+    //
+    // Without this fix, tiddlers[i].title would map to batch[i] which could
+    // be a completely different tiddler's file, causing the "saving a new
+    // user tiddler deletes a system plugin" bug.
+    //
+    // Note: We cannot run Kotlin tests in this JS test suite, but we simulate
+    // the exact ordering bug by making the mock return results in reverse order
+    // while relying on _filepath for correct mapping.
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const userPath = `${workspace.wikiFolderLocation}/tiddlers/User.tid`;
+    const pluginPath = `${workspace.wikiFolderLocation}/tiddlers/system/$_plugins_test_B.tid`;
+    mockFileSystem.writeFileSync(userPath, 'title: User\n\nuser content');
+    mockFileSystem.writeFileSync(pluginPath, 'title: $:/plugins/test/B\n\nplugin content');
+
+    const sortedPaths = [pluginPath, userPath].sort();
+    mockExternalStorage.batchParseTidFiles.mockImplementationOnce(() =>
+      Promise.resolve(JSON.stringify(
+        // Return results in REVERSE order — simulating parallelStream() race
+        [...sortedPaths].reverse().map((path) => ({
+          _filepath: path,
+          title: mockFileSystem.parseTitle(path),
+        })),
+      ))
+    );
+    mockExternalStorage.readDirRecursive.mockResolvedValueOnce(sortedPaths.map(
+      (p) => p.slice(workspace.wikiFolderLocation.length + 1),
+    ));
+
+    const service = new FileSystemWikiStorageService(workspace);
+    await service.buildFileIndex();
+
+    // Both titles must map to their CORRECT files despite the reversed order.
+    expect(service.getTrackedTiddlerFilePath('$:/plugins/test/B')).toBe(pluginPath);
+    expect(service.getTrackedTiddlerFilePath('User')).toBe(userPath);
+  });
 });
