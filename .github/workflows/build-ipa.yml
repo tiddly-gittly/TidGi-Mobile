@@ -111,7 +111,8 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: ios-simulator-app-${{ github.run_number }}-${{ github.sha }}
-          path: /tmp/ios-artifacts/
+          path: |
+            /tmp/ios-artifacts/TidGi-Test-Simulator.zip
           if-no-files-found: warn
 
       - name: Create Release

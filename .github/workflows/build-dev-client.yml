@@ -126,7 +126,9 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: dev-client-apks-${{ github.run_number }}-${{ github.sha }}
-          path: /tmp/apk-artifacts/
+          path: |
+            /tmp/apk-artifacts/app-release-dev-client.apk
+            /tmp/apk-artifacts/app-debug-androidTest.apk
           if-no-files-found: warn
 
       - name: Create Release (dev-client APKs)
