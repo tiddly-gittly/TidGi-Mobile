@@ -385,8 +385,8 @@ export class FileSystemWikiStorageService {
         const oldPathIsValid = oldPath === undefined || oldPathOwner === undefined || oldPathOwner === title;
         if (!oldPathIsValid) {
           this.#logger.warn(
-            `saveTiddler "${title}": index corruption detected — oldPath belongs to "${oldPathOwner}": ${toPlainPath(oldPath!)}. ` +
-            `Falling back to generating a new path.`,
+            `saveTiddler "${title}": index corruption detected — oldPath belongs to "${oldPathOwner}": ${toPlainPath(oldPath)}. ` +
+              `Falling back to generating a new path.`,
           );
         }
         const shouldTrackCreatedUserTiddler = oldPath === undefined && !title.startsWith('$:/');
@@ -434,7 +434,7 @@ export class FileSystemWikiStorageService {
           if (oldPathOwner !== undefined && oldPathOwner !== title) {
             this.#logger.warn(
               `saveTiddler "${title}": refusing to cleanup oldPath owned by "${oldPathOwner}": ${toPlainPath(oldPath)}. ` +
-              `This indicates a corrupted file index — consider rebuilding.`,
+                `This indicates a corrupted file index — consider rebuilding.`,
             );
           } else {
             // Remove old reverse index entry
