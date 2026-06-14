@@ -68,10 +68,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Type check and lint
+      - name: Type check, lint, and unit test
         run: |
           pnpm run check
           pnpm run lint
+          pnpm run test:unit
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v5
