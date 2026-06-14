@@ -593,7 +593,15 @@
       "DownloadingArchiveHint": "正在以归档格式下载完整 Wiki，这比 git clone 快得多。如果中断可以自动恢复。",
       "ExtractingFiles": "正在解压文件",
       "ExtractingFilesHint": "正在将归档解压到磁盘。大多数 Wiki 只需几秒。",
-      "RestoringFromCache": "正在从本地缓存恢复"
+      "RestoringFromCache": "正在从本地缓存恢复",
+      "PreparingDirectory": "正在准备目标目录",
+      "CheckingServer": "正在连接服务器",
+      "EstimatingSize": "正在估算下载大小",
+      "DownloadingRepository": "正在下载仓库数据",
+      "DownloadingRepositoryHint": "正在从服务器下载 Git 对象数据，大型 Wiki 可能需要较长时间，请耐心等待...",
+      "WritingFiles": "正在处理文件",
+      "ApplyingGitConfig": "正在优化 Git 配置",
+      "ApplyingGitAttributes": "正在应用文件属性"
     },
     "PartialSuccess": {
       "Succeeded": "已成功导入",
