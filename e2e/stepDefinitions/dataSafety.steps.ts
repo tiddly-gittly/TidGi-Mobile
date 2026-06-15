@@ -44,14 +44,26 @@ When('I wait {int} seconds for pending saves to complete', async (s: number) => 
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-When('I navigate back to the main menu', { timeout: 30_000 }, async () => {
-  for (let i = 0; i < 6; i++) {
-    try { await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500); await device.disableSynchronization(); return; } catch { /* continue */ }
+When('I navigate back to the main menu', { timeout: 60_000 }, async () => {
+  // Press back repeatedly until main-menu-screen is visible.
+  // The navigation stack can be deep: MainMenu → Settings → Importer → WebView,
+  // so a fixed number of presses is unreliable.
+  // Max 15 presses with 1.5s between each = ~22s worst case.
+  for (let i = 0; i < 15; i++) {
+    try {
+      await waitFor(element(by.id('main-menu-screen')))
+        .toBeVisible()
+        .withTimeout(1_500);
+      await device.disableSynchronization().catch(() => {});
+      console.log(`[data-safety] Back to main menu after ${i} presses`);
+      return;
+    } catch { /* not yet on main menu */ }
     try { adbKeyEvent(4); } catch { /* non-fatal */ }
-    await delay(1_200);
+    await delay(1_500);
   }
+  // Final fallback
   await device.disableSynchronization().catch(() => {});
-  await waitForElement(by.id('main-menu-screen'), 10_000, 'main-menu-screen after back navigation');
+  await waitForElement(by.id('main-menu-screen'), 10_000, 'main-menu-screen after 15 back presses');
 });
 
 // ── Create tiddler via WebView ────────────────────────────────────────────────

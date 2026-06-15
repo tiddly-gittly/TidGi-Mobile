@@ -1,4 +1,4 @@
-@mobilesync @conflict
+@conflict
 Feature: Conflict Resolution - Mobile and Desktop concurrent edits
 
   # Pre-condition: At least one wiki workspace exists with E2ETestTiddler.tid in its git history.
