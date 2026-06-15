@@ -27,6 +27,7 @@ import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
 import { mkdirSync, writeFileSync } from 'fs';
 import { captureDeviceSnapshot, diagnosticError, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
+import { ensureWikiReady, startServer, stopServer } from '../mock-server/setup';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
 // WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
@@ -176,15 +177,16 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   keepDeviceAwake();
   ensureDeviceUnlocked();
 
-  // Ensure device can reach TidGi Desktop on the host (Metro uses LAN IP
-  // broadcast by Expo — no reverse needed for 8081 on the same LAN).
+  // ── Start mock TiddlyWiki server ──────────────────────────────────────────
+  // Creates e2e/test-wiki/ with tw-mobile-sync plugin, init git, start server.
+  // Replaces the old TIDGI_DESKTOP_URL dependency.
+  await ensureWikiReady();
+  await startServer();
+
+  // Reverse port 5212 so the device can reach the mock server on localhost.
   try {
-    const desktopUrl = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
-    const desktopPort = new URL(desktopUrl).port || '5212';
-    execSync(`adb reverse tcp:${desktopPort} tcp:${desktopPort}`, { stdio: 'ignore' });
-  } catch {
-    // Non-fatal — detox.init() will surface the real error if device is unreachable.
-  }
+    execSync('adb reverse tcp:5212 tcp:5212', { stdio: 'ignore' });
+  } catch { /* non-fatal */ }
 
   // Pre-grant camera permission so the Importer screen renders immediately
   // without showing a system permission dialog during @mobilesync tests.
@@ -352,6 +354,7 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
 });
 
 AfterAll(async () => {
+  stopServer();
   allowDeviceSleepNormally();
   await detox.cleanup();
 });

@@ -28,6 +28,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# E2E mock server
+/e2e/test-wiki/
+
 # local env files
 .env*.local
 
