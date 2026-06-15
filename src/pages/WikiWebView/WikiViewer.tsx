@@ -1,6 +1,6 @@
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Platform } from 'react-native';
+import { Dimensions, Platform, Pressable, TextInput } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
@@ -66,6 +66,11 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     useShallow(state => [state.rememberLastVisitState, state.preferredLanguage, state.androidHardwareAcceleration]),
   );
   /**
+   * E2E: hidden TextInput stores the tiddler title, hidden Pressable triggers
+   * injectJavaScript to call window.__e2e_createTiddler(title) in the WebView.
+   */
+  const [e2eTiddlerTitle, setE2eTiddlerTitle] = useState('');
+  /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
   const [webViewReference, onMessageReference, registerWikiStorageServiceOnWebView, servicesOfWorkspace] = useRegisterService(wikiWorkspace);
@@ -114,6 +119,18 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
 
       ${registerWikiStorageServiceOnWebView}
 
+      // E2E hook: exposed so Detox can trigger tiddler creation via the full
+      // TiddlyWiki \`$tw API pipeline (addTiddler → syncer.saveTiddler → file write).
+      window.__e2e_createTiddler = function(title) {
+        var now = (new Date()).toISOString();
+        $tw.wiki.addTiddler(new $tw.Tiddler({
+          title: title, text: 'E2E test at ' + now,
+          type: 'text/vnd.tiddlywiki', created: now, modified: now, tags: 'E2ETest'
+        }));
+        try { if ($tw.syncer) $tw.syncer.saveTiddler(title); } catch(e) {}
+        return 'OK';
+      };
+
       ${webviewSideReceiver}
 
       window.preloadScriptLoaded = true;
@@ -149,6 +166,22 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           androidHardwareAcceleration={androidHardwareAcceleration}
         />
       </WebViewContainer>
+      <TextInput
+        testID="e2e-tiddler-title"
+        style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0 }}
+        value={e2eTiddlerTitle}
+        onChangeText={setE2eTiddlerTitle}
+      />
+      <Pressable
+        testID="e2e-create-tiddler-button"
+        style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0 }}
+        onPress={() => {
+          const title = e2eTiddlerTitle || 'E2E Test';
+          webViewReference.current?.injectJavaScript(
+            `window.__e2e_createTiddler(${JSON.stringify(title)})`,
+          );
+        }}
+      />
     </>
   );
 }

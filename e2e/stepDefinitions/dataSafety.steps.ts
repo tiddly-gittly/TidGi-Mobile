@@ -8,7 +8,7 @@
 
 import { Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
-import { by, device, element, waitFor, web } from 'detox';
+import { by, device, element, waitFor } from 'detox';
 import { diagnosticError, waitForElement } from '../support/diagnostics';
 import { getMockServerUrl, getTestWikiDir } from '../mock-server/setup';
 
@@ -69,20 +69,13 @@ When('I navigate back to the main menu', { timeout: 60_000 }, async () => {
 // ── Create tiddler via WebView ────────────────────────────────────────────────
 
 When('I create a tiddler {string} via the wiki webview', { timeout: 30_000 }, async (title: string) => {
-  // Use TiddlyWiki's own \$tw API inside the WebView to create and save a tiddler.
-  // Detox's web().runScript() exists at runtime (WebRunScriptAction) but the
-  // TS type definitions haven't caught up (Detox 20.47).
-  const js = `(function(){
-    var t='${title.replace(/'/g, "\\'")}';
-    var now=(new Date()).toISOString();
-    $tw.wiki.addTiddler(new $tw.Tiddler({title:t,text:'E2E test at '+now,type:'text/vnd.tiddlywiki',created:now,modified:now,tags:'E2ETest'}));
-    try{if($tw.syncer)$tw.syncer.saveTiddler(t);}catch(e){}
-    return 'OK';
-  })();`;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-  await (web(by.type('android.webkit.WebView')) as any).runScript(js);
-  console.log(`[data-safety] Created tiddler "${title}" via WebView`);
+  // Uses hidden E2E UI elements (TextInput + Pressable) inside WikiViewer.
+  // 1. Type the title into the hidden TextInput
+  // 2. Tap the hidden Pressable → calls webViewReference.injectJavaScript()
+  //    → triggers $tw.wiki.addTiddler + $tw.syncer.saveTiddler in the WebView.
+  await element(by.id('e2e-tiddler-title')).replaceText(title);
+  await element(by.id('e2e-create-tiddler-button')).tap();
+  console.log(`[data-safety] Triggered tiddler creation for "${title}" via WebView`);
 });
 
 // ── Git status on device ──────────────────────────────────────────────────────
