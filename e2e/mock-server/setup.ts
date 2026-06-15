@@ -75,10 +75,10 @@ export async function startServer(): Promise<void> {
   sh('git add -A', TEST_WIKI_DIR);
   try { sh('git -c user.name=E2E -c user.email=e2e@test commit -m "Pre-test state"', TEST_WIKI_DIR); } catch { /* nothing to commit */ }
 
-  const twExe = join(REPO_ROOT, 'node_modules', '.bin', 'tiddlywiki');
+  const twMain = require.resolve('tiddlywiki/tiddlywiki.js');
   console.log(`[mock-server] Starting on :${PORT}...`);
 
-  server = spawn(twExe, [TEST_WIKI_DIR, '--listen', `port=${PORT}`, 'host=0.0.0.0', 'username=e2e', 'password=test'], {
+  server = spawn(process.execPath, [twMain, TEST_WIKI_DIR, '--listen', `port=${PORT}`, 'host=0.0.0.0', 'username=e2e', 'password=test'], {
     cwd: REPO_ROOT,
     stdio: 'pipe',
   });
