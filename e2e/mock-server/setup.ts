@@ -5,7 +5,7 @@
  * and manages the server lifecycle. Called from hooks.ts.
  */
 import { execSync, spawn, type ChildProcess } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { get } from 'node:https';
 import { join, resolve } from 'node:path';
 
@@ -60,6 +60,11 @@ export async function ensureWikiReady() {
     const url = sh('gh api repos/tiddly-gittly/tw-mobile-sync/releases/latest --jq ".assets[].browser_download_url"');
     console.log(`[mock-server] Downloading tw-mobile-sync: ${url}`);
     await download(url, plugin);
+    // Also copy to tiddlers/ so the filesystem plugin picks it up at boot
+    writeFileSync(join(td, PLUGIN_JSON), readFileSync(plugin));
+  } else {
+    // Ensure tiddlers/ copy is fresh
+    writeFileSync(join(td, PLUGIN_JSON), readFileSync(plugin));
   }
 
   try { sh('git rev-parse --git-dir', TEST_WIKI_DIR); } catch {

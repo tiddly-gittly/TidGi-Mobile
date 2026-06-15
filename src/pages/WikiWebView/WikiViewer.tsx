@@ -168,13 +168,13 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       </WebViewContainer>
       <TextInput
         testID="e2e-tiddler-title"
-        style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0 }}
+        style={{ position: 'absolute', top: 0, left: 0, width: 44, height: 44, opacity: 0 }}
         value={e2eTiddlerTitle}
         onChangeText={setE2eTiddlerTitle}
       />
       <Pressable
         testID="e2e-create-tiddler-button"
-        style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0 }}
+        style={{ position: 'absolute', top: 0, left: 44, width: 44, height: 44, opacity: 0 }}
         onPress={() => {
           const title = e2eTiddlerTitle || 'E2E Test';
           webViewReference.current?.injectJavaScript(
