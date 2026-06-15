@@ -26,6 +26,7 @@ import { execFileSync, execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
 import { mkdirSync, writeFileSync } from 'fs';
+import { networkInterfaces } from 'os';
 import { captureDeviceSnapshot, diagnosticError, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
@@ -35,8 +36,28 @@ setDefaultTimeout(120_000);
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-// Metro bundler URL reachable from the device on the same LAN (IP broadcast by Expo).
-const METRO_URL = process.env.METRO_URL ?? 'http://localhost:8081';
+/** Detect host LAN IP so the device connects directly (same network, no adb reverse). */
+function getLanIp(): string {
+  // Allow override via env for CI / VPN / special setups.
+  if (process.env.TIDGI_HOST_IP) return process.env.TIDGI_HOST_IP;
+  const nics = networkInterfaces();
+  for (const name of Object.keys(nics)) {
+    const addrs = nics[name];
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      // Pick the first non-internal IPv4 (e.g. 192.168.x.x).
+      if (addr.family === 'IPv4' && !addr.internal) {
+        return addr.address;
+      }
+    }
+  }
+  // Fallback — only used when no LAN interface is detected (e.g. CI containers).
+  return '192.168.1.2';
+}
+
+const LAN_IP = getLanIp();
+// Metro URL that the DEVICE can reach (same LAN, no adb reverse).
+const METRO_URL = process.env.METRO_URL ?? `http://${LAN_IP}:8081`;
 
 // Expo dev-client deep-link that auto-connects to Metro without manual interaction.
 // Format: exp+<slug>://expo-development-client/?url=<encoded-metro-url>
