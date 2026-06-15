@@ -1,20 +1,21 @@
 /**
  * Step definitions for conflict resolution scenarios.
  *
- * Tests the core conflict-resolution logic in TidGi Desktop's mergeUtilities.ts:
+ * Tests the core conflict-resolution logic in the tw-mobile-sync plugin
+ * (now conflictResolution.ts inside the plugin, not TidGi Desktop):
  *   - .tid header section (before blank line): mobile "theirs" wins entirely
- *   - .tid body section (after blank line): desktop lines kept + unique mobile lines appended
+ *   - .tid body section (after blank line): mock-server lines kept + unique mobile lines appended
  *
  * Setup requirements:
  *   - @import and @sync scenarios must have run first (E2ETestTiddler.tid must exist in the
- *     shared git history of both desktop and mobile).
- *   - TIDGI_DESKTOP_URL: desktop server origin (e.g. http://localhost:15313)
- *   - TIDGI_WIKI_PATH: desktop wiki folder (defaults to I:\github\TidGi-Desktop\wiki-dev\wiki)
+ *     shared git history of both mock server and mobile).
+ *   - The mock server is started by hooks.ts BeforeAll and uses the local tw-mobile-sync
+ *     plugin with the system-git runner. No TidGi-Desktop process is required.
  *
  * Conflict flow:
- *   desktop (X → Y): modifies E2ETestTiddler.tid body, file-watcher auto-commits
- *   mobile  (X → Z): modifies same file differently (via adb), committed during sync
- *   sync: mobile pushes Z → desktop merges Y+Z → resolves conflict → mobile fetches result
+ *   mock-server (X → Y): modifies E2ETestTiddler.tid body and commits explicitly
+ *   mobile      (X → Z): modifies same file differently (via adb), committed during sync
+ *   sync: mobile pushes Z → mock server merges Y+Z → resolves conflict → mobile fetches result
  */
 
 import { Given, Then, When } from '@cucumber/cucumber';
@@ -22,12 +23,13 @@ import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { getTestWikiDir } from '../mock-server/setup';
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 
-const DESKTOP_WIKI_PATH = process.env.TIDGI_WIKI_PATH ?? 'I:\\github\\TidGi-Desktop\\wiki-dev\\wiki';
+const MOCK_SERVER_WIKI_PATH = getTestWikiDir();
 
-/** Desktop git identity matching what TidGi Desktop uses for auto-commits. */
+/** Git identity used by the mock server for its explicit commits. */
 const GIT_ENV = {
   ...process.env,
   GIT_AUTHOR_NAME: 'TidGi Desktop',
@@ -42,14 +44,14 @@ let mobileModifiedTimestamp: string | undefined;
 // ── Desktop filesystem helpers ─────────────────────────────────────────────────
 
 /**
- * Read a .tid file from the desktop wiki tiddlers directory.
+ * Read a .tid file from the mock server wiki tiddlers directory.
  * Returns { header, body } where header is the lines before the first blank line
  * and body is the lines after.
  */
-function readDesktopTiddler(tiddlerFilename: string): { raw: string; header: string; body: string } {
-  const path = join(DESKTOP_WIKI_PATH, 'tiddlers', tiddlerFilename);
+function readMockServerTiddler(tiddlerFilename: string): { raw: string; header: string; body: string } {
+  const path = join(MOCK_SERVER_WIKI_PATH, 'tiddlers', tiddlerFilename);
   if (!existsSync(path)) {
-    throw new Error(`Desktop tiddler not found: ${path}`);
+    throw new Error(`Mock server tiddler not found: ${path}`);
   }
   const raw = readFileSync(path, 'utf-8');
   const blankIndex = raw.indexOf('\n\n');
@@ -64,56 +66,56 @@ function readDesktopTiddler(tiddlerFilename: string): { raw: string; header: str
 }
 
 /**
- * Write a .tid file to the desktop wiki tiddlers directory.
+ * Write a .tid file to the mock server wiki tiddlers directory.
  */
-function writeDesktopTiddler(tiddlerFilename: string, content: string): void {
-  const path = join(DESKTOP_WIKI_PATH, 'tiddlers', tiddlerFilename);
+function writeMockServerTiddler(tiddlerFilename: string, content: string): void {
+  const path = join(MOCK_SERVER_WIKI_PATH, 'tiddlers', tiddlerFilename);
   writeFileSync(path, content, 'utf-8');
 }
 
 /**
- * Return the current HEAD commit hash of the desktop wiki git repo.
+ * Return the current HEAD commit hash of the mock server wiki git repo.
  */
-function getDesktopHead(): string {
-  return execSync(`git -C "${DESKTOP_WIKI_PATH}" rev-parse HEAD`, {
+function getMockServerHead(): string {
+  return execSync(`git -C "${MOCK_SERVER_WIKI_PATH}" rev-parse HEAD`, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   }).trim();
 }
 
 /**
- * Wait for a new commit to appear in the desktop wiki repo (file-watcher auto-commit).
- * If no new commit appears within timeoutMs, falls back to an explicit git commit.
+ * Wait for a new commit to appear in the mock server wiki repo.
+ * The mock server has no file-watcher, so this falls back to an explicit git commit.
  */
-async function waitForDesktopCommit(previousHead: string, timeoutMs = 20_000): Promise<string> {
+async function waitForMockServerCommit(previousHead: string, timeoutMs = 20_000): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const head = getDesktopHead();
+    const head = getMockServerHead();
     if (head !== previousHead) {
-      console.log(`[conflict] Desktop auto-committed: ${head.slice(0, 8)}`);
+      console.log(`[conflict] Mock server auto-committed: ${head.slice(0, 8)}`);
       return head;
     }
     await new Promise<void>(resolve => setTimeout(resolve, 800));
   }
 
-  // File-watcher didn't commit within the timeout — commit manually.
-  console.log('[conflict] File-watcher did not commit; committing manually...');
+  // No file-watcher on the mock server — commit manually.
+  console.log('[conflict] Committing mock-server edit manually...');
   try {
-    execSync(`git -C "${DESKTOP_WIKI_PATH}" add tiddlers/E2ETestTiddler.tid`, {
+    execSync(`git -C "${MOCK_SERVER_WIKI_PATH}" add tiddlers/E2ETestTiddler.tid`, {
       stdio: ['ignore', 'ignore', 'ignore'],
       env: GIT_ENV,
     });
     execSync(
-      `git -C "${DESKTOP_WIKI_PATH}" commit -m "E2E conflict test: desktop edit"`,
+      `git -C "${MOCK_SERVER_WIKI_PATH}" commit -m "E2E conflict test: mock server edit"`,
       { stdio: ['ignore', 'ignore', 'ignore'], env: GIT_ENV },
     );
   } catch (error) {
-    // Commit might fail if the file watcher committed between our poll and now.
+    // Commit might fail if a concurrent operation changed HEAD between our poll and now.
     console.log('[conflict] Manual commit result (may be benign):', String(error).split('\n')[0]);
   }
-  const head = getDesktopHead();
+  const head = getMockServerHead();
   if (head === previousHead) {
-    throw new Error('Desktop wiki still has no new commit after file write + manual commit attempt.');
+    throw new Error('Mock server wiki still has no new commit after file write + manual commit attempt.');
   }
   return head;
 }
@@ -190,40 +192,39 @@ function getFirstWikiWorkspace(): { id: string; wikiFolderLocation: string } | u
 // ── Step definitions ───────────────────────────────────────────────────────────
 
 Given(
-  'the desktop appends {string} to {string} and commits',
+  'the mock server appends {string} to {string} and commits',
   { timeout: 60_000 },
   async (appendLine: string, tiddlerFilename: string) => {
     // 1. Snapshot the current HEAD so we can detect the new commit.
-    const previousHead = getDesktopHead();
-    console.log(`[conflict] Desktop HEAD before edit: ${previousHead.slice(0, 8)}`);
+    const previousHead = getMockServerHead();
+    console.log(`[conflict] Mock server HEAD before edit: ${previousHead.slice(0, 8)}`);
 
     // 2. Read current tiddler and add the line to the body.
-    const { header, body } = readDesktopTiddler(tiddlerFilename);
-    const desktopTs = new Date().toISOString();
+    const { header, body } = readMockServerTiddler(tiddlerFilename);
+    const mockServerTs = new Date().toISOString();
 
     // Update (or add) the modified: field in the header.
     const updatedHeader = header.includes('modified:')
-      ? header.replace(/^modified:.*$/m, `modified: ${desktopTs}`)
-      : `${header}\nmodified: ${desktopTs}`;
+      ? header.replace(/^modified:.*$/m, `modified: ${mockServerTs}`)
+      : `${header}\nmodified: ${mockServerTs}`;
 
     // Append the unique line to the body (trailing newline for git cleanliness).
     const updatedBody = body.trimEnd() + '\n' + appendLine + '\n';
     const newContent = `${updatedHeader}\n\n${updatedBody}`;
 
-    writeDesktopTiddler(tiddlerFilename, newContent);
-    console.log(`[conflict] Desktop wrote "${tiddlerFilename}" with modified: ${desktopTs}, appended: "${appendLine}"`);
+    writeMockServerTiddler(tiddlerFilename, newContent);
+    console.log(`[conflict] Mock server wrote "${tiddlerFilename}" with modified: ${mockServerTs}, appended: "${appendLine}"`);
 
-    // 3. Wait for the file-system watcher in TidGi Desktop to auto-commit,
-    //    falling back to an explicit git commit if it doesn't arrive in time.
-    await waitForDesktopCommit(previousHead, 25_000);
+    // 3. The mock server has no file-watcher; commit the edit explicitly.
+    await waitForMockServerCommit(previousHead, 25_000);
 
-    // Emit the desktop git log for diagnostics.
+    // Emit the mock server git log for diagnostics.
     try {
-      const log = execSync(`git -C "${DESKTOP_WIKI_PATH}" log --oneline -3`, {
+      const log = execSync(`git -C "${MOCK_SERVER_WIKI_PATH}" log --oneline -3`, {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
       });
-      console.log(`[conflict] Desktop git log:\n${log.trimEnd()}`);
+      console.log(`[conflict] Mock server git log:\n${log.trimEnd()}`);
     } catch { /* non-fatal */ }
   },
 );
@@ -279,14 +280,14 @@ When(
 );
 
 Then(
-  'the desktop tiddler {string} body contains {string}',
+  'the mock server tiddler {string} body contains {string}',
   (tiddlerFilename: string, expectedLine: string) => {
-    const { body } = readDesktopTiddler(tiddlerFilename);
+    const { body } = readMockServerTiddler(tiddlerFilename);
     if (!body.includes(expectedLine)) {
       // Provide a helpful diagnostic showing the actual file content.
-      const { raw } = readDesktopTiddler(tiddlerFilename);
+      const { raw } = readMockServerTiddler(tiddlerFilename);
       throw new Error(
-        `Expected desktop tiddler "${tiddlerFilename}" body to contain:\n  "${expectedLine}"\n` +
+        `Expected mock server tiddler "${tiddlerFilename}" body to contain:\n  "${expectedLine}"\n` +
           `Actual file content:\n${raw}`,
       );
     }
@@ -294,7 +295,7 @@ Then(
 );
 
 Then(
-  'the desktop tiddler {string} header contains the mobile modified timestamp',
+  'the mock server tiddler {string} header contains the mobile modified timestamp',
   (tiddlerFilename: string) => {
     if (!mobileModifiedTimestamp) {
       throw new Error(
@@ -302,11 +303,11 @@ Then(
           'Ensure the "the mobile overwrites..." step ran before this assertion.',
       );
     }
-    const { header } = readDesktopTiddler(tiddlerFilename);
+    const { header } = readMockServerTiddler(tiddlerFilename);
     if (!header.includes(mobileModifiedTimestamp)) {
-      const { raw } = readDesktopTiddler(tiddlerFilename);
+      const { raw } = readMockServerTiddler(tiddlerFilename);
       throw new Error(
-        `Expected desktop tiddler "${tiddlerFilename}" header to contain mobile timestamp:\n` +
+        `Expected mock server tiddler "${tiddlerFilename}" header to contain mobile timestamp:\n` +
           `  "${mobileModifiedTimestamp}"\n` +
           `Actual header:\n${header}\n\nFull file:\n${raw}`,
       );

@@ -28,6 +28,7 @@ import detox from 'detox/internals';
 import { mkdirSync, writeFileSync } from 'fs';
 import { networkInterfaces } from 'os';
 import { captureDeviceSnapshot, diagnosticError, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
+import { ensureWikiReady, startServer, stopServer } from '../mock-server/setup';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
 // WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
@@ -219,7 +220,14 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   keepDeviceAwake();
   ensureDeviceUnlocked();
 
-  // Reverse port 5212 so the device can reach a local TidGi Desktop / mock server.
+  // Start the local mock TiddlyWiki server. It uses the tw-mobile-sync plugin
+  // built from the local source tree, so @mobilesync tests no longer require a
+  // running TidGi-Desktop instance.
+  console.log('[BeforeAll] Preparing mock server...');
+  await ensureWikiReady();
+  await startServer();
+
+  // Reverse port 5212 so the device can reach the mock server.
   // Only used by @mobilesync scenarios; harmless for @sync / @smoke.
   try {
     execSync('adb reverse tcp:5212 tcp:5212', { stdio: 'ignore' });
@@ -391,6 +399,7 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
 });
 
 AfterAll(async () => {
+  stopServer();
   allowDeviceSleepNormally();
   await detox.cleanup();
 });
