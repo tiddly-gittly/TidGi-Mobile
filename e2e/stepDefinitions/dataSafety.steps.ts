@@ -57,9 +57,9 @@ When('I navigate back to the main menu', { timeout: 30_000 }, async () => {
 // ── Create tiddler via WebView ────────────────────────────────────────────────
 
 When('I create a tiddler {string} via the wiki webview', { timeout: 30_000 }, async (title: string) => {
-  // Use TiddlyWiki's own $tw API inside the WebView to create and save a tiddler.
-  // This triggers the FULL pipeline: addTiddler → syncer.saveTiddler →
-  // FileSystemWikiStorageService.saveTiddler → file write → git.
+  // Use TiddlyWiki's own \$tw API inside the WebView to create and save a tiddler.
+  // Detox's web().runScript() exists at runtime (WebRunScriptAction) but the
+  // TS type definitions haven't caught up (Detox 20.47).
   const js = `(function(){
     var t='${title.replace(/'/g, "\\'")}';
     var now=(new Date()).toISOString();
@@ -68,8 +68,8 @@ When('I create a tiddler {string} via the wiki webview', { timeout: 30_000 }, as
     return 'OK';
   })();`;
 
-  const webview = web(by.type('android.webkit.WebView'));
-  await webview.runScript(js);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  await (web(by.type('android.webkit.WebView')) as any).runScript(js);
   console.log(`[data-safety] Created tiddler "${title}" via WebView`);
 });
 

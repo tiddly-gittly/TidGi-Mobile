@@ -152,3 +152,4 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     </>
   );
 }
+
