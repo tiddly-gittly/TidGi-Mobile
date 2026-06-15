@@ -6,7 +6,6 @@
  */
 import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { get } from 'node:https';
 import { join, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
@@ -17,16 +16,6 @@ const PLUGIN_JSON = '$__plugins_linonetwo_tw-mobile-sync.json';
 let server: ChildProcess | null = null;
 
 function sh(cmd: string, cwd = REPO_ROOT) { return execSync(cmd, { encoding: 'utf8', cwd, timeout: 30_000 }).trim(); }
-
-async function download(url: string, dest: string): Promise<void> {
-  return new Promise((ok, fail) => {
-    get(url, (res) => {
-      if (res.statusCode === 302 || res.statusCode === 301) { download(res.headers.location!, dest).then(ok, fail); return; }
-      if (res.statusCode !== 200) { fail(new Error(`HTTP ${res.statusCode}`)); return; }
-      res.pipe(createWriteStream(dest)).on('finish', ok).on('error', fail);
-    }).on('error', fail);
-  });
-}
 
 function putTid(name: string, lines: string[]) {
   writeFileSync(join(TEST_WIKI_DIR, 'tiddlers', name), lines.join('\n'), 'utf8');
@@ -59,11 +48,11 @@ export async function ensureWikiReady() {
   if (!existsSync(plugin)) {
     const url = sh('gh api repos/tiddly-gittly/tw-mobile-sync/releases/latest --jq ".assets[].browser_download_url"');
     console.log(`[mock-server] Downloading tw-mobile-sync: ${url}`);
-    await download(url, plugin);
+    // Use curl via proxy since the direct Node https connection may fail (ECONNRESET)
+    sh(`curl.exe -L --socks5 127.0.0.1:1080 -o "${plugin}" "${url}"`);
     // Also copy to tiddlers/ so the filesystem plugin picks it up at boot
     writeFileSync(join(td, PLUGIN_JSON), readFileSync(plugin));
   } else {
-    // Ensure tiddlers/ copy is fresh
     writeFileSync(join(td, PLUGIN_JSON), readFileSync(plugin));
   }
 
