@@ -1,3 +1,4 @@
+@sync
 Feature: Data Safety — verify creating a tiddler does not corrupt the file index
 
   # Regression test for the parallelStream ordering bug.
