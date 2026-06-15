@@ -40,18 +40,40 @@ setDefaultTimeout(120_000);
 function getLanIp(): string {
   // Allow override via env for CI / VPN / special setups.
   if (process.env.TIDGI_HOST_IP) return process.env.TIDGI_HOST_IP;
+
+  const preferredNames = ['以太网', 'Wi-Fi', 'WLAN', 'Ethernet', 'wlan', 'eth', 'en'];
   const nics = networkInterfaces();
-  for (const name of Object.keys(nics)) {
-    const addrs = nics[name];
-    if (!addrs) continue;
-    for (const addr of addrs) {
-      // Pick the first non-internal IPv4 (e.g. 192.168.x.x).
-      if (addr.family === 'IPv4' && !addr.internal) {
+  let fallback: string | undefined;
+
+  // First pass: prefer real network interfaces (not virtual adapters).
+  for (const pattern of preferredNames) {
+    for (const name of Object.keys(nics)) {
+      if (!name.toLowerCase().includes(pattern.toLowerCase())) continue;
+      const addrs = nics[name];
+      if (!addrs) continue;
+      for (const addr of addrs) {
+        if (addr.family !== 'IPv4' || addr.internal) continue;
+        // Exclude link-local (169.254.x.x) — these are APIPA addresses from
+        // virtual adapters (Hyper-V, WSL, VPN) and are not routable.
+        if (addr.address.startsWith('169.254.')) continue;
         return addr.address;
       }
     }
   }
-  // Fallback — only used when no LAN interface is detected (e.g. CI containers).
+
+  // Second pass: any non-internal IPv4 that isn't link-local.
+  for (const name of Object.keys(nics)) {
+    const addrs = nics[name];
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family !== 'IPv4' || addr.internal) continue;
+      if (addr.address.startsWith('169.254.')) continue;
+      if (!fallback) fallback = addr.address;
+    }
+  }
+  if (fallback) return fallback;
+
+  // Last resort.
   return '192.168.1.2';
 }
 
