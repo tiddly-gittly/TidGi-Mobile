@@ -66,10 +66,10 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     useShallow(state => [state.rememberLastVisitState, state.preferredLanguage, state.androidHardwareAcceleration]),
   );
   /**
-   * E2E: hidden TextInput stores the tiddler title, hidden Pressable triggers
-   * injectJavaScript to call window.__e2e_createTiddler(title) in the WebView.
+   * E2E test hook: hidden UI elements for Detox to interact with.
    */
-  const [e2eTiddlerTitle, setE2eTiddlerTitle] = useState('');
+  // eslint-disable-next-line unicorn/prevent-abbreviations
+  const [e2eTestTiddlerTitle, setE2eTestTiddlerTitle] = useState('');
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
@@ -149,17 +149,20 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const showProgressBar = loading && !quickLoad;
   return (
     <>
+      {}
       <TextInput
-        testID="e2e-tiddler-title"
+        testID='e2e-tiddler-title'
         style={{ position: 'absolute', bottom: 88, left: 8, width: 44, height: 44, opacity: 0, zIndex: 999 }}
-        value={e2eTiddlerTitle}
-        onChangeText={setE2eTiddlerTitle}
+        value={e2eTestTiddlerTitle}
+        onChangeText={setE2eTestTiddlerTitle}
       />
+      {}
       <Pressable
-        testID="e2e-create-tiddler-button"
+        testID='e2e-create-tiddler-button'
         style={{ position: 'absolute', bottom: 88, left: 56, width: 44, height: 44, opacity: 0, zIndex: 999 }}
         onPress={() => {
-          const title = e2eTiddlerTitle || 'E2E Test';
+          const title = e2eTestTiddlerTitle || 'E2E Test';
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           webViewReference.current?.injectJavaScript(
             `window.__e2e_createTiddler(${JSON.stringify(title)})`,
           );
@@ -185,4 +188,3 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
     </>
   );
 }
-
