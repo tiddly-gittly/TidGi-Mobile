@@ -14,15 +14,25 @@ function adbKeyEvent(key: number) { try { execSync(`adb shell input keyevent ${k
 
 let systemTiddlerCountBefore: number;
 
+function getWikiPath(): { wikiPath: string; isInternal: boolean } {
+  const raw = execSync(
+    'adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage',
+    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
+  );
+  const parsed = JSON.parse(raw) as { state?: { workspaces?: Array<{ type?: string; wikiFolderLocation?: string }> } };
+  const wiki = parsed.state?.workspaces?.find(w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string');
+  if (!wiki?.wikiFolderLocation) throw new Error('No wiki workspace found');
+  const wikiPath = wiki.wikiFolderLocation.replace('file://', '').replace(/\/$/, '');
+  return { wikiPath, isInternal: wikiPath.startsWith('/data/') };
+}
+
 function countSystemTiddlers(): number {
-  // Count .tid and .json files in the wiki's tiddlers/system/ directory on external storage.
-  // External storage paths are world-readable, no run-as needed.
-  const wikisDir = '/storage/emulated/0/Documents/TidGi/wikis';
-  const dirs = execSync(`adb shell "ls ${wikisDir} 2>/dev/null"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-  if (!dirs) throw new Error('No wiki directories found');
-  const wikiDir = dirs.split(/\r?\n/).find(s => s.trim().length > 0)?.trim() ?? '';
-  if (!wikiDir) throw new Error('No wiki directory found');
-  const count = execSync(`adb shell "ls ${wikisDir}/${wikiDir}/tiddlers/system/ 2>/dev/null | wc -l"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+  const { wikiPath, isInternal } = getWikiPath();
+  const cmd = isInternal
+    ? `adb shell run-as ren.onetwo.tidgi.mobile.test sh -c "ls '${wikiPath}/tiddlers/system/' 2>/dev/null | wc -l"`
+    : `adb shell "ls '${wikiPath}/tiddlers/system/' 2>/dev/null | wc -l"`;
+  const count = execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+  console.log(`[data-safety] Wiki ${wikiPath}, isInternal=${isInternal}, system tiddlers=${count}`);
   return Number.parseInt(count, 10) || 0;
 }
 

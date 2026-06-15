@@ -149,6 +149,22 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const showProgressBar = loading && !quickLoad;
   return (
     <>
+      <TextInput
+        testID="e2e-tiddler-title"
+        style={{ position: 'absolute', bottom: 88, left: 8, width: 44, height: 44, opacity: 0, zIndex: 999 }}
+        value={e2eTiddlerTitle}
+        onChangeText={setE2eTiddlerTitle}
+      />
+      <Pressable
+        testID="e2e-create-tiddler-button"
+        style={{ position: 'absolute', bottom: 88, left: 56, width: 44, height: 44, opacity: 0, zIndex: 999 }}
+        onPress={() => {
+          const title = e2eTiddlerTitle || 'E2E Test';
+          webViewReference.current?.injectJavaScript(
+            `window.__e2e_createTiddler(${JSON.stringify(title)})`,
+          );
+        }}
+      />
       <TopProgressBar animatedValue={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
       <WebViewContainer showProgressBar={showProgressBar}>
         <CustomWebView
@@ -166,22 +182,6 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
           androidHardwareAcceleration={androidHardwareAcceleration}
         />
       </WebViewContainer>
-      <TextInput
-        testID="e2e-tiddler-title"
-        style={{ position: 'absolute', top: 0, left: 0, width: 44, height: 44, opacity: 0 }}
-        value={e2eTiddlerTitle}
-        onChangeText={setE2eTiddlerTitle}
-      />
-      <Pressable
-        testID="e2e-create-tiddler-button"
-        style={{ position: 'absolute', top: 0, left: 44, width: 44, height: 44, opacity: 0 }}
-        onPress={() => {
-          const title = e2eTiddlerTitle || 'E2E Test';
-          webViewReference.current?.injectJavaScript(
-            `window.__e2e_createTiddler(${JSON.stringify(title)})`,
-          );
-        }}
-      />
     </>
   );
 }
