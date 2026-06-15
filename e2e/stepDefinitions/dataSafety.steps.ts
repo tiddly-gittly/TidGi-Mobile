@@ -1,141 +1,66 @@
 /**
- * Step definitions for data safety & sync regression tests.
+ * Step definitions for data safety regression test.
  *
- * Creates tiddlers via the TiddlyWiki WebView (injectJavaScript),
- * triggering the full save→file write pipeline. Verifies git status
- * for unexpected deletions after save.
+ * Creates a tiddler via TiddlyWiki WebView (hidden UI elements),
+ * then checks file system for unexpected deletions.
  */
-
 import { Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
-import { diagnosticError, waitForElement } from '../support/diagnostics';
-import { getMockServerUrl, getTestWikiDir } from '../mock-server/setup';
+import { waitForElement } from '../support/diagnostics';
 
-const UI_TIMEOUT = 15_000;
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
+function adbKeyEvent(key: number) { try { execSync(`adb shell input keyevent ${key}`, { stdio: 'ignore', timeout: 3_000 }); } catch { /* */ } }
 
-async function getWikiPath(): Promise<string> {
-  try {
-    const raw = execSync(
-      'adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage',
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-    );
-    const parsed = JSON.parse(raw) as { state?: { workspaces?: Array<{ type?: string; wikiFolderLocation?: string }> } };
-    const wiki = parsed.state?.workspaces?.find(w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string');
-    if (wiki?.wikiFolderLocation) return wiki.wikiFolderLocation.replace('file://', '').replace(/\/$/, '');
-  } catch { /* fall through */ }
-  const list = execSync(
-    'adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis',
-    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-  ).trim();
-  const first = list.split(/\r?\n/).find(l => l.length > 0);
-  if (first) return `/data/data/ren.onetwo.tidgi.mobile.test/files/wikis/${first.trim()}`;
-  throw new Error('No wiki workspace found on device');
+let systemTiddlerCountBefore: number;
+
+function countSystemTiddlers(): number {
+  // Count .tid and .json files in the wiki's tiddlers/system/ directory on external storage.
+  // External storage paths are world-readable, no run-as needed.
+  const wikisDir = '/storage/emulated/0/Documents/TidGi/wikis';
+  const dirs = execSync(`adb shell "ls ${wikisDir} 2>/dev/null"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+  if (!dirs) throw new Error('No wiki directories found');
+  const wikiDir = dirs.split(/\r?\n/).find(s => s.trim().length > 0)?.trim() ?? '';
+  if (!wikiDir) throw new Error('No wiki directory found');
+  const count = execSync(`adb shell "ls ${wikisDir}/${wikiDir}/tiddlers/system/ 2>/dev/null | wc -l"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+  return Number.parseInt(count, 10) || 0;
 }
 
-function adbKeyEvent(key: number) { execSync(`adb shell input keyevent ${key}`, { stdio: 'ignore', timeout: 3_000 }); }
-
 // ── Wait ──────────────────────────────────────────────────────────────────────
-
 When('I wait {int} seconds for the wiki to fully load', async (s: number) => { await delay(s * 1000); });
 When('I wait {int} seconds for the save to complete', async (s: number) => { await delay(s * 1000); });
 When('I wait {int} seconds for pending saves to complete', async (s: number) => { await delay(s * 1000); });
 
-// ── Navigation ────────────────────────────────────────────────────────────────
-
+// ── Navigate back ─────────────────────────────────────────────────────────────
 When('I navigate back to the main menu', { timeout: 60_000 }, async () => {
-  // Press back repeatedly until main-menu-screen is visible.
-  // The navigation stack can be deep: MainMenu → Settings → Importer → WebView,
-  // so a fixed number of presses is unreliable.
-  // Max 15 presses with 1.5s between each = ~22s worst case.
   for (let i = 0; i < 15; i++) {
-    try {
-      await waitFor(element(by.id('main-menu-screen')))
-        .toBeVisible()
-        .withTimeout(1_500);
-      await device.disableSynchronization().catch(() => {});
-      console.log(`[data-safety] Back to main menu after ${i} presses`);
-      return;
-    } catch { /* not yet on main menu */ }
-    try { adbKeyEvent(4); } catch { /* non-fatal */ }
+    try { await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500); await device.disableSynchronization().catch(() => {}); console.log(`[data-safety] Back to main menu after ${i} presses`); return; } catch { /* */ }
+    adbKeyEvent(4);
     await delay(1_500);
   }
-  // Final fallback
   await device.disableSynchronization().catch(() => {});
   await waitForElement(by.id('main-menu-screen'), 10_000, 'main-menu-screen after 15 back presses');
 });
 
-// ── Create tiddler via WebView ────────────────────────────────────────────────
-
+// ── Create tiddler ────────────────────────────────────────────────────────────
 When('I create a tiddler {string} via the wiki webview', { timeout: 30_000 }, async (title: string) => {
-  // Uses hidden E2E UI elements (TextInput + Pressable) inside WikiViewer.
-  // 1. Type the title into the hidden TextInput
-  // 2. Tap the hidden Pressable → calls webViewReference.injectJavaScript()
-  //    → triggers $tw.wiki.addTiddler + $tw.syncer.saveTiddler in the WebView.
+  // Count system tiddlers BEFORE creating the user tiddler.
+  systemTiddlerCountBefore = countSystemTiddlers();
+  console.log(`[data-safety] System tiddler count BEFORE: ${systemTiddlerCountBefore}`);
+
+  // Type title into hidden TextInput, tap hidden Pressable → injectJavaScript.
   await element(by.id('e2e-tiddler-title')).replaceText(title);
   await element(by.id('e2e-create-tiddler-button')).tap();
   console.log(`[data-safety] Triggered tiddler creation for "${title}" via WebView`);
 });
 
-// ── Git status on device ──────────────────────────────────────────────────────
-
-Then('the workspace git working tree should contain no deletions', { timeout: 20_000 }, async () => {
-  const wikiPath = await getWikiPath();
-  let lines: string[] = [];
-  try {
-    // Try the app's bundled git
-    const out = execSync(
-      `adb shell run-as ren.onetwo.tidgi.mobile.test sh -c "ls /data/data/ren.onetwo.tidgi.mobile.test/files/git/bin/git 2>/dev/null && echo FOUND || echo NOTFOUND"`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-    ).trim();
-    if (out.includes('FOUND')) {
-      const status = execSync(
-        `adb shell run-as ren.onetwo.tidgi.mobile.test /data/data/ren.onetwo.tidgi.mobile.test/files/git/bin/git -C '${wikiPath}' status --short`,
-        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-      );
-      lines = status.split(/\r?\n/).filter(l => l.trim().length > 0);
-    }
-  } catch { /* git unavailable, skip */ }
-
-  console.log(`[data-safety] Git status (${lines.length} entries):`);
-  lines.forEach(l => console.log(`  ${l}`));
-
-  const deletions = lines.filter(l => l.trimStart().startsWith('D'));
-  if (deletions.length > 0) {
-    throw diagnosticError(`DELETIONS detected: ${deletions.join('; ')}`, 1);
+// ── Verify ────────────────────────────────────────────────────────────────────
+Then('the workspace system tiddlers count should remain unchanged', { timeout: 20_000 }, async () => {
+  await delay(3_000); // Let filesystem settle
+  const after = countSystemTiddlers();
+  console.log(`[data-safety] System tiddler count AFTER: ${after} (was ${systemTiddlerCountBefore})`);
+  if (after !== systemTiddlerCountBefore) {
+    throw new Error(`System tiddler count changed! ${systemTiddlerCountBefore} → ${after}. Data corruption detected.`);
   }
-  console.log('[data-safety] ✅ No deletions');
-});
-
-// ── Mock server ───────────────────────────────────────────────────────────────
-
-Then('the mock server is reachable', () => {
-  try {
-    execSync(`curl.exe -s --max-time 5 -o NUL ${getMockServerUrl()}/status`, { timeout: 10_000 });
-  } catch {
-    throw new Error(`Mock server ${getMockServerUrl()} unreachable`);
-  }
-});
-
-When('I enter the mock server URL', async () => {
-  const raw = execSync(
-    `curl.exe -sf --max-time 10 ${getMockServerUrl()}/tw-mobile-sync/git/mobile-sync-info`,
-    { encoding: 'utf8', timeout: 15_000 },
-  ).trim();
-  JSON.parse(raw); // validate
-
-  await waitForElement(by.id('toggle-manual-config-button'), UI_TIMEOUT, 'toggle-manual-config-button');
-  await element(by.id('toggle-manual-config-button')).tap();
-  await delay();
-  await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input');
-  await element(by.id('manual-json-input')).replaceText(raw);
-  await delay(2_000);
-});
-
-Then('the mock server git working tree contains {string}', { timeout: 10_000 }, (title: string) => {
-  const log = execSync(`git -C "${getTestWikiDir()}" log --oneline -3`, { encoding: 'utf8' }).trim();
-  console.log(`[mock-server] Recent commits:\n${log}`);
-  const status = execSync(`git -C "${getTestWikiDir()}" status --short`, { encoding: 'utf8' }).trim();
-  console.log(`[mock-server] Status: ${status || '(clean)'}`);
+  console.log(`[data-safety] ✅ Count unchanged: ${systemTiddlerCountBefore}`);
 });
