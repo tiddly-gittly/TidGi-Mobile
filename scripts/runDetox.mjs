@@ -47,10 +47,13 @@ function normalizeDetoxArgs(args) {
   return normalizedArgs;
 }
 
-if (configuration.startsWith('android.')) {
-  runCommand('adb', ['reverse', '--remove-all']);
-  runCommand('adb', ['reverse', 'tcp:8081', 'tcp:8081']);
-}
+// adb reverse is set up once manually when Metro first starts and persists
+// across runs. Only uncomment if you see "SocketTimeoutException" or
+// "Detox can't connect to test app".
+// if (configuration.startsWith('android.')) {
+//   runCommand('adb', ['reverse', '--remove-all']);
+//   runCommand('adb', ['reverse', 'tcp:8081', 'tcp:8081']);
+// }
 
 const detoxPackageJsonPath = require.resolve('detox/package.json');
 const detoxCliPath = path.join(path.dirname(detoxPackageJsonPath), 'local-cli', 'cli.js');
