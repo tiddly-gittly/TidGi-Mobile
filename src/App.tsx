@@ -14,6 +14,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
+import { AgentChat } from './pages/AgentChat';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
@@ -51,6 +52,7 @@ import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
+  AgentChat: undefined;
   Config: undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
@@ -136,6 +138,14 @@ export const App: React.FC = () => {
                           }}
                         />
                       ),
+                    })}
+                  />
+                  <Stack.Screen
+                    name='AgentChat'
+                    component={AgentChat}
+                    options={() => ({
+                      headerTitle: 'Agent',
+                      headerTitleStyle: { color: theme.colors.primary },
                     })}
                   />
                   <Stack.Screen

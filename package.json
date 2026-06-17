@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@memeloop/react-ui": "file:../memeloop/packages/memeloop-react-ui",
     "@react-native-community/datetimepicker": "~8.4.4",
     "@react-native-picker/picker": "~2.11.1",
     "@react-navigation/bottom-tabs": "^7.2.1",
@@ -62,6 +63,7 @@
     "i18next": "^25.2.1",
     "immer": "^10.1.1",
     "lodash": "^4.17.21",
+    "memeloop": "file:../memeloop/packages/memeloop",
     "p-timeout": "^6.1.4",
     "react": "19.1.0",
     "react-i18next": "^15.4.0",
