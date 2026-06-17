@@ -13,9 +13,9 @@ import { PaperProvider } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
+import { AgentChat } from './pages/AgentChat';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
-import { AgentChat } from './pages/AgentChat';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
@@ -42,6 +42,7 @@ const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
 `;
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
+import { deviceNetworkService } from './services/DeviceNetworkService';
 import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
@@ -83,6 +84,9 @@ export const App: React.FC = () => {
     initializeMobileLogger();
     const cleanupAnalytics = initializeMobileAnalytics();
     void trackMobileAppLaunch();
+    void deviceNetworkService.start().catch((error: unknown) => {
+      console.warn('[DeviceNetwork] failed to start', error);
+    });
 
     return cleanupAnalytics;
   }, []);
