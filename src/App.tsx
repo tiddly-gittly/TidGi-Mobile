@@ -15,6 +15,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
+import { AgentChat } from './pages/AgentChat';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
 import { Importer, type ImporterProps } from './pages/Importer/Index';
 import { MainMenu, type MainMenuProps } from './pages/MainMenu';
@@ -47,6 +48,7 @@ import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
+  AgentChat: undefined;
   Config: undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
@@ -130,6 +132,14 @@ export const App: React.FC = () => {
                       }}
                     />
                   ),
+                })}
+              />
+              <Stack.Screen
+                name='AgentChat'
+                component={AgentChat}
+                options={() => ({
+                  headerTitle: 'Agent',
+                  headerTitleStyle: { color: theme.colors.primary },
                 })}
               />
               <Stack.Screen
