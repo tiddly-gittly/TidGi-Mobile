@@ -46,6 +46,7 @@ const AppSafeArea = styled(SafeAreaView)`
   flex: 1;
 `;
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
+import { deviceNetworkService } from './services/DeviceNetworkService';
 import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
@@ -87,6 +88,9 @@ export const App: React.FC = () => {
     initializeMobileLogger();
     const cleanupAnalytics = initializeMobileAnalytics();
     void trackMobileAppLaunch();
+    void deviceNetworkService.start().catch((error: unknown) => {
+      console.warn('[DeviceNetwork] failed to start', error);
+    });
 
     return cleanupAnalytics;
   }, []);
