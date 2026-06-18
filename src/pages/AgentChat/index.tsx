@@ -1,5 +1,5 @@
-import { NativeAgentChatView } from '@memeloop/react-ui/native';
 import type { MemeLoopChatAdapter } from '@memeloop/react-ui/chat';
+import { NativeAgentChatView } from '@memeloop/react-ui/native';
 import type { ChatMessage } from 'memeloop';
 import { type FC, useMemo, useState } from 'react';
 
@@ -39,29 +39,33 @@ export const AgentChat: FC = () => {
     isRunning,
     isLoading: false,
     error: null,
-    sendMessage: async (input) => {
+    sendMessage: (input) => {
       const text = input.text.trim();
-      if (!text) return;
+      if (!text) return Promise.resolve();
 
       setIsRunning(true);
       const userMessage = createMessage('user', text);
       const assistantMessage = createMessage('assistant', `Mobile demo received: ${text}`);
       setMessages(currentMessages => [...currentMessages, userMessage, assistantMessage]);
       setIsRunning(false);
+      return Promise.resolve();
     },
-    cancel: async () => {
+    cancel: () => {
       setIsRunning(false);
+      return Promise.resolve();
     },
-    deleteTurn: async (userMessageId) => {
+    deleteTurn: (userMessageId) => {
       setMessages(currentMessages => deleteTurnFromMessages(currentMessages, userMessageId));
+      return Promise.resolve();
     },
-    retryTurn: async (userMessageId) => {
+    retryTurn: (userMessageId) => {
       const userMessage = messages.find(message => message.messageId === userMessageId);
-      if (!userMessage) return;
+      if (!userMessage) return Promise.resolve();
       setMessages(currentMessages => [
         ...currentMessages,
         createMessage('assistant', `Retry demo response for: ${userMessage.content}`),
       ]);
+      return Promise.resolve();
     },
   }), [isRunning, messages]);
 
