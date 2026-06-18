@@ -4,7 +4,7 @@ packages:
 
 allowBuilds:
   '@parcel/watcher': true
-  '@ipshipyard/node-datachannel': false
+  '@ipshipyard/node-datachannel': true
   detox: true
   dprint: true
   dtrace-provider: true
