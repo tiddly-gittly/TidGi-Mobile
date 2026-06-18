@@ -3,7 +3,7 @@ packages:
   - plugins
 
 allowBuilds:
-  '@ipshipyard/node-datachannel': set this to true or false
+  '@ipshipyard/node-datachannel': true
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
