@@ -152,6 +152,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       {}
       <TextInput
         testID='e2e-tiddler-title'
+        // eslint-disable-next-line react-native/no-inline-styles
         style={{ position: 'absolute', bottom: 88, left: 8, width: 44, height: 44, opacity: 0, zIndex: 999 }}
         value={e2eTestTiddlerTitle}
         onChangeText={setE2eTestTiddlerTitle}
@@ -159,6 +160,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       {}
       <Pressable
         testID='e2e-create-tiddler-button'
+        // eslint-disable-next-line react-native/no-inline-styles
         style={{ position: 'absolute', bottom: 88, left: 56, width: 44, height: 44, opacity: 0, zIndex: 999 }}
         onPress={() => {
           const title = e2eTestTiddlerTitle || 'E2E Test';
