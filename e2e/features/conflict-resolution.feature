@@ -1,24 +1,23 @@
 @conflict
 Feature: Conflict Resolution - Mobile and mock server concurrent edits
 
-  # Pre-condition: At least one wiki workspace exists with E2ETestTiddler.tid in its git history.
-  # Run @import and @sync scenarios first to ensure the shared ancestor commit exists.
-  #
   # The conflict flow:
-  #   1. Mock server modifies E2ETestTiddler.tid body + commits explicitly (no file-watcher).
-  #   2. Mobile modifies the SAME file differently (via adb) — diverged commit from the same ancestor.
-  #   3. Mobile taps sync: gitCommit → gitPushToIncoming → plugin merge → gitFetchAndReset.
-  #   4. Plugin detects merge conflict → resolveTidConflictMarkers resolves it:
+  #   1. Scenario imports a fresh mock wiki and creates E2ETestTiddler.tid.
+  #   2. Mock server modifies E2ETestTiddler.tid body + commits explicitly.
+  #   3. Mobile modifies the SAME file differently (via adb) — diverged commit from the same ancestor.
+  #   4. Mobile taps sync: gitCommit → gitPushToIncoming → plugin merge → gitFetchAndReset.
+  #   5. Plugin detects merge conflict → resolveTidConflictMarkers resolves it:
   #        header: mobile wins (newer modified timestamp)
   #        body: mock server + unique mobile lines merged
-  #   5. Verify: mock server file contains BOTH body lines; mobile sync completes successfully.
+  #   6. Verify: mock server file contains BOTH body lines; mobile sync completes successfully.
 
   Background:
     Given the app is on the main menu screen
-    And at least one wiki workspace exists
 
   @conflict
   Scenario: Body edits on both sides are merged; mobile header wins on conflict
+    Given a fresh mock server wiki is imported
+    And the imported mock server wiki has a synced tiddler "E2ETestTiddler" in shared history
     # Mock server adds a unique body line to E2ETestTiddler.tid and commits explicitly.
     # Mobile independently overwrites the same tiddler with a different body line.
     # After sync, both body lines must be present and mobile's modified timestamp must win.

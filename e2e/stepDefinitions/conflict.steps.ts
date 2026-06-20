@@ -7,8 +7,8 @@
  *   - .tid body section (after blank line): mock-server lines kept + unique mobile lines appended
  *
  * Setup requirements:
- *   - @import and @sync scenarios must have run first (E2ETestTiddler.tid must exist in the
- *     shared git history of both mock server and mobile).
+ *   - Each scenario imports its own mock wiki and creates E2ETestTiddler.tid
+ *     in the shared git history before creating divergent edits.
  *   - The mock server is started by hooks.ts BeforeAll and uses the local tw-mobile-sync
  *     plugin with the system-git runner. No TidGi-Desktop process is required.
  *
@@ -170,20 +170,37 @@ function writeMobileTiddler(wikiPath: string, tiddlerFilename: string, content: 
 /**
  * Get the first wiki workspace info from the mobile device's persist storage.
  */
-function getFirstWikiWorkspace(): { id: string; wikiFolderLocation: string } | undefined {
+function getImportedWikiWorkspace(): { id: string; wikiFolderLocation: string } | undefined {
   try {
     const raw = execSync(
       'adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage',
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
     );
     const parsed = JSON.parse(raw) as {
-      state?: { workspaces?: Array<{ id?: string; type?: string; wikiFolderLocation?: string }> };
+      state?: {
+        workspaces?: Array<{
+          id?: string;
+          type?: string;
+          wikiFolderLocation?: string;
+          syncedServers?: Array<{ serverID?: string }>;
+        }>;
+      };
     };
-    const wiki = parsed.state?.workspaces?.find(
+    const wikiList = parsed.state?.workspaces?.filter(
       w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string',
+    ) ?? [];
+    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
+    if (standaloneWiki?.id && standaloneWiki.wikiFolderLocation) {
+      return { id: standaloneWiki.id, wikiFolderLocation: standaloneWiki.wikiFolderLocation };
+    }
+    const importedWiki = wikiList.find(w =>
+      Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0),
     );
-    if (wiki?.id && wiki.wikiFolderLocation) {
-      return { id: wiki.id, wikiFolderLocation: wiki.wikiFolderLocation };
+    if (importedWiki?.id && importedWiki.wikiFolderLocation) {
+      return { id: importedWiki.id, wikiFolderLocation: importedWiki.wikiFolderLocation };
+    }
+    if (wikiList[0]?.id && wikiList[0].wikiFolderLocation) {
+      return { id: wikiList[0].id, wikiFolderLocation: wikiList[0].wikiFolderLocation };
     }
   } catch { /* non-fatal */ }
   return undefined;
@@ -233,9 +250,9 @@ When(
   'the mobile overwrites {string} adding body line {string}',
   { timeout: 30_000 },
   async (tiddlerFilename: string, appendLine: string) => {
-    const wiki = getFirstWikiWorkspace();
+    const wiki = getImportedWikiWorkspace();
     if (!wiki) {
-      throw new Error('No wiki workspace found on device. Run @import scenario first.');
+      throw new Error('No wiki workspace found on device. Import a fresh mock server wiki in this scenario first.');
     }
 
     let wikiPath = wiki.wikiFolderLocation;
@@ -249,7 +266,7 @@ When(
     if (!currentContent) {
       throw new Error(
         `Tiddler "${tiddlerFilename}" not found on mobile device at ${wikiPath}/tiddlers/. ` +
-          'Run @sync scenario first so the file exists in the shared git history.',
+          'Create and sync the baseline tiddler in this scenario before creating divergent edits.',
       );
     }
 

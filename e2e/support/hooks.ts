@@ -23,12 +23,13 @@
 
 import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, setDefaultTimeout, Status } from '@cucumber/cucumber';
 import { execFileSync, execSync } from 'child_process';
+import { mkdirSync, writeFileSync } from 'fs';
+import { get as httpGet } from 'node:http';
+import { networkInterfaces } from 'os';
 import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
-import { mkdirSync, writeFileSync } from 'fs';
-import { networkInterfaces } from 'os';
-import { captureDeviceSnapshot, diagnosticError, dumpFullUIHierarchy, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
-import { ensureWikiReady, startServer, stopServer } from '../mock-server/setup';
+import { captureDeviceSnapshot, detectExpoErrorState, diagnosticError, dumpFullUIHierarchy, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
+import { ensureWikiReady, getTestWikiDir, resetMockWikiFilesToBaseline, startServer, stopServer } from '../mock-server/setup';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
 // WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
@@ -42,33 +43,47 @@ function getLanIp(): string {
   // Allow override via env for CI / VPN / special setups.
   if (process.env.TIDGI_HOST_IP) return process.env.TIDGI_HOST_IP;
 
-  const preferredNames = ['以太网', 'Wi-Fi', 'WLAN', 'Ethernet', 'wlan', 'eth', 'en'];
   const nics = networkInterfaces();
-  let fallback: string | undefined;
 
-  // First pass: prefer real network interfaces (not virtual adapters).
+  // Exclude virtual/VPN adapters that happen to contain "Ethernet" etc.
+  const excludedNames = ['virtual', 'hyper-v', 'wsl', 'vmware', 'docker', 'tailscale', 'vpn', 'loopback', 'pseudo'];
+  const isExcludedName = (name: string) => excludedNames.some(e => name.toLowerCase().includes(e));
+
+  // Tailscale uses 100.64.0.0/10 (CGNAT); Hyper-V/WSL often uses 172.16.0.0/12.
+  const isExcludedIp = (ip: string) => {
+    if (ip.startsWith('169.254.')) return true;
+    if (ip.startsWith('127.')) return true;
+    const parts = ip.split('.').map(Number);
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true; // Tailscale
+    return false;
+  };
+
+  const preferredNames = ['以太网', 'wi-fi', 'wlan', 'ethernet', 'eth', 'en'];
+
+  // First pass: preferred real network interfaces.
   for (const pattern of preferredNames) {
     for (const name of Object.keys(nics)) {
+      if (isExcludedName(name)) continue;
       if (!name.toLowerCase().includes(pattern.toLowerCase())) continue;
       const addrs = nics[name];
       if (!addrs) continue;
       for (const addr of addrs) {
         if (addr.family !== 'IPv4' || addr.internal) continue;
-        // Exclude link-local (169.254.x.x) — these are APIPA addresses from
-        // virtual adapters (Hyper-V, WSL, VPN) and are not routable.
-        if (addr.address.startsWith('169.254.')) continue;
+        if (isExcludedIp(addr.address)) continue;
         return addr.address;
       }
     }
   }
 
-  // Second pass: any non-internal IPv4 that isn't link-local.
+  // Second pass: any non-internal IPv4 that isn't link-local / CGNAT.
+  let fallback: string | undefined;
   for (const name of Object.keys(nics)) {
+    if (isExcludedName(name)) continue;
     const addrs = nics[name];
     if (!addrs) continue;
     for (const addr of addrs) {
       if (addr.family !== 'IPv4' || addr.internal) continue;
-      if (addr.address.startsWith('169.254.')) continue;
+      if (isExcludedIp(addr.address)) continue;
       if (!fallback) fallback = addr.address;
     }
   }
@@ -79,17 +94,46 @@ function getLanIp(): string {
 }
 
 const LAN_IP = getLanIp();
-// Metro URL that the DEVICE can reach (same LAN, no adb reverse).
-const METRO_URL = process.env.METRO_URL ?? `http://${LAN_IP}:8081`;
+
+// Base URL the device uses to reach the host (same Wi-Fi/LAN, no adb reverse).
+// Override with TIDGI_HOST_BASE_URL for complex network setups.
+const HOST_BASE_URL = process.env.TIDGI_HOST_BASE_URL ?? `http://${LAN_IP}`;
+
+// Metro URL that the DEVICE can reach directly on the LAN.
+// `pnpm run android` runs `expo start --android`, which starts Metro on the
+// default Expo port 8081 and binds to all interfaces including the LAN IP.
+// The deep-link must NOT contain extra query parameters after `url` — Expo
+// dev-client 6.x mis-parses `&...` as part of the port.
+const METRO_URL = process.env.METRO_URL ?? `${HOST_BASE_URL}:8081`;
+
+// Default mock-server URL the device reaches directly on the LAN.
+const DEFAULT_DESKTOP_URL = process.env.TIDGI_DESKTOP_URL ?? `${HOST_BASE_URL}:5212`;
 
 // Expo dev-client deep-link that auto-connects to Metro without manual interaction.
 // Format: exp+<slug>://expo-development-client/?url=<encoded-metro-url>
 // The slug comes from app.json → expo.slug ("tidgi-mobile"), NOT expo.scheme ("tidgi").
-// `disableOnboarding=1` prevents the first-run onboarding overlay from appearing.
-const EXPO_DEV_CLIENT_URL = `exp+tidgi-mobile://expo-development-client/?url=${encodeURIComponent(METRO_URL)}&disableOnboarding=1`;
-const ATTACH_EXISTING_APP = process.env.TIDGI_ATTACH_EXISTING_APP === 'true';
+// NOTE: Do NOT append query parameters after `url`; dev-client parses the raw
+// query string and can include `&...` as part of the port, causing
+// "Invalid URL port" errors.
+const EXPO_DEV_CLIENT_URL = `exp+tidgi-mobile://expo-development-client/?url=${encodeURIComponent(METRO_URL)}`;
 
+const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
 const MAIN_MENU_ID = 'main-menu-screen';
+const MOCK_WIKI_GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: 'E2E',
+  GIT_AUTHOR_EMAIL: 'e2e@test',
+  GIT_COMMITTER_NAME: 'E2E',
+  GIT_COMMITTER_EMAIL: 'e2e@test',
+};
+
+function getDetoxLaunchArgs(): Record<string, string> {
+  return {
+    // Pattern matches the LAN IP:8081 Metro connections.
+    detoxURLBlacklist: JSON.stringify([`.*${LAN_IP.replace(/\./g, '\\.')}:8081.*`]),
+    TIDGI_DESKTOP_URL: DEFAULT_DESKTOP_URL,
+  };
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,6 +150,52 @@ function allowDeviceSleepNormally(): void {
     execSync('adb shell svc power stayon false', { stdio: 'ignore' });
   } catch {
     // Non-fatal on devices that don't support stayon.
+  }
+}
+
+function adbShell(args: string[], timeout = 10_000): void {
+  execFileSync('adb', ['shell', ...args], { stdio: 'ignore', timeout });
+}
+
+function resetDeviceE2EState(): void {
+  try {
+    adbShell(['am', 'force-stop', APP_PACKAGE], 5_000);
+  } catch {
+    // Non-fatal: the app may already be stopped.
+  }
+
+  try {
+    adbShell(['run-as', APP_PACKAGE, 'rm', '-rf', 'files/wikis'], 10_000);
+    adbShell(['run-as', APP_PACKAGE, 'rm', '-f', 'files/persistStorage/wiki-storage', 'files/persistStorage/server-storage'], 10_000);
+    adbShell(['run-as', APP_PACKAGE, 'rm', '-rf', 'cache'], 10_000);
+    adbShell(['run-as', APP_PACKAGE, 'mkdir', '-p', 'files/wikis', 'files/persistStorage', 'cache'], 10_000);
+    console.log('[hooks] Cleared device E2E workspaces and server storage.');
+  } catch (error) {
+    console.warn('[hooks] Failed to clear device E2E state:', String(error).split('\n')[0]);
+  }
+}
+
+function runMockWikiGit(args: string[], timeout = 30_000): string {
+  return execFileSync('git', ['-C', getTestWikiDir(), ...args], {
+    encoding: 'utf8',
+    env: MOCK_WIKI_GIT_ENV,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout,
+  }).trim();
+}
+
+function resetMockWikiRepositoryToBaseline(): void {
+  try {
+    resetMockWikiFilesToBaseline();
+    runMockWikiGit(['add', '-A']);
+    try {
+      runMockWikiGit(['diff', '--cached', '--quiet']);
+    } catch {
+      runMockWikiGit(['commit', '-m', `E2E baseline ${new Date().toISOString()}`]);
+    }
+    console.log(`[hooks] Mock wiki baseline ready at ${runMockWikiGit(['rev-parse', '--short', 'HEAD'])}.`);
+  } catch (error) {
+    console.warn('[hooks] Failed to reset mock wiki baseline:', String(error).split('\n')[0]);
   }
 }
 
@@ -154,6 +244,66 @@ function ensureDeviceUnlocked(): void {
     throw new Error(
       'Android device is still locked behind keyguard. Unlock the phone once manually, then rerun Detox. The test hooks now keep the screen awake after that, but they cannot bypass a credential-protected lock screen over adb.',
     );
+  }
+}
+
+/**
+ * Wait until Metro is reachable on the host's LAN IP and can serve the bundle.
+ *
+ * A plain HTTP 200 on `/` is not enough: when Metro is still initialising it
+ * returns the server UI with status 200 but the bundle endpoint is not ready
+ * yet, and the Expo dev-client may show a "Request Error" if launched too
+ * early. We therefore poll `/index.bundle?platform=android&dev=true` until
+ * Metro returns something other than a 5xx/connection error.
+ *
+ * NOTE: If Metro is clearly unreachable (e.g. ECONNREFUSED or the device-side
+ * bundle endpoint never responds), the agent MUST ask the user for the current
+ * Metro server state instead of trying to auto-start or auto-fix it. On this
+ * project `pnpm run android` starts Metro manually and the agent should not
+ * silently spawn a second Metro instance.
+ */
+async function waitForMetroReachable(timeoutMs = 60_000, intervalMs = 1_000): Promise<void> {
+  const bundleUrl = `${METRO_URL}/index.bundle?platform=android&dev=true`;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    let ok = false;
+    try {
+      ok = await new Promise<boolean>((resolve) => {
+        const req = httpGet(bundleUrl, { timeout: 3000 }, (res) => {
+          // During startup Metro may return 404/400 if the platform query is
+          // unexpected, but any non-5xx response means the server is alive and
+          // the bundler is answering requests. We intentionally avoid requiring
+          // a 200 here because Metro's response code varies by version.
+          resolve(res.statusCode !== undefined && res.statusCode < 500);
+          res.resume();
+        });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => { req.destroy(); resolve(false); });
+      });
+    } catch { /* continue polling */ }
+    if (ok) {
+      console.log(`[hooks] Metro bundle endpoint reachable at ${bundleUrl}`);
+      return;
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(
+    `Metro not reachable at ${METRO_URL} after ${timeoutMs}ms. ` +
+    'Make sure "pnpm start" is running and bound to the LAN IP (--host lan). ' +
+    'On Windows, ensure the firewall allows inbound TCP 8081.',
+  );
+}
+
+/** Optional device-side reachability log (non-fatal). */
+function logDeviceReachability(host: string, port: number): void {
+  try {
+    const out = execSync(
+      `adb shell curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://${host}:${port}/`,
+      { encoding: 'utf8', timeout: 5_000, stdio: ['pipe', 'pipe', 'ignore'] },
+    ).trim();
+    console.log(`[hooks] Device reachability ${host}:${port} -> ${out}`);
+  } catch {
+    console.log(`[hooks] Device reachability ${host}:${port} -> unavailable (no curl or unreachable)`);
   }
 }
 
@@ -225,24 +375,21 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // running TidGi-Desktop instance.
   console.log('[BeforeAll] Preparing mock server...');
   await ensureWikiReady();
+  resetMockWikiRepositoryToBaseline();
   await startServer();
 
-  // Reverse port 5212 so the device can reach the mock server.
-  // Only used by @mobilesync scenarios; harmless for @sync / @smoke.
-  try {
-    execSync('adb reverse tcp:5212 tcp:5212', { stdio: 'ignore' });
-  } catch { /* non-fatal */ }
+  // Mock server binds to 0.0.0.0 and is reached via LAN IP (no adb reverse).
 
   // Pre-grant camera permission so the Importer screen renders immediately
   // without showing a system permission dialog during @mobilesync tests.
   try {
-    execSync('adb shell pm grant ren.onetwo.tidgi.mobile.test android.permission.CAMERA', { stdio: 'ignore' });
+    execSync(`adb shell pm grant ${APP_PACKAGE} android.permission.CAMERA`, { stdio: 'ignore' });
   } catch { /* non-fatal */ }
 
   // Grant MANAGE_EXTERNAL_STORAGE so the app can write to external wiki folders.
   // On Android 11+, this is a special permission that requires appops (not pm grant).
   try {
-    execSync('adb shell appops set ren.onetwo.tidgi.mobile.test MANAGE_EXTERNAL_STORAGE allow', { stdio: 'ignore' });
+    execSync(`adb shell appops set ${APP_PACKAGE} MANAGE_EXTERNAL_STORAGE allow`, { stdio: 'ignore' });
   } catch { /* non-fatal */ }
 
   // Prevent BlackShark (JoyUI) and MIUI-derived power managers from killing the test app.
@@ -251,9 +398,9 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // generates touch events during the launchApp() idle wait. Adding to Doze whitelist and
   // granting RUN_IN_BACKGROUND prevents this aggressive cgroup kill.
   try {
-    execSync('adb shell cmd deviceidle whitelist +ren.onetwo.tidgi.mobile.test', { stdio: 'ignore' });
-    execSync('adb shell appops set ren.onetwo.tidgi.mobile.test RUN_IN_BACKGROUND allow', { stdio: 'ignore' });
-    execSync('adb shell appops set ren.onetwo.tidgi.mobile.test RUN_ANY_IN_BACKGROUND allow', { stdio: 'ignore' });
+    execSync(`adb shell cmd deviceidle whitelist +${APP_PACKAGE}`, { stdio: 'ignore' });
+    execSync(`adb shell appops set ${APP_PACKAGE} RUN_IN_BACKGROUND allow`, { stdio: 'ignore' });
+    execSync(`adb shell appops set ${APP_PACKAGE} RUN_ANY_IN_BACKGROUND allow`, { stdio: 'ignore' });
   } catch { /* non-fatal */ }
 
   // Wake the screen so the app can render in the foreground.
@@ -277,7 +424,6 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // finished and disable "show at launch". Also disable gesture activation so
   // shaking or long-press won't accidentally open the dev menu mid-test.
   try {
-    const appPackage = 'ren.onetwo.tidgi.mobile.test';
     const prefsFile = 'expo.modules.devmenu.sharedpreferences.xml';
     const localPath = '/tmp/expo_devmenu_prefs.xml';
     const devicePath = '/data/local/tmp/expo_devmenu_prefs.xml';
@@ -298,104 +444,13 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
     );
     execSync(`adb push ${localPath} ${devicePath}`, { stdio: 'ignore', timeout: 5_000 });
     execSync(
-      `adb shell "run-as ${appPackage} sh -c 'mkdir -p shared_prefs && cp ${devicePath} shared_prefs/${prefsFile}'"`,
+      `adb shell "run-as ${APP_PACKAGE} sh -c 'mkdir -p shared_prefs && cp ${devicePath} shared_prefs/${prefsFile}'"`,
       { stdio: 'ignore', timeout: 5_000 },
     );
   } catch { /* non-fatal — the disableOnboarding=1 URL param is a fallback */ }
 
   await detox.init();
-
-  // The deep-link URL (EXPO_DEV_CLIENT_URL) tells Expo dev-client to auto-
-  // connect to Metro without showing the server picker. On second+ launches,
-  // the URL is also cached in AsyncStorage.
-  // detoxEnableSynchronization:0 is set globally in .detoxrc.js → app.launchArgs,
-  // so the native side never registers IdlingResources. We also call
-  // disableSynchronization() as a belt-and-suspenders safeguard.
-  // Launch the app and wait for it to reach a stable idle state.
-  //
-  // The 3-minute idle wait is caused by the Expo dev-client's OkHttp Metro WebSocket:
-  // the dev-client maintains a persistent WebSocket to Metro for fast-refresh. OkHttp
-  // registers this connection as an active IdlingResource, keeping Espresso "busy".
-  // Espresso only becomes idle after ~3 minutes when the Metro WS connection enters a
-  // keep-alive state. On BlackShark devices, the OS power manager SIGKILLs apps after
-  // ~3 minutes without user interaction, killing the app right as it becomes idle.
-  //
-  // Fix: pass `detoxURLBlacklist` as a launch arg. Detox's native Android module reads
-  // this at startup and configures the OkHttp synchronizer to ignore matching URLs,
-  // so the persistent Metro WebSocket no longer blocks the Espresso idle check.
-  // launchApp() then returns within seconds of the app connecting.
-  await device.launchApp(ATTACH_EXISTING_APP
-    ? { newInstance: false }
-    : {
-      newInstance: true,
-      url: EXPO_DEV_CLIENT_URL,
-      launchArgs: {
-        // Blacklist Metro hot-reload WebSocket URL so OkHttp doesn't block Espresso idle.
-        // Pattern matches ws://localhost:8081/... and http://localhost:8081/... connections.
-        detoxURLBlacklist: '[".*localhost:8081.*"]',
-        TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
-      },
-    });
-  await device.disableSynchronization();
-
-  // After launchApp() returns (Espresso became idle after ~3 min of git I/O), Metro may
-  // immediately apply a pending fast-refresh (from test-code changes between runs).
-  // The fast-refresh causes: (a) RN bridge briefly drops, (b) app JS runtime reloads,
-  // (c) React Navigation resets — app may navigate to wiki page instead of main menu.
-  //
-  // Fix: wait 20 s unconditionally so the hot-refresh completes and the app settles
-  // before we attempt any element lookup. 20 s > typical RN bundle reload time (~8-12 s)
-  // on this device. This is only done once per test run in BeforeAll.
-  await new Promise<void>(resolve => setTimeout(resolve, 20_000));
-
-  // Ensure synchronization stays disabled (hot-refresh resets native state on some devices).
-  try {
-    await device.disableSynchronization();
-  } catch { /* non-fatal */ }
-
-  const mainMenuDeadline = Date.now() + 3 * 60_000;
-  let mainMenuReady = false;
-
-  while (!mainMenuReady) {
-    const remaining = mainMenuDeadline - Date.now();
-    if (remaining <= 0) {
-      const snapshot = captureDeviceSnapshot();
-      throw new Error(
-        `[BeforeAll] Main menu not visible after 3 minutes.\n` +
-          `  ${formatSnapshot(snapshot)}`,
-      );
-    }
-
-    try {
-      await dismissExpoOverlays();
-      await waitFor(element(by.id(MAIN_MENU_ID)))
-        .toBeVisible()
-        .withTimeout(Math.min(60_000, remaining));
-      mainMenuReady = true;
-    } catch (error) {
-      const errorMessage = String(error);
-      if (errorMessage.includes("can't connect") || errorMessage.includes('connect to the test app')) {
-        // RN bridge is reconnecting (hot-refresh or synchronisation toggle).
-        console.log('[BeforeAll] Detox WS disconnected; waiting 8 s for reconnection...');
-        await new Promise<void>(resolve => setTimeout(resolve, 8_000));
-        // Re-send disableSynchronization — may have been reset by bundle reload.
-        try {
-          await device.disableSynchronization();
-        } catch { /* non-fatal */ }
-      } else {
-        // Element not found: app navigated away from main menu (e.g. wiki WebView).
-        // Navigate back via adb to avoid Espresso blocking (WebView keeps JS thread busy).
-        console.log('[BeforeAll] main-menu-screen not visible; pressing back via adb...');
-        try {
-          execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
-        } catch { /* non-fatal */ }
-        await new Promise<void>(resolve => setTimeout(resolve, 2_000));
-        try {
-          await device.disableSynchronization();
-        } catch { /* non-fatal */ }
-      }
-    }
-  }
+  console.log('[BeforeAll] Detox initialized. Each scenario launches a clean app instance.');
 });
 
 AfterAll(async () => {
@@ -416,149 +471,32 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
     status: 'running',
   });
 
-  const isSyncScenario = pickle.tags.some(tag => tag.name === '@mobilesync');
-  const isImportScenario = pickle.tags.some(tag => tag.name === '@import');
-  if (isImportScenario) {
-    // Full relaunch only for @import so git state is clean
-    await device.launchApp({
-      newInstance: true,
-      url: EXPO_DEV_CLIENT_URL,
-      launchArgs: {
-        TIDGI_DESKTOP_URL: process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212',
-      },
-    });
-    await device.disableSynchronization();
-    await dismissExpoOverlays(15_000);
-    await waitFor(element(by.id(MAIN_MENU_ID)))
-      .toBeVisible()
-      .withTimeout(60_000);
-  } else if (isSyncScenario) {
-    // @open, @sync: reuse the running app instance (wiki already imported).
-    // Navigate back to main menu via adb (bypass Espresso idle blocks).
-    const pressBackViaAdb = () => {
-      try {
-        execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
-      } catch { /* non-fatal */ }
-    };
+  resetDeviceE2EState();
+  resetMockWikiRepositoryToBaseline();
 
-    // Wake the screen in case it turned off during a long previous scenario.
-    try {
-      execSync('adb shell input keyevent 224', { stdio: 'ignore', timeout: 2_000 });
-    } catch { /* non-fatal */ }
-
-    // WorkspaceList fires gitGetUnsyncedCommitCount on mount (5s delay after our
-    // WorkspaceList fix), but the first 5s after import it can still block Espresso.
-    // Use an 8s timeout to cover that window before deciding to press back.
-    if (await isMainMenuVisible(8_000)) {
-      await device.disableSynchronization();
-      return;
-    }
-
-    // Not on main menu — could be on WikiWebView, WorkspaceDetail, etc.
-    // Press back until we reach the root screen.
-    for (let index = 0; index < 6; index++) {
-      if (await isMainMenuVisible(2_000)) {
-        await device.disableSynchronization();
-        return;
-      }
-      pressBackViaAdb();
-      await new Promise(resolve => setTimeout(resolve, 1_200));
-    }
-
-    // Still not on main menu. Try a React Native reload (faster than force-stop).
-    try {
-      await device.disableSynchronization();
-    } catch { /* may still be blocked */ }
-
-    if (await isMainMenuVisible(5_000)) return;
-
-    // Last resort: reload React Native bundle (preserves native app process).
-    try {
-      await device.reloadReactNative();
-      await device.disableSynchronization();
-      await waitFor(element(by.id(MAIN_MENU_ID)))
-        .toBeVisible()
-        .withTimeout(30_000);
-      return;
-    } catch { /* RN reload failed; fall through to force-stop */ }
-
-    try {
-      execSync('adb shell am force-stop ren.onetwo.tidgi.mobile.test', { stdio: 'ignore' });
-      await new Promise(resolve => setTimeout(resolve, 2_000));
-    } catch { /* non-fatal */ }
-    await device.launchApp({
-      newInstance: true,
-      url: EXPO_DEV_CLIENT_URL,
-    });
-    await device.disableSynchronization();
-    await dismissExpoOverlays(15_000);
-    await waitFor(element(by.id(MAIN_MENU_ID)))
-      .toBeVisible()
-      .withTimeout(60_000);
-  } else {
-    // Smoke / settings / workspace: reuse the running app instance.
-    //
-    // IMPORTANT: After TiddlyWiki boots inside a WebView, its continuous JS
-    // execution keeps the React Native main thread message queue non-empty.
-    // This blocks Espresso's IdlingResource mechanism, which in turn blocks
-    // ALL Detox commands (including device.disableSynchronization() itself).
-    //
-    // To break out of this deadlock we use raw adb commands (which bypass
-    // Espresso entirely) to navigate back to the main menu screen. Once
-    // the WebView is no longer in the view hierarchy (i.e., we're on the
-    // main menu), the main thread settles and Espresso becomes responsive.
-    //
-    // Strategy:
-    //  1. Press BACK via adb up to 5 times to pop navigation stack
-    //  2. After each press, briefly sleep then check via adb if the
-    //     main-menu-screen testID exists in the view hierarchy
-    //  3. Once we're on the main menu (or as fallback), call
-    //     device.disableSynchronization() which should succeed now
-
-    // Helper: press back via adb (bypasses Espresso)
-    const pressBackViaAdb = () => {
-      try {
-        execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
-      } catch { /* non-fatal */ }
-    };
-
-    // Try pressing back multiple times via adb to reach main menu
-    for (let index = 0; index < 5; index++) {
-      // Check if main menu is visible by looking for its testID via Detox
-      // (this may time out if Espresso is blocked, hence a short timeout)
-      if (await isMainMenuVisible(2_000)) {
-        await device.disableSynchronization();
-        return;
-      }
-      pressBackViaAdb();
-      // Wait for navigation animation
-      await new Promise(resolve => setTimeout(resolve, 1_500));
-    }
-
-    // Final check — if we still can't see main menu, try
-    // disableSynchronization first (may succeed if WebView was unloaded
-    // by the back presses), then check.
-    try {
-      await device.disableSynchronization();
-    } catch { /* may still be blocked */ }
-
-    if (await isMainMenuVisible(5_000)) return;
-
-    // Last resort: full relaunch via adb (kills app, Detox reconnects)
-    try {
-      execSync('adb shell am force-stop ren.onetwo.tidgi.mobile.test', { stdio: 'ignore' });
-      await new Promise(resolve => setTimeout(resolve, 2_000));
-    } catch { /* non-fatal */ }
-    await device.launchApp({
-      newInstance: true,
-      url: EXPO_DEV_CLIENT_URL,
-    });
-    await device.disableSynchronization();
-    await dismissExpoOverlays(15_000);
-    await waitFor(element(by.id(MAIN_MENU_ID)))
-      .toBeVisible()
-      .withTimeout(30_000);
+  const expoError = detectExpoErrorState();
+  if (expoError.isError) {
+    const snapshot = captureDeviceSnapshot();
+    throw new Error(
+      `[Before] Detected Expo error state before launch: ${expoError.type}\n` +
+      `  Details: ${expoError.details}\n` +
+      `  Device state:\n  ${formatSnapshot(snapshot)}`,
+    );
   }
+
+  await waitForMetroReachable();
+  logDeviceReachability(LAN_IP, 8081);
+
+  await device.launchApp({
+    newInstance: true,
+    url: EXPO_DEV_CLIENT_URL,
+    launchArgs: getDetoxLaunchArgs(),
+  });
+  await device.disableSynchronization();
+  await dismissExpoOverlays(15_000);
+  await waitFor(element(by.id(MAIN_MENU_ID)))
+    .toBeVisible()
+    .withTimeout(60_000);
 });
 
 After(async (message: ITestCaseHookParameter) => {
@@ -568,6 +506,12 @@ After(async (message: ITestCaseHookParameter) => {
     fullName: pickle.name,
     status: result === undefined || result.status !== Status.PASSED ? 'failed' : 'passed',
   });
+  // NOTE: Do NOT force-stop the app here. Detox manages the instrumentation
+  // lifecycle across scenarios; killing the app from adb in After can leave the
+  // next scenario's device.launchApp() stuck waiting for the instrumentation
+  // ready message. Per-scenario cleanup (force-stop + wipe storage) is done in
+  // the Before hook instead, right before launching a clean instance.
+  resetMockWikiRepositoryToBaseline();
 });
 
 /**

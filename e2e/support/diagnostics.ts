@@ -47,13 +47,14 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
     appRunning: false,
   };
 
-  // 1. Current foreground activity
+  // 1. Current foreground activity and windows
   try {
-    const focusRaw = execSync(
-      'adb shell "dumpsys window | grep mCurrentFocus"',
+    const dumpsys = execSync(
+      'adb shell "dumpsys window | grep -E (mCurrentFocus|mFocusedWindow)"',
       { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
     );
-    const match = focusRaw.match(/mCurrentFocus=Window\{[^ ]+ [^ ]+ ([^}]+)\}/);
+    const match = dumpsys.match(/mCurrentFocus=Window\{[^ ]+ [^ ]+ ([^}]+)\}/) ??
+      dumpsys.match(/mFocusedWindow=Window\{[^ ]+ [^ ]+ ([^}]+)\}/);
     if (match) {
       snapshot.currentActivity = match[1];
       snapshot.appRunning = snapshot.currentActivity.includes(APP_PACKAGE);
@@ -94,7 +95,7 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
     ].slice(0, 20);
   }
 
-  // 3. Recent RN JS errors
+  // 3. Recent RN JS errors + Expo dev-client errors
   try {
     const errors = execSync(
       'adb logcat -d -s ReactNativeJS:E',
@@ -105,6 +106,20 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
       .filter(l => l.includes('ReactNativeJS'))
       .slice(-5)
       .map(l => l.replace(/^.*ReactNativeJS:\s*/, '').trim());
+  } catch { /* non-fatal */ }
+
+  // 4. Expo dev-client specific errors (SocketTimeout / connection failures)
+  try {
+    const expoErrors = execSync(
+      'adb logcat -d -s DevLauncher:E',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const lines = expoErrors
+      .split('\n')
+      .filter(l => /DevLauncher|SocketTimeout|connection|timeout|failed to connect/i.test(l))
+      .slice(-5)
+      .map(l => l.replace(/^.*DevLauncher:\s*/, '').trim());
+    snapshot.jsErrors.push(...lines);
   } catch { /* non-fatal */ }
 
   return snapshot;
@@ -189,6 +204,34 @@ export function getDesktopLogTail(maxLines = 15): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Detect common Expo dev-client error states from logcat / window state.
+ */
+export function detectExpoErrorState(): { isError: boolean; type?: string; details?: string } {
+  try {
+    const window = execSync(
+      'adb shell "dumpsys window | grep -E (mCurrentFocus|mFocusedWindow)"',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    if (window.includes('DevLauncherErrorActivity')) {
+      return { isError: true, type: 'DevLauncherErrorActivity', details: window.trim() };
+    }
+  } catch { /* non-fatal */ }
+
+  try {
+    const logs = execSync(
+      'adb logcat -d -s DevLauncher:E',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    if (/SocketTimeout|Could not connect|failed to connect|connection refused/i.test(logs)) {
+      const line = logs.split('\n').filter(l => /SocketTimeout|Could not connect|failed to connect|connection refused/i.test(l)).slice(-1)[0] ?? '';
+      return { isError: true, type: 'ExpoConnectionError', details: line.replace(/^.*DevLauncher:\s*/, '').trim() };
+    }
+  } catch { /* non-fatal */ }
+
+  return { isError: false };
 }
 
 /**
