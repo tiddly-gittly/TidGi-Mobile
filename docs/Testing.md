@@ -71,9 +71,17 @@ In a **separate terminal**, keep this running while tests execute:
 pnpm start
 ```
 
-Metro serves the JS bundle to the device. `expo start` also runs `adb reverse tcp:8081 tcp:8081` so the Android device can reach `localhost:8081` on your Mac.
+You can also use the Android dev-client launch command (it is configured to bind to the LAN as well):
 
-> **Do not run `adb reverse --remove-all` manually** before or during tests — it removes Metro's port mapping and causes the Expo dev client to show the "Connect to development server" screen. The scripted `pnpm detox:test` command resets and then immediately re-adds the Metro mapping for you.
+```bash
+pnpm run android
+```
+
+Both commands serve the JS bundle to the device over the host's LAN IP (`pnpm start` and `pnpm run android` both run `expo start --host lan`). The phone and host PC must be on the same Wi-Fi/LAN, and the host firewall must allow inbound TCP 8081. No `adb reverse` is required.
+
+> **Do not run `adb reverse --remove-all` manually** before or during tests — it can disrupt a running Expo session on devices that still have other reverse mappings. The mobile-sync E2E path uses LAN IPs instead of adb reverse.
+
+> **OOM during bundling**: If Metro crashes with `JavaScript heap out of memory`, the `android` script already sets `NODE_OPTIONS=--max-old-space-size=8192`. For `pnpm start`, set it manually: `cross-env NODE_OPTIONS=--max-old-space-size=8192 pnpm start`.
 
 ---
 
@@ -158,8 +166,8 @@ e2e/
 │   ├── smoke.feature             # @smoke — app launch & basic navigation
 │   ├── settings.feature          # @settings — theme, toggles, username
 │   ├── workspace.feature         # @workspace — workspace detail pages (requires an existing wiki workspace)
-│   ├── desktop-sync.feature      # @mobilesync — import, open, sync with Desktop
-│   └── conflict-resolution.feature  # @conflict — concurrent-edit merge tests
+│   ├── desktop-sync.feature          # @mobilesync — import, open, sync with mock Desktop/TW server
+│   └── conflict-resolution.feature   # @conflict — self-contained concurrent-edit merge tests
 ├── stepDefinitions/     # TypeScript step implementations
 │   ├── smoke.steps.ts
 │   ├── settings.steps.ts
@@ -191,85 +199,66 @@ These scenarios verify importing a wiki from TidGi Desktop and syncing changes.
 
 ### Pre-conditions
 
-1. **TidGi Desktop running** with the `tw-mobile-sync` plugin active.
-   The plugin provides the HTTP API that the mobile app clones/syncs from.
-
-2. **Build & deploy the plugin** (from the `tw-mobile-sync` repo):
+1. **Start Metro** in a separate terminal and wait for the command menu:
    ```bash
-   cd /path/to/tw-mobile-sync
-   pnpm build
-   # Copy the built JSON into the Desktop dev wiki's tiddlers/
-   cp dist/\$__plugins_linonetwo_tw-mobile-sync.json \
-      /path/to/TidGi-Desktop/wiki-dev/wiki/tiddlers/
+   pnpm start
    ```
-   Then **restart** the TidGi Desktop dev wiki so the new plugin is loaded.
+   This binds Metro to the host's LAN IP (`--host lan`), which the phone reaches
+   directly over Wi-Fi. No `adb reverse` is required.
 
-3. **Desktop server URL & auth token** — when `tokenAuth` is enabled (default
-   in TidGi Desktop), the server requires an auth token header. The token is
-   a random `nanoid` generated when the wiki starts; it is persisted in
-   `TidGi-Desktop/userData-dev/settings/settings.json` under
-   `workspaces.<id>.authToken`.
+2. **Device on the same network** — the phone must be able to reach the host's
+   LAN IP on ports 8081 (Metro) and 5212 (mock server). The host's firewall
+   must allow inbound TCP 8081 from the local network.
 
-   You need to set these environment variables:
-   ```bash
-   # Required — desktop server origin
-   TIDGI_DESKTOP_URL=http://localhost:15313
-
-   # Required when tokenAuth is enabled — the authToken from settings.json
-   TIDGI_DESKTOP_AUTH_TOKEN=pgosct3xricbrwa3ere1e
-
-   # Optional — defaults to "TidGi User"
-   TIDGI_DESKTOP_AUTH_USER="TidGi User"
-
-   # Required for @import — full QR JSON payload (bypasses mobile-sync-info endpoint)
-   # Build this from the Desktop's settings.json fields:
-   TIDGI_DESKTOP_QR_JSON='{"baseUrl":"http://localhost:15313","workspaceId":"<id>","workspaceName":"wiki","token":"<authToken>","tokenAuthHeaderName":"x-tidgi-auth-token-<authToken>","tokenAuthHeaderValue":"TidGi User"}'
-   ```
-
-   The `authToken` survives Desktop restarts (persisted in settings.json).
-   It only changes if the workspace is re-created.
-
-4. **adb reverse port mapping** — the test hooks automatically set up
-   `adb reverse tcp:8081` (Metro) and the Desktop server port. You do NOT
-   need to do this manually.
+3. The mock TiddlyWiki server and the `tw-mobile-sync` plugin are built and
+   started automatically by `scripts/setup-infra.mjs` / `hooks.ts`.
 
 ### Running
 
-```bash
-# Run all desktop-sync scenarios (import + open + sync)
-TIDGI_DESKTOP_URL=http://localhost:15313 \
-TIDGI_DESKTOP_AUTH_TOKEN=<token> \
-TIDGI_DESKTOP_QR_JSON='<json>' \
-pnpm detox:test -- --tags "@mobilesync"
+The `@mobilesync` scenarios use a mock TiddlyWiki server that is auto-started by
+`hooks.ts`. The phone and the host PC must be on the same Wi-Fi/LAN. Metro is
+reached via the host's LAN IP (auto-detected); no `adb reverse` is required.
 
-# Run only the import scenario
-pnpm detox:test -- --tags "@import"
+1. Start Metro in a **separate terminal** and wait until you see the command menu:
+   ```bash
+   pnpm start
+   ```
+2. In another terminal, run the tests:
+   ```bash
+   # Full mobile-sync story in a single invocation.
+   # Each scenario imports/resets its own wiki state; order should not matter.
+   $env:CUCUMBER_TAGS='(@import or @sync or @conflict) and not @data-safety'; pnpm detox:test
+   ```
 
-# Run only sync scenarios (requires a wiki already imported)
-pnpm detox:test -- --tags "@sync"
+   ```bash
+   # Run only the import scenario
+   $env:CUCUMBER_TAGS='@import'; pnpm detox:test
+   ```
 
-# Run conflict resolution tests (requires @import and @sync to have run first)
-pnpm detox:test -- --tags "@conflict"
-```
+   ```bash
+   # Run only sync scenarios
+   $env:CUCUMBER_TAGS='@sync and not @data-safety'; pnpm detox:test
+   ```
+
+   ```bash
+   # Run conflict resolution tests
+   $env:CUCUMBER_TAGS='@conflict'; pnpm detox:test
+   ```
+
+> **Note:** Tag expressions containing spaces or `and`/`or` do not survive PowerShell quoting when passed via `--tags`. Use the `CUCUMBER_TAGS` environment variable instead.
 
 ### Device requirements for @mobilesync
 
 Same as the general prerequisites above, plus:
-- **USB connected** — `adb reverse` is set up automatically by the test hooks
+
+- **USB connected** — Detox communicates with the device over USB
+- **Same network** — the phone must be able to reach the host PC's LAN IP on ports 8081 (Metro) and 5212 (mock server)
 - At least 200 MB free storage for the cloned wiki
 
 ### Technical notes
 
-- **Import flow**: The test navigates to Settings → scrolls to "Import Wiki"
-  button → enters the Importer screen → taps "Manual Configuration" → pastes
-  the QR JSON → taps confirm. The QR JSON is provided via `TIDGI_DESKTOP_QR_JSON`
-  env var (required when tokenAuth is enabled, since the `/mobile-sync-info`
-  endpoint returns 403).
-- **Scrolling**: Uses Detox `swipe('up')` on the `config-screen` ScrollView;
-  falls back to `adb shell input swipe` if Espresso is blocked.
-- **Workspace ID discovery**: Step definitions read the device's persist storage
-  via `adb shell run-as` to find the first wiki workspace ID, needed for
-  dynamic testIDs like `workspace-item-{id}`.
+- **Import flow**: The test taps the main-menu "Create workspace" button, which opens the Importer. It then pastes the mock-server QR JSON and confirms.
+- **Workspace ID discovery**: Step definitions read the device's persist storage via `adb shell run-as` to find the imported `standalone` wiki, needed for dynamic testIDs like `workspace-item-{id}`.
 - **Sync verification**: After writing a test tiddler via adb push, the test
   taps the sync button and waits for `sync-result-success-{wikiId}` testID.
 - **Diagnostic errors**: All `waitForElement` calls capture a device snapshot
@@ -312,8 +301,9 @@ commands time out.
 **Cause**: Espresso's idle-resource mechanism is blocked by WebView JS
 execution or OkHttp connections to Metro.
 
-**Prevention**: The hooks pass `detoxURLBlacklist: '[".*localhost:8081.*"]'`
-as a launch arg and call `device.disableSynchronization()` immediately. If
+**Prevention**: The hooks pass a LAN-IP Metro URL pattern such as
+`[".*192\\.168\\.3\\.24:8081.*"]` as `detoxURLBlacklist` and call
+`device.disableSynchronization()` immediately. If
 the issue persists, ensure the app was NOT already running when tests started:
 ```bash
 adb shell am force-stop ren.onetwo.tidgi.mobile.test
@@ -328,5 +318,5 @@ pnpm start -- --clear
 ```
 Then pre-warm the bundle before running tests:
 ```bash
-curl -sf "http://localhost:8081/index.bundle?platform=android&dev=true" -o NUL
+curl -sf "http://<host-lan-ip>:8081/index.bundle?platform=android&dev=true" -o NUL
 ```

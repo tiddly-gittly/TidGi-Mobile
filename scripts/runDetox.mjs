@@ -47,13 +47,20 @@ function normalizeDetoxArgs(args) {
   return normalizedArgs;
 }
 
-// adb reverse is set up once manually when Metro first starts and persists
-// across runs. Only uncomment if you see "SocketTimeoutException" or
-// "Detox can't connect to test app".
-// if (configuration.startsWith('android.')) {
-//   runCommand('adb', ['reverse', '--remove-all']);
-//   runCommand('adb', ['reverse', 'tcp:8081', 'tcp:8081']);
-// }
+// ── E2E Infrastructure Setup ──────────────────────────────────────────────────
+// Cucumber worker processes cannot reliably run shell commands (cmd.exe /
+// powershell.exe may not be available). We handle all shell-dependent setup
+// HERE, in the main Node.js process, before spawning the test runner.
+
+console.log('\n══════════════════════════════════════════');
+console.log('  Setting up E2E infrastructure...');
+console.log('══════════════════════════════════════════\n');
+
+const setupInfraScript = path.resolve(path.dirname(import.meta.url.replace('file:///', '')), 'setup-infra.mjs');
+runCommand(process.execPath, [setupInfraScript], {
+  stdio: 'inherit',
+  env: { ...process.env },
+});
 
 const detoxPackageJsonPath = require.resolve('detox/package.json');
 const detoxCliPath = path.join(path.dirname(detoxPackageJsonPath), 'local-cli', 'cli.js');

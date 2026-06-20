@@ -29,16 +29,14 @@
  *
  * Troubleshooting:
  *   • "SocketTimeoutException" / app can't connect to Metro:
- *       VS Code's automatic port forwarding (remote.autoForwardPorts) can steal
- *       IPv4 port 8081 while Metro listens on IPv6. Disable it in VS Code
- *       Settings → Remote: Auto Forward Ports → uncheck, then run:
- *         adb reverse --remove-all && adb reverse tcp:8081 tcp:8081
- *       (Normally NOT needed — adb reverse persists across runs. Only use if
- *       you see connection errors after changing networks or rebooting device.)
+ *       The test hooks use the host's LAN IP for Metro (`pnpm start --host lan`).
+ *       Ensure the phone and PC are on the same Wi-Fi and the PC's firewall
+ *       allows inbound TCP 8081. No `adb reverse` is needed.
  *   • "Detox can't connect to test app" forever:
- *       Ensure Metro is running (`pnpm start`) and `adb reverse tcp:8081 tcp:8081`
- *       is active. Also verify `lsof -i tcp:8081` shows only the Metro `node`
- *       process listening, not VS Code's Code Helper.
+ *       Ensure Metro is running (`pnpm start`) and reachable from the phone at
+ *       the host's LAN IP on port 8081. On Windows, verify only the Metro `node`
+ *       process is listening on 8081 and the LAN IP is selected (not a Hyper-V
+ *       or Tailscale virtual adapter).
  *
  * @type {Detox.DetoxConfig}
  */

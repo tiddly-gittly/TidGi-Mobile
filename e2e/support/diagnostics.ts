@@ -11,8 +11,14 @@
  */
 import { execSync } from 'child_process';
 import { element, waitFor } from 'detox';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
+const ARTIFACTS_DIR = join(__dirname, '..', 'artifacts');
+
+/** Step counter for sequential UI dump filenames. Incremented on each call. */
+let stepCounter = 0;
 
 /** Compact snapshot of device state for failure diagnostics. */
 export interface DeviceSnapshot {
@@ -54,27 +60,39 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
     }
   } catch { /* non-fatal */ }
 
-  // 2. UI element dump
+  // 2. UI element dump — try /dev/stdout first (fast), fall back to device file
+  let rawXml = '';
   try {
-    const raw = execSync(
+    rawXml = execSync(
       'adb shell uiautomator dump /dev/stdout',
       { encoding: 'utf8', timeout: 8_000, stdio: ['ignore', 'pipe', 'ignore'] },
     );
+  } catch {
+    try {
+      execSync('adb shell uiautomator dump /data/local/tmp/e2e-uidump.xml', {
+        encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      rawXml = execSync('adb shell cat /data/local/tmp/e2e-uidump.xml', {
+        encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch { /* non-fatal */ }
+  }
+  if (rawXml) {
     snapshot.screenIds = [
       ...new Set(
-        Array.from(raw.matchAll(/resource-id="([^"]+)"/g))
+        Array.from(rawXml.matchAll(/resource-id="([^"]+)"/g))
           .map(m => m[1].split('/').pop()!)
           .filter(Boolean),
       ),
     ].slice(0, 25);
     snapshot.visibleText = [
       ...new Set(
-        Array.from(raw.matchAll(/(?:text|content-desc)="([^"]{1,80})"/g))
+        Array.from(rawXml.matchAll(/(?:text|content-desc)="([^"]{1,80})"/g))
           .map(m => m[1])
           .filter(Boolean),
       ),
     ].slice(0, 20);
-  } catch { /* non-fatal */ }
+  }
 
   // 3. Recent RN JS errors
   try {
@@ -171,4 +189,38 @@ export function getDesktopLogTail(maxLines = 15): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Save the full Android UI hierarchy XML to a file.
+ * Uses a two-step approach for reliability:
+ *   1. uiautomator dump to a temp file on the device
+ *   2. cat that file and capture the output
+ * Returns the file path and full XML content.
+ */
+export function dumpFullUIHierarchy(label: string): { filePath: string; xml: string } {
+  stepCounter++;
+  const timestamp = Date.now();
+  const safeLabel = label.replace(/\W+/g, '-').slice(0, 40);
+  const filePath = join(ARTIFACTS_DIR, `ui-dump-${stepCounter}-${safeLabel}-${timestamp}.xml`);
+
+  let xml = '';
+  try {
+    mkdirSync(ARTIFACTS_DIR, { recursive: true });
+
+    // Step 1: dump to a temp file on the device (uiautomator cannot write to /dev/stdout on all devices)
+    execSync('adb shell uiautomator dump /data/local/tmp/e2e-uidump.xml', {
+      encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    // Step 2: read the file content
+    xml = execSync('adb shell cat /data/local/tmp/e2e-uidump.xml', {
+      encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    // Step 3: save to a local file
+    writeFileSync(filePath, xml, 'utf8');
+  } catch { /* non-fatal — dump may not be available on all devices/API levels */ }
+
+  return { filePath, xml };
 }

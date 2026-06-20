@@ -27,7 +27,7 @@ import { by, device, element, waitFor } from 'detox';
 import detox from 'detox/internals';
 import { mkdirSync, writeFileSync } from 'fs';
 import { networkInterfaces } from 'os';
-import { captureDeviceSnapshot, diagnosticError, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
+import { captureDeviceSnapshot, diagnosticError, dumpFullUIHierarchy, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
 import { ensureWikiReady, startServer, stopServer } from '../mock-server/setup';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
@@ -571,30 +571,38 @@ After(async (message: ITestCaseHookParameter) => {
 });
 
 /**
- * Capture diagnostic snapshot when a step fails.
+ * After each step: dump full UI hierarchy so the AI agent can read the
+ * accessibility tree XML files and diagnose what's on screen.
  *
- * Outputs:
- *  1. Screenshot (Detox artifact, saved to artifacts/ folder)
- *  2. Compact UI element list via `adb uiautomator dump` (printed to console)
- *  3. Tail of the desktop TidGi log (last 15 relevant lines)
- *
- * The adb dump is intentionally printed to stderr so it appears in the test
- * runner output even when stdout is suppressed.
+ * On failure: also capture screenshot, compact snapshot, and desktop log.
  */
 AfterStep(async (message) => {
   const { result, pickleStep } = message;
-  if (result.status !== Status.FAILED) return;
-
   const stepSlug = pickleStep.text.replace(/\W+/g, '-').slice(0, 50);
+
+  // 1. Full UI hierarchy dump (every step, success or failure)
+  //    Saved to artifacts/ui-dump-<N>-<stepLabel>-<timestamp>.xml
+  const { filePath: dumpPath, xml: dumpXml } = dumpFullUIHierarchy(stepSlug);
+  const dumpSummary = dumpXml
+    ? `UI dump (${dumpXml.length} bytes): ${dumpPath}`
+    : 'UI dump: (unavailable)';
+
+  if (result.status !== Status.FAILED) {
+    // Success: just log a one-liner so the dump path is visible
+    console.log(`[Step OK] "${pickleStep.text}" — ${dumpSummary}`);
+    return;
+  }
+
+  // ── Failure diagnostics ──────────────────────────────────────────────────
+
   const latestScreenshotPath = 'artifacts/latest-fail-screen.png';
   const latestStepInfoPath = 'artifacts/latest-fail-step.txt';
 
-  // 1. Screenshot
+  // 2. Screenshot
   try {
     await device.takeScreenshot(`fail-${stepSlug}`);
   } catch { /* non-fatal */ }
 
-  // Save an additional deterministic screenshot path for quick manual review.
   try {
     mkdirSync('artifacts', { recursive: true });
     const png = execFileSync('adb', ['exec-out', 'screencap', '-p'], {
@@ -606,15 +614,38 @@ AfterStep(async (message) => {
     writeFileSync(latestStepInfoPath, `Failed step: ${pickleStep.text}\nScreenshot: ${latestScreenshotPath}\n`);
   } catch { /* non-fatal */ }
 
-  // 2. Device snapshot — captures activity, view tree, JS errors
+  // 3. Device snapshot — compact summary
   const snapshot = captureDeviceSnapshot();
   console.error(
     `\n[AfterStep FAIL] Step: "${pickleStep.text}"\n` +
       `[AfterStep FAIL] Screenshot: ${latestScreenshotPath}\n` +
+      `[AfterStep FAIL] ${dumpSummary}\n` +
       `[AfterStep FAIL] ${formatSnapshot(snapshot)}`,
   );
 
-  // 3. Desktop TidGi log tail — confirms whether git operations reached the server
+  // 4. Print key UI elements from the full dump XML for quick reference
+  if (dumpXml) {
+    const classes = [...new Set(Array.from(dumpXml.matchAll(/class="([^"]+)"/g)).map(m => m[1]))].slice(0, 15);
+    const texts = [...new Set(Array.from(dumpXml.matchAll(/(?:text|content-desc)="([^"]{1,120})"/g)).map(m => m[1]))].slice(0, 15);
+    if (classes.length) console.error(`[AfterStep FAIL] UI classes: ${classes.join(', ')}`);
+    if (texts.length) console.error(`[AfterStep FAIL] UI texts: ${texts.join(' | ')}`);
+
+    // Check for common error indicators
+    if (dumpXml.includes('error') || dumpXml.includes('Error') || dumpXml.includes('ERROR')) {
+      console.error('[AfterStep FAIL] ⚠ "error" found in UI hierarchy');
+    }
+    if (dumpXml.includes('retry') || dumpXml.includes('Retry')) {
+      console.error('[AfterStep FAIL] ⚠ "retry" found in UI hierarchy');
+    }
+    if (dumpXml.includes('timeout') || dumpXml.includes('Timeout')) {
+      console.error('[AfterStep FAIL] ⚠ "timeout" found in UI hierarchy');
+    }
+    if (dumpXml.includes('fail') || dumpXml.includes('Fail')) {
+      console.error('[AfterStep FAIL] ⚠ "fail" found in UI hierarchy');
+    }
+  }
+
+  // 5. Desktop TidGi log tail — confirms whether git operations reached the server
   const logTail = getDesktopLogTail();
   if (logTail) {
     console.error('[AfterStep FAIL] Desktop log tail:\n' + logTail.split('\n').map(l => `  ${l}`).join('\n'));

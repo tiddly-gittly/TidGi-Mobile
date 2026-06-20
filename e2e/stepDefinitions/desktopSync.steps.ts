@@ -9,6 +9,7 @@ import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import { diagnosticError, waitForElement } from '../support/diagnostics';
+import { getMockServerUrl } from '../mock-server/setup';
 
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
@@ -47,6 +48,45 @@ When('I navigate to the importer screen', { timeout: 60_000 }, async () => {
 
 Then('I should see the importer screen', async () => {
   await waitForElement(by.id('importer-screen'), 30_000, 'importer-screen');
+});
+
+Then('the mock server is reachable', { timeout: 30_000 }, async () => {
+  const url = getMockServerUrl();
+  // The TiddlyWiki /status endpoint requires HTTP Basic Auth when credentials
+  // are configured. The mock server uses username=e2e / password=test.
+  const statusCode = execSync(
+    `curl.exe -s --max-time 5 -o NUL -w "%{http_code}" -u e2e:test ${url}/status`,
+    { encoding: 'utf8', timeout: 10_000 },
+  ).trim();
+  if (statusCode !== '200' && statusCode !== '204') {
+    throw new Error(`Mock server not reachable at ${url}/status (HTTP ${statusCode})`);
+  }
+});
+
+When('I enter the mock server URL', async () => {
+  // Open the manual JSON configuration panel if it is not already open.
+  try {
+    await waitFor(element(by.id('toggle-manual-config-button'))).toExist().withTimeout(2_000);
+    await element(by.id('toggle-manual-config-button')).tap();
+    await delay(500);
+  } catch {
+    // Manual config area might already be visible.
+  }
+
+  await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input');
+  const url = getMockServerUrl();
+  const qrPayload = JSON.stringify({
+    baseUrl: url,
+    workspaceId: 'standalone',
+    workspaceName: 'E2E Mock Wiki',
+    useStandardGitProtocol: false,
+  });
+  await element(by.id('manual-json-input')).clearText();
+  await element(by.id('manual-json-input')).typeText(qrPayload);
+
+  // Dismiss the keyboard so the confirm button becomes tappable.
+  try { await device.pressBack(); } catch { execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 }); }
+  await delay(1_000);
 });
 
 When('I tap the import wiki confirm button', async () => {
