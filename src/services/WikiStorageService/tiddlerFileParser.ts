@@ -7,6 +7,67 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 
+import contentTypeInfo, { getExtensionForType, getTypeEncoding, usesSeparateMetaFile } from './contentTypeInfo';
+export { getExtensionForType, getTypeEncoding, usesSeparateMetaFile };
+
+/**
+ * Determine whether a body file (by path) is base64-encoded binary content.
+ * Looks up the file extension in contentTypeInfo to match TW's registerFileType.
+ * Returns true for extensions like .jpg, .png, .pdf, .wasm, etc.
+ */
+export function isBase64EncodedBodyFile(bodyFilePath: string): boolean {
+  const extension = bodyFilePath.slice(bodyFilePath.lastIndexOf('.'));
+  if (!extension || extension === '.tid' || extension === '.meta') return false;
+  for (const info of Object.values(contentTypeInfo)) {
+    const extensions = Array.isArray(info.extension) ? info.extension : [info.extension];
+    if (extensions.includes(extension)) {
+      return info.encoding === 'base64';
+    }
+  }
+  return false;
+}
+
+/**
+ * Determine the on-disk storage strategy for a tiddler, mirroring the official
+ * TW `$tw.utils.generateTiddlerFileInfo` logic in `core-server/filesystem.js`.
+ *
+ * Rules:
+ *   - text/vnd.tiddlywiki, text/vnd.tiddlywiki-multiple, or has _canonical_uri
+ *     → self-contained `.tid` file (no .meta companion)
+ *   - Everything else → body file + `.meta` companion
+ */
+export function shouldUseSeparateMetaFile(fields: { type?: string; _canonical_uri?: string }): boolean {
+  const tiddlerType = fields.type || 'text/vnd.tiddlywiki';
+  // text/vnd.tiddlywiki and text/vnd.tiddlywiki-multiple are always .tid
+  if (tiddlerType === 'text/vnd.tiddlywiki' || tiddlerType === 'text/vnd.tiddlywiki-multiple') {
+    return false;
+  }
+  // Tiddlers with _canonical_uri (e.g. external images) are always .tid
+  if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Get the file extension for a tiddler's body file, respecting canonical URI
+ * override (forces .tid extension).
+ */
+export function getTiddlerFileExtension(fields: { type?: string; _canonical_uri?: string }): string {
+  if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
+    return '.tid';
+  }
+  return getExtensionForType(fields.type);
+}
+
+/**
+ * Given a `.meta` file path, return the path of its companion body file.
+ * For example, `tiddlers/Foo.md.meta` → `tiddlers/Foo.md`.
+ */
+export function getBodyFilePathFromMetaPath(metaPath: string): string {
+  return metaPath.replace(/\.meta$/, '');
+}
+
 /**
  * Parse a tiddler DIV in a *.tid file. It looks like this:
  *

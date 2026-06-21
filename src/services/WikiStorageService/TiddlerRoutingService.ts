@@ -4,11 +4,12 @@
  * NOTE: Workspace ROUTING (which workspace a tiddler belongs to) is handled by
  * the syncadaptor in the WebView, which has access to $tw.wiki for tag-tree
  * and filter matching. This service only handles FILE PATH generation —
- * given a workspace, compute the relative path for a .tid file.
+ * given a workspace, compute the relative path for a .tid or .md file.
  */
 
 import type { ITiddlerFields } from 'tiddlywiki';
 import { IWikiWorkspace } from '../../store/workspace';
+import { getTiddlerFileExtension } from './tiddlerFileParser';
 import { readTidgiConfig } from './tidgiConfigManager';
 
 /**
@@ -34,17 +35,18 @@ export class TiddlerRoutingService {
    */
   public getTiddlerFilePathSync(
     title: string,
-    _fields: ITiddlerFields,
+    fields: ITiddlerFields,
     workspace: IWikiWorkspace,
   ): string {
     let sanitized = title.replaceAll(/["#%&'*/:<=>?\\{}]/g, '_');
     if (sanitized.length > 200) {
       sanitized = sanitized.substring(0, 200);
     }
+    const extension = getTiddlerFileExtension(fields);
     if (workspace.isSubWiki === true) {
-      return `${sanitized}.tid`;
+      return `${sanitized}${extension}`;
     }
-    return `tiddlers/${sanitized}.tid`;
+    return `tiddlers/${sanitized}${extension}`;
   }
 
   /**
@@ -52,7 +54,7 @@ export class TiddlerRoutingService {
    */
   private computeFilePath(
     title: string,
-    _fields: ITiddlerFields,
+    fields: ITiddlerFields,
     workspace: IWikiWorkspace,
     config: Awaited<ReturnType<typeof readTidgiConfig>>,
   ): string {
@@ -65,6 +67,8 @@ export class TiddlerRoutingService {
       sanitized = sanitized.substring(0, 200);
     }
 
+    const extension = getTiddlerFileExtension(fields);
+
     // Apply fileSystemPathFilter if configured and enabled
     if (config.fileSystemPathFilterEnable && typeof config.fileSystemPathFilter === 'string' && config.fileSystemPathFilter.length > 0) {
       // Parse filter expression (simplified — full filter evaluation requires WebView)
@@ -72,14 +76,14 @@ export class TiddlerRoutingService {
       const addprefixMatch = config.fileSystemPathFilter.match(/\[addprefix\[([^\]]+)\]\]/);
       if (addprefixMatch) {
         const prefix = addprefixMatch[1];
-        return `${prefix}/${sanitized}.tid`;
+        return `${prefix}/${sanitized}${extension}`;
       }
     }
 
     if (workspace.isSubWiki === true) {
-      return `${sanitized}.tid`;
+      return `${sanitized}${extension}`;
     }
 
-    return `tiddlers/${sanitized}.tid`;
+    return `tiddlers/${sanitized}${extension}`;
   }
 }

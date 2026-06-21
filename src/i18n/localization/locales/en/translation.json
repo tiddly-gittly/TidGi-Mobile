@@ -617,7 +617,15 @@
       "DownloadingArchiveHint": "Downloading the complete wiki as an archive. This is much faster than git clone. Supports resume if interrupted.",
       "ExtractingFiles": "Extracting files",
       "ExtractingFilesHint": "Extracting archive to disk. This is fast — a few seconds for most wikis.",
-      "RestoringFromCache": "Restoring from local cache"
+      "RestoringFromCache": "Restoring from local cache",
+      "PreparingDirectory": "Preparing target directory",
+      "CheckingServer": "Connecting to server",
+      "EstimatingSize": "Estimating download size",
+      "DownloadingRepository": "Downloading repository data",
+      "DownloadingRepositoryHint": "Downloading Git objects from server. Large wikis may take a while, please be patient...",
+      "WritingFiles": "Processing files",
+      "ApplyingGitConfig": "Optimizing Git configuration",
+      "ApplyingGitAttributes": "Applying file attributes"
     },
     "PartialSuccess": {
       "Succeeded": "Successfully imported",
@@ -626,7 +634,8 @@
     "RetryFailed": "Retry failed ({{count}})",
     "Advanced": "Advanced",
     "UseExternalStorage": "Store in external (device-visible) storage",
-    "UseStandardGitProtocol": "Use standard Git protocol (GitHub / Gitea)"
+    "UseStandardGitProtocol": "Use standard Git protocol (GitHub / Gitea)",
+    "UseStandardGitProtocolDescription": "Use standard Git HTTP protocol to sync with any Git host such as GitHub or Gitea. Mobile devices have limited RAM, so large wikis may run out of memory and fail. Leave this off to use TidGi Desktop's bundle protocol, which lets the desktop handle packing."
   },
   "ConfirmDelete": "Really want to delete?",
   "ConfirmDeleteDescription": "This operation can't be reverted.",
@@ -720,8 +729,9 @@
     "StorageType": "Storage Location",
     "UseExternalStorage": "Store in device-visible external storage",
     "UseExternalStorageHintExternal": "Files are stored in /sdcard/Documents/TidGi/ (visible to other apps).",
-    "UseExternalStorageHintInternal": "Files are stored in app internal storage (private).",
+    "UseExternalStorageHintInternal": "Files are stored in app internal storage (private). Existing files will be automatically migrated when checked, sub-wikis will also be migrated.",
     "MigratingStorage": "Migrating Storage",
+    "MigrateSubWikis": "Also migrate {{count}} sub-wiki(s)",
     "MigrationConfirm": "Move all wiki files {{direction}}? This may take a while.",
     "ToExternal": "to external storage",
     "ToInternal": "to internal storage",

@@ -9,7 +9,7 @@ import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
 export function WorkspaceSettingsPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceSettingsPage'>): JSX.Element {
   const { t } = useTranslation();
   const wiki = useWikiWorkspace(route.params.id);
-  useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.Title'));
+  useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.GeneralSettings'));
 
   if (!wiki) {
     return (

@@ -388,8 +388,13 @@ const clearGitTextCheckoutPolicyCache = (directory: string) => {
   gitConfigAppliedDirectories.delete(directory);
 };
 
-async function ensureGitAttributesForMobile(directory: string): Promise<void> {
+async function ensureGitAttributesForMobile(
+  directory: string,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<void> {
   if (gitAttributesAppliedDirectories.has(directory)) return;
+
+  onProgress?.('Applying git attributes…', 0, 1);
 
   const infoDirectory = `${directory}/.git/info`;
   const attributesPath = `${infoDirectory}/attributes`;
@@ -411,11 +416,16 @@ async function ensureGitAttributesForMobile(directory: string): Promise<void> {
   }
 
   gitAttributesAppliedDirectories.add(directory);
+  onProgress?.('Applying git attributes…', 1, 1);
 }
 
-async function ensureGitTextCheckoutPolicy(directory: string, options: { normalizeWorkingTreeTextFiles?: boolean } = {}): Promise<void> {
-  await ensureGitAttributesForMobile(directory);
-  await ensureGitConfigForMobile(directory);
+async function ensureGitTextCheckoutPolicy(
+  directory: string,
+  options: { normalizeWorkingTreeTextFiles?: boolean } = {},
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<void> {
+  await ensureGitAttributesForMobile(directory, onProgress);
+  await ensureGitConfigForMobile(directory, onProgress);
 
   if (options.normalizeWorkingTreeTextFiles === true) {
     const normalizedCount = await normalizeRepositoryTextFilesToLF(directory);
@@ -449,6 +459,9 @@ export async function gitCloneToDirectory(
       const didArchive = await tryArchiveClone(remote, url, directory, onProgress);
       if (didArchive) {
         console.log('[gitClone] Fast archive clone succeeded');
+        onProgress?.('Writing files to disk…', 0, 1);
+        await ensureGitTextCheckoutPolicy(directory, {}, onProgress);
+        onProgress?.('Writing files to disk…', 1, 1);
         return;
       }
       clearGitTextCheckoutPolicyCache(directory);
@@ -465,6 +478,7 @@ export async function gitCloneToDirectory(
 
   // Native JGit clone — ensure directory is empty before first attempt.
   // tryArchiveClone may have left partial files on failure.
+  onProgress?.('Preparing directory…', 0, 1);
   try {
     if (isExternalPath(directory)) {
       const info = await ExternalStorage.getInfo(directory);
@@ -477,6 +491,7 @@ export async function gitCloneToDirectory(
   } catch (cleanupError) {
     console.warn('[gitClone] Failed to prepare directory before native clone:', cleanupError);
   }
+  onProgress?.('Preparing directory…', 1, 1);
   console.log('Git clone strategy: native JGit');
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= CLONE_MAX_RETRIES; attempt++) {
@@ -484,6 +499,7 @@ export async function gitCloneToDirectory(
       console.log(`[gitClone] Retry attempt ${attempt}/${CLONE_MAX_RETRIES}`);
       onProgress?.('Reconnecting…', attempt, CLONE_MAX_RETRIES);
       await new Promise<void>(resolve => setTimeout(resolve, CLONE_RETRY_DELAY_MS));
+      onProgress?.('Preparing directory…', 0, 1);
       try {
         if (isExternalPath(directory)) {
           const info = await ExternalStorage.getInfo(directory);
@@ -496,14 +512,17 @@ export async function gitCloneToDirectory(
       } catch (cleanupError) {
         console.warn('[gitClone] Failed to clean directory before retry:', cleanupError);
       }
+      onProgress?.('Preparing directory…', 1, 1);
     }
     try {
       await gitCloneNative(remote, url, directory, onProgress);
+      onProgress?.('Writing files to disk…', 0, 1);
       try {
-        await ensureGitTextCheckoutPolicy(directory);
+        await ensureGitTextCheckoutPolicy(directory, {}, onProgress);
       } catch (policyError) {
         console.warn('[gitClone] Failed to apply local git text checkout policy after native clone:', (policyError as Error).message);
       }
+      onProgress?.('Writing files to disk…', 1, 1);
       return;
     } catch (error) {
       lastError = error as Error;
@@ -536,6 +555,8 @@ async function gitCloneNative(
     }
 
     const headers = normalizeHeaders(createAuthHeader(remote));
+
+    onProgress?.('Checking server…', 0, 1);
     try {
       await preflightInfoReferences(url, headers);
     } catch (error) {
@@ -546,6 +567,9 @@ async function gitCloneNative(
 
       console.warn(`[gitCloneNative] info/refs preflight failed, falling back to native clone: ${message}`);
     }
+    onProgress?.('Checking server…', 1, 1);
+
+    onProgress?.('Estimating size…', 0, 1);
     const estimatedBytes = await tryGetRemotePackSize(url, headers);
     if (estimatedBytes !== null) {
       const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
@@ -555,12 +579,14 @@ async function gitCloneNative(
         throw new Error(`${GIT_CLONE_ERROR_TOO_LARGE_PREFIX}${estimatedMB}`);
       }
     }
-    onProgress?.('Cloning repository…', 0, 0);
+    onProgress?.('Estimating size…', 1, 1);
+
+    onProgress?.('Downloading repository…', 0, 0);
     const resultJson = await ExternalStorage.gitClone(url, directory, null, GIT_CLONE_DEPTH, true, true, JSON.stringify(headers));
     const result = parseNativeResult<{ ok: boolean; head?: string; error?: string }>(resultJson);
     if (!result.ok) throw new Error(result.error ?? 'Native git clone failed');
     console.log(`Successfully cloned repository to ${directory}, HEAD=${result.head}`);
-    onProgress?.('Clone complete', 1, 1);
+    onProgress?.('Downloading repository…', 1, 1);
   } catch (error) {
     const message = (error as Error).message;
     if (
@@ -732,7 +758,10 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
  */
 const gitConfigAppliedDirectories = new Set<string>();
 
-export async function ensureGitConfigForMobile(directory: string): Promise<void> {
+export async function ensureGitConfigForMobile(
+  directory: string,
+  onProgress?: (phase: string, loaded: number, total: number) => void,
+): Promise<void> {
   if (gitConfigAppliedDirectories.has(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
@@ -750,12 +779,15 @@ export async function ensureGitConfigForMobile(directory: string): Promise<void>
     // core.streamFileThreshold: objects larger than this are streamed
     ['core', null, 'streamfilethreshold', String(5 * 1024 * 1024)], // 5MB
   ];
-  for (const [section, subsection, name, value] of settings) {
+  onProgress?.('Applying git configuration…', 0, settings.length);
+  for (let index = 0; index < settings.length; index++) {
+    const [section, subsection, name, value] = settings[index];
     try {
       await ExternalStorage.gitSetConfig(directory, section, subsection, name, value);
     } catch (error) {
       console.warn(`[ensureGitConfig] Failed to set ${section}.${name}=${value}:`, (error as Error).message);
     }
+    onProgress?.('Applying git configuration…', index + 1, settings.length);
   }
   console.log('[ensureGitConfig] Applied mobile git config settings');
   gitConfigAppliedDirectories.add(directory);

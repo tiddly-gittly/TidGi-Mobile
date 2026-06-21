@@ -35,7 +35,7 @@ setDefaultTimeout(120_000);
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-// Metro bundler URL reachable from the device via adb reverse (set up by the detox:test script).
+// Metro bundler URL reachable from the device on the same LAN (IP broadcast by Expo).
 const METRO_URL = process.env.METRO_URL ?? 'http://localhost:8081';
 
 // Expo dev-client deep-link that auto-connects to Metro without manual interaction.
@@ -176,12 +176,9 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   keepDeviceAwake();
   ensureDeviceUnlocked();
 
-  // Set up adb reverse for Metro and Desktop server ports.
-  // NOTE: Do NOT use `adb reverse --remove-all` — it removes Metro's port
-  // mapping and causes the Expo dev client to show "Connect to dev server".
-  // Instead, set each port individually (idempotent if already mapped).
+  // Ensure device can reach TidGi Desktop on the host (Metro uses LAN IP
+  // broadcast by Expo — no reverse needed for 8081 on the same LAN).
   try {
-    execSync('adb reverse tcp:8081 tcp:8081', { stdio: 'ignore' });
     const desktopUrl = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
     const desktopPort = new URL(desktopUrl).port || '5212';
     execSync(`adb reverse tcp:${desktopPort} tcp:${desktopPort}`, { stdio: 'ignore' });

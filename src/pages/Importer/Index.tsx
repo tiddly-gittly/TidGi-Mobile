@@ -141,6 +141,40 @@ function deriveWorkspaceIdFromGitUrl(gitUrl: string, preferredName?: string): st
 
 export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
+
+  // Map raw progress phase strings to translated labels.
+  // Uses startsWith for phases that may include variable suffixes (e.g. "Extracting 123/456 files").
+  function phaseToLabel(phase: string): string {
+    if (phase.startsWith('Preparing directory')) return t('Import.Phase.PreparingDirectory');
+    if (phase.startsWith('Checking server')) return t('Import.Phase.CheckingServer');
+    if (phase.startsWith('Estimating size')) return t('Import.Phase.EstimatingSize');
+    if (phase.startsWith('Downloading repository')) return t('Import.Phase.DownloadingRepository');
+    if (phase.startsWith('Writing files to disk')) return t('Import.Phase.WritingFiles');
+    if (phase.startsWith('Applying git configuration')) return t('Import.Phase.ApplyingGitConfig');
+    if (phase.startsWith('Applying git attributes')) return t('Import.Phase.ApplyingGitAttributes');
+    if (phase === 'Creating work tree') return t('Import.Phase.CreatingWorkTree');
+    if (phase === 'Downloading pack') return t('Import.Phase.DownloadingPack');
+    if (phase === 'Receiving pack data') return t('Import.Phase.ReceivingPackData');
+    if (phase.startsWith('Indexing pack')) return t('Import.Phase.IndexingPack');
+    if (phase.startsWith('Reconnecting')) return t('Import.Phase.Reconnecting');
+    if (phase.startsWith('Checking server')) return t('Import.Phase.CheckingCapabilities');
+    if (phase.startsWith('Downloading archive')) return t('Import.Phase.DownloadingArchive');
+    if (phase.startsWith('Extracting')) return t('Import.Phase.ExtractingFiles');
+    if (phase.startsWith('Restoring from cache')) return t('Import.Phase.RestoringFromCache');
+    return phase;
+  }
+
+  // Return hint text for phases that benefit from extra explanation, empty string otherwise.
+  function phaseToHint(phase: string): string {
+    if (phase.startsWith('Downloading repository')) return t('Import.Phase.DownloadingRepositoryHint');
+    if (phase.startsWith('Downloading pack')) return t('Import.Phase.DownloadingPackHint');
+    if (phase.startsWith('Indexing pack')) return t('Import.Phase.IndexingPackHint');
+    if (phase === 'Creating work tree') return t('Import.Phase.CreatingWorkTreeHint');
+    if (phase.startsWith('Downloading archive')) return t('Import.Phase.DownloadingArchiveHint');
+    if (phase.startsWith('Extracting')) return t('Import.Phase.ExtractingFilesHint');
+    return '';
+  }
+
   const autoImportTriggeredReference = useRef(false);
   const [hasPermission, setHasPermission] = useState<undefined | boolean>();
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
@@ -450,63 +484,68 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setShowSavedServers(false);
     setQrScannerOpen(false);
 
-    if (addAsServer) {
-      const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
+    try {
+      if (addAsServer) {
+        const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
 
-      if (qrData) {
-        // Collect batch items
-        const batchItems: IBatchImportItem[] = [];
+        if (qrData) {
+          // Collect batch items
+          const batchItems: IBatchImportItem[] = [];
 
-        // 1. Add main wiki
-        batchItems.push({
-          qrData: qrData,
-          wikiName: wikiName,
-          serverID: newServer.id,
-          useExternalStorage,
-          useStandardGitProtocol,
-        });
-
-        // 2. Add selected sub-wikis
-        if (qrData.subWorkspaces && selectedSubWikiIds.length > 0) {
-          qrData.subWorkspaces.forEach(sub => {
-            if (selectedSubWikiIds.includes(sub.id)) {
-              batchItems.push({
-                qrData: {
-                  ...qrData,
-                  workspaceId: sub.id,
-                  workspaceName: sub.name,
-                  isSubWiki: true,
-                  mainWikiID: sub.mainWikiID ?? qrData.workspaceId,
-                },
-                wikiName: sub.name,
-                serverID: newServer.id,
-                useExternalStorage,
-                useStandardGitProtocol,
-              });
-            }
+          // 1. Add main wiki
+          batchItems.push({
+            qrData: qrData,
+            wikiName: wikiName,
+            serverID: newServer.id,
+            useExternalStorage,
+            useStandardGitProtocol,
           });
-        }
 
-        if (batchItems.length > 1) {
-          await batchImportWikis(batchItems);
+          // 2. Add selected sub-wikis
+          if (qrData.subWorkspaces && selectedSubWikiIds.length > 0) {
+            qrData.subWorkspaces.forEach(sub => {
+              if (selectedSubWikiIds.includes(sub.id)) {
+                batchItems.push({
+                  qrData: {
+                    ...qrData,
+                    workspaceId: sub.id,
+                    workspaceName: sub.name,
+                    isSubWiki: true,
+                    mainWikiID: sub.mainWikiID ?? qrData.workspaceId,
+                  },
+                  wikiName: sub.name,
+                  serverID: newServer.id,
+                  useExternalStorage,
+                  useStandardGitProtocol,
+                });
+              }
+            });
+          }
+
+          if (batchItems.length > 1) {
+            await batchImportWikis(batchItems);
+          } else {
+            // Single import (fallback to original behavior for better UX if used alone)
+            await importWiki(qrData, wikiName, newServer.id, useExternalStorage, useStandardGitProtocol);
+          }
         } else {
-          // Single import (fallback to original behavior for better UX if used alone)
-          await importWiki(qrData, wikiName, newServer.id, useExternalStorage, useStandardGitProtocol);
+          // No valid QR data - cannot use Git sync
+          Alert.alert(t('Import.GitSyncRequiresQRCode'));
+          return;
         }
+      } else if (qrData) {
+        await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
       } else {
-        // No valid QR data - cannot use Git sync
-        Alert.alert(t('Import.GitSyncRequiresQRCode'));
+        Alert.alert(t('Import.ServerRequired'));
         return;
       }
-    } else if (qrData) {
-      await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
-    } else {
-      Alert.alert(t('Import.ServerRequired'));
-      return;
+    } finally {
+      // Always clear input state after import attempt (success or failure),
+      // so stale qrData / wikiUrl don't accidentally re-trigger the auto-start
+      // effect on a subsequent re-render.
+      setWikiUrl(undefined);
+      setQrData(undefined);
     }
-
-    setWikiUrl(undefined);
-    setQrData(undefined);
   }, [addAsServer, addServer, importWiki, batchImportWikis, wikiName, wikiUrl?.origin, qrData, selectedSubWikiIds, useExternalStorage, useStandardGitProtocol, t]);
 
   useEffect(() => {
@@ -669,34 +708,12 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                     <Text variant='bodyMedium'>{t('Sync.CloningRepository')}</Text>
                     {cloneProgress.phase !== '' && (
                       <Text variant='bodySmall'>
-                        {cloneProgress.phase === 'Creating work tree'
-                          ? t('Import.Phase.CreatingWorkTree')
-                          : cloneProgress.phase === 'Downloading pack'
-                          ? t('Import.Phase.DownloadingPack')
-                          : cloneProgress.phase === 'Receiving pack data'
-                          ? t('Import.Phase.ReceivingPackData')
-                          : cloneProgress.phase.startsWith('Indexing pack')
-                          ? t('Import.Phase.IndexingPack')
-                          : cloneProgress.phase.startsWith('Reconnecting')
-                          ? t('Import.Phase.Reconnecting')
-                          : cloneProgress.phase.startsWith('Checking server')
-                          ? t('Import.Phase.CheckingCapabilities')
-                          : cloneProgress.phase.startsWith('Downloading archive')
-                          ? t('Import.Phase.DownloadingArchive')
-                          : cloneProgress.phase.startsWith('Extracting')
-                          ? t('Import.Phase.ExtractingFiles')
-                          : cloneProgress.phase.startsWith('Restoring from cache')
-                          ? t('Import.Phase.RestoringFromCache')
-                          : cloneProgress.phase}
+                        {phaseToLabel(cloneProgress.phase)}
                         {cloneProgress.total > 0 ? `: ${cloneProgress.loaded} / ${cloneProgress.total}` : ''}
                       </Text>
                     )}
                     {cloneProgress.phase === '' && <Text variant='bodySmall'>{t('Import.Phase.Connecting')}</Text>}
-                    {cloneProgress.phase === 'Downloading pack' && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingPackHint')}</HintText>}
-                    {cloneProgress.phase.startsWith('Indexing pack') && <HintText variant='bodySmall'>{t('Import.Phase.IndexingPackHint')}</HintText>}
-                    {cloneProgress.phase === 'Creating work tree' && <HintText variant='bodySmall'>{t('Import.Phase.CreatingWorkTreeHint')}</HintText>}
-                    {cloneProgress.phase.startsWith('Downloading archive') && <HintText variant='bodySmall'>{t('Import.Phase.DownloadingArchiveHint')}</HintText>}
-                    {cloneProgress.phase.startsWith('Extracting') && <HintText variant='bodySmall'>{t('Import.Phase.ExtractingFilesHint')}</HintText>}
+                    {phaseToHint(cloneProgress.phase) !== '' && <HintText variant='bodySmall'>{phaseToHint(cloneProgress.phase)}</HintText>}
                     <ProgressBar
                       animatedValue={cloneProgress.total > 0 ? cloneProgress.loaded / cloneProgress.total : 0}
                       indeterminate={cloneProgress.total === 0}
