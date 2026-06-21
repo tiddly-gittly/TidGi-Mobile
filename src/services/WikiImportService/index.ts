@@ -11,6 +11,7 @@ import { type IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCloneToDirectory, IGitRemote } from '../GitService';
 import { extractZipToDirectory } from '../WikiTemplateService/extractLocalWikiTemplate';
 import { getGitCloneCacheDirectory, hasValidGitRepository, normalizeGitCloneUrl, toFileCloneUrl, updateGitCloneCache } from './gitCloneCache';
+import { saveTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 
 function isExternalPath(filepath: string): boolean {
   const plain = toPlainPath(filepath);
@@ -61,16 +62,21 @@ export async function removeWikiDirectory(directory: string | undefined): Promis
       const info = await ExternalStorage.getInfo(plainPath);
       if (info.exists) {
         await ExternalStorage.rmdir(plainPath);
+        console.log(`[WikiImportService] Removed external wiki directory: ${plainPath}`);
       }
       return;
     }
 
-    const directoryInfo = await FileSystemLegacy.getInfoAsync(toFileUri(directory));
+    const directoryUri = toFileUri(directory);
+    const directoryInfo = await FileSystemLegacy.getInfoAsync(directoryUri);
     if (directoryInfo.exists) {
-      await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
+      await FileSystemLegacy.deleteAsync(directoryUri, { idempotent: true });
+      console.log(`[WikiImportService] Removed wiki directory: ${directory}`);
     }
   } catch (error) {
-    console.warn('[WikiImportService] Failed to remove wiki directory:', (error as Error).message);
+    // Log loudly so we know cleanup failed, but don't throw — the caller is
+    // usually already handling an import error and we don't want to mask it.
+    console.error(`[WikiImportService] Failed to remove wiki directory '${directory}':`, (error as Error).message);
   }
 }
 
@@ -199,6 +205,17 @@ export async function importBundledWikiTemplate({
   try {
     await ensureEmptyWikiDirectory(targetDirectory);
     await extractZipToDirectory(zipBytes, targetDirectory, useExternalStorage, onProgress);
+
+    // The template ZIP contains a .git directory with a commit that includes
+    // tidgi.config.json, but extractZipToDirectory intentionally skips that file
+    // (the desktop's config is not valid on mobile). Create a mobile-proper
+    // tidgi.config.json so git doesn't report it as deleted.
+    await saveTidgiConfig(targetDirectory, {
+      version: 1,
+      id: workspaceId,
+      name: templateName,
+    });
+
     return await registerWikiWorkspaceWithCleanup({
       workspaceId,
       name: templateName,

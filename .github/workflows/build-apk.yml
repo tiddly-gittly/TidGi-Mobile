@@ -68,10 +68,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Type check and lint
+      - name: Type check, lint, and unit test
         run: |
           pnpm run check
           pnpm run lint
+          pnpm run test:unit
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v5
@@ -121,13 +122,19 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
+      - name: Collect APKs into flat staging dir
+        run: |
+          mkdir -p /tmp/apk-artifacts
+          cp android/app/build/outputs/apk/release/app-release-signed.apk /tmp/apk-artifacts/app-release-signed.apk || true
+          cp android/app/build/outputs/apk/release/app-release.apk /tmp/apk-artifacts/app-release.apk || true
+
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v5
         with:
           name: release-apk-${{ github.run_number }}-${{ github.sha }}
           path: |
-            android/app/build/outputs/apk/release/app-release-signed.apk
-            android/app/build/outputs/apk/release/app-release.apk
+            /tmp/apk-artifacts/app-release-signed.apk
+            /tmp/apk-artifacts/app-release.apk
             /tmp/apk-artifacts/AndroidManifest-release.xml
           if-no-files-found: ignore
 

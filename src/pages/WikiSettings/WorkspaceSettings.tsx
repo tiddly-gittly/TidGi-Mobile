@@ -2,10 +2,10 @@
  * Workspace settings UI - tidgi.config.json editor
  */
 
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView } from 'react-native';
-import { Button, Card, Checkbox, Dialog, ProgressBar, Text, TextInput } from 'react-native-paper';
+import { Button, Checkbox, Dialog, ProgressBar, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { IMigrationProgress, migrateWorkspaceStorage } from '../../services/WikiMigrationService';
@@ -23,7 +23,7 @@ const SaveButton = styled(Button)`
   margin-bottom: 32px;
 `;
 
-const Section = styled(Card)`
+const Section = styled.View`
   margin-bottom: 16px;
   padding: 16px;
 `;
@@ -68,6 +68,15 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
   const [migrationProgress, setMigrationProgress] = useState<IMigrationProgress | null>(null);
   const [pendingExternalValue, setPendingExternalValue] = useState<boolean>(false);
   const isMigratingReference = useRef(false);
+
+  // Sub-wiki migration support
+  const subWikis = useMemo(() => {
+    if (workspace.isSubWiki === true) return [];
+    return useWorkspaceStore.getState().workspaces
+      .filter((item): item is IWikiWorkspace => item.type === 'wiki' && item.isSubWiki === true && item.mainWikiID === workspace.id);
+  }, [workspace.id, workspace.isSubWiki]);
+  const hasSubWikis = subWikis.length > 0;
+  const [migrateSubWikis, setMigrateSubWikis] = useState(true);
 
   // Load config
   useEffect(() => {
@@ -116,6 +125,7 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
         (progress) => {
           setMigrationProgress(progress);
         },
+        migrateSubWikis ? subWikis : undefined,
       );
     } catch (error) {
       console.error('[WorkspaceSettings] migration failed:', error);
@@ -124,7 +134,7 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
       setMigrationDialogVisible(false);
       setMigrationProgress(null);
     }
-  }, [workspace, pendingExternalValue, customWikiFolderPath]);
+  }, [workspace, pendingExternalValue, customWikiFolderPath, migrateSubWikis, subWikis]);
 
   const isCurrentlyExternal = workspace.useExternalStorage === true;
 
@@ -146,6 +156,8 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
           value={workspace.wikiFolderLocation}
           mode='outlined'
           editable={false}
+          multiline
+          numberOfLines={3}
           right={
             <TextInput.Icon
               icon='folder-open'
@@ -185,6 +197,16 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
               ? t('WorkspaceSettings.UseExternalStorageHintExternal')
               : t('WorkspaceSettings.UseExternalStorageHintInternal')}
           </StorageHintText>
+          {hasSubWikis && (
+            <Checkbox.Item
+              label={t('WorkspaceSettings.MigrateSubWikis', { count: subWikis.length })}
+              status={migrateSubWikis ? 'checked' : 'unchecked'}
+              onPress={() => {
+                setMigrateSubWikis(!migrateSubWikis);
+              }}
+              mode='android'
+            />
+          )}
         </Section>
       )}
 
