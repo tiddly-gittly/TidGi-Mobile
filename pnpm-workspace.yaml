@@ -4,6 +4,8 @@ packages:
 
 allowBuilds:
   '@ipshipyard/node-datachannel': true
+  detox: set this to true or false
+  svelte-preprocess: set this to true or false
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
