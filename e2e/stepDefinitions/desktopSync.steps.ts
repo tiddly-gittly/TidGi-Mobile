@@ -8,8 +8,9 @@
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
-import { diagnosticError, waitForElement } from '../support/diagnostics';
-import { getMockServerUrl } from '../mock-server/setup';
+import { readFileSync } from 'fs';
+import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
+import { waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
@@ -20,14 +21,6 @@ function adbKeyEvent(key: number): void {
     execSync(`adb shell input keyevent ${key}`, { stdio: 'ignore', timeout: 3_000 });
   } catch {
     // Non-fatal: Detox checks below will surface real navigation failures.
-  }
-}
-
-async function scrollDown(distance: 'large' | 'small' = 'large') {
-  try {
-    await element(by.id('config-screen')).swipe('up', 'slow', distance === 'small' ? 0.3 : 0.6);
-  } catch {
-    try { execSync(`adb shell input swipe 540 1800 540 ${distance === 'small' ? 1300 : 1000} 300`, { stdio: 'ignore', timeout: 3_000 }); } catch { /* */ }
   }
 }
 
@@ -82,7 +75,11 @@ async function enterMockServerUrl(): Promise<void> {
   await element(by.id('manual-json-input')).typeText(qrPayload);
 
   // Dismiss the keyboard so the confirm button becomes tappable.
-  try { await device.pressBack(); } catch { adbKeyEvent(4); }
+  try {
+    await device.pressBack();
+  } catch {
+    adbKeyEvent(4);
+  }
   await delay(1_000);
 }
 
@@ -96,7 +93,7 @@ async function waitForImportSuccess(): Promise<void> {
 }
 
 async function navigateBackToMainMenuScreen(): Promise<void> {
-  for (let i = 0; i < 15; i++) {
+  for (let index = 0; index < 15; index++) {
     try {
       await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500);
       await device.disableSynchronization().catch(() => {});
@@ -138,7 +135,7 @@ Then('I should see the importer screen', async () => {
   await waitForElement(by.id('importer-screen'), 30_000, 'importer-screen');
 });
 
-Then('the mock server is reachable', { timeout: 30_000 }, async () => {
+Then('the mock server is reachable', { timeout: 30_000 }, () => {
   assertMockServerReachable();
 });
 
@@ -165,7 +162,8 @@ Given('a fresh mock server wiki is imported', { timeout: NETWORK_TIMEOUT + 90_00
 // ── Open wiki ─────────────────────────────────────────────────────────────────
 When('I tap the first wiki workspace', async () => {
   const wikiId = getImportedWikiWorkspaceId();
-  if (wikiId) { await element(by.id(`workspace-item-${wikiId}`)).tap(); } else { throw new Error('No imported wiki found. Import a fresh mock server wiki in this scenario first.'); }
+  if (wikiId) await element(by.id(`workspace-item-${wikiId}`)).tap();
+  else throw new Error('No imported wiki found. Import a fresh mock server wiki in this scenario first.');
   await delay(2_000);
 });
 
@@ -192,7 +190,10 @@ async function createTiddlerViaWikiWebView(title: string): Promise<void> {
 // ── Sync ──────────────────────────────────────────────────────────────────────
 function getImportedWikiWorkspaceId(): string | undefined {
   try {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
     const parsed = JSON.parse(raw) as {
       state?: {
         workspaces?: Array<{
@@ -205,13 +206,14 @@ function getImportedWikiWorkspaceId(): string | undefined {
     const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki') ?? [];
     const standaloneWiki = wikiList.find(w => w.id === 'standalone');
     if (standaloneWiki?.id) return standaloneWiki.id;
-    const importedWiki = wikiList.find(w =>
-      Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0),
-    );
+    const importedWiki = wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0));
     if (importedWiki?.id) return importedWiki.id;
     return wikiList[0]?.id;
   } catch {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
     const ids = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
     return ids.find(id => id === 'standalone') ?? ids[0];
   }
@@ -269,7 +271,11 @@ async function assertUnsyncedCountIsZero(): Promise<void> {
   await element(by.id(`workspace-settings-icon-${wikiId}`)).tap();
   await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
   await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count');
-  try { await device.pressBack(); } catch { adbKeyEvent(4); }
+  try {
+    await device.pressBack();
+  } catch {
+    adbKeyEvent(4);
+  }
   await delay();
 }
 
@@ -278,8 +284,7 @@ Then('the mock server git working tree contains {string}', { timeout: 10_000 }, 
 });
 
 function assertMockServerGitWorkingTreeContains(expectedName: string): void {
-  const { getTestWikiDir } = require('../mock-server/setup');
-  const repoPath = getTestWikiDir();
+  const repoPath = getTestWikiDirectory();
   const stdout = execSync(
     `git -C "${repoPath}" ls-files tiddlers/`,
     { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
@@ -287,15 +292,33 @@ function assertMockServerGitWorkingTreeContains(expectedName: string): void {
   const match = stdout.split(/\r?\n/).some(line =>
     line.includes(expectedName) ||
     // TW5 filesystem adapter lowercases spaces and appends `.meta` for binary tiddlers.
-    line.toLowerCase().replace(/ /g, '_').includes(expectedName.toLowerCase().replace(/ /g, '_')),
+    line.toLowerCase().replace(/ /g, '_').includes(expectedName.toLowerCase().replace(/ /g, '_'))
   );
   if (!match) {
     throw new Error(
       `Expected mock server working tree to contain a tiddler matching "${expectedName}". ` +
-      `Git tracked files:\n${stdout}`,
+        `Git tracked files:\n${stdout}`,
     );
   }
 }
+
+function readDesktopGitRunnerHits(): Partial<Record<string, number>> {
+  const raw = readFileSync(getDesktopGitRunnerHitsPath(), 'utf8');
+  const parsedHits: unknown = JSON.parse(raw);
+  if (typeof parsedHits !== 'object' || parsedHits === null) {
+    throw new Error(`Desktop git runner hit counters were not an object: ${raw}`);
+  }
+  return Object.fromEntries(
+    Object.entries(parsedHits).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+  );
+}
+
+Then('the mock server desktop git runner should be used', () => {
+  const hits = readDesktopGitRunnerHits();
+  if ((hits.runGitCommand ?? 0) <= 0) {
+    throw new Error(`Expected desktop git runner to be used, but hit counters were ${JSON.stringify(hits)}`);
+  }
+});
 
 Given('the imported mock server wiki has a synced tiddler {string} in shared history', { timeout: NETWORK_TIMEOUT + 90_000 }, async (title: string) => {
   await tapImportedWikiWorkspace();

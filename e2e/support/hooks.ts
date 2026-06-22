@@ -23,13 +23,13 @@
 
 import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, setDefaultTimeout, Status } from '@cucumber/cucumber';
 import { execFileSync, execSync } from 'child_process';
+import { by, device, element, waitFor } from 'detox';
+import detox from 'detox/internals';
 import { mkdirSync, writeFileSync } from 'fs';
 import { get as httpGet } from 'node:http';
 import { networkInterfaces } from 'os';
-import { by, device, element, waitFor } from 'detox';
-import detox from 'detox/internals';
-import { captureDeviceSnapshot, detectExpoErrorState, diagnosticError, dumpFullUIHierarchy, formatSnapshot, getDesktopLogTail, waitForElement } from './diagnostics';
-import { ensureWikiReady, getTestWikiDir, resetMockWikiFilesToBaseline, startServer, stopServer } from '../mock-server/setup';
+import { ensureWikiReady, getTestWikiDirectory, resetMockWikiFilesToBaseline, startServer, stopServer } from '../mock-server/setup';
+import { captureDeviceSnapshot, detectExpoErrorState, dumpFullUIHierarchy, formatSnapshot, getDesktopLogTail } from './diagnostics';
 
 // Cucumber default step timeout — must be long enough for Detox waitFor() calls.
 // WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
@@ -47,7 +47,7 @@ function getLanIp(): string {
 
   // Exclude virtual/VPN adapters that happen to contain "Ethernet" etc.
   const excludedNames = ['virtual', 'hyper-v', 'wsl', 'vmware', 'docker', 'tailscale', 'vpn', 'loopback', 'pseudo'];
-  const isExcludedName = (name: string) => excludedNames.some(e => name.toLowerCase().includes(e));
+  const isExcludedName = (name: string) => excludedNames.some(excludedName => name.toLowerCase().includes(excludedName));
 
   // Tailscale uses 100.64.0.0/10 (CGNAT); Hyper-V/WSL often uses 172.16.0.0/12.
   const isExcludedIp = (ip: string) => {
@@ -127,7 +127,7 @@ const MOCK_WIKI_GIT_ENV = {
   GIT_COMMITTER_EMAIL: 'e2e@test',
 };
 
-function getDetoxLaunchArgs(): Record<string, string> {
+function getDetoxLaunchArguments(): Record<string, string> {
   return {
     // Pattern matches the LAN IP:8081 Metro connections.
     detoxURLBlacklist: JSON.stringify([`.*${LAN_IP.replace(/\./g, '\\.')}:8081.*`]),
@@ -153,8 +153,8 @@ function allowDeviceSleepNormally(): void {
   }
 }
 
-function adbShell(args: string[], timeout = 10_000): void {
-  execFileSync('adb', ['shell', ...args], { stdio: 'ignore', timeout });
+function adbShell(arguments_: string[], timeout = 10_000): void {
+  execFileSync('adb', ['shell', ...arguments_], { stdio: 'ignore', timeout });
 }
 
 function resetDeviceE2EState(): void {
@@ -175,8 +175,8 @@ function resetDeviceE2EState(): void {
   }
 }
 
-function runMockWikiGit(args: string[], timeout = 30_000): string {
-  return execFileSync('git', ['-C', getTestWikiDir(), ...args], {
+function runMockWikiGit(arguments_: string[], timeout = 30_000): string {
+  return execFileSync('git', ['-C', getTestWikiDirectory(), ...arguments_], {
     encoding: 'utf8',
     env: MOCK_WIKI_GIT_ENV,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -269,16 +269,21 @@ async function waitForMetroReachable(timeoutMs = 60_000, intervalMs = 1_000): Pr
     let ok = false;
     try {
       ok = await new Promise<boolean>((resolve) => {
-        const req = httpGet(bundleUrl, { timeout: 3000 }, (res) => {
+        const request = httpGet(bundleUrl, { timeout: 3000 }, (response) => {
           // During startup Metro may return 404/400 if the platform query is
           // unexpected, but any non-5xx response means the server is alive and
           // the bundler is answering requests. We intentionally avoid requiring
           // a 200 here because Metro's response code varies by version.
-          resolve(res.statusCode !== undefined && res.statusCode < 500);
-          res.resume();
+          resolve(response.statusCode !== undefined && response.statusCode < 500);
+          response.resume();
         });
-        req.on('error', () => resolve(false));
-        req.on('timeout', () => { req.destroy(); resolve(false); });
+        request.on('error', () => {
+          resolve(false);
+        });
+        request.on('timeout', () => {
+          request.destroy();
+          resolve(false);
+        });
       });
     } catch { /* continue polling */ }
     if (ok) {
@@ -289,8 +294,8 @@ async function waitForMetroReachable(timeoutMs = 60_000, intervalMs = 1_000): Pr
   }
   throw new Error(
     `Metro not reachable at ${METRO_URL} after ${timeoutMs}ms. ` +
-    'Make sure "pnpm start" is running and bound to the LAN IP (--host lan). ' +
-    'On Windows, ensure the firewall allows inbound TCP 8081.',
+      'Make sure "pnpm start" is running and bound to the LAN IP (--host lan). ' +
+      'On Windows, ensure the firewall allows inbound TCP 8081.',
   );
 }
 
@@ -374,7 +379,7 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   // built from the local source tree, so @mobilesync tests no longer require a
   // running TidGi-Desktop instance.
   console.log('[BeforeAll] Preparing mock server...');
-  await ensureWikiReady();
+  ensureWikiReady();
   resetMockWikiRepositoryToBaseline();
   await startServer();
 
@@ -479,8 +484,8 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
     const snapshot = captureDeviceSnapshot();
     throw new Error(
       `[Before] Detected Expo error state before launch: ${expoError.type}\n` +
-      `  Details: ${expoError.details}\n` +
-      `  Device state:\n  ${formatSnapshot(snapshot)}`,
+        `  Details: ${expoError.details}\n` +
+        `  Device state:\n  ${formatSnapshot(snapshot)}`,
     );
   }
 
@@ -490,7 +495,7 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
   await device.launchApp({
     newInstance: true,
     url: EXPO_DEV_CLIENT_URL,
-    launchArgs: getDetoxLaunchArgs(),
+    launchArgs: getDetoxLaunchArguments(),
   });
   await device.disableSynchronization();
   await dismissExpoOverlays(15_000);

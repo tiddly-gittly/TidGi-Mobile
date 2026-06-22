@@ -107,7 +107,6 @@ function toFileUri(plainPath: string): string {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 function parseNativeResult<T>(json: string): T {
   return JSON.parse(json) as T;
 }

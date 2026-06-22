@@ -23,11 +23,11 @@ import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { getTestWikiDir } from '../mock-server/setup';
+import { getTestWikiDirectory } from '../mock-server/setup';
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 
-const MOCK_SERVER_WIKI_PATH = getTestWikiDir();
+const MOCK_SERVER_WIKI_PATH = getTestWikiDirectory();
 
 /** Git identity used by the mock server for its explicit commits. */
 const GIT_ENV = {
@@ -193,9 +193,7 @@ function getImportedWikiWorkspace(): { id: string; wikiFolderLocation: string } 
     if (standaloneWiki?.id && standaloneWiki.wikiFolderLocation) {
       return { id: standaloneWiki.id, wikiFolderLocation: standaloneWiki.wikiFolderLocation };
     }
-    const importedWiki = wikiList.find(w =>
-      Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0),
-    );
+    const importedWiki = wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0));
     if (importedWiki?.id && importedWiki.wikiFolderLocation) {
       return { id: importedWiki.id, wikiFolderLocation: importedWiki.wikiFolderLocation };
     }

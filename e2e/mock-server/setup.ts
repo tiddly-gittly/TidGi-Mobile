@@ -11,11 +11,11 @@
  * ║  This file uses only Node.js APIs — no execSync / spawnSync.    ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { get as httpGet } from 'node:http';
-import { join, resolve } from 'node:path';
 import { networkInterfaces } from 'node:os';
+import { join, resolve } from 'node:path';
 
 // NOTE: Cucumber worker processes use ts-node/esm loader where __dirname may
 // resolve incorrectly. We use process.cwd() which is always the project root
@@ -30,17 +30,136 @@ const PLUGIN_NAME = '$:/plugins/linonetwo/tw-mobile-sync';
 const TW_MOBILE_SYNC_ROOT = resolve(REPO_ROOT, '..', 'tw-mobile-sync');
 const PLUGIN_DIST = resolve(TW_MOBILE_SYNC_ROOT, 'dist', PLUGIN_JSON);
 
+const DESKTOP_GIT_RUNNER_HITS = join(TEST_WIKI_DIR, '.desktop-git-runner-hits.json');
+
 let server: ChildProcess | null = null;
 
 function putTid(name: string, lines: string[]) {
   writeFileSync(join(TEST_WIKI_DIR, 'tiddlers', name), lines.join('\n'), 'utf8');
 }
 
+function writeDesktopGitRunnerStartupModule(): void {
+  putTid('$__plugins_linonetwo_tw-mobile-sync_e2e_DesktopGitServerMock.tid', [
+    'title: $:/plugins/linonetwo/tw-mobile-sync/e2e/DesktopGitServerMock',
+    'type: application/javascript',
+    'module-type: startup',
+    '',
+    String.raw`const { execFile } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const HITS_FILE = path.join($tw.boot.wikiPath, '.desktop-git-runner-hits.json');
+
+function readHits() {
+  try {
+    return JSON.parse(fs.readFileSync(HITS_FILE, 'utf8'));
+  } catch {
+    return { runGitCommand: 0, readWorkspaceFile: 0, writeWorkspaceFile: 0, writeTempGitFile: 0, deleteTempGitFile: 0 };
+  }
+}
+
+function bumpHit(key) {
+  const hits = readHits();
+  hits[key] = (hits[key] ?? 0) + 1;
+  fs.writeFileSync(HITS_FILE, JSON.stringify(hits), 'utf8');
+}
+
+function ensureWorkspacePath(workspaceId) {
+  if (workspaceId !== 'standalone') {
+    throw new Error('Unexpected workspaceId for E2E desktop git server mock: ' + workspaceId);
+  }
+  return $tw.boot.wikiPath;
+}
+
+function runGit(repoPath, gitArguments, environment) {
+  return new Promise((resolve, reject) => {
+    const child = execFile('git', gitArguments, {
+      cwd: repoPath,
+      env: environment === undefined ? process.env : { ...process.env, ...environment },
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', chunk => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr?.on('data', chunk => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('error', reject);
+    child.on('close', exitCode => {
+      resolve({ exitCode, stdout, stderr });
+    });
+  });
+}
+
+exports.name = 'tw-mobile-sync-e2e-desktop-git-server-mock';
+exports.platforms = ['node'];
+exports.after = ['startup'];
+exports.synchronous = false;
+exports.startup = function startup() {
+  const workspace = {
+    get: async workspaceId => {
+      ensureWorkspacePath(workspaceId);
+      return { wikiFolderLocation: $tw.boot.wikiPath };
+    },
+    getWorkspaceToken: async () => undefined,
+    getWorkspacesAsList: async () => [{ id: 'standalone', name: 'E2E Mock Wiki', isSubWiki: false }],
+    getSubWorkspacesAsList: async () => [],
+    validateWorkspaceToken: async () => true,
+    isWorkspaceReadOnly: async () => false,
+  };
+
+  const gitServer = {
+    async runGitCommand(workspaceId, gitArguments, environment) {
+      bumpHit('runGitCommand');
+      return await runGit(ensureWorkspacePath(workspaceId), gitArguments, environment);
+    },
+    async readWorkspaceFile(workspaceId, relativePath) {
+      bumpHit('readWorkspaceFile');
+      const filePath = path.join(ensureWorkspacePath(workspaceId), relativePath);
+      try {
+        return fs.readFileSync(filePath, 'utf8');
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+          return undefined;
+        }
+        throw error;
+      }
+    },
+    async writeWorkspaceFile(workspaceId, relativePath, content) {
+      bumpHit('writeWorkspaceFile');
+      const filePath = path.join(ensureWorkspacePath(workspaceId), relativePath);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content, 'utf8');
+    },
+    async writeTempGitFile(workspaceId, fileName, data) {
+      bumpHit('writeTempGitFile');
+      const filePath = path.join(ensureWorkspacePath(workspaceId), '.git', path.basename(fileName));
+      fs.writeFileSync(filePath, Buffer.from(data));
+      return filePath;
+    },
+    async deleteTempGitFile(workspaceId, fileName) {
+      bumpHit('deleteTempGitFile');
+      const filePath = path.join(ensureWorkspacePath(workspaceId), '.git', path.basename(fileName));
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+      }
+    },
+  };
+
+  $tw.tidgi = $tw.tidgi || {};
+  $tw.tidgi.service = { ...$tw.tidgi.service, gitServer, workspace };
+};`,
+  ]);
+}
+
 export function writeBaselineWikiFiles(): void {
   if (!existsSync(PLUGIN_DIST)) {
     throw new Error(
       `Plugin dist not found at ${PLUGIN_DIST}. ` +
-      'Build it first: cd tw-mobile-sync && pnpm exec tiddlywiki-plugin-dev build',
+        'Build it first: cd tw-mobile-sync && pnpm exec tiddlywiki-plugin-dev build',
     );
   }
 
@@ -51,11 +170,19 @@ export function writeBaselineWikiFiles(): void {
   // Always rewrite tiddlywiki.info so plugin paths stay in sync with code changes.
   // The tw-mobile-sync plugin JSON is placed in tiddlers/ and will be
   // auto-discovered as a plugin tiddler — no plugin.info needed.
-  writeFileSync(join(TEST_WIKI_DIR, 'tiddlywiki.info'), JSON.stringify({
-    description: 'E2E Mock Wiki',
-    plugins: ['tiddlywiki/filesystem', 'tiddlywiki/tiddlyweb'],
-    themes: ['tiddlywiki/vanilla'],
-  }, null, 2), 'utf8');
+  writeFileSync(
+    join(TEST_WIKI_DIR, 'tiddlywiki.info'),
+    JSON.stringify(
+      {
+        description: 'E2E Mock Wiki',
+        plugins: ['tiddlywiki/filesystem', 'tiddlywiki/tiddlyweb'],
+        themes: ['tiddlywiki/vanilla'],
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
 
   putTid('$__StoryList.tid', ['title: $:/StoryList', 'list:', '']);
   putTid('HelloThere.tid', ['title: HelloThere', 'type: text/vnd.tiddlywiki', '', 'E2E mock wiki.']);
@@ -66,13 +193,27 @@ export function writeBaselineWikiFiles(): void {
   const pluginContent = readFileSync(PLUGIN_DIST);
   writeFileSync(join(td, PLUGIN_JSON), pluginContent);
 
-  // Force standalone system-git runner. Even though "system" is the default,
-  // writing the config tiddler makes the test setup explicit and self-contained.
+  writeFileSync(
+    DESKTOP_GIT_RUNNER_HITS,
+    JSON.stringify({
+      runGitCommand: 0,
+      readWorkspaceFile: 0,
+      writeWorkspaceFile: 0,
+      writeTempGitFile: 0,
+      deleteTempGitFile: 0,
+    }),
+    'utf8',
+  );
+
+  writeDesktopGitRunnerStartupModule();
+
+  // Force the desktop runner so the plugin exercises the same gitServer
+  // delegation path used inside TidGi Desktop.
   putTid(`$__plugins_linonetwo_tw-mobile-sync_Config_GitRunner.tid`, [
     `title: ${PLUGIN_NAME}/Config/GitRunner`,
     'description: Git runner used by mobile sync endpoints. "desktop" delegates to TidGi Desktop\'s dugite-based gitServer; "system" uses the system git binary directly.',
     '',
-    'system',
+    'desktop',
   ]);
 }
 
@@ -82,7 +223,7 @@ function getLanIp(): string {
   const nics = networkInterfaces();
 
   const excludedNames = ['virtual', 'hyper-v', 'wsl', 'vmware', 'docker', 'tailscale', 'vpn', 'loopback', 'pseudo'];
-  const isExcludedName = (name: string) => excludedNames.some(e => name.toLowerCase().includes(e));
+  const isExcludedName = (name: string) => excludedNames.some(excludedName => name.toLowerCase().includes(excludedName));
 
   const isExcludedIp = (ip: string) => {
     if (ip.startsWith('169.254.')) return true;
@@ -125,10 +266,21 @@ function getLanIp(): string {
 
 const LAN_IP = getLanIp();
 
-export function getMockServerUrl() { return `http://${LAN_IP}:${PORT}`; }
-export function getTestWikiDir() { return TEST_WIKI_DIR; }
-export function getPluginDistPath() { return PLUGIN_DIST; }
-export function resetMockWikiFilesToBaseline() { writeBaselineWikiFiles(); }
+export function getMockServerUrl() {
+  return `http://${LAN_IP}:${PORT}`;
+}
+export function getTestWikiDirectory() {
+  return TEST_WIKI_DIR;
+}
+export function getPluginDistributionPath() {
+  return PLUGIN_DIST;
+}
+export function resetMockWikiFilesToBaseline() {
+  writeBaselineWikiFiles();
+}
+export function getDesktopGitRunnerHitsPath() {
+  return DESKTOP_GIT_RUNNER_HITS;
+}
 
 /**
  * One-time wiki setup (idempotent). Call before startServer.
@@ -137,7 +289,7 @@ export function resetMockWikiFilesToBaseline() { writeBaselineWikiFiles(); }
  * by runDetox.mjs (or manually) before this runs. See `ensureInfraReady()`
  * exported from setup-infra.mjs for the prep steps.
  */
-export async function ensureWikiReady() {
+export function ensureWikiReady() {
   writeBaselineWikiFiles();
 }
 
@@ -161,7 +313,7 @@ export async function startServer(): Promise<void> {
   // Capture server output for diagnostics — log each line in real time so
   // incoming requests are visible in the test output.
   const serverOut: string[] = [];
-  const serverErr: string[] = [];
+  const serverError: string[] = [];
   server.stdout?.on('data', (d: Buffer) => {
     const text = d.toString();
     serverOut.push(text);
@@ -171,28 +323,35 @@ export async function startServer(): Promise<void> {
   });
   server.stderr?.on('data', (d: Buffer) => {
     const text = d.toString();
-    serverErr.push(text);
+    serverError.push(text);
     for (const line of text.split('\n').filter(Boolean)) {
       console.log(`[tw-server:err] ${line}`);
     }
   });
-  server.on('exit', (code) => { console.log(`[mock-server] Process exited with code ${code}`); });
+  server.on('exit', (code) => {
+    console.log(`[mock-server] Process exited with code ${code}`);
+  });
 
   // Health-check via node:http (avoids global fetch which may be unavailable
   // in ts-node/esm worker context). The mock server has no auth layer, so no
   // Authorization header is needed.
-  for (let i = 0; i < 30; i++) {
+  for (let index = 0; index < 30; index++) {
     await new Promise(r => setTimeout(r, 1000));
     try {
       const ok = await new Promise<boolean>((resolve) => {
-        const req = httpGet(`${getMockServerUrl()}/status`, {
+        const request = httpGet(`${getMockServerUrl()}/status`, {
           timeout: 3000,
-        }, (res) => {
-          resolve(res.statusCode === 200);
-          res.resume();
+        }, (response) => {
+          resolve(response.statusCode === 200);
+          response.resume();
         });
-        req.on('error', () => resolve(false));
-        req.on('timeout', () => { req.destroy(); resolve(false); });
+        request.on('error', () => {
+          resolve(false);
+        });
+        request.on('timeout', () => {
+          request.destroy();
+          resolve(false);
+        });
       });
       if (ok) {
         console.log('[mock-server] Ready.');
@@ -203,10 +362,14 @@ export async function startServer(): Promise<void> {
 
   // Diagnostics: print server output on failure
   if (serverOut.length) console.log('[mock-server] STDOUT:', serverOut.join('').slice(0, 2000));
-  if (serverErr.length) console.log('[mock-server] STDERR:', serverErr.join('').slice(0, 2000));
+  if (serverError.length) console.log('[mock-server] STDERR:', serverError.join('').slice(0, 2000));
   throw new Error('[mock-server] Timeout waiting for server');
 }
 
 export function stopServer() {
-  if (server) { server.kill('SIGTERM'); server = null; console.log('[mock-server] Stopped.'); }
+  if (server) {
+    server.kill('SIGTERM');
+    server = null;
+    console.log('[mock-server] Stopped.');
+  }
 }
