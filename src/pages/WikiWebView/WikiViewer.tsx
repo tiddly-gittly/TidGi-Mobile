@@ -89,8 +89,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   /**
    * E2E test hook: hidden UI elements for Detox to interact with.
    */
-  // eslint-disable-next-line unicorn/prevent-abbreviations
-  const [e2eTestTiddlerTitle, setE2eTestTiddlerTitle] = useState('');
+  const [endToEndTestTiddlerTitle, setEndToEndTestTiddlerTitle] = useState('');
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
@@ -174,16 +173,15 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       <TextInput
         testID='e2e-tiddler-title'
         style={styles.e2eTiddlerTitleInput}
-        value={e2eTestTiddlerTitle}
-        onChangeText={setE2eTestTiddlerTitle}
+        value={endToEndTestTiddlerTitle}
+        onChangeText={setEndToEndTestTiddlerTitle}
       />
       {}
       <Pressable
         testID='e2e-create-tiddler-button'
         style={styles.e2eCreateTiddlerButton}
         onPress={() => {
-          const title = e2eTestTiddlerTitle || 'E2E Test';
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          const title = endToEndTestTiddlerTitle || 'E2E Test';
           webViewReference.current?.injectJavaScript(
             `window.__e2e_createTiddler(${JSON.stringify(title)})`,
           );

@@ -7,7 +7,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as Haptics from 'expo-haptics';
 import * as TaskManager from 'expo-task-manager';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
@@ -544,8 +544,6 @@ export class GitBackgroundSyncService {
     // Check if we're in active state before showing Alert (which crashes in background)
     try {
       if (AppState.currentState === 'active') {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const Alert = (require('react-native') as typeof import('react-native')).Alert;
         Alert.alert(
           i18n.t('Sync.SyncFailed'),
           `${workspaceName}: ${errorMessage}`,

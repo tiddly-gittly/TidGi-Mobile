@@ -23,6 +23,15 @@ export function useRequestNativePermissions() {
 
 export function useRegisterReceivingShareIntent() {
   const [importSuccessSnackBarVisible, setImportSuccessSnackBarVisible] = useState(false);
+  const [useShareIntent, setUseShareIntent] = useState<typeof IUseShareIntent | undefined>();
+  useEffect(() => {
+    import('expo-share-intent').then(module => {
+      setUseShareIntent(() => module.useShareIntent);
+    }).catch(() => {
+      console.log('expo-share-intent not available — sharing feature disabled');
+    });
+  }, []);
+
   const importSuccessSnackBar = (
     <Snackbar
       visible={importSuccessSnackBarVisible}
@@ -34,13 +43,14 @@ export function useRegisterReceivingShareIntent() {
     </Snackbar>
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useShareIntent } = require('expo-share-intent') as { useShareIntent: typeof IUseShareIntent };
-
-  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
+  const shareIntentResult = useShareIntent?.({
     debug: true,
     disabled: process.env.NODE_ENV === 'development',
   });
+
+  const { hasShareIntent, shareIntent, resetShareIntent, error } = shareIntentResult ?? {
+    hasShareIntent: false, shareIntent: undefined, resetShareIntent: () => {}, error: undefined,
+  };
 
   useEffect(() => {
     if (error) {

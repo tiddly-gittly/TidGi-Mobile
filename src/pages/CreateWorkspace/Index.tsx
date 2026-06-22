@@ -14,8 +14,7 @@ type CreateWorkspaceTabParameterList = {
   CreateWebpageShortcut: undefined;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const Tab = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
+const Tab: ReturnType<typeof createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>> = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
 
 export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>> = ({ navigation: _navigation }) => {
   const { t } = useTranslation();

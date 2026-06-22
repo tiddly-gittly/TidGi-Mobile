@@ -142,13 +142,17 @@ function ViewAppLogItem() {
 
 // --- DebugInfoItem -----------------------------------------------------------
 
+const CopyDebugInfoButton = React.lazy(async () => {
+  const module = await import('../Developer/CopyDebugInfoButton.js');
+  return { default: module.CopyDebugInfoButton };
+});
+
 function DebugInfoItem() {
-  // Lazy import to keep the bundle chunk small when not on the developer page
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { CopyDebugInfoButton } = require('../Developer/CopyDebugInfoButton') as typeof import('../Developer/CopyDebugInfoButton');
   return (
     <View style={styles.customItemContainer}>
-      <CopyDebugInfoButton />
+      <React.Suspense fallback={null}>
+        <CopyDebugInfoButton />
+      </React.Suspense>
     </View>
   );
 }
