@@ -52,6 +52,7 @@ const AdvancedToggleButton = styled(Button)`
 `;
 
 const ButtonLabelPadding = 30;
+const buttonLabelPadding = { padding: ButtonLabelPadding } as const;
 
 interface IImporterServerConfigsProps {
   allServers: IServerInfo[];
@@ -119,7 +120,7 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
         testID='toggle-scanner-button'
         mode={importStatus === 'idle' ? 'elevated' : 'outlined'}
         disabled={importStatus !== 'idle'}
-        labelStyle={{ padding: ButtonLabelPadding }}
+        labelStyle={buttonLabelPadding}
         onPress={onToggleScanner}
       >
         {t('AddWorkspace.ToggleQRCodeScanner')}

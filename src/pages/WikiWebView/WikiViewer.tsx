@@ -1,6 +1,6 @@
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Platform, Pressable, TextInput } from 'react-native';
+import { Dimensions, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
@@ -36,6 +36,27 @@ const TopProgressBar = styled(ProgressBar)`
 const ErrorText = styled(Text)`
   color: ${MD3Colors.error50};
 `;
+
+const styles = StyleSheet.create({
+  e2eCreateTiddlerButton: {
+    bottom: 88,
+    height: 44,
+    left: 56,
+    opacity: 0,
+    position: 'absolute',
+    width: 44,
+    zIndex: 999,
+  },
+  e2eTiddlerTitleInput: {
+    bottom: 88,
+    height: 44,
+    left: 8,
+    opacity: 0,
+    position: 'absolute',
+    width: 44,
+    zIndex: 999,
+  },
+});
 
 export interface WikiViewerProps {
   /**
@@ -152,16 +173,14 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
       {}
       <TextInput
         testID='e2e-tiddler-title'
-        // eslint-disable-next-line react-native/no-inline-styles
-        style={{ position: 'absolute', bottom: 88, left: 8, width: 44, height: 44, opacity: 0, zIndex: 999 }}
+        style={styles.e2eTiddlerTitleInput}
         value={e2eTestTiddlerTitle}
         onChangeText={setE2eTestTiddlerTitle}
       />
       {}
       <Pressable
         testID='e2e-create-tiddler-button'
-        // eslint-disable-next-line react-native/no-inline-styles
-        style={{ position: 'absolute', bottom: 88, left: 56, width: 44, height: 44, opacity: 0, zIndex: 999 }}
+        style={styles.e2eCreateTiddlerButton}
         onPress={() => {
           const title = e2eTestTiddlerTitle || 'E2E Test';
           // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access

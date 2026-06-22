@@ -123,19 +123,19 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
             />
             <InfoBlock>
               <Text variant='titleSmall' numberOfLines={1}>{serverInfo.name}</Text>
-              <Text variant='bodySmall' style={{ color: theme.colors.outline }} numberOfLines={1}>{serverInfo.uri}</Text>
+              <OutlineText variant='bodySmall' numberOfLines={1}>{serverInfo.uri}</OutlineText>
               <Row>
-                <Text variant='bodySmall' style={{ color: isActive ? theme.colors.primary : theme.colors.outline }}>
+                <StatusLineText variant='bodySmall' $active={isActive}>
                   {statusLine}
-                </Text>
+                </StatusLineText>
               </Row>
-              <Text variant='bodySmall' style={{ color: theme.colors.outline }}>
+              <OutlineText variant='bodySmall'>
                 {t('ServerList.LastSync')}: {formatLastSync(lastSync)}
-              </Text>
+              </OutlineText>
               {serverInfo.useStandardGitProtocol === true && (
-                <Text variant='bodySmall' style={{ color: theme.colors.tertiary }}>
+                <TertiaryText variant='bodySmall'>
                   {t('ServerList.StandardGitProtocol')}
-                </Text>
+                </TertiaryText>
               )}
             </InfoBlock>
           </CardInner>
@@ -192,4 +192,16 @@ const FlexTouchableOpacity = styled(TouchableOpacity)`
 const StatusIcon = styled(Ionicons)`
   margin-right: 8px;
   margin-top: 2px;
+`;
+
+const OutlineText = styled(Text)`
+  color: ${({ theme }) => theme.colors.outline};
+`;
+
+const StatusLineText = styled(Text)<{ $active?: boolean }>`
+  color: ${({ theme, $active }) => $active ? theme.colors.primary : theme.colors.outline};
+`;
+
+const TertiaryText = styled(Text)`
+  color: ${({ theme }) => theme.colors.tertiary};
 `;

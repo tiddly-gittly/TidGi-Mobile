@@ -333,7 +333,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
               setDetailsError(undefined);
             }}
           >
-            <DetailsCard testID='commit-details-card' style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
+            <ElevatedDetailsCard testID='commit-details-card' onStartShouldSetResponder={() => true}>
               <Card.Title title={t('GitHistory.CommitDetails')} />
               <PaddedCardContent>
                 <DetailSegmentedButtons
@@ -418,14 +418,14 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
                         </>
                       )
                       : (
-                        <Text variant='bodyMedium' style={{ color: theme.colors.outline }}>
+                        <OutlineText variant='bodyMedium'>
                           {t('GitHistory.NoActionsForCommit', '此提交暂无可用操作')}
-                        </Text>
+                        </OutlineText>
                       )}
                   </ActionsView>
                 )}
               </PaddedCardContent>
-            </DetailsCard>
+            </ElevatedDetailsCard>
           </Pressable>
         </Modal>
         <Modal
@@ -445,7 +445,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
               setSelectedUncommittedItem(undefined);
             }}
           />
-          <PreviewDetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} pointerEvents='box-none'>
+          <ElevatedPreviewDetailsCard pointerEvents='box-none'>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
@@ -466,7 +466,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
                 />
               )}
             </Card.Content>
-          </PreviewDetailsCard>
+          </ElevatedPreviewDetailsCard>
         </Modal>
         <Dialog
           visible={confirmDiscardAllVisible}
@@ -529,10 +529,16 @@ const HistoryCard = styled(Card)`
 const DetailsCard = styled(Card)`
   max-height: 80%;
 `;
+const ElevatedDetailsCard = styled(DetailsCard)`
+  background-color: ${({ theme }) => theme.colors.elevation.level2};
+`;
 const PreviewDetailsCard = styled(Card)`
   max-height: 80%;
   align-self: center;
   width: 92%;
+`;
+const ElevatedPreviewDetailsCard = styled(PreviewDetailsCard)`
+  background-color: ${({ theme }) => theme.colors.elevation.level2};
 `;
 const FilesList = styled(FlatList)`
   flex: 1;
@@ -572,6 +578,10 @@ const DetailSegmentedButtons = styled(SegmentedButtons)`
 
 const FilesTitleText = styled(Text)`
   margin-top: 8px;
+`;
+
+const OutlineText = styled(Text)`
+  color: ${({ theme }) => theme.colors.outline};
 `;
 
 const ActionsView = styled(View)`

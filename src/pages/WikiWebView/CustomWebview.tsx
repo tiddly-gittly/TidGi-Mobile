@@ -39,10 +39,11 @@ export class CustomWebView extends Component<CustomWebViewProps> {
       reloadingKey,
     } = this.props;
 
+    const webViewStyle = { backgroundColor };
     return (
       <WebView
         key={reloadingKey}
-        style={{ backgroundColor }}
+        style={webViewStyle}
         originWhitelist={['*']}
         mediaPlaybackRequiresUserAction={false}
         allowsInlineMediaPlayback

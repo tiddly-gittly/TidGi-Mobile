@@ -42,6 +42,8 @@ const ImportWikiButton = styled(Button)`
 `;
 /** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
 const ButtonLabelPadding = 30;
+const buttonLabelPadding = { padding: ButtonLabelPadding } as const;
+const errorColorStyle = { color: MD3Colors.error50 } as const;
 const OpenWikiButton = styled(Button)`
   min-height: 5em;
   margin-top: 5px;
@@ -647,7 +649,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             testID='import-wiki-confirm-button'
             mode='elevated'
             onPress={addServerAndImport}
-            labelStyle={{ padding: ButtonLabelPadding }}
+            labelStyle={buttonLabelPadding}
           >
             <Text>
               {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
@@ -733,17 +735,17 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       {(importStatus === 'error' || localTemplateStatus === 'error') && (
         <>
           {importErrorKind === 'oom' && (
-            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+            <ImportStatusText style={errorColorStyle}>
               <Text>{t('Import.Error.OOM')}</Text>
             </ImportStatusText>
           )}
           {importErrorKind === 'tooLarge' && (
-            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+            <ImportStatusText style={errorColorStyle}>
               <Text>{t('Import.Error.TooLarge', { mb: importError ?? '?' })}</Text>
             </ImportStatusText>
           )}
           {importErrorKind === 'connectionAbort' && (
-            <ImportStatusText style={{ color: MD3Colors.error50 }}>
+            <ImportStatusText style={errorColorStyle}>
               <Text>{t('Import.Error.ConnectionAbort')}</Text>
             </ImportStatusText>
           )}
@@ -756,7 +758,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 }
               }}
             >
-              <ImportStatusText style={{ color: MD3Colors.error50 }}>
+              <ImportStatusText style={errorColorStyle}>
                 <Text selectable>{t('ErrorMessage')} {importError}</Text>
               </ImportStatusText>
             </Pressable>
@@ -805,7 +807,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           {/* Show failed wikis with error details */}
           {batchFailedItems.length > 0 && (
             <>
-              <DoneImportActionsTitleText variant='titleLarge' style={{ color: MD3Colors.error50 }}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
+              <DoneImportActionsTitleText variant='titleLarge' style={errorColorStyle}>{t('Import.PartialSuccess.Failed')}</DoneImportActionsTitleText>
               {batchFailedItems.map((f, index) => (
                 <Pressable
                   key={index}
@@ -837,7 +839,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                 navigation.navigate('MainMenu', { fromWikiID: ws.id });
                 navigation.navigate('WikiWebView', { id: ws.id });
               }}
-              labelStyle={{ padding: ButtonLabelPadding }}
+              labelStyle={buttonLabelPadding}
             >
               <Text>{`${t('Open')} ${ws.name}`}</Text>
             </OpenWikiButton>
@@ -870,7 +872,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
                     navigation.navigate('MainMenu', { fromWikiID: ws.id });
                     navigation.navigate('WikiWebView', { id: ws.id });
                   }}
-                  labelStyle={{ padding: ButtonLabelPadding }}
+                  labelStyle={buttonLabelPadding}
                 >
                   <Text>{`${t('Open')} ${ws.name}`}</Text>
                 </OpenWikiButton>

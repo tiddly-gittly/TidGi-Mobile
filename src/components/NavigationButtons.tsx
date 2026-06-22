@@ -11,6 +11,8 @@ const MainFeatureButton = styled(Button)`
 /** Can't reach the label from button's style-component. Need to defined using `labelStyle`. Can't set padding on button, otherwise padding can't trigger click. */
 const ButtonLabelPadding = 15;
 const ButtonMinHeight = 56;
+const contentMinHeight = { minHeight: ButtonMinHeight } as const;
+const labelPadding = { padding: ButtonLabelPadding } as const;
 
 export function ImporterButton() {
   const { t } = useTranslation();
@@ -19,12 +21,12 @@ export function ImporterButton() {
   return (
     <MainFeatureButton
       testID='import-wiki-button'
-      contentStyle={{ minHeight: ButtonMinHeight }}
+      contentStyle={contentMinHeight}
       mode='outlined'
       onPress={() => {
         navigation.navigate('Importer', {});
       }}
-      labelStyle={{ padding: ButtonLabelPadding }}
+      labelStyle={labelPadding}
     >
       <Text>{t('Menu.ScanQRToSync')}</Text>
     </MainFeatureButton>
@@ -38,12 +40,12 @@ export function CreateWorkspaceButton() {
   return (
     <MainFeatureButton
       testID='create-workspace-button'
-      contentStyle={{ minHeight: ButtonMinHeight }}
+      contentStyle={contentMinHeight}
       mode='outlined'
       onPress={() => {
         navigation.navigate('CreateWorkspace');
       }}
-      labelStyle={{ padding: ButtonLabelPadding }}
+      labelStyle={labelPadding}
     >
       <Text>{t('AddWorkspace.AddWorkspace')}</Text>
     </MainFeatureButton>

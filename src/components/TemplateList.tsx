@@ -79,6 +79,7 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
   const [selectedUrl, setSelectedUrl] = useState(item.url);
   const templateTestIdSegment = toTemplateTestIdSegment(item);
   const isOnlineTemplate = item.url.startsWith('http://') || item.url.startsWith('https://');
+  const selectedMenuItemStyle = React.useMemo(() => ({ backgroundColor: theme.colors.primaryContainer }), [theme.colors.primaryContainer]);
 
   const handleSelectUrl = useCallback((url: string) => {
     setSelectedUrl(url);
@@ -113,7 +114,7 @@ export function TemplateListItem({ item, onPreviewPress, onUsePress }: ITemplate
             {[item.url, ...fallbackUrls].map((url, index) => (
               <Menu.Item
                 key={index}
-                style={url === selectedUrl ? { backgroundColor: theme.colors.primaryContainer } : undefined}
+                style={url === selectedUrl ? selectedMenuItemStyle : undefined}
                 title={new URL(url).hostname}
                 onPress={() => {
                   handleSelectUrl(url);
