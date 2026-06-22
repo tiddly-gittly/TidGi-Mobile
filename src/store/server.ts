@@ -85,8 +85,8 @@ export const useServerStore = create<ServerState & ServerActions>()(
         },
         remove: (id) => {
           set((state) => {
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete state.servers[id];
+            const { [id]: _removed, ...remaining } = state.servers;
+            state.servers = remaining;
           });
         },
       }),

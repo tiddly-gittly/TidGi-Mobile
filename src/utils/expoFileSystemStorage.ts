@@ -12,15 +12,15 @@ const ensureDirectoryExists = () => {
 };
 
 export const expoFileSystemStorage: PersistStorage<unknown> = {
-  getItem: async (name) => {
+  getItem: async (name: string) => {
     ensureDirectoryExists();
     const file = new File(storageDirectory, name);
     if (!file.exists) {
-      return undefined;
+      return null;
     }
     const content = await file.text();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return JSON.parse(content);
+    const parsed: unknown = JSON.parse(content);
+    return parsed as { state: unknown; version?: number };
   },
   setItem: (name, value) => {
     ensureDirectoryExists();
