@@ -143,7 +143,7 @@ function ViewAppLogItem() {
 // --- DebugInfoItem -----------------------------------------------------------
 
 const CopyDebugInfoButton = React.lazy(async () => {
-  const module = await import('../Developer/CopyDebugInfoButton.js');
+  const module = await import('../Developer/CopyDebugInfoButton.tsx');
   return { default: module.CopyDebugInfoButton };
 });
 

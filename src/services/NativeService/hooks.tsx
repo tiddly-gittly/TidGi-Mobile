@@ -1,4 +1,4 @@
-import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
+import type { useShareIntent } from 'expo-share-intent';
 import { useEffect, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
@@ -21,16 +21,31 @@ export function useRequestNativePermissions() {
   }, []);
 }
 
+// Resolve useShareIntent at module load time so the hook is always
+// called unconditionally (no conditional hook calls). If expo-share-intent
+// is not installed, fall back to a no-op that returns empty data.
+let useShareIntentHook: typeof useShareIntent | (() => ReturnType<typeof useShareIntent>);
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  useShareIntentHook = require('expo-share-intent').useShareIntent;
+} catch {
+  useShareIntentHook = () => ({
+    isReady: true,
+    hasShareIntent: false,
+    shareIntent: null as unknown as import('expo-share-intent').ShareIntent,
+    resetShareIntent: () => {},
+    error: null,
+  });
+}
+
 export function useRegisterReceivingShareIntent() {
   const [importSuccessSnackBarVisible, setImportSuccessSnackBarVisible] = useState(false);
-  const [useShareIntent, setUseShareIntent] = useState<typeof IUseShareIntent | undefined>();
-  useEffect(() => {
-    import('expo-share-intent').then(module => {
-      setUseShareIntent(() => module.useShareIntent);
-    }).catch(() => {
-      console.log('expo-share-intent not available — sharing feature disabled');
-    });
-  }, []);
+
+  // Called unconditionally — satisfies the Rules of Hooks.
+  const shareIntentResult = useShareIntentHook({
+    debug: true,
+    disabled: process.env.NODE_ENV === 'development',
+  });
 
   const importSuccessSnackBar = (
     <Snackbar
@@ -42,11 +57,6 @@ export function useRegisterReceivingShareIntent() {
       {i18n.t('Share.ImportSuccess')}
     </Snackbar>
   );
-
-  const shareIntentResult = useShareIntent?.({
-    debug: true,
-    disabled: process.env.NODE_ENV === 'development',
-  });
 
   const { hasShareIntent, shareIntent, resetShareIntent, error } = shareIntentResult ?? {
     hasShareIntent: false, shareIntent: undefined, resetShareIntent: () => {}, error: undefined,
