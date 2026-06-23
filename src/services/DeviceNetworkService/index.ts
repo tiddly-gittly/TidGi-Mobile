@@ -1,23 +1,25 @@
 import * as SecureStore from 'expo-secure-store';
 import {
   CloudDeviceAuthorizer,
-  createDeviceIdentity,
   type CloudDeviceClient,
   type CloudDeviceRecord,
-  type DeviceConnectionGrant,
+  createDeviceIdentity,
   type Device,
   type DeviceCapabilities,
+  type DeviceConnectionGrant,
+  type DeviceRelayReservationToken,
+  type DeviceTrustStore,
   Libp2pDeviceNetworkService,
-  type LocalPairingRequestOptions,
   type LocalDeviceIdentity,
+  type LocalPairingRequestOptions,
   type MemeLoopDuplexStream,
   type MemeLoopProtocol,
   type PairingSession,
-  type DeviceTrustStore,
-  type TrustedDeviceRecord,
   type RawSeedDeviceIdentity,
-  type SyncResult,
+  signDeviceBinding,
   syncCloudDevices,
+  type SyncResult,
+  type TrustedDeviceRecord,
 } from 'memeloop';
 
 import { useWorkspaceStore } from '../../store/workspace';
@@ -104,6 +106,13 @@ class MobileCloudClient implements CloudDeviceClient {
     });
   }
 
+  public async createRelayReservation(input: { peerId: string }): Promise<DeviceRelayReservationToken> {
+    return this.request('/api/devices/relay-reservation', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
   public async createBindingNonce(): Promise<{ nonce: string; accountId: string; expiresAt: string }> {
     return this.request('/api/devices/binding/nonce', { method: 'POST' });
   }
@@ -174,6 +183,8 @@ export class DeviceNetworkService {
   private cloudClient?: MobileCloudClient;
   private cloudAuthorizer?: CloudDeviceAuthorizer;
   private cloudGrantCache = new Map<string, DeviceConnectionGrant>();
+  private cloudHeartbeatTimer?: ReturnType<typeof setInterval>;
+  private relayReservation?: DeviceRelayReservationToken;
 
   public async start(): Promise<void> {
     if (this.started) return;
@@ -194,9 +205,10 @@ export class DeviceNetworkService {
       }
     }
 
+    const capabilities = this.buildCapabilities();
     this.core = new Libp2pDeviceNetworkService({
       identity: this.identity!,
-      capabilities: this.buildCapabilities(),
+      capabilities,
       trustStore: this.trustStore,
       authorizer,
       enableMdns: true,
@@ -204,6 +216,11 @@ export class DeviceNetworkService {
     await this.core.start();
 
     if (this.cloudClient) {
+      try {
+        await this.registerCloudDevice(capabilities);
+      } catch (error) {
+        console.warn('[DeviceNetworkService] cloud device registration failed', error);
+      }
       try {
         const synced = await this.syncCloudDevices();
         console.info('[DeviceNetworkService] cloud directory synced', { count: synced.length });
@@ -217,10 +234,15 @@ export class DeviceNetworkService {
 
   public async stop(): Promise<void> {
     if (!this.started) return;
+    if (this.cloudHeartbeatTimer) {
+      clearInterval(this.cloudHeartbeatTimer);
+      this.cloudHeartbeatTimer = undefined;
+    }
     await this.core?.stop();
     this.core = undefined;
     this.started = false;
     this.cloudGrantCache.clear();
+    this.relayReservation = undefined;
   }
 
   public configureCloud(config: { cloudUrl: string; accessToken: string }): void {
@@ -331,6 +353,51 @@ export class DeviceNetworkService {
   public async syncWithDevice(peerId: string, presentedGrant?: DeviceConnectionGrant): Promise<SyncResult> {
     const grant = presentedGrant ?? await this.resolveOutboundGrant(peerId);
     return this.core!.syncWithDevice(peerId, grant);
+  }
+
+  private async registerCloudDevice(capabilities: DeviceCapabilities): Promise<void> {
+    if (!this.cloudClient || !this.identity || !this.core) return;
+    const nonce = await this.cloudClient.createBindingNonce();
+    await this.cloudClient.registerDevice({
+      identity: this.identity,
+      cloudNonce: nonce.nonce,
+      signature: await signDeviceBinding({ identity: this.identity, accountId: nonce.accountId, nonce: nonce.nonce }),
+      capabilities,
+      multiaddrs: this.core.getMultiaddrs(),
+      relayReservations: [],
+    });
+    try {
+      this.relayReservation = await this.cloudClient.createRelayReservation({ peerId: this.identity.peerId });
+      await this.core.configureRelayReservation(this.relayReservation);
+    } catch (error) {
+      console.warn('[DeviceNetworkService] relay reservation failed', error);
+    }
+    await this.sendCloudHeartbeat();
+    this.scheduleCloudHeartbeat();
+  }
+
+  private scheduleCloudHeartbeat(): void {
+    if (this.cloudHeartbeatTimer) clearInterval(this.cloudHeartbeatTimer);
+    this.cloudHeartbeatTimer = setInterval(() => {
+      void this.sendCloudHeartbeat().catch((error: unknown) => {
+        console.warn('[DeviceNetworkService] cloud heartbeat failed', error);
+      });
+    }, 60_000);
+  }
+
+  private async sendCloudHeartbeat(): Promise<void> {
+    if (!this.cloudClient || !this.identity || !this.core) return;
+    await this.cloudClient.heartbeat({
+      peerId: this.identity.peerId,
+      capabilities: this.buildCapabilities(),
+      multiaddrs: this.core.getMultiaddrs(),
+      relayReservations: this.currentRelayReservations(),
+    });
+  }
+
+  private currentRelayReservations(): string[] {
+    const relayedAddresses = this.core?.getMultiaddrs().filter((address) => address.includes('/p2p-circuit')) ?? [];
+    return relayedAddresses.length > 0 ? relayedAddresses : this.relayReservation?.relayMultiaddrs ?? [];
   }
 
   private async resolveOutboundGrant(peerId: string): Promise<DeviceConnectionGrant | undefined> {
