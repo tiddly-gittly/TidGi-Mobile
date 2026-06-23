@@ -317,6 +317,8 @@
     "SyncIntervalDescription": "この期間が経過すると、自動的にGithubにバックアップを開始します。ローカルワークスペースの場合は、ローカルGitバックアップを作成します（アプリを再起動した後に有効になります）",
     "DefaultUserName": "ユーザー名",
     "DefaultUserNameDetail": "Wiki内のユーザー名です。これは再起動後にのみ有効になり、新しく作成または編集されたTiddlersの作成者フィールドに入力されます。ワークスペース設定で設定されたユーザー名によってオーバーライドされます。",
+    "DeviceNetwork": "Device Network",
+    "DeviceNetworkDescription": "Discover nearby devices, confirm local pairing codes, and manage trusted MemeLoop devices.",
     "ShowSideBarDetail": "サイドバーを使用すると、ワークスペース間を簡単に切り替えることができます。",
     "ShowSideBarText": "サイドバーにボタンのラベルを表示",
     "ShowNavigationBar": "ナビゲーションバーを表示",
@@ -582,6 +584,37 @@
     "EnableExternal": "デバイスストレージを使う",
     "GrantPermission": "ファイルアクセス権限を許可",
     "ResetToDefault": "デフォルト（内部ストレージ）に戻す"
+  },
+  "DeviceNetwork": {
+    "AcceptPairing": "Accept",
+    "Devices": "Devices",
+    "DevicesDescription": "Nearby devices can be paired locally. Cloud account devices appear here after directory sync.",
+    "Direction": {
+      "inbound": "Incoming request",
+      "outbound": "Outgoing request"
+    },
+    "LocalDevice": "This device",
+    "NoDevices": "No nearby or trusted devices yet.",
+    "NoPendingPairing": "No pairing requests waiting for confirmation.",
+    "Pair": "Pair",
+    "PairingRequests": "Pairing requests",
+    "Reachability": {
+      "connecting": "Connecting",
+      "nearby": "Nearby",
+      "offline": "Offline",
+      "online": "Online"
+    },
+    "Refresh": "Refresh devices",
+    "RejectPairing": "Reject",
+    "RemoveTrustedDevice": "Remove trusted device",
+    "RemoveTrustedDeviceConfirm": "Remove local trust for {{deviceName}}?",
+    "Sync": "Sync",
+    "SyncCloudDevices": "Sync cloud devices",
+    "TrustMode": {
+      "cloud-account": "Cloud account",
+      "local-pairing": "Local pairing"
+    },
+    "Trusted": "Trusted"
   },
   "WarningMessage": "警告メッセージ"
 }

@@ -118,6 +118,19 @@ export const preferenceSections: PreferenceSectionSchema[] = [
     ],
   },
   {
+    id: 'device-network',
+    titleKey: 'Preference.DeviceNetwork',
+    items: [
+      {
+        type: 'custom',
+        key: 'device-network',
+        titleKey: 'Preference.DeviceNetwork',
+        descriptionKey: 'Preference.DeviceNetworkDescription',
+        customKey: 'device-network',
+      },
+    ],
+  },
+  {
     id: 'privacy',
     titleKey: 'Preference.PrivacyAndSecurity',
     items: [
