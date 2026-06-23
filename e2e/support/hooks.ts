@@ -31,10 +31,16 @@ import { networkInterfaces } from 'os';
 import { ensureWikiReady, getTestWikiDirectory, resetMockWikiFilesToBaseline, startServer, stopServer } from '../mock-server/setup';
 import { captureDeviceSnapshot, detectExpoErrorState, dumpFullUIHierarchy, formatSnapshot, getDesktopLogTail } from './diagnostics';
 
-// Cucumber default step timeout — must be long enough for Detox waitFor() calls.
-// WebView cold-start and git sync can take 30-90 s, so we use 120 s globally.
-// Fast steps finish well before this limit.
-setDefaultTimeout(120_000);
+// Cucumber default step timeout — fail fast for most steps.
+// Long-running steps (sync, import, WebView load) override this explicitly
+// via { timeout: ms } in their step definitions.
+setDefaultTimeout(30_000);
+
+// Detox waits for the RN bridge / UI thread to become idle before every
+// interaction. React Native Alerts and continuous animations (spinners,
+// WebView JS) prevent the app from ever idling, causing opaque "App seems idle"
+// hangs. For E2E we disable synchronization globally inside BeforeAll and use
+// explicit waits or polling instead.
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -455,6 +461,9 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   } catch { /* non-fatal — the disableOnboarding=1 URL param is a fallback */ }
 
   await detox.init();
+  // Disable synchronization once for the whole test suite. Must happen after
+  // detox.init() so the worker context is available.
+  await device.disableSynchronization().catch(() => {});
   console.log('[BeforeAll] Detox initialized. Each scenario launches a clean app instance.');
 });
 

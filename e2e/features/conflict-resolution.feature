@@ -1,4 +1,4 @@
-@conflict
+@mobilesync @conflict
 Feature: Conflict Resolution - Mobile and mock server concurrent edits
 
   # The conflict flow:

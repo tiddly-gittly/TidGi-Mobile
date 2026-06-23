@@ -11,7 +11,7 @@
  */
 import { execSync } from 'child_process';
 import { element, waitFor } from 'detox';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
@@ -71,10 +71,14 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
   } catch {
     try {
       execSync('adb shell uiautomator dump /data/local/tmp/e2e-uidump.xml', {
-        encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+        timeout: 10_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
       });
       rawXml = execSync('adb shell cat /data/local/tmp/e2e-uidump.xml', {
-        encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+        timeout: 5_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
       });
     } catch { /* non-fatal */ }
   }
@@ -156,6 +160,46 @@ export function diagnosticError(what: string, timeoutMs: number): Error {
     `  ${formatSnapshot(snapshot)}`,
   ].join('\n');
   return new Error(message);
+}
+
+/**
+ * Detect whether an Android AlertDialog / system dialog is currently showing.
+ *
+ * When a React Native Alert is displayed, the dialog lives in a separate
+ * system window. Detox keeps waiting for the app to become idle and can
+ * time out with an opaque "AppIdle" error instead of failing fast.
+ *
+ * @returns true if a dialog window is currently focused.
+ */
+export function isAlertShowing(): boolean {
+  try {
+    const dumpsys = execSync(
+      'adb shell "dumpsys window | grep -E (mCurrentFocus|mFocusedWindow)"',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return /AlertDialog|PopupWindow|Dialog/.test(dumpsys) ||
+      /mCurrentFocus=Window\{[^}]+ [^}]+ com\.android\.systemui/.test(dumpsys);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Dismiss a blocking Alert / system dialog.
+ *
+ * Tries the Android back key first (works for RN Alerts with a Cancel action),
+ * then falls back to tapping the focused window. Returns whether an alert was
+ * detected before dismissal.
+ */
+export function dismissBlockingAlert(): boolean {
+  const hadAlert = isAlertShowing();
+  if (!hadAlert) return false;
+  try {
+    execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
+  } catch {
+    // ignore
+  }
+  return true;
 }
 
 /**
@@ -253,12 +297,16 @@ export function dumpFullUIHierarchy(label: string): { filePath: string; xml: str
 
     // Step 1: dump to a temp file on the device (uiautomator cannot write to /dev/stdout on all devices)
     execSync('adb shell uiautomator dump /data/local/tmp/e2e-uidump.xml', {
-      encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      timeout: 10_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
 
     // Step 2: read the file content
     xml = execSync('adb shell cat /data/local/tmp/e2e-uidump.xml', {
-      encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
 
     // Step 3: save to a local file

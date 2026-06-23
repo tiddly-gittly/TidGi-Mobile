@@ -10,7 +10,11 @@ import { by, device, element, waitFor } from 'detox';
 import { waitForElement } from '../support/diagnostics';
 
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
-function adbKeyEvent(key: number) { try { execSync(`adb shell input keyevent ${key}`, { stdio: 'ignore', timeout: 3_000 }); } catch { /* */ } }
+function adbKeyEvent(key: number) {
+  try {
+    execSync(`adb shell input keyevent ${key}`, { stdio: 'ignore', timeout: 3_000 });
+  } catch { /* */ }
+}
 
 let systemTiddlerCountBefore: number;
 
@@ -37,14 +41,25 @@ function countSystemTiddlers(): number {
 }
 
 // ── Wait ──────────────────────────────────────────────────────────────────────
-When('I wait {int} seconds for the wiki to fully load', async (s: number) => { await delay(s * 1000); });
-When('I wait {int} seconds for the save to complete', async (s: number) => { await delay(s * 1000); });
-When('I wait {int} seconds for pending saves to complete', async (s: number) => { await delay(s * 1000); });
+When('I wait {int} seconds for the wiki to fully load', async (s: number) => {
+  await delay(s * 1000);
+});
+When('I wait {int} seconds for the save to complete', async (s: number) => {
+  await delay(s * 1000);
+});
+When('I wait {int} seconds for pending saves to complete', async (s: number) => {
+  await delay(s * 1000);
+});
 
 // ── Navigate back ─────────────────────────────────────────────────────────────
 When('I navigate back to the main menu', { timeout: 60_000 }, async () => {
-  for (let i = 0; i < 15; i++) {
-    try { await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500); await device.disableSynchronization().catch(() => {}); console.log(`[data-safety] Back to main menu after ${i} presses`); return; } catch { /* */ }
+  for (let index = 0; index < 15; index++) {
+    try {
+      await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500);
+      await device.disableSynchronization().catch(() => {});
+      console.log(`[data-safety] Back to main menu after ${index} presses`);
+      return;
+    } catch { /* */ }
     adbKeyEvent(4);
     await delay(1_500);
   }

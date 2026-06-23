@@ -2,7 +2,7 @@ import { ensureWikiReady, getMockServerUrl, startServer, stopServer } from './se
 
 async function main() {
   try {
-    await ensureWikiReady();
+    ensureWikiReady();
     await startServer();
     const base = getMockServerUrl();
 
@@ -15,11 +15,12 @@ async function main() {
     for (const path of endpoints) {
       const url = `${base}${path}`;
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-        const text = await res.text();
-        console.log(`${path} -> ${res.status} ${text.slice(0, 200)}`);
-      } catch (e: any) {
-        console.error(`${path} -> ERROR: ${e.message}`);
+        const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        const text = await response.text();
+        console.log(`${path} -> ${response.status} ${text.slice(0, 200)}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`${path} -> ERROR: ${message}`);
       }
     }
   } finally {
@@ -27,4 +28,7 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exit(1);
+});

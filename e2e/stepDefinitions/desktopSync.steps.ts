@@ -10,7 +10,7 @@ import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import { readFileSync } from 'fs';
 import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
-import { waitForElement } from '../support/diagnostics';
+import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
@@ -88,8 +88,25 @@ async function tapImportWikiConfirmButton(): Promise<void> {
   await element(by.id('import-wiki-confirm-button')).tap();
 }
 
-async function waitForImportSuccess(): Promise<void> {
-  await waitForElement(by.text('下一步'), NETWORK_TIMEOUT, '下一步 (import success)');
+async function waitForImportSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
+  const start = Date.now();
+  const pollInterval = 1_500;
+
+  while (Date.now() - start < maxWaitMs) {
+    if (isAlertShowing() || dismissBlockingAlert()) {
+      await delay(500);
+      throw diagnosticError('import to complete, but an Alert/Error dialog appeared', Date.now() - start);
+    }
+
+    try {
+      await waitFor(element(by.text('下一步'))).toBeVisible().withTimeout(pollInterval);
+      return;
+    } catch {
+      // Keep polling while import is in progress.
+    }
+  }
+
+  throw diagnosticError('下一步 (import success)', maxWaitMs);
 }
 
 async function navigateBackToMainMenuScreen(): Promise<void> {
@@ -249,16 +266,47 @@ async function tapSyncButtonForImportedWiki(): Promise<void> {
     throw new Error(`Sync button for wiki ${wikiId} not found (tried ${possibleIds.join(', ')}).`);
   }
   await element(by.id(matchedId)).tap();
+
+  // After tapping sync, immediately disable synchronization so a failure Alert
+  // does not cause an "App seems idle" hang. Individual waits still work.
+  await device.disableSynchronization().catch(() => {});
 }
 
-Then('the sync should complete successfully', async () => {
+Then('the sync should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {
   await waitForSyncSuccess();
 });
 
-async function waitForSyncSuccess(): Promise<void> {
+/**
+ * Poll for sync completion while checking for blocking Alert dialogs.
+ *
+ * Detox's waitFor() blocks on RN idle; a sync-failure Alert prevents the app
+ * from ever idling, turning the failure into an opaque "App seems idle" hang.
+ * We therefore disable synchronization and poll the UI / Alert state instead.
+ */
+async function waitForSyncSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
   const wikiId = getImportedWikiWorkspaceId();
   if (!wikiId) throw new Error('No wiki workspace found.');
-  await waitForElement(by.id(`sync-result-success-${wikiId}`), NETWORK_TIMEOUT, `sync-result-success-${wikiId}`);
+
+  const successId = `sync-result-success-${wikiId}`;
+  const start = Date.now();
+  const pollInterval = 1_500;
+
+  while (Date.now() - start < maxWaitMs) {
+    // A failure Alert is the most common cause of a stuck sync — fail fast.
+    if (isAlertShowing() || dismissBlockingAlert()) {
+      await delay(500);
+      throw diagnosticError('sync to complete, but an Alert/Error dialog appeared', Date.now() - start);
+    }
+
+    try {
+      await waitFor(element(by.id(successId))).toBeVisible().withTimeout(pollInterval);
+      return;
+    } catch {
+      // Expected while sync is still in progress; keep polling.
+    }
+  }
+
+  throw diagnosticError(successId, maxWaitMs);
 }
 
 Then('the unsynced count should be zero after sync', async () => {
