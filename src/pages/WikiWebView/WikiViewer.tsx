@@ -1,6 +1,6 @@
 import useThrottledCallback from 'beautiful-react-hooks/useThrottledCallback';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Platform } from 'react-native';
+import { Dimensions, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
 import { MD3Colors, ProgressBar, Text, useTheme } from 'react-native-paper';
 import { webviewPreloadedJS as ipcCatWebviewPreloadedJS } from 'react-native-postmessage-cat';
 import { styled } from 'styled-components/native';
@@ -37,6 +37,27 @@ const ErrorText = styled(Text)`
   color: ${MD3Colors.error50};
 `;
 
+const styles = StyleSheet.create({
+  e2eCreateTiddlerButton: {
+    bottom: 88,
+    height: 44,
+    left: 56,
+    opacity: 0,
+    position: 'absolute',
+    width: 44,
+    zIndex: 999,
+  },
+  e2eTiddlerTitleInput: {
+    bottom: 88,
+    height: 44,
+    left: 8,
+    opacity: 0,
+    position: 'absolute',
+    width: 44,
+    zIndex: 999,
+  },
+});
+
 export interface WikiViewerProps {
   /**
    * User ask wiki to quick load. By pressing a button that show up only when `enableQuickLoad` is true.
@@ -65,6 +86,10 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const [rememberLastVisitState, preferredLanguage, androidHardwareAcceleration] = useConfigStore(
     useShallow(state => [state.rememberLastVisitState, state.preferredLanguage, state.androidHardwareAcceleration]),
   );
+  /**
+   * E2E test hook: hidden UI elements for Detox to interact with.
+   */
+  const [endToEndTestTiddlerTitle, setEndToEndTestTiddlerTitle] = useState('');
   /**
    * Register service JSB to be `window.service.xxxService`, for plugin in webView to call.
    */
@@ -114,6 +139,18 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
 
       ${registerWikiStorageServiceOnWebView}
 
+      // E2E hook: exposed so Detox can trigger tiddler creation via the full
+      // TiddlyWiki \`$tw API pipeline (addTiddler → syncer.saveTiddler → file write).
+      window.__e2e_createTiddler = function(title) {
+        var now = (new Date()).toISOString();
+        $tw.wiki.addTiddler(new $tw.Tiddler({
+          title: title, text: 'E2E test at ' + now,
+          type: 'text/vnd.tiddlywiki', created: now, modified: now, tags: 'E2ETest'
+        }));
+        try { if ($tw.syncer) $tw.syncer.saveTiddler(title); } catch(e) {}
+        return 'OK';
+      };
+
       ${webviewSideReceiver}
 
       window.preloadScriptLoaded = true;
@@ -132,6 +169,27 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const showProgressBar = loading && !quickLoad;
   return (
     <>
+      {}
+      <TextInput
+        testID='e2e-tiddler-title'
+        style={styles.e2eTiddlerTitleInput}
+        value={endToEndTestTiddlerTitle}
+        onChangeText={setEndToEndTestTiddlerTitle}
+      />
+      {}
+      <Pressable
+        testID='e2e-create-tiddler-button'
+        style={styles.e2eCreateTiddlerButton}
+        onPress={() => {
+          const title = endToEndTestTiddlerTitle || 'E2E Test';
+          // The webview reference is typed as WebView | null; the webview package
+          // provides injectJavaScript at runtime. Cast to a small interface to
+          // avoid unsafe `any` lint errors.
+          (webViewReference.current as { injectJavaScript: (script: string) => void } | null)?.injectJavaScript(
+            `window.__e2e_createTiddler(${JSON.stringify(title)})`,
+          );
+        }}
+      />
       <TopProgressBar animatedValue={streamChunksToWebViewPercentage} color={MD3Colors.neutral50} />
       <WebViewContainer showProgressBar={showProgressBar}>
         <CustomWebView

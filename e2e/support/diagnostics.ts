@@ -11,8 +11,14 @@
  */
 import { execSync } from 'child_process';
 import { element, waitFor } from 'detox';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
+const ARTIFACTS_DIR = join(__dirname, '..', 'artifacts');
+
+/** Step counter for sequential UI dump filenames. Incremented on each call. */
+let stepCounter = 0;
 
 /** Compact snapshot of device state for failure diagnostics. */
 export interface DeviceSnapshot {
@@ -41,42 +47,59 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
     appRunning: false,
   };
 
-  // 1. Current foreground activity
+  // 1. Current foreground activity and windows
   try {
-    const focusRaw = execSync(
-      'adb shell "dumpsys window | grep mCurrentFocus"',
+    const dumpsys = execSync(
+      'adb shell "dumpsys window | grep -E (mCurrentFocus|mFocusedWindow)"',
       { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
     );
-    const match = focusRaw.match(/mCurrentFocus=Window\{[^ ]+ [^ ]+ ([^}]+)\}/);
+    const match = dumpsys.match(/mCurrentFocus=Window\{[^ ]+ [^ ]+ ([^}]+)\}/) ??
+      dumpsys.match(/mFocusedWindow=Window\{[^ ]+ [^ ]+ ([^}]+)\}/);
     if (match) {
       snapshot.currentActivity = match[1];
       snapshot.appRunning = snapshot.currentActivity.includes(APP_PACKAGE);
     }
   } catch { /* non-fatal */ }
 
-  // 2. UI element dump
+  // 2. UI element dump — try /dev/stdout first (fast), fall back to device file
+  let rawXml = '';
   try {
-    const raw = execSync(
+    rawXml = execSync(
       'adb shell uiautomator dump /dev/stdout',
       { encoding: 'utf8', timeout: 8_000, stdio: ['ignore', 'pipe', 'ignore'] },
     );
+  } catch {
+    try {
+      execSync('adb shell uiautomator dump /data/local/tmp/e2e-uidump.xml', {
+        encoding: 'utf8',
+        timeout: 10_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      rawXml = execSync('adb shell cat /data/local/tmp/e2e-uidump.xml', {
+        encoding: 'utf8',
+        timeout: 5_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch { /* non-fatal */ }
+  }
+  if (rawXml) {
     snapshot.screenIds = [
       ...new Set(
-        Array.from(raw.matchAll(/resource-id="([^"]+)"/g))
+        Array.from(rawXml.matchAll(/resource-id="([^"]+)"/g))
           .map(m => m[1].split('/').pop()!)
           .filter(Boolean),
       ),
     ].slice(0, 25);
     snapshot.visibleText = [
       ...new Set(
-        Array.from(raw.matchAll(/(?:text|content-desc)="([^"]{1,80})"/g))
+        Array.from(rawXml.matchAll(/(?:text|content-desc)="([^"]{1,80})"/g))
           .map(m => m[1])
           .filter(Boolean),
       ),
     ].slice(0, 20);
-  } catch { /* non-fatal */ }
+  }
 
-  // 3. Recent RN JS errors
+  // 3. Recent RN JS errors + Expo dev-client errors
   try {
     const errors = execSync(
       'adb logcat -d -s ReactNativeJS:E',
@@ -87,6 +110,20 @@ export function captureDeviceSnapshot(): DeviceSnapshot {
       .filter(l => l.includes('ReactNativeJS'))
       .slice(-5)
       .map(l => l.replace(/^.*ReactNativeJS:\s*/, '').trim());
+  } catch { /* non-fatal */ }
+
+  // 4. Expo dev-client specific errors (SocketTimeout / connection failures)
+  try {
+    const expoErrors = execSync(
+      'adb logcat -d -s DevLauncher:E',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const lines = expoErrors
+      .split('\n')
+      .filter(l => /DevLauncher|SocketTimeout|connection|timeout|failed to connect/i.test(l))
+      .slice(-5)
+      .map(l => l.replace(/^.*DevLauncher:\s*/, '').trim());
+    snapshot.jsErrors.push(...lines);
   } catch { /* non-fatal */ }
 
   return snapshot;
@@ -123,6 +160,46 @@ export function diagnosticError(what: string, timeoutMs: number): Error {
     `  ${formatSnapshot(snapshot)}`,
   ].join('\n');
   return new Error(message);
+}
+
+/**
+ * Detect whether an Android AlertDialog / system dialog is currently showing.
+ *
+ * When a React Native Alert is displayed, the dialog lives in a separate
+ * system window. Detox keeps waiting for the app to become idle and can
+ * time out with an opaque "AppIdle" error instead of failing fast.
+ *
+ * @returns true if a dialog window is currently focused.
+ */
+export function isAlertShowing(): boolean {
+  try {
+    const dumpsys = execSync(
+      'adb shell "dumpsys window | grep -E (mCurrentFocus|mFocusedWindow)"',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return /AlertDialog|PopupWindow|Dialog/.test(dumpsys) ||
+      /mCurrentFocus=Window\{[^}]+ [^}]+ com\.android\.systemui/.test(dumpsys);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Dismiss a blocking Alert / system dialog.
+ *
+ * Tries the Android back key first (works for RN Alerts with a Cancel action),
+ * then falls back to tapping the focused window. Returns whether an alert was
+ * detected before dismissal.
+ */
+export function dismissBlockingAlert(): boolean {
+  const hadAlert = isAlertShowing();
+  if (!hadAlert) return false;
+  try {
+    execSync('adb shell input keyevent 4', { stdio: 'ignore', timeout: 3_000 });
+  } catch {
+    // ignore
+  }
+  return true;
 }
 
 /**
@@ -171,4 +248,70 @@ export function getDesktopLogTail(maxLines = 15): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Detect common Expo dev-client error states from logcat / window state.
+ */
+export function detectExpoErrorState(): { isError: boolean; type?: string; details?: string } {
+  try {
+    const window = execSync(
+      'adb shell "dumpsys window | grep -E (mCurrentFocus|mFocusedWindow)"',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    if (window.includes('DevLauncherErrorActivity')) {
+      return { isError: true, type: 'DevLauncherErrorActivity', details: window.trim() };
+    }
+  } catch { /* non-fatal */ }
+
+  try {
+    const logs = execSync(
+      'adb logcat -d -s DevLauncher:E',
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    if (/SocketTimeout|Could not connect|failed to connect|connection refused/i.test(logs)) {
+      const line = logs.split('\n').filter(l => /SocketTimeout|Could not connect|failed to connect|connection refused/i.test(l)).slice(-1)[0] ?? '';
+      return { isError: true, type: 'ExpoConnectionError', details: line.replace(/^.*DevLauncher:\s*/, '').trim() };
+    }
+  } catch { /* non-fatal */ }
+
+  return { isError: false };
+}
+
+/**
+ * Save the full Android UI hierarchy XML to a file.
+ * Uses a two-step approach for reliability:
+ *   1. uiautomator dump to a temp file on the device
+ *   2. cat that file and capture the output
+ * Returns the file path and full XML content.
+ */
+export function dumpFullUIHierarchy(label: string): { filePath: string; xml: string } {
+  stepCounter++;
+  const timestamp = Date.now();
+  const safeLabel = label.replace(/\W+/g, '-').slice(0, 40);
+  const filePath = join(ARTIFACTS_DIR, `ui-dump-${stepCounter}-${safeLabel}-${timestamp}.xml`);
+
+  let xml = '';
+  try {
+    mkdirSync(ARTIFACTS_DIR, { recursive: true });
+
+    // Step 1: dump to a temp file on the device (uiautomator cannot write to /dev/stdout on all devices)
+    execSync('adb shell uiautomator dump /data/local/tmp/e2e-uidump.xml', {
+      encoding: 'utf8',
+      timeout: 10_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    // Step 2: read the file content
+    xml = execSync('adb shell cat /data/local/tmp/e2e-uidump.xml', {
+      encoding: 'utf8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    // Step 3: save to a local file
+    writeFileSync(filePath, xml, 'utf8');
+  } catch { /* non-fatal — dump may not be available on all devices/API levels */ }
+
+  return { filePath, xml };
 }
