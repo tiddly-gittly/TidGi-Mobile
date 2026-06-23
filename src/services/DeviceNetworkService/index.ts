@@ -77,6 +77,7 @@ const emptyCapabilities: DeviceCapabilities = {
   tools: [],
   mcpServers: [],
   hasWiki: false,
+  agentLoop: false,
   imChannels: [],
   wikis: [],
 };
