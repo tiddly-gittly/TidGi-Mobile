@@ -14,7 +14,9 @@ type CreateWorkspaceTabParameterList = {
   CreateWebpageShortcut: undefined;
 };
 
-const Tab: ReturnType<typeof createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>> = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
+// The navigator factory is untyped in this version of react-navigation-paper;
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+const Tab = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
 
 export const CreateWorkspace: FC<StackScreenProps<RootStackParameterList, 'CreateWorkspace'>> = ({ navigation: _navigation }) => {
   const { t } = useTranslation();

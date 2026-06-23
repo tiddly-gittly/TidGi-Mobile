@@ -107,9 +107,11 @@ function toFileUri(plainPath: string): string {
   }
 }
 
+/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Generic helper for call-site type clarity */
 function parseNativeResult<T>(json: string): T {
   return JSON.parse(json) as T;
 }
+/* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
 
 function createAuthHeader(remote: Pick<IGitRemote, 'token' | 'tokenAuthHeaderName' | 'tokenAuthHeaderValue'>): Record<string, string | undefined> {
   const headers: Record<string, string | undefined> = {

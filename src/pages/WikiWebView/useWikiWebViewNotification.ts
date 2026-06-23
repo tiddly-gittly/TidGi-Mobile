@@ -107,6 +107,9 @@ async function registerForPushNotifications() {
   const token = (await getDevicePushTokenAsync()).data as string;
 
   setNotificationHandler({
+    // Notification handler interface requires async; it is intentionally a
+    // fire-and-forget response.
+    // eslint-disable-next-line @typescript-eslint/require-await
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,

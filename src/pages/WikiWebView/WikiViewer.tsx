@@ -182,7 +182,10 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
         style={styles.e2eCreateTiddlerButton}
         onPress={() => {
           const title = endToEndTestTiddlerTitle || 'E2E Test';
-          webViewReference.current?.injectJavaScript(
+          // The webview reference is typed as WebView | null; the webview package
+          // provides injectJavaScript at runtime. Cast to a small interface to
+          // avoid unsafe `any` lint errors.
+          (webViewReference.current as { injectJavaScript: (script: string) => void } | null)?.injectJavaScript(
             `window.__e2e_createTiddler(${JSON.stringify(title)})`,
           );
         }}
