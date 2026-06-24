@@ -4,19 +4,29 @@ import { useTranslation } from 'react-i18next';
 import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
 import { useShallow } from 'zustand/react/shallow';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
-import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
+import { syncHtmlWorkspaceWithServer } from '../services/HtmlWorkspaceService';
+import { type IServerInfo, ServerStatus, useServerStore } from '../store/server';
+import { type IHtmlWorkspace, useWorkspaceStore } from '../store/workspace';
 
 export interface ISyncIconButtonProps {
   workspaceID: string;
 }
+
+function getOnlineServerForHtmlWorkspace(workspace: Pick<IHtmlWorkspace, 'syncedServers'>, servers: Record<string, IServerInfo>): IServerInfo | undefined {
+  return workspace.syncedServers
+    .map(item => servers[item.serverID] as IServerInfo | undefined)
+    .find((serverInfo): serverInfo is IServerInfo => serverInfo !== undefined && serverInfo.status === ServerStatus.online);
+}
+
 export function SyncIconButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
   // Use useShallow + useMemo to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  const wiki = useMemo(
-    () => workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined,
+  const workspace = useMemo(
+    () => workspaces.find(w => w.id === workspaceID && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
     [workspaces, workspaceID],
   );
+  const servers = useServerStore(useShallow(state => state.servers));
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
@@ -40,16 +50,25 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
       icon={iconName}
       iconColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80) : undefined}
       onPress={async () => {
-        if (wiki === undefined) return;
+        if (workspace === undefined || workspace.type === 'webpage') return;
         setInSyncing(true);
         try {
           await gitBackgroundSyncService.updateServerOnlineStatus();
-          const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
-          if (server === undefined) {
-            setIsConnected(false);
-            return;
+          if (workspace.type === 'html') {
+            const server = getOnlineServerForHtmlWorkspace(workspace, servers);
+            if (server === undefined) {
+              setIsConnected(false);
+              return;
+            }
+            setIsSyncSucceed(await syncHtmlWorkspaceWithServer(workspace, server));
+          } else {
+            const server = gitBackgroundSyncService.getOnlineServerForWiki(workspace);
+            if (server === undefined) {
+              setIsConnected(false);
+              return;
+            }
+            setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(workspace, server));
           }
-          setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {
@@ -65,22 +84,25 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
   // Use useShallow + useMemo to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  const wiki = useMemo(
-    () => workspaces.find(w => w.id === workspaceID && w.type === 'wiki') as IWikiWorkspace | undefined,
+  const workspace = useMemo(
+    () => workspaces.find(w => w.id === workspaceID && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
     [workspaces, workspaceID],
   );
+  const servers = useServerStore(useShallow(state => state.servers));
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof gitBackgroundSyncService.getOnlineServerForWiki>>>();
   useEffect(() => {
-    if (!wiki) {
+    if (!workspace || workspace.type === 'webpage') {
       setIsConnected(false);
       return;
     }
     void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
-      const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
+      const server = workspace.type === 'wiki'
+        ? gitBackgroundSyncService.getOnlineServerForWiki(workspace)
+        : getOnlineServerForHtmlWorkspace(workspace, servers);
       if (server === undefined) {
         setIsConnected(false);
       } else {
@@ -88,7 +110,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       }
       setCurrentOnlineServerToSync(server);
     });
-  }, [wiki]);
+  }, [servers, workspace]);
 
   return (
     <Button
@@ -97,15 +119,23 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       loading={inSyncing}
       buttonColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80) : undefined}
       onPress={async () => {
-        if (wiki === undefined) return;
+        if (workspace === undefined || workspace.type === 'webpage') return;
         setInSyncing(true);
         try {
           await gitBackgroundSyncService.updateServerOnlineStatus();
-          const server = gitBackgroundSyncService.getOnlineServerForWiki(wiki);
-          if (server === undefined) {
-            throw new Error('No server available');
+          if (workspace.type === 'html') {
+            const server = getOnlineServerForHtmlWorkspace(workspace, servers);
+            if (server === undefined) {
+              throw new Error('No server available');
+            }
+            setIsSyncSucceed(await syncHtmlWorkspaceWithServer(workspace, server));
+          } else {
+            const server = gitBackgroundSyncService.getOnlineServerForWiki(workspace);
+            if (server === undefined) {
+              throw new Error('No server available');
+            }
+            setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(workspace, server));
           }
-          setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(wiki, server));
         } catch {
           setIsSyncSucceed(false);
         } finally {

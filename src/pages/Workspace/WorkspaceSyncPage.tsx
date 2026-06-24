@@ -11,7 +11,7 @@ import { SyncTextButton } from '../../components/SyncButton';
 import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
 import { useWorkspaceStore } from '../../store/workspace';
 import { WorkspaceSyncModalContent } from '../MainMenu/EditItemModel/WorkspaceSyncModalContent';
-import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
+import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
 
 const SectionTitle = styled(Text)`
   margin-top: 16px;
@@ -25,7 +25,7 @@ const AddServerButton = styled(Button)`
 
 export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceSync'>): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWikiWorkspace(route.params.id);
+  const wiki = useSyncableWorkspace(route.params.id);
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('Sync.WorkspaceSync'));
 
   const [setServerActive] = useWorkspaceStore(useShallow(state => [state.setServerActive]));
@@ -43,9 +43,11 @@ export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootSt
       <WorkspaceSyncModalContent
         workspace={wiki}
         showCloseButton={false}
-        onOpenChanges={() => {
-          navigation.navigate('WorkspaceChanges', { id: wiki.id });
-        }}
+        onOpenChanges={wiki.type === 'wiki'
+          ? () => {
+            navigation.navigate('WorkspaceChanges', { id: wiki.id });
+          }
+          : undefined}
         onClose={() => {
           navigation.goBack();
         }}
@@ -55,7 +57,7 @@ export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootSt
       <SyncTextButton workspaceID={wiki.id} />
 
       {/* ── Server list ─────────────────────────────────────────── */}
-      {wiki.isSubWiki !== true && (
+      {(wiki.type !== 'wiki' || wiki.isSubWiki !== true) && (
         <>
           <SectionTitle variant='titleSmall'>{t('AddWorkspace.ServerList')}</SectionTitle>
           <ServerList

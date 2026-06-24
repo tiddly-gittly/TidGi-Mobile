@@ -9,9 +9,9 @@ import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { type IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCloneToDirectory, IGitRemote } from '../GitService';
+import { saveTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { extractZipToDirectory } from '../WikiTemplateService/extractLocalWikiTemplate';
 import { getGitCloneCacheDirectory, hasValidGitRepository, normalizeGitCloneUrl, toFileCloneUrl, updateGitCloneCache } from './gitCloneCache';
-import { saveTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 
 function isExternalPath(filepath: string): boolean {
   const plain = toPlainPath(filepath);
