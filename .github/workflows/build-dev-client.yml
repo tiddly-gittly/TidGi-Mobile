@@ -64,8 +64,14 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Checkout local memeloop dependency
+        env:
+          MEMELOOP_CHECKOUT_TOKEN: ${{ secrets.MEMELOOP_CHECKOUT_TOKEN }}
         run: |
-          git clone --depth 1 --branch "$MEMELOOP_REF" https://github.com/linonetwo/memeloop.git ../memeloop
+          if [ -z "$MEMELOOP_CHECKOUT_TOKEN" ]; then
+            echo "::error::Set MEMELOOP_CHECKOUT_TOKEN with read access to linonetwo/memeloop before building the dev-client artifact."
+            exit 1
+          fi
+          git -c http.extraheader="AUTHORIZATION: bearer $MEMELOOP_CHECKOUT_TOKEN" clone --depth 1 --branch "$MEMELOOP_REF" https://github.com/linonetwo/memeloop.git ../memeloop
 
       - name: Install dependencies
         run: pnpm install
