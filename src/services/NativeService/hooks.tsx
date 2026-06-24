@@ -1,4 +1,3 @@
-import type { useShareIntent as IUseShareIntent } from 'expo-share-intent';
 import { useEffect, useState } from 'react';
 import { Snackbar } from 'react-native-paper';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
@@ -21,8 +20,49 @@ export function useRequestNativePermissions() {
   }, []);
 }
 
+// Resolve useShareIntent at module load time so the hook is always
+// called unconditionally (no conditional hook calls). If expo-share-intent
+// is not installed, fall back to a no-op that returns empty data.
+// The module is optional and only has community types, so we bypass strict
+// type checks via a local helper.
+interface ShareIntentResultLike {
+  isReady: boolean;
+  hasShareIntent: boolean;
+  shareIntent: import('expo-share-intent').ShareIntent | undefined;
+  resetShareIntent: () => void;
+  error: Error | null;
+}
+
+let useShareIntentHook: (options?: { debug?: boolean; disabled?: boolean }) => ShareIntentResultLike;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const shareIntentModule = require('expo-share-intent') as { useShareIntent?: (options?: { debug?: boolean; disabled?: boolean }) => ShareIntentResultLike };
+  useShareIntentHook = shareIntentModule.useShareIntent ?? (() => ({
+    isReady: true,
+    hasShareIntent: false,
+    shareIntent: undefined,
+    resetShareIntent: () => {},
+    error: null,
+  }));
+} catch {
+  useShareIntentHook = () => ({
+    isReady: true,
+    hasShareIntent: false,
+    shareIntent: undefined,
+    resetShareIntent: () => {},
+    error: null,
+  });
+}
+
 export function useRegisterReceivingShareIntent() {
   const [importSuccessSnackBarVisible, setImportSuccessSnackBarVisible] = useState(false);
+
+  // Called unconditionally — satisfies the Rules of Hooks.
+  const shareIntentResult = useShareIntentHook({
+    debug: true,
+    disabled: process.env.NODE_ENV === 'development',
+  });
+
   const importSuccessSnackBar = (
     <Snackbar
       visible={importSuccessSnackBarVisible}
@@ -34,13 +74,9 @@ export function useRegisterReceivingShareIntent() {
     </Snackbar>
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useShareIntent } = require('expo-share-intent') as { useShareIntent: typeof IUseShareIntent };
-
-  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
-    debug: true,
-    disabled: process.env.NODE_ENV === 'development',
-  });
+  // The hook is called unconditionally above, so shareIntentResult is always
+  // defined. Destructure directly to avoid lint warnings about the redundant ??.
+  const { hasShareIntent, shareIntent, resetShareIntent, error } = shareIntentResult;
 
   useEffect(() => {
     if (error) {
@@ -50,7 +86,7 @@ export function useRegisterReceivingShareIntent() {
     }
     void (async () => {
       try {
-        if (!hasShareIntent) return;
+        if (!hasShareIntent || shareIntent === undefined) return;
         await nativeService.receivingShareIntent(shareIntent);
         resetShareIntent();
         setImportSuccessSnackBarVisible(true);

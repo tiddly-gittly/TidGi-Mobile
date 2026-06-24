@@ -10,6 +10,6 @@
     "types": ["node", "tw5-typed"],
     "lib": ["DOM", "ESNext"]
   },
-  "include": ["src", "*.json", "wiki/*.info", "*.mjs", "*.js", "src/**/*.d.ts", "wiki/tiddlers/tests/playwright/**/*.ts"]
+  "include": ["src", "e2e/**/*.ts", "*.json", "wiki/*.info", "*.mjs", "*.js", "src/**/*.d.ts", "wiki/tiddlers/tests/playwright/**/*.ts"]
 }
 

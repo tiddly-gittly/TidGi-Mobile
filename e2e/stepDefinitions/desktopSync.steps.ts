@@ -1,375 +1,390 @@
 /**
- * Step definitions for Desktop Sync scenarios.
+ * Step definitions for mock-server sync scenarios.
  *
  * Pre-conditions:
- *   - TidGi Desktop running with tw-mobile-sync plugin active.
- *   - TIDGI_DESKTOP_URL env var with desktop origin (default: http://localhost:5212).
- *   - Device connected via USB, `adb reverse` set by hooks.ts BeforeAll.
- *
- * Principles:
- *   - Use Detox for all UI interactions (tap, waitFor, replaceText).
- *   - Use adb only for device storage reads and file writes (non-UI).
- *   - On failure, capture device snapshot for diagnostics instead of bare timeouts.
+ *   - Mock TiddlyWiki server running on the host's LAN IP :5212 (auto-started by hooks.ts).
+ *   - Device connected via USB and on the same Wi-Fi/LAN as the host (no adb reverse needed).
  */
-
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
-import { writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { diagnosticError, waitForElement } from '../support/diagnostics';
+import { readFileSync } from 'fs';
+import { get as httpGet } from 'node:http';
+import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
+import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement } from '../support/diagnostics';
 
-const DESKTOP_URL = process.env.TIDGI_DESKTOP_URL ?? 'http://localhost:5212';
-const DESKTOP_AUTH_TOKEN = process.env.TIDGI_DESKTOP_AUTH_TOKEN ?? '';
-const DESKTOP_AUTH_USER = process.env.TIDGI_DESKTOP_AUTH_USER ?? 'TidGi User';
-/**
- * Full QR-code JSON payload. Required when tokenAuth is enabled
- * (the /tw-mobile-sync/git/mobile-sync-info endpoint returns 403).
- */
-const DESKTOP_QR_JSON = process.env.TIDGI_DESKTOP_QR_JSON ?? '';
-/** Timeout for steps that require network (clone, sync). */
-const NETWORK_TIMEOUT = 120_000;
-/** Timeout for local UI interactions. */
 const UI_TIMEOUT = 10_000;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function curlAuthArguments(): string {
-  if (!DESKTOP_AUTH_TOKEN) return '';
-  return `-H "x-tidgi-auth-token-${DESKTOP_AUTH_TOKEN}: ${DESKTOP_AUTH_USER}"`;
-}
-
+const NETWORK_TIMEOUT = 120_000;
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-/**
- * Scroll the config screen. Prefers Detox swipe; falls back to adb if blocked.
- */
-async function scrollDown(distance: 'large' | 'small' = 'large') {
+function adbKeyEvent(key: number): void {
   try {
-    const pct = distance === 'small' ? 0.3 : 0.6;
-    await element(by.id('config-screen')).swipe('up', 'slow', pct);
+    execSync(`adb shell input keyevent ${key}`, { stdio: 'ignore', timeout: 3_000 });
   } catch {
-    try {
-      const endY = distance === 'small' ? 1300 : 1000;
-      execSync(`adb shell input swipe 540 1800 540 ${endY} 300`, { stdio: 'ignore', timeout: 3_000 });
-    } catch { /* non-fatal */ }
+    // Non-fatal: Detox checks below will surface real navigation failures.
   }
 }
 
 // ── Background ────────────────────────────────────────────────────────────────
-
 Given('the app is on the main menu screen', async () => {
-  await waitForElement(by.id('main-menu-screen'), UI_TIMEOUT, 'main-menu-screen visible', 'visible');
+  await waitForElement(by.id('main-menu-screen'), UI_TIMEOUT, 'main-menu-screen', 'visible');
   await delay(3_000);
 });
 
-// ── Import flow ───────────────────────────────────────────────────────────────
-
-When('I navigate to the importer screen', { timeout: 60_000 }, async () => {
-  try {
-    await device.disableSynchronization();
-  } catch { /* non-fatal */ }
-
-  // Navigate to Settings
-  await element(by.id('settings-icon-button')).tap();
+async function navigateToImporterScreen(): Promise<void> {
+  await device.disableSynchronization().catch(() => {});
+  // MainMenu's bottom button opens CreateWorkspace with ScanQRCode as the first tab,
+  // which renders the Importer. This is the natural user flow for adding/importing a wiki.
+  await element(by.id('create-workspace-button')).tap();
   await delay(2_000);
-  await waitForElement(by.id('config-screen'), UI_TIMEOUT, 'config-screen after tapping settings icon', 'visible');
+  await waitForElement(by.id('create-workspace-tab-scan-qr'), UI_TIMEOUT, 'create-workspace-tab-scan-qr');
+  await waitForElement(by.id('importer-screen'), 10_000, 'importer-screen');
+}
 
-  // Scroll to find the import button
+async function assertMockServerReachable(): Promise<void> {
+  const url = getMockServerUrl();
+  // The mock server is started without TiddlyWeb Basic Auth so the mobile
+  // client can access Git endpoints anonymously. We just check /status is up.
+  const statusCode = await new Promise<number>((resolve, reject) => {
+    const request = httpGet(`${url}/status`, response => {
+      response.resume();
+      resolve(response.statusCode ?? 0);
+    });
+    request.setTimeout(5_000, () => {
+      request.destroy(new Error(`Timed out reaching ${url}/status`));
+    });
+    request.on('error', reject);
+  });
+  if (statusCode !== 200 && statusCode !== 204) {
+    throw new Error(`Mock server not reachable at ${url}/status (HTTP ${statusCode})`);
+  }
+}
+
+async function enterMockServerUrl(): Promise<void> {
+  // Open the manual JSON configuration panel if it is not already open.
+  try {
+    await waitFor(element(by.id('toggle-manual-config-button'))).toExist().withTimeout(2_000);
+    await element(by.id('toggle-manual-config-button')).tap();
+    await delay(500);
+  } catch {
+    // Manual config area might already be visible.
+  }
+
+  await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input');
+  const url = getMockServerUrl();
+  const qrPayload = JSON.stringify({
+    baseUrl: url,
+    workspaceId: 'standalone',
+    workspaceName: 'E2E Mock Wiki',
+    useStandardGitProtocol: false,
+  });
+  await element(by.id('manual-json-input')).clearText();
+  await element(by.id('manual-json-input')).typeText(qrPayload);
+
+  // Dismiss the keyboard so the confirm button becomes tappable.
+  try {
+    await device.pressBack();
+  } catch {
+    adbKeyEvent(4);
+  }
+  await delay(1_000);
+}
+
+async function tapImportWikiConfirmButton(): Promise<void> {
+  await waitForElement(by.id('import-wiki-confirm-button'), UI_TIMEOUT, 'import-wiki-confirm-button');
+  await element(by.id('import-wiki-confirm-button')).tap();
+}
+
+async function waitForImportSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
+  const start = Date.now();
+  const pollInterval = 1_500;
+
+  while (Date.now() - start < maxWaitMs) {
+    if (isAlertShowing() || dismissBlockingAlert()) {
+      await delay(500);
+      throw diagnosticError('import to complete, but an Alert/Error dialog appeared', Date.now() - start);
+    }
+
+    try {
+      await waitFor(element(by.text('下一步'))).toBeVisible().withTimeout(pollInterval);
+      return;
+    } catch {
+      // Keep polling while import is in progress.
+    }
+  }
+
+  throw diagnosticError('下一步 (import success)', maxWaitMs);
+}
+
+async function navigateBackToMainMenuScreen(): Promise<void> {
   for (let index = 0; index < 15; index++) {
     try {
-      await waitFor(element(by.id('import-wiki-button'))).toExist().withTimeout(500);
-      break;
+      await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500);
+      await device.disableSynchronization().catch(() => {});
+      return;
     } catch {
-      if (index === 14) {
-        throw diagnosticError('import-wiki-button after scrolling 15 times through settings', 15 * 1100);
-      }
-      await scrollDown('small');
-      await delay(600);
+      adbKeyEvent(4);
+      await delay(1_500);
     }
   }
+  await device.disableSynchronization().catch(() => {});
+  await waitForElement(by.id('main-menu-screen'), 10_000, 'main-menu-screen after back navigation');
+}
 
-  // Tap with scroll-retry if element is behind nav bar
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      await element(by.id('import-wiki-button')).tap();
-      break;
-    } catch {
-      if (attempt === 4) {
-        throw diagnosticError('tapping import-wiki-button (may be behind system nav bar)', 5 * 900);
-      }
-      await scrollDown('small');
-      await delay(400);
-    }
-  }
-  await delay(1_500);
+async function waitForImportedWikiInWorkspaceList(): Promise<void> {
+  await navigateBackToMainMenuScreen();
+  await delay(3_000);
 
-  // Verify Importer screen appeared
-  await waitForElement(by.id('importer-screen'), 10_000, 'importer-screen after tapping import button');
+  // The sync button has a per-workspace testID; locate the imported wiki first.
+  const wikiId = getImportedWikiWorkspaceId();
+  if (!wikiId) throw new Error('No imported wiki found in device storage.');
+  await waitForElement(by.id(`sync-icon-button-${wikiId}`), 20_000, `sync-icon-button-${wikiId}`);
+}
+
+async function importFreshMockServerWiki(): Promise<void> {
+  await navigateToImporterScreen();
+  await assertMockServerReachable();
+  await enterMockServerUrl();
+  await tapImportWikiConfirmButton();
+  await waitForImportSuccess();
+  await waitForImportedWikiInWorkspaceList();
+}
+
+// ── Import ────────────────────────────────────────────────────────────────────
+When('I navigate to the importer screen', { timeout: 60_000 }, async () => {
+  await navigateToImporterScreen();
 });
 
 Then('I should see the importer screen', async () => {
   await waitForElement(by.id('importer-screen'), 30_000, 'importer-screen');
 });
 
-When('the desktop server is reachable', () => {
-  // Ensure adb reverse is set so the device can reach localhost on the host.
-  // Extract port from DESKTOP_URL so it works with non-default ports.
-  try {
-    const port = new URL(DESKTOP_URL).port || '5212';
-    execSync(`adb reverse tcp:${port} tcp:${port}`, { stdio: 'ignore', timeout: 3_000 });
-  } catch { /* non-fatal — may already be set */ }
-  // Quick HTTP health check from the host (not from the device).
-  // Use curl.exe explicitly (Windows ships it in System32) and avoid Unix-only
-  // redirects like `> /dev/null` — stdio: 'pipe' lets Node discard the output.
-  // Do NOT use -f: a 401 (tokenAuth) or 403 response still means the server is
-  // UP — we just need auth.  Only fail on connection errors (exit codes 6/7/28).
-  try {
-    const authArguments = curlAuthArguments();
-    execSync(
-      `curl.exe -s --max-time 5 ${authArguments} -o NUL -w "%{http_code}" ${DESKTOP_URL}/status`,
-      { stdio: 'pipe', timeout: 10_000 },
-    );
-  } catch {
-    throw new Error(`Desktop server at ${DESKTOP_URL} is not reachable. Ensure TidGi Desktop is running with tw-mobile-sync plugin.`);
-  }
+Then('the mock server is reachable', { timeout: 30_000 }, async () => {
+  await assertMockServerReachable();
 });
 
-When('I enter the desktop server URL', async () => {
-  // Fetch the QR JSON payload from the desktop's mobile-sync-info endpoint
-  // so we have the correct workspaceId and baseUrl.
-  // When tokenAuth is enabled the endpoint returns 403; in that case
-  // TIDGI_DESKTOP_QR_JSON must be provided as an env var instead.
-  let qrJSON: string;
-  if (DESKTOP_QR_JSON) {
-    // Env var provided — validate and use directly.
-    const parsed = JSON.parse(DESKTOP_QR_JSON) as { baseUrl?: string; workspaceId?: string };
-    if (!parsed.baseUrl || !parsed.workspaceId) {
-      throw new Error('TIDGI_DESKTOP_QR_JSON is missing baseUrl or workspaceId');
-    }
-    qrJSON = DESKTOP_QR_JSON;
-  } else {
-    try {
-      const authArguments = curlAuthArguments();
-      const raw = execSync(
-        `curl.exe -sf --max-time 10 ${authArguments} ${DESKTOP_URL}/tw-mobile-sync/git/mobile-sync-info`,
-        { encoding: 'utf8', timeout: 15_000 },
-      ).trim();
-      // Validate it has the required fields.
-      const parsed = JSON.parse(raw) as { baseUrl?: string; workspaceId?: string };
-      if (!parsed.baseUrl || !parsed.workspaceId) {
-        throw new Error('Missing baseUrl or workspaceId in mobile-sync-info response');
-      }
-      qrJSON = raw;
-    } catch (error) {
-      throw new Error(
-        `Failed to fetch mobile-sync-info from ${DESKTOP_URL}: ${(error as Error).message}. ` +
-          'If tokenAuth is enabled set TIDGI_DESKTOP_QR_JSON env var with the full QR payload.',
-      );
-    }
-  }
-
-  // Tap "Manual Configuration" to expand the JSON input area.
-  await waitForElement(by.id('toggle-manual-config-button'), UI_TIMEOUT, 'toggle-manual-config-button on importer screen', 'visible');
-  await element(by.id('toggle-manual-config-button')).tap();
-  await delay();
-
-  // Type the JSON into the manual input field.
-  // react-native-paper TextInput testID is on the inner native EditText.
-  await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input after expanding manual config');
-  await element(by.id('manual-json-input')).replaceText(qrJSON);
-  await delay(2_000);
+When('I enter the mock server URL', async () => {
+  await enterMockServerUrl();
 });
 
 When('I tap the import wiki confirm button', async () => {
-  await waitForElement(by.id('import-wiki-confirm-button'), UI_TIMEOUT, 'import-wiki-confirm-button', 'visible');
-  await element(by.id('import-wiki-confirm-button')).tap();
+  await tapImportWikiConfirmButton();
 });
 
 Then('the import should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {
-  // When import succeeds, t('NextStep') = '下一步' text appears above the open button.
-  // Git clone can take a long time — the step timeout must exceed NETWORK_TIMEOUT.
-  await waitForElement(by.text('下一步'), NETWORK_TIMEOUT, 'import success indicator (下一步 button)');
+  await waitForImportSuccess();
 });
 
 Then('I should see the imported wiki in the workspace list', { timeout: 30_000 }, async () => {
-  // Navigate back to main menu. After a successful import, the navigation
-  // stack may be: MainMenu → Settings → Importer(success). Press back via
-  // device.pressBack() (preferred over adb) to pop the navigation stack.
-  for (let index = 0; index < 4; index++) {
-    try {
-      await device.pressBack();
-    } catch {
-      // Fallback to adb if Detox pressBack fails (Espresso blocked by WebView)
-      try {
-        execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
-      } catch { /* non-fatal */ }
-    }
-    await delay(1_500);
-    try {
-      await waitFor(element(by.id('main-menu-screen')))
-        .toExist()
-        .withTimeout(2_000);
-      break;
-    } catch { /* keep pressing back */ }
-  }
-  // Extra settling time for workspace list to re-render after import
-  await delay(3_000);
-  // Wiki workspaces have a sync icon button (accessibilityLabel).
-  await waitForElement(
-    by.label('sync-icon-button'),
-    20_000,
-    'sync-icon-button in workspace list after import (wiki workspace card not rendered yet?)',
-  );
+  await waitForImportedWikiInWorkspaceList();
+});
+
+Given('a fresh mock server wiki is imported', { timeout: NETWORK_TIMEOUT + 90_000 }, async () => {
+  await importFreshMockServerWiki();
 });
 
 // ── Open wiki ─────────────────────────────────────────────────────────────────
-
 When('I tap the first wiki workspace', async () => {
-  // Read workspace ID from device storage and tap the card directly.
-  const wikiId = getFirstWikiWorkspaceId();
-  if (wikiId) {
-    await element(by.id(`workspace-item-${wikiId}`)).tap();
-  } else {
-    throw new Error('No wiki workspace found on device. Run the @import scenario first.');
-  }
+  const wikiId = getImportedWikiWorkspaceId();
+  if (wikiId) await element(by.id(`workspace-item-${wikiId}`)).tap();
+  else throw new Error('No imported wiki found. Import a fresh mock server wiki in this scenario first.');
   await delay(2_000);
 });
 
 Then('I should see the wiki webview', { timeout: 60_000 }, async () => {
-  await waitForElement(by.id('wiki-webview-screen'), 30_000, 'wiki-webview-screen after tapping workspace');
+  await waitForElement(by.id('wiki-webview-screen'), 30_000, 'wiki-webview-screen');
 });
 
-// ── Create change & sync ──────────────────────────────────────────────────────
+async function tapImportedWikiWorkspace(): Promise<void> {
+  const wikiId = getImportedWikiWorkspaceId();
+  if (!wikiId) throw new Error('No imported wiki workspace found.');
+  await element(by.id(`workspace-item-${wikiId}`)).tap();
+  await delay(2_000);
+}
 
-/**
- * Read the first wiki workspace ID and folder location from the device's persist storage.
- */
-function getFirstWikiWorkspace(): { id: string; wikiFolderLocation: string } | undefined {
+async function waitForWikiWebView(): Promise<void> {
+  await waitForElement(by.id('wiki-webview-screen'), 30_000, 'wiki-webview-screen');
+}
+
+async function createTiddlerViaWikiWebView(title: string): Promise<void> {
+  await element(by.id('e2e-tiddler-title')).replaceText(title);
+  await element(by.id('e2e-create-tiddler-button')).tap();
+}
+
+// ── Sync ──────────────────────────────────────────────────────────────────────
+function getImportedWikiWorkspaceId(): string | undefined {
   try {
-    const raw = execSync(
-      'adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage',
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-    );
+    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
     const parsed = JSON.parse(raw) as {
-      state?: { workspaces?: Array<{ id?: string; type?: string; wikiFolderLocation?: string }> };
+      state?: {
+        workspaces?: Array<{
+          id?: string;
+          type?: string;
+          syncedServers?: Array<{ serverID?: string }>;
+        }>;
+      };
     };
-    const wiki = parsed.state?.workspaces?.find(
-      w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string',
-    );
-    if (wiki?.id && wiki.wikiFolderLocation) {
-      return { id: wiki.id, wikiFolderLocation: wiki.wikiFolderLocation };
-    }
+    const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki') ?? [];
+    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
+    if (standaloneWiki?.id) return standaloneWiki.id;
+    const importedWiki = wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0));
+    if (importedWiki?.id) return importedWiki.id;
+    return wikiList[0]?.id;
   } catch {
-    // Fall back to the actual imported wiki folders when the persisted zustand
-    // store file is absent in the current app build.
-  }
-
-  try {
-    const raw = execSync(
-      'adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis',
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-    ).trim();
-    const id = raw.split(/\r?\n/).map(value => value.trim()).find(value => value.length > 0);
-    if (!id) {
-      return undefined;
-    }
-    return {
-      id,
-      wikiFolderLocation: `file:///data/user/0/ren.onetwo.tidgi.mobile.test/files/wikis/${id}`,
-    };
-  } catch {
-    return undefined;
+    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    const ids = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
+    return ids.find(id => id === 'standalone') ?? ids[0];
   }
 }
-
-function getFirstWikiWorkspaceId(): string | undefined {
-  return getFirstWikiWorkspace()?.id;
-}
-
-Given('a test tiddler is written to the first wiki via adb', async () => {
-  const wiki = getFirstWikiWorkspace();
-  if (!wiki) {
-    throw new Error(
-      'No wiki workspace found on device. Run the @import scenario first, or ensure a wiki workspace is installed.',
-    );
-  }
-
-  // Get the wiki folder path. Remove file:// prefix for adb shell commands.
-  let wikiPath = wiki.wikiFolderLocation;
-  if (wikiPath.startsWith('file://')) {
-    wikiPath = wikiPath.slice('file://'.length);
-  }
-  // Remove trailing slash
-  wikiPath = wikiPath.replace(/\/$/, '');
-
-  const tiddlerPath = `${wikiPath}/tiddlers/E2ETestTiddler.tid`;
-  const tiddlersDirectory = `${wikiPath}/tiddlers`;
-  const ts = new Date().toISOString();
-  const tidContent = `title: E2E Test Tiddler\\ntags: E2ETest\\ncreated: ${ts}\\nmodified: ${ts}\\n\\nCreated by Detox e2e test at ${ts}.`;
-
-  // For internal storage paths, use run-as to write as the app user.
-  // Internal storage requires run-as; external storage is world-accessible.
-  const isInternal = wikiPath.startsWith('/data/user/') || wikiPath.startsWith('/data/data/');
-  // Strategy: write content to a host temp file, push via `adb push` to
-  // /data/local/tmp (world-writable), then `run-as cp` to app-private path.
-  // This avoids SELinux restrictions on `sh -c "... > file"` via run-as.
-  const hostTemporaryPath = join(tmpdir(), 'E2ETestTiddler.tid');
-  // Convert \n sequences to real newlines for the file
-  const tidFileContent = tidContent.replace(/\\n/g, '\n');
-  writeFileSync(hostTemporaryPath, tidFileContent, 'utf8');
-
-  const deviceTemporaryPath = '/data/local/tmp/E2ETestTiddler.tid';
-  execSync(`adb push "${hostTemporaryPath}" ${deviceTemporaryPath}`, { stdio: 'inherit' });
-
-  if (isInternal) {
-    // Ensure the tiddlers directory exists (silently ignore if already there)
-    try {
-      execSync(`adb shell run-as ren.onetwo.tidgi.mobile.test mkdir -p ${tiddlersDirectory}`, { stdio: 'inherit' });
-    } catch { /* already exists */ }
-    execSync(`adb shell run-as ren.onetwo.tidgi.mobile.test cp ${deviceTemporaryPath} ${tiddlerPath}`, { stdio: 'inherit' });
-  } else {
-    try {
-      execSync(`adb shell mkdir -p ${tiddlersDirectory}`, { stdio: 'inherit' });
-    } catch { /* already exists */ }
-    execSync(`adb shell cp ${deviceTemporaryPath} ${tiddlerPath}`, { stdio: 'inherit' });
-  }
-
-  // Give the app's filesystem watcher a moment to detect the new file.
-  await new Promise<void>(resolve => setTimeout(resolve, 2_000));
-});
 
 When('I tap the sync button for the first wiki workspace', async () => {
-  // SyncIconButton has accessibilityLabel='sync-icon-button'.
-  // atIndex(0) picks the first wiki workspace's sync button.
-  await element(by.label('sync-icon-button')).atIndex(0).tap();
+  await tapSyncButtonForImportedWiki();
 });
 
-Then('the sync should complete successfully', async () => {
-  const wikiId = getFirstWikiWorkspaceId();
+async function tapSyncButtonForImportedWiki(): Promise<void> {
+  const wikiId = getImportedWikiWorkspaceId();
   if (!wikiId) throw new Error('No wiki workspace found.');
-  await waitForElement(
-    by.id(`sync-result-success-${wikiId}`),
-    NETWORK_TIMEOUT,
-    `sync-result-success-${wikiId} (sync may have failed or timed out)`,
-  );
+
+  // The sync button testID changes based on previous sync state:
+  //   sync-icon-button-{id}      → initial / never synced
+  //   sync-result-success-{id}   → previous sync succeeded
+  // We try the success ID first (common after @sync), then fall back.
+  const possibleIds = [`sync-result-success-${wikiId}`, `sync-icon-button-${wikiId}`];
+  let matchedId: string | undefined;
+  for (const id of possibleIds) {
+    try {
+      await waitFor(element(by.id(id)))
+        .toBeVisible()
+        .whileElement(by.id('workspace-list'))
+        .scroll(200, 'down');
+      matchedId = id;
+      break;
+    } catch {
+      // Try the next ID.
+    }
+  }
+  if (!matchedId) {
+    throw new Error(`Sync button for wiki ${wikiId} not found (tried ${possibleIds.join(', ')}).`);
+  }
+  await element(by.id(matchedId)).tap();
+
+  // After tapping sync, immediately disable synchronization so a failure Alert
+  // does not cause an "App seems idle" hang. Individual waits still work.
+  await device.disableSynchronization().catch(() => {});
+}
+
+Then('the sync should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {
+  await waitForSyncSuccess();
 });
+
+/**
+ * Poll for sync completion while checking for blocking Alert dialogs.
+ *
+ * Detox's waitFor() blocks on RN idle; a sync-failure Alert prevents the app
+ * from ever idling, turning the failure into an opaque "App seems idle" hang.
+ * We therefore disable synchronization and poll the UI / Alert state instead.
+ */
+async function waitForSyncSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
+  const wikiId = getImportedWikiWorkspaceId();
+  if (!wikiId) throw new Error('No wiki workspace found.');
+
+  const successId = `sync-result-success-${wikiId}`;
+  const start = Date.now();
+  const pollInterval = 1_500;
+
+  while (Date.now() - start < maxWaitMs) {
+    // A failure Alert is the most common cause of a stuck sync — fail fast.
+    if (isAlertShowing() || dismissBlockingAlert()) {
+      await delay(500);
+      throw diagnosticError('sync to complete, but an Alert/Error dialog appeared', Date.now() - start);
+    }
+
+    try {
+      await waitFor(element(by.id(successId))).toBeVisible().withTimeout(pollInterval);
+      return;
+    } catch {
+      // Expected while sync is still in progress; keep polling.
+    }
+  }
+
+  throw diagnosticError(successId, maxWaitMs);
+}
 
 Then('the unsynced count should be zero after sync', async () => {
-  await element(by.label('workspace-settings-icon')).atIndex(0).tap();
-  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen after tapping settings icon');
-  await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count label');
-  // Navigate back using device.pressBack; fall back to adb if blocked.
+  await assertUnsyncedCountIsZero();
+});
+
+async function assertUnsyncedCountIsZero(): Promise<void> {
+  const wikiId = getImportedWikiWorkspaceId();
+  if (!wikiId) throw new Error('No wiki workspace found.');
+  await element(by.id(`workspace-settings-icon-${wikiId}`)).tap();
+  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
+  await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count');
   try {
     await device.pressBack();
   } catch {
-    execSync('adb shell input keyevent KEYCODE_BACK', { stdio: 'ignore', timeout: 3_000 });
+    adbKeyEvent(4);
   }
   await delay();
+}
+
+Then('the mock server git working tree contains {string}', { timeout: 10_000 }, (expectedName: string) => {
+  assertMockServerGitWorkingTreeContains(expectedName);
 });
 
-// ── Sync page assertions ──────────────────────────────────────────────────────
-// NOTE: The following steps are shared with workspace.steps.ts:
-//   - "I should see the last sync timestamp"
-// They are defined in workspace.steps.ts and reused here via Cucumber's step matching.
+function assertMockServerGitWorkingTreeContains(expectedName: string): void {
+  const repoPath = getTestWikiDirectory();
+  const stdout = execSync(
+    `git -C "${repoPath}" ls-files tiddlers/`,
+    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
+  );
+  const match = stdout.split(/\r?\n/).some(line =>
+    line.includes(expectedName) ||
+    // TW5 filesystem adapter lowercases spaces and appends `.meta` for binary tiddlers.
+    line.toLowerCase().replace(/ /g, '_').includes(expectedName.toLowerCase().replace(/ /g, '_'))
+  );
+  if (!match) {
+    throw new Error(
+      `Expected mock server working tree to contain a tiddler matching "${expectedName}". ` +
+        `Git tracked files:\n${stdout}`,
+    );
+  }
+}
+
+function readDesktopGitRunnerHits(): Partial<Record<string, number>> {
+  const raw = readFileSync(getDesktopGitRunnerHitsPath(), 'utf8');
+  const parsedHits: unknown = JSON.parse(raw);
+  if (typeof parsedHits !== 'object' || parsedHits === null) {
+    throw new Error(`Desktop git runner hit counters were not an object: ${raw}`);
+  }
+  return Object.fromEntries(
+    Object.entries(parsedHits).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+  );
+}
+
+Then('the mock server desktop git runner should be used', () => {
+  const hits = readDesktopGitRunnerHits();
+  if ((hits.runGitCommand ?? 0) <= 0) {
+    throw new Error(`Expected desktop git runner to be used, but hit counters were ${JSON.stringify(hits)}`);
+  }
+});
+
+Given('the imported mock server wiki has a synced tiddler {string} in shared history', { timeout: NETWORK_TIMEOUT + 90_000 }, async (title: string) => {
+  await tapImportedWikiWorkspace();
+  await waitForWikiWebView();
+  await delay(15_000);
+  await createTiddlerViaWikiWebView(title);
+  await delay(10_000);
+  await navigateBackToMainMenuScreen();
+  await delay(5_000);
+  await tapSyncButtonForImportedWiki();
+  await waitForSyncSuccess();
+  await assertUnsyncedCountIsZero();
+  assertMockServerGitWorkingTreeContains(title);
+});
