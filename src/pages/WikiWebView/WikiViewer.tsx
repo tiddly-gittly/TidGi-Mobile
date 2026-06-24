@@ -169,14 +169,12 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
   const showProgressBar = loading && !quickLoad;
   return (
     <>
-      {}
       <TextInput
         testID='e2e-tiddler-title'
         style={styles.e2eTiddlerTitleInput}
         value={endToEndTestTiddlerTitle}
         onChangeText={setEndToEndTestTiddlerTitle}
       />
-      {}
       <Pressable
         testID='e2e-create-tiddler-button'
         style={styles.e2eCreateTiddlerButton}

@@ -217,6 +217,7 @@ export function writeBaselineWikiFiles(): void {
   ]);
 }
 
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function getLanIp(): string {
   if (process.env.TIDGI_HOST_IP) return process.env.TIDGI_HOST_IP;
 
@@ -282,6 +283,11 @@ export function getDesktopGitRunnerHitsPath() {
   return DESKTOP_GIT_RUNNER_HITS;
 }
 
+/** Absolute filesystem path of the mock server's wiki git repository. */
+export function getMockServerWikiPath(): string {
+  return TEST_WIKI_DIR;
+}
+
 /**
  * One-time wiki setup (idempotent). Call before startServer.
  *
@@ -295,7 +301,9 @@ export function ensureWikiReady() {
 
 /** Start the server. Returns when health-check passes. */
 export async function startServer(): Promise<void> {
-  const twMain = require.resolve('tiddlywiki/tiddlywiki.js');
+  // The mock server runs under ts-node/esm. Use a path relative to the project
+  // root instead of require.resolve/import.meta.resolve for maximum compatibility.
+  const twMain = join(REPO_ROOT, 'node_modules', 'tiddlywiki', 'tiddlywiki.js');
   console.log(`[mock-server] Starting on :${PORT}...`);
 
   // NOTE: We intentionally do NOT set username/password here. The mock server

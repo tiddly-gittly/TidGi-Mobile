@@ -15,7 +15,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
-const ARTIFACTS_DIR = join(__dirname, '..', 'artifacts');
+// E2E files run under ts-node/esm (ESM), so __dirname is not available.
+// The working directory is the repo root when tests are invoked via cucumber-js.
+const ARTIFACTS_DIR = join(process.cwd(), 'artifacts');
 
 /** Step counter for sequential UI dump filenames. Incremented on each call. */
 let stepCounter = 0;
