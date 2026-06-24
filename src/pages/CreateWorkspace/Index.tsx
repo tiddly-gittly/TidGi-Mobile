@@ -14,6 +14,7 @@ type CreateWorkspaceTabParameterList = {
   CreateWebpageShortcut: undefined;
 };
 
+// The navigator factory is untyped in this version of react-navigation-paper;
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 const Tab = createMaterialBottomTabNavigator<CreateWorkspaceTabParameterList>();
 

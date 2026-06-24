@@ -16,19 +16,22 @@
  *   mobile  (X → Z): modifies same file differently (via adb), committed during sync
  *   sync: mobile pushes Z → desktop merges Y+Z → resolves conflict → mobile fetches result
  */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument -- @types/node v25 resolves some Node.js APIs as any under TS 6 */
 
 import { Given, Then, When } from '@cucumber/cucumber';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { getMockServerWikiPath } from '../mock-server/setup';
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 
 const DESKTOP_WIKI_PATH = process.env.TIDGI_WIKI_PATH ?? 'I:\\github\\TidGi-Desktop\\wiki-dev\\wiki';
+const MOCK_SERVER_WIKI_PATH = getMockServerWikiPath();
 
 /** Desktop git identity matching what TidGi Desktop uses for auto-commits. */
-const GIT_ENV = {
+const GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   GIT_AUTHOR_NAME: 'TidGi Desktop',
   GIT_AUTHOR_EMAIL: 'desktop@tidgi.fun',
@@ -74,11 +77,16 @@ function writeDesktopTiddler(tiddlerFilename: string, content: string): void {
 /**
  * Return the current HEAD commit hash of the desktop wiki git repo.
  */
-function getDesktopHead(): string {
-  return execSync(`git -C "${DESKTOP_WIKI_PATH}" rev-parse HEAD`, {
+function execGit(gitArguments: string[], cwd = DESKTOP_WIKI_PATH): string {
+  return execFileSync('git', ['-C', cwd, ...gitArguments], {
     encoding: 'utf8',
+    env: GIT_ENV,
     stdio: ['ignore', 'pipe', 'ignore'],
   }).trim();
+}
+
+function getDesktopHead(): string {
+  return execGit(['rev-parse', 'HEAD']);
 }
 
 /**
@@ -99,14 +107,8 @@ async function waitForDesktopCommit(previousHead: string, timeoutMs = 20_000): P
   // File-watcher didn't commit within the timeout — commit manually.
   console.log('[conflict] File-watcher did not commit; committing manually...');
   try {
-    execSync(`git -C "${DESKTOP_WIKI_PATH}" add tiddlers/E2ETestTiddler.tid`, {
-      stdio: ['ignore', 'ignore', 'ignore'],
-      env: GIT_ENV,
-    });
-    execSync(
-      `git -C "${DESKTOP_WIKI_PATH}" commit -m "E2E conflict test: desktop edit"`,
-      { stdio: ['ignore', 'ignore', 'ignore'], env: GIT_ENV },
-    );
+    execGit(['add', 'tiddlers/E2ETestTiddler.tid']);
+    execGit(['commit', '-m', 'E2E conflict test: desktop edit']);
   } catch (error) {
     // Commit might fail if the file watcher committed between our poll and now.
     console.log('[conflict] Manual commit result (may be benign):', String(error).split('\n')[0]);
@@ -219,11 +221,8 @@ Given(
 
     // Emit the desktop git log for diagnostics.
     try {
-      const log = execSync(`git -C "${DESKTOP_WIKI_PATH}" log --oneline -3`, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      console.log(`[conflict] Desktop git log:\n${log.trimEnd()}`);
+      const log = execGit(['log', '--oneline', '-3']);
+      console.log(`[conflict] Desktop git log:\n${log}`);
     } catch { /* non-fatal */ }
   },
 );
@@ -312,5 +311,128 @@ Then(
       );
     }
     console.log(`[conflict] ✓ Mobile modified timestamp ${mobileModifiedTimestamp} found in header`);
+  },
+);
+
+// ── Mock-server variants (local test-wiki repo) ───────────────────────────────
+
+function readMockServerTiddler(tiddlerFilename: string): { raw: string; header: string; body: string } {
+  const path = join(MOCK_SERVER_WIKI_PATH, 'tiddlers', tiddlerFilename);
+  if (!existsSync(path)) {
+    throw new Error(`Mock server tiddler not found: ${path}`);
+  }
+  const raw = readFileSync(path, 'utf-8');
+  const blankIndex = raw.indexOf('\n\n');
+  if (blankIndex === -1) {
+    return { raw, header: raw, body: '' };
+  }
+  return {
+    raw,
+    header: raw.slice(0, blankIndex),
+    body: raw.slice(blankIndex + 2),
+  };
+}
+
+function writeMockServerTiddler(tiddlerFilename: string, content: string): void {
+  writeFileSync(join(MOCK_SERVER_WIKI_PATH, 'tiddlers', tiddlerFilename), content, 'utf-8');
+}
+
+function getMockServerHead(): string {
+  return execSync(`git -C "${MOCK_SERVER_WIKI_PATH}" rev-parse HEAD`, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+}
+
+async function waitForMockServerCommit(previousHead: string, timeoutMs = 20_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const head = getMockServerHead();
+    if (head !== previousHead) {
+      console.log(`[conflict] Mock server auto-committed: ${head.slice(0, 8)}`);
+      return head;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 800));
+  }
+  console.log('[conflict] Mock server file-watcher did not commit; committing manually...');
+  try {
+    execSync(`git -C "${MOCK_SERVER_WIKI_PATH}" add tiddlers/E2ETestTiddler.tid`, {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      env: GIT_ENV,
+    });
+    execSync(
+      `git -C "${MOCK_SERVER_WIKI_PATH}" commit -m "E2E conflict test: mock server edit"`,
+      { stdio: ['ignore', 'ignore', 'ignore'], env: GIT_ENV },
+    );
+  } catch (error) {
+    console.log('[conflict] Manual mock-server commit result (may be benign):', String(error).split('\n')[0]);
+  }
+  const head = getMockServerHead();
+  if (head === previousHead) {
+    throw new Error('Mock server wiki still has no new commit after file write + manual commit attempt.');
+  }
+  return head;
+}
+
+Given(
+  'the mock server appends {string} to {string} and commits',
+  { timeout: 60_000 },
+  async (appendLine: string, tiddlerFilename: string) => {
+    const previousHead = getMockServerHead();
+    console.log(`[conflict] Mock server HEAD before edit: ${previousHead.slice(0, 8)}`);
+
+    const { header, body } = readMockServerTiddler(tiddlerFilename);
+    const mockServerTs = new Date().toISOString();
+    const updatedHeader = header.includes('modified:')
+      ? header.replace(/^modified:.*$/m, `modified: ${mockServerTs}`)
+      : `${header}\nmodified: ${mockServerTs}`;
+    const updatedBody = body.trimEnd() + '\n' + appendLine + '\n';
+    const newContent = `${updatedHeader}\n\n${updatedBody}`;
+
+    writeMockServerTiddler(tiddlerFilename, newContent);
+    console.log(`[conflict] Mock server wrote "${tiddlerFilename}" with modified: ${mockServerTs}, appended: "${appendLine}"`);
+
+    await waitForMockServerCommit(previousHead, 25_000);
+
+    try {
+      const log = execGit(['log', '--oneline', '-3'], MOCK_SERVER_WIKI_PATH);
+      console.log(`[conflict] Mock server git log:\n${log}`);
+    } catch { /* non-fatal */ }
+  },
+);
+
+Then(
+  'the mock server tiddler {string} body contains {string}',
+  (tiddlerFilename: string, expectedLine: string) => {
+    const { body } = readMockServerTiddler(tiddlerFilename);
+    if (!body.includes(expectedLine)) {
+      const { raw } = readMockServerTiddler(tiddlerFilename);
+      throw new Error(
+        `Expected mock server tiddler "${tiddlerFilename}" body to contain:\n  "${expectedLine}"\n` +
+          `Actual file content:\n${raw}`,
+      );
+    }
+  },
+);
+
+Then(
+  'the mock server tiddler {string} header contains the mobile modified timestamp',
+  (tiddlerFilename: string) => {
+    if (!mobileModifiedTimestamp) {
+      throw new Error(
+        'Mobile modified timestamp was not captured. ' +
+          'Ensure the "the mobile overwrites..." step ran before this assertion.',
+      );
+    }
+    const { header } = readMockServerTiddler(tiddlerFilename);
+    if (!header.includes(mobileModifiedTimestamp)) {
+      const { raw } = readMockServerTiddler(tiddlerFilename);
+      throw new Error(
+        `Expected mock server tiddler "${tiddlerFilename}" header to contain mobile timestamp:\n` +
+          `  "${mobileModifiedTimestamp}"\n` +
+          `Actual header:\n${header}\n\nFull file:\n${raw}`,
+      );
+    }
+    console.log(`[conflict] ✓ Mobile modified timestamp ${mobileModifiedTimestamp} found in mock server header`);
   },
 );
