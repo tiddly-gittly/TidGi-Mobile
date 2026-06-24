@@ -7,6 +7,7 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { RootStackParameterList } from '../../App';
 import { useWorkspaceStore } from '../../store/workspace';
+import { HtmlWikiViewer } from './HtmlWikiViewer';
 import { getWebviewSideReceiver } from './useStreamChunksToWebView/webviewSideReceiver';
 import { WikiViewer } from './WikiViewer';
 
@@ -44,6 +45,13 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
       return (
         <Container testID='wiki-webview-screen'>
           <WebView source={{ uri: activeWorkspace.uri }} />
+        </Container>
+      );
+    }
+    case 'html': {
+      return (
+        <Container testID='wiki-webview-screen'>
+          <HtmlWikiViewer workspace={activeWorkspace} />
         </Container>
       );
     }

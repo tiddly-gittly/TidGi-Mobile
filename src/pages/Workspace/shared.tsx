@@ -4,7 +4,7 @@ import { TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import type { RootStackParameterList } from '../../App';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 export function useWikiWorkspace(id: string): IWikiWorkspace | undefined {
   // Use useShallow + memoized selector to avoid re-renders from .find() recreation
@@ -16,9 +16,20 @@ export function useWikiWorkspace(id: string): IWikiWorkspace | undefined {
   );
 }
 
+export type SyncableWorkspace = IWikiWorkspace | IHtmlWorkspace;
+
+export function useSyncableWorkspace(id: string): SyncableWorkspace | undefined {
+  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
+
+  return useMemo(
+    () => workspaces.find((workspace): workspace is SyncableWorkspace => (workspace.type === 'wiki' || workspace.type === 'html') && workspace.id === id),
+    [workspaces, id],
+  );
+}
+
 export function useWorkspaceTitle(
   props: StackScreenProps<RootStackParameterList, keyof RootStackParameterList>,
-  wiki: IWikiWorkspace | undefined,
+  wiki: SyncableWorkspace | undefined,
   fallback: string,
 ): void {
   useLayoutEffect(() => {

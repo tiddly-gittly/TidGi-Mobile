@@ -8,3 +8,17 @@ export interface GitQRData {
   workspaceName?: string;
   subWorkspaces?: Array<{ id: string; mainWikiID?: string; name: string }>;
 }
+
+export interface HtmlQRData {
+  baseUrl: string;
+  htmlUrl: string;
+  readOnly?: boolean;
+  revision?: string;
+  syncType: 'html';
+  tokenAuthHeaderName?: string;
+  tokenAuthHeaderValue?: string;
+  workspaceId: string;
+  workspaceName?: string;
+}
+
+export type ImportQRData = GitQRData | HtmlQRData;

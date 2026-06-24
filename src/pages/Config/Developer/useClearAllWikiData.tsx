@@ -34,5 +34,10 @@ export const deleteWikiFile = (wikiWorkspace: IWorkspace): void => {
     if (directory.exists) {
       recursiveDeleteDirectory(directory);
     }
+  } else if (wikiWorkspace.type === 'html') {
+    const file = new File(wikiWorkspace.htmlFileLocation);
+    if (file.exists) {
+      file.delete();
+    }
   }
 };

@@ -7,7 +7,7 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useServerStore } from '../../store/server';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 
 interface WikiEditModalProps {
   id: string | undefined;
@@ -29,7 +29,8 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
   // Use useShallow + useMemo to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
   const wiki = useMemo(
-    () => id === undefined ? undefined : workspaces.find((w): w is IWikiWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki')),
+    () =>
+      id === undefined ? undefined : workspaces.find((w): w is IWikiWorkspace | IHtmlWorkspace => w.id === id && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
     [id, workspaces],
   );
   const theme = useTheme();
@@ -147,13 +148,15 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
           setServerName(newText);
         }}
       />
-      <Checkbox.Item
-        label={t('ServerList.UseStandardGitProtocol')}
-        status={useStandardGitProtocol ? 'checked' : 'unchecked'}
-        onPress={() => {
-          setUseStandardGitProtocol(previous => !previous);
-        }}
-      />
+      {wiki.type !== 'html' && (
+        <Checkbox.Item
+          label={t('ServerList.UseStandardGitProtocol')}
+          status={useStandardGitProtocol ? 'checked' : 'unchecked'}
+          onPress={() => {
+            setUseStandardGitProtocol(previous => !previous);
+          }}
+        />
+      )}
       <ButtonsContainer>
         <Button onPress={addServerForWiki}>
           <Text>{t('EditWorkspace.Save')}</Text>

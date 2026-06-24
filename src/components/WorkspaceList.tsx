@@ -71,7 +71,7 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
           : undefined}
         right={(props) => (
           <RightButtonsContainer>
-            {item.type === 'wiki' && <SyncIconButton workspaceID={item.id} />}
+            {(item.type === 'wiki' || item.type === 'html') && <SyncIconButton workspaceID={item.id} />}
             <ItemRightButton
               testID={`workspace-settings-icon-${item.id}`}
               accessibilityLabel='workspace-settings-icon'

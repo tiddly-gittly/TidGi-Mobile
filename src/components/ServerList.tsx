@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { gitGetAheadCommitCount } from '../services/GitService';
 import { IServerInfo, ServerStatus, useServerStore } from '../store/server';
-import { IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
+import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../store/workspace';
 
 interface ServerListProps {
   activeIDs?: string[];
@@ -18,7 +18,7 @@ interface ServerListProps {
   onlineOnly?: boolean;
   serverIDs?: string[];
   /** When provided, ahead/behind counts will be computed for this workspace */
-  workspace?: IWikiWorkspace;
+  workspace?: IWikiWorkspace | IHtmlWorkspace;
 }
 
 interface ServerAheadInfo {
@@ -65,7 +65,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
   // ahead commit counts per server (only computed when a workspace is given)
   const [aheadMap, setAheadMap] = useState<Partial<Record<string, ServerAheadInfo>>>({});
   useEffect(() => {
-    if (!workspace) return;
+    if (!workspace || workspace.type !== 'wiki') return;
     let cancelled = false;
     const fetchAhead = async () => {
       const count = await gitGetAheadCommitCount(workspace).catch(() => 0);

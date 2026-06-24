@@ -9,7 +9,7 @@ import { LogViewerDialog } from '../../components/LogViewerDialog';
 import { gitGetAheadCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
-import { PageContainer, useWikiWorkspace, useWorkspaceTitle } from './shared';
+import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
 import { FooterRow } from './workspaceStyles';
 
 const ActionButton = styled(Button)`
@@ -21,7 +21,7 @@ const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace
 
 export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceDetail'>): JSX.Element {
   const { t } = useTranslation();
-  const wiki = useWikiWorkspace(route.params.id);
+  const wiki = useSyncableWorkspace(route.params.id);
   // Combine multiple selector calls into a single useShallow call
   const [removeWorkspace] = useWorkspaceStore(useShallow(state => [state.remove]));
   const allWorkspaces = useWorkspaceStore(useShallow(state => state.workspaces));
@@ -32,20 +32,21 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const subWorkspaces = allWorkspaces.filter((workspace): workspace is IWikiWorkspace =>
     workspace.type === 'wiki' && workspace.isSubWiki === true && workspace.mainWikiID === wiki?.id
   );
-  const canDeleteSubWorkspacesTogether = wiki?.isSubWiki !== true && subWorkspaces.length > 0;
+  const isFolderWiki = wiki?.type === 'wiki';
+  const canDeleteSubWorkspacesTogether = isFolderWiki && wiki.isSubWiki !== true && subWorkspaces.length > 0;
 
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.Title'));
 
   const wikiId = wiki?.id;
   useEffect(() => {
-    if (wikiId === undefined) return;
+    if (wikiId === undefined || wiki?.type !== 'wiki') return;
     const timeout = setTimeout(() => {
-      void getAheadCommitCount(wiki!).then(setPendingCommitCount);
+      void getAheadCommitCount(wiki).then(setPendingCommitCount);
     }, 1_500);
     return () => {
       clearTimeout(timeout);
     };
-  }, [wikiId]);
+  }, [wiki, wikiId]);
 
   if (!wiki) {
     return (
@@ -57,7 +58,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
 
   return (
     <PageContainer testID='workspace-detail-screen'>
-      <Text variant='bodySmall' testID='workspace-unsynced-count'>{t('Sync.UnsyncedCommitCount', { count: pendingCommitCount })}</Text>
+      {isFolderWiki && <Text variant='bodySmall' testID='workspace-unsynced-count'>{t('Sync.UnsyncedCommitCount', { count: pendingCommitCount })}</Text>}
 
       <ActionButton
         testID='workspace-sync-button'
@@ -69,16 +70,18 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
       >
         {t('Sync.WorkspaceSync')}
       </ActionButton>
-      <ActionButton
-        testID='workspace-changes-button'
-        mode='outlined'
-        icon='history'
-        onPress={() => {
-          navigation.navigate('WorkspaceChanges', { id: wiki.id });
-        }}
-      >
-        {t('AddWorkspace.OpenChangeLogList')}
-      </ActionButton>
+      {isFolderWiki && (
+        <ActionButton
+          testID='workspace-changes-button'
+          mode='outlined'
+          icon='history'
+          onPress={() => {
+            navigation.navigate('WorkspaceChanges', { id: wiki.id });
+          }}
+        >
+          {t('AddWorkspace.OpenChangeLogList')}
+        </ActionButton>
+      )}
       <ActionButton
         mode='outlined'
         icon='file-document-outline'
@@ -98,16 +101,18 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
       >
         {t('WorkspaceSettings.GeneralSettings')}
       </ActionButton>
-      <ActionButton
-        mode='outlined'
-        icon='folder-cog'
-        onPress={() => {
-          navigation.navigate('WorkspaceRoutingConfig', { id: wiki.id });
-        }}
-      >
-        {t('WorkspaceSettings.SubWikiRouting')}
-      </ActionButton>
-      {wiki.isSubWiki !== true && (
+      {isFolderWiki && (
+        <ActionButton
+          mode='outlined'
+          icon='folder-cog'
+          onPress={() => {
+            navigation.navigate('WorkspaceRoutingConfig', { id: wiki.id });
+          }}
+        >
+          {t('WorkspaceSettings.SubWikiRouting')}
+        </ActionButton>
+      )}
+      {isFolderWiki && wiki.isSubWiki !== true && (
         <ActionButton
           mode='outlined'
           icon='file-tree'
@@ -118,7 +123,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
           {t('SubWiki.ManageSubKnowledgeBases')}
         </ActionButton>
       )}
-      {wiki.isSubWiki !== true && (
+      {isFolderWiki && wiki.isSubWiki !== true && (
         <ActionButton
           mode='outlined'
           onPress={() => {
