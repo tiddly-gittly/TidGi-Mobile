@@ -2,7 +2,6 @@
  * expo-notifications is not installed to prevent install expo-application which has proprietary code.
  */
 
-/* eslint-disable @typescript-eslint/require-await */
 import { useNavigation } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import {
@@ -108,6 +107,9 @@ async function registerForPushNotifications() {
   const token = (await getDevicePushTokenAsync()).data as string;
 
   setNotificationHandler({
+    // Notification handler interface requires async; it is intentionally a
+    // fire-and-forget response.
+    // eslint-disable-next-line @typescript-eslint/require-await
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,
