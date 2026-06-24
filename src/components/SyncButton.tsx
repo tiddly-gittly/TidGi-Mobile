@@ -5,18 +5,25 @@ import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
 import { useShallow } from 'zustand/react/shallow';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
 import { syncHtmlWorkspaceWithServer } from '../services/HtmlWorkspaceService';
-import { ServerStatus, useServerStore } from '../store/server';
-import { useWorkspaceStore } from '../store/workspace';
+import { type IServerInfo, ServerStatus, useServerStore } from '../store/server';
+import { type IHtmlWorkspace, useWorkspaceStore } from '../store/workspace';
 
 export interface ISyncIconButtonProps {
   workspaceID: string;
 }
+
+function getOnlineServerForHtmlWorkspace(workspace: Pick<IHtmlWorkspace, 'syncedServers'>, servers: Record<string, IServerInfo>): IServerInfo | undefined {
+  return workspace.syncedServers
+    .map(item => servers[item.serverID] as IServerInfo | undefined)
+    .find((serverInfo): serverInfo is IServerInfo => serverInfo !== undefined && serverInfo.status === ServerStatus.online);
+}
+
 export function SyncIconButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
   // Use useShallow + useMemo to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
   const workspace = useMemo(
-    () => workspaces.find(w => w.id === workspaceID && (w.type === 'wiki' || w.type === 'html')),
+    () => workspaces.find(w => w.id === workspaceID && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
     [workspaces, workspaceID],
   );
   const servers = useServerStore(useShallow(state => state.servers));
@@ -48,7 +55,7 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
         try {
           await gitBackgroundSyncService.updateServerOnlineStatus();
           if (workspace.type === 'html') {
-            const server = workspace.syncedServers.map(item => servers[item.serverID]).find(serverInfo => serverInfo.status === ServerStatus.online);
+            const server = getOnlineServerForHtmlWorkspace(workspace, servers);
             if (server === undefined) {
               setIsConnected(false);
               return;
@@ -78,7 +85,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
   // Use useShallow + useMemo to avoid re-renders from .find() recreation
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
   const workspace = useMemo(
-    () => workspaces.find(w => w.id === workspaceID && (w.type === 'wiki' || w.type === 'html')),
+    () => workspaces.find(w => w.id === workspaceID && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
     [workspaces, workspaceID],
   );
   const servers = useServerStore(useShallow(state => state.servers));
@@ -95,7 +102,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
     void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
       const server = workspace.type === 'wiki'
         ? gitBackgroundSyncService.getOnlineServerForWiki(workspace)
-        : workspace.syncedServers.map(item => servers[item.serverID]).find(serverInfo => serverInfo.status === ServerStatus.online);
+        : getOnlineServerForHtmlWorkspace(workspace, servers);
       if (server === undefined) {
         setIsConnected(false);
       } else {
@@ -117,7 +124,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
         try {
           await gitBackgroundSyncService.updateServerOnlineStatus();
           if (workspace.type === 'html') {
-            const server = workspace.syncedServers.map(item => servers[item.serverID]).find(serverInfo => serverInfo.status === ServerStatus.online);
+            const server = getOnlineServerForHtmlWorkspace(workspace, servers);
             if (server === undefined) {
               throw new Error('No server available');
             }

@@ -1,5 +1,5 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import React, { lazy, Suspense, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { RootStackParameterList } from '../../App';
@@ -7,7 +7,8 @@ import { type IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
 
 const LazyWorkspaceSettings = lazy<React.ComponentType<{ workspace: IWikiWorkspace }>>(async () => {
-  const module: typeof import('../WikiSettings/WorkspaceSettings.js') = await import('../WikiSettings/WorkspaceSettings.js');
+  // @ts-expect-error Metro resolves the extensionless TSX module; explicit .js breaks Android bundling.
+  const module = await (import('../WikiSettings/WorkspaceSettings') as Promise<typeof import('../WikiSettings/WorkspaceSettings.js')>);
   return { default: module.WorkspaceSettings };
 });
 
@@ -17,6 +18,10 @@ export function WorkspaceSettingsPage({ route, navigation }: StackScreenProps<Ro
   const [name, setName] = useState(wiki?.name ?? '');
   const updateWorkspace = useWorkspaceStore(state => state.update);
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.GeneralSettings'));
+
+  useEffect(() => {
+    setName(wiki?.name ?? '');
+  }, [wiki?.id, wiki?.name]);
 
   if (!wiki) {
     return (

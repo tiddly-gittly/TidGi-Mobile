@@ -47,7 +47,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
   const serverList = useServerStore(useShallow(state => compact(serverIDs === undefined ? Object.values(state.servers) : serverIDs.map(id => state.servers[id]))));
   const allSyncedServers = useWorkspaceStore(useShallow(state =>
     state.workspaces
-      .filter((w): w is IWikiWorkspace => w.type === 'wiki')
+      .filter((w): w is IWikiWorkspace => w.type === undefined || w.type === 'wiki')
       .flatMap(w => w.syncedServers)
   ));
 
@@ -65,7 +65,7 @@ export const ServerList: React.FC<ServerListProps> = ({ onPress, onSettings, onl
   // ahead commit counts per server (only computed when a workspace is given)
   const [aheadMap, setAheadMap] = useState<Partial<Record<string, ServerAheadInfo>>>({});
   useEffect(() => {
-    if (!workspace || workspace.type !== 'wiki') return;
+    if (!workspace || workspace.type === 'html') return;
     let cancelled = false;
     const fetchAhead = async () => {
       const count = await gitGetAheadCommitCount(workspace).catch(() => 0);

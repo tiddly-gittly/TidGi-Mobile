@@ -11,7 +11,7 @@ export function useWikiWorkspace(id: string): IWikiWorkspace | undefined {
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
 
   return useMemo(
-    () => workspaces.find((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki' && workspace.id === id),
+    () => workspaces.find((workspace): workspace is IWikiWorkspace => (workspace.type === undefined || workspace.type === 'wiki') && workspace.id === id),
     [workspaces, id],
   );
 }
@@ -22,7 +22,10 @@ export function useSyncableWorkspace(id: string): SyncableWorkspace | undefined 
   const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
 
   return useMemo(
-    () => workspaces.find((workspace): workspace is SyncableWorkspace => (workspace.type === 'wiki' || workspace.type === 'html') && workspace.id === id),
+    () =>
+      workspaces.find((workspace): workspace is SyncableWorkspace =>
+        (workspace.type === undefined || workspace.type === 'wiki' || workspace.type === 'html') && workspace.id === id
+      ),
     [workspaces, id],
   );
 }

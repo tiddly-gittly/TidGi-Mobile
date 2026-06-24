@@ -38,7 +38,8 @@ async function fetchText(url: string, init?: RequestInit): Promise<{ headers: He
 }
 
 export async function fetchHtmlSyncInfo(serverUri: string, headers: Record<string, string> = {}): Promise<IHtmlSyncInfo> {
-  const response = await fetch(`${serverUri.replace(/\/$/, '')}/tidgi-html-sync/info`, { headers });
+  const normalizedServerUri = serverUri.replace(/\/$/, '');
+  const response = await fetch(`${normalizedServerUri}/tidgi-html-sync/info`, { headers });
   if (!response.ok) {
     throw new Error(`HTML sync info failed (${response.status}): ${await response.text()}`);
   }
@@ -46,7 +47,16 @@ export async function fetchHtmlSyncInfo(serverUri: string, headers: Record<strin
   if (parsed.syncType !== 'html' || typeof parsed.workspaceId !== 'string' || typeof parsed.htmlUrl !== 'string') {
     throw new Error('Invalid HTML sync info payload');
   }
-  return parsed as IHtmlSyncInfo;
+  const baseUrl = typeof parsed.baseUrl === 'string' && parsed.baseUrl.length > 0
+    ? parsed.baseUrl
+    : new URL(normalizedServerUri).origin;
+  return {
+    ...parsed,
+    baseUrl,
+    htmlUrl: new URL(parsed.htmlUrl, baseUrl).toString(),
+    syncType: 'html',
+    workspaceId: parsed.workspaceId,
+  };
 }
 
 export async function importHtmlWorkspace(qrData: IHtmlImportQRCode, wikiName: string, serverID: string): Promise<IHtmlWorkspace> {

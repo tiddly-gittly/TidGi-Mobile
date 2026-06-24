@@ -56,9 +56,11 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
       );
     }
     default: {
-      <Container testID='wiki-webview-screen'>
-        <Text>{t('Loading')}</Text>
-      </Container>;
+      return (
+        <Container testID='wiki-webview-screen'>
+          <Text>{t('Loading')}</Text>
+        </Container>
+      );
     }
   }
 };
