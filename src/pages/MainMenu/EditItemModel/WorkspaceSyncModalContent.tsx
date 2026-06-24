@@ -2,11 +2,11 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 
 interface IWorkspaceSyncModalContentProps {
   onOpenChanges?: () => void;
-  workspace: IWikiWorkspace;
+  workspace: IWikiWorkspace | IHtmlWorkspace;
   showCloseButton?: boolean;
   onClose: () => void;
 }
@@ -28,7 +28,7 @@ export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton 
         {t('Sync.LastSync')}: {lastSyncTimestamp ? new Date(lastSyncTimestamp).toLocaleString() : '-'}
       </Text>
 
-      {!workspace.isSubWiki && (
+      {workspace.type === 'wiki' && !workspace.isSubWiki && (
         <Checkbox.Item
           label={t('Sync.IncludeSubWikis')}
           status={workspace.syncIncludeSubWikis !== false ? 'checked' : 'unchecked'}
@@ -38,14 +38,16 @@ export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton 
         />
       )}
 
-      <Button
-        mode='outlined'
-        onPress={() => {
-          onOpenChanges?.();
-        }}
-      >
-        {t('AddWorkspace.OpenChangeLogList')}
-      </Button>
+      {workspace.type === 'wiki' && (
+        <Button
+          mode='outlined'
+          onPress={() => {
+            onOpenChanges?.();
+          }}
+        >
+          {t('AddWorkspace.OpenChangeLogList')}
+        </Button>
+      )}
 
       {showCloseButton && <Button mode='text' onPress={onClose}>{t('Close')}</Button>}
     </Container>

@@ -53,7 +53,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
           navigation.navigate('WikiWebView', { id: wiki.id });
         }}
         onPressSettings={(wiki) => {
-          if (wiki.type === 'wiki') {
+          if (wiki.type === 'wiki' || wiki.type === 'html') {
             navigation.navigate('WorkspaceDetail', { id: wiki.id });
           } else if (wiki.type === 'webpage') {
             navigation.navigate('WebPageDetail', { id: wiki.id });

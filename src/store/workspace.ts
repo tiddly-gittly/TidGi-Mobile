@@ -56,13 +56,41 @@ export interface IWikiWorkspace {
    */
   wikiFolderLocation: string;
 }
+export interface IHtmlWorkspace {
+  /**
+   * Display order for workspace list (lower number = higher priority)
+   */
+  order?: number;
+  /**
+   * Display name for this HTML wiki workspace.
+   */
+  name: string;
+  /**
+   * Last known remote revision returned by TidGi Desktop.
+   */
+  remoteRevision?: string;
+  /**
+   * Remote HTML file endpoint for GET/PUT sync.
+   */
+  remoteHtmlUrl: string;
+  id: string;
+  lastLocalSaveAt?: number;
+  lastLocationHash?: string;
+  lastSync?: number;
+  /**
+   * Local single HTML file path.
+   */
+  htmlFileLocation: string;
+  syncedServers: IWikiServerSync[];
+  type: 'html';
+}
 export interface IPageWorkspace {
   id: string;
   name: string;
   type: 'webpage';
   uri: string;
 }
-export type IWorkspace = IWikiWorkspace | IPageWorkspace;
+export type IWorkspace = IWikiWorkspace | IHtmlWorkspace | IPageWorkspace;
 export interface IWikiServerSync {
   lastSync: number;
   serverID: string;
@@ -99,7 +127,10 @@ interface WikiActions {
    * @returns id of new workspace if successful, undefined otherwise
    */
   add: (
-    newWikiWorkspace: (Omit<IWikiWorkspace, 'wikiFolderLocation'> & { id?: string }) | (Omit<IPageWorkspace, 'id' | 'name'> & { name?: IPageWorkspace['name'] }),
+    newWikiWorkspace:
+      | (Omit<IWikiWorkspace, 'wikiFolderLocation'> & { id?: string })
+      | (Omit<IHtmlWorkspace, 'htmlFileLocation'> & { id?: string })
+      | (Omit<IPageWorkspace, 'id' | 'name'> & { name?: IPageWorkspace['name'] }),
   ) => IWorkspace | undefined;
   addServer: (id: string, newServerID: string) => void;
   remove: (id: string) => void;
@@ -167,6 +198,32 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 result = cloneDeep(newWikiWorkspaceWithID);
                 return;
               }
+              case 'html': {
+                const customPath = state.customWikiFolderPath;
+                const htmlWorkspaceBasePath = customPath
+                  ? `${customPath.endsWith('/') ? customPath : `${customPath}/`}html-wikis/`
+                  : `${WIKI_FOLDER_PATH}html-wikis/`;
+                newWorkspace.name = newWorkspace.name || 'HTML Wiki';
+                const requestedID = (newWorkspace as IHtmlWorkspace).id;
+                if (typeof requestedID === 'string' && requestedID.length > 0 && state.workspaces.some(workspace => workspace.id === requestedID)) {
+                  return;
+                }
+                const sameNameWorkspace = state.workspaces.find((workspace) => workspace.name === newWorkspace.name || workspace.id === newWorkspace.name);
+                const id = typeof requestedID === 'string' && requestedID.length > 0
+                  ? requestedID
+                  : (sameNameWorkspace ? `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}` : newWorkspace.name);
+                const htmlFileLocation = `${htmlWorkspaceBasePath}${id}/wiki.html`;
+                const newHtmlWorkspaceWithID = {
+                  ...(newWorkspace as IHtmlWorkspace),
+                  htmlFileLocation,
+                  id,
+                  syncedServers: (newWorkspace as IHtmlWorkspace).syncedServers,
+                  type: 'html',
+                } satisfies IHtmlWorkspace;
+                state.workspaces = [newHtmlWorkspaceWithID, ...state.workspaces];
+                result = cloneDeep(newHtmlWorkspaceWithID);
+                return;
+              }
               case 'webpage': {
                 const id = String(Math.random()).substring(2, 7);
 
@@ -206,7 +263,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
               }
-              if (oldWiki.type !== 'wiki') return;
+              if (oldWiki.type !== 'wiki' && oldWiki.type !== 'html') return;
               // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
               const lastSync = oldWiki.syncedServers.reduce<number>(
                 (max, server) => (server.lastSync > max ? server.lastSync : max),
@@ -246,7 +303,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
               if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
               }
-              if (oldWiki.type !== 'wiki') return;
+              if (oldWiki.type !== 'wiki' && oldWiki.type !== 'html') return;
               const serverToChange = oldWiki.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
               if (serverToChange) {
                 serverToChange.syncActive = isActive;
@@ -267,7 +324,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         removeSyncedServersFromWorkspace(serverIDToRemove) {
           set((state) => {
             state.workspaces.forEach(workspace => {
-              if (workspace.type === 'wiki' && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
+              if ((workspace.type === 'wiki' || workspace.type === 'html') && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
                 workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
                 // No need to call state.update() - immer already tracks mutations
               }

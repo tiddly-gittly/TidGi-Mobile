@@ -13,11 +13,12 @@ import { useShallow } from 'zustand/react/shallow';
 import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { RootStackParameterList } from '../../App';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
+import { fetchHtmlSyncInfo, importHtmlWorkspace } from '../../services/HtmlWorkspaceService';
 import { importBundledWikiTemplate, normalizeGitCloneUrl } from '../../services/WikiImportService';
 import { IServerInfo, useServerStore } from '../../store/server';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
-import { GitQRData } from './types';
+import { GitQRData, HtmlQRData, ImportQRData } from './types';
 
 function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
   if (arrayA.length !== arrayB.length) return false;
@@ -139,6 +140,10 @@ function deriveWorkspaceIdFromGitUrl(gitUrl: string, preferredName?: string): st
   return `${safeSlug}-${Date.now().toString(36)}`;
 }
 
+function isHtmlQRData(qrData: ImportQRData | undefined): qrData is HtmlQRData {
+  return qrData !== undefined && 'syncType' in qrData;
+}
+
 export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
 
@@ -188,7 +193,8 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     return initialUrl === undefined ? undefined : new URL(new URL(initialUrl).origin);
   });
   const [wikiName, setWikiName] = useState('');
-  const [qrData, setQrData] = useState<GitQRData | undefined>();
+  const [qrData, setQrData] = useState<ImportQRData | undefined>();
+  const [createdHtmlWorkspace, setCreatedHtmlWorkspace] = useState<IHtmlWorkspace | undefined>();
   const [manualEdit, setManualEdit] = useState(false);
   const [showSavedServers, setShowSavedServers] = useState(false);
   const [isLoadingServerInfo, setIsLoadingServerInfo] = useState(false);
@@ -238,17 +244,18 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     };
   }, [allServers]);
 
-  const fillFromQRCodeData = useCallback((qr: GitQRData) => {
+  const fillFromQRCodeData = useCallback((qr: ImportQRData) => {
     setQrData(previous => {
       if (
         previous !== undefined &&
         previous.baseUrl === qr.baseUrl &&
         previous.workspaceId === qr.workspaceId &&
         previous.workspaceName === qr.workspaceName &&
-        previous.gitUrl === qr.gitUrl &&
-        previous.token === qr.token &&
+        (!('gitUrl' in previous) || !('gitUrl' in qr) || previous.gitUrl === qr.gitUrl) &&
+        (!('token' in previous) || !('token' in qr) || previous.token === qr.token) &&
         previous.tokenAuthHeaderName === qr.tokenAuthHeaderName &&
-        previous.tokenAuthHeaderValue === qr.tokenAuthHeaderValue
+        previous.tokenAuthHeaderValue === qr.tokenAuthHeaderValue &&
+        (('syncType' in previous ? previous.syncType : undefined) === ('syncType' in qr ? qr.syncType : undefined))
       ) {
         return previous;
       }
@@ -264,7 +271,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     const nextWikiName = qr.workspaceName ?? `Wiki-${new Date().toISOString().slice(0, 10)}`;
     setWikiName(previous => previous === nextWikiName ? previous : nextWikiName);
 
-    const nextSubWorkspaceIDs = Array.isArray(qr.subWorkspaces)
+    const nextSubWorkspaceIDs = !isHtmlQRData(qr) && Array.isArray(qr.subWorkspaces)
       ? qr.subWorkspaces.map(workspace => workspace.id)
       : [];
     setSelectedSubWikiIds(previous => areStringArraysEqual(previous, nextSubWorkspaceIDs) ? previous : nextSubWorkspaceIDs);
@@ -279,7 +286,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         'baseUrl' in parsed &&
         'workspaceId' in parsed
       ) {
-        fillFromQRCodeData(parsed as GitQRData);
+        fillFromQRCodeData(parsed as ImportQRData);
       }
     } catch {
       // Invalid JSON, ignore
@@ -305,6 +312,15 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
     try {
+      try {
+        const htmlInfo = await fetchHtmlSyncInfo(server.uri);
+        fillFromQRCodeData(htmlInfo);
+        setManualEdit(false);
+        setShowSavedServers(false);
+        return;
+      } catch {
+        // Not an HTML workspace endpoint; fall through to existing Git import.
+      }
       const endpoint = `${server.uri.replace(/\/$/, '')}/tw-mobile-sync/git/mobile-sync-info`;
       const response = await fetch(endpoint);
       if (response.status === 403) {
@@ -382,7 +398,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           // token is optional
         ) {
           // Valid Git QR code
-          const qr = parsed as GitQRData;
+          const qr = parsed as ImportQRData;
           fillFromQRCodeData(qr);
           return;
         } else {
@@ -488,7 +504,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       if (addAsServer) {
         const newServer = addServer({ uri: wikiUrl.origin, name: wikiName, useStandardGitProtocol });
 
-        if (qrData) {
+        if (isHtmlQRData(qrData)) {
+          const workspace = await importHtmlWorkspace(qrData, wikiName, newServer.id);
+          setCreatedHtmlWorkspace(workspace);
+        } else if (qrData) {
           // Collect batch items
           const batchItems: IBatchImportItem[] = [];
 
@@ -533,6 +552,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           Alert.alert(t('Import.GitSyncRequiresQRCode'));
           return;
         }
+      } else if (isHtmlQRData(qrData)) {
+        const workspace = await importHtmlWorkspace(qrData, wikiName, '');
+        setCreatedHtmlWorkspace(workspace);
       } else if (qrData) {
         await importWiki(qrData, wikiName, '', useExternalStorage, useStandardGitProtocol);
       } else {
@@ -634,7 +656,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     <Container testID='importer-screen'>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
       {!isLocalTemplate && autoStartImport !== true && importStatus === 'idle' && serverConfigs}
-      {!isLocalTemplate && importStatus === 'idle' && !qrScannerOpen && qrData && (
+      {!isLocalTemplate && importStatus === 'idle' && !qrScannerOpen && qrData && createdHtmlWorkspace === undefined && (
         <>
           <WorkspaceNameInput
             label={t('EditWorkspace.Name')}
@@ -650,7 +672,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
             labelStyle={{ padding: ButtonLabelPadding }}
           >
             <Text>
-              {selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
+              {isHtmlQRData(qrData) ? t('Import.ImportWiki') : selectedSubWikiIds.length > 0 ? t('Import.ImportWikis') : t('Import.ImportWiki')}
             </Text>
           </ImportWikiButton>
         </>
@@ -853,14 +875,19 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
           </ResetButton>
         </>
       )}
-      {(importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0)) || localTemplateCreatedWorkspace !== undefined
+      {(importStatus === 'success' && !isBatchImporting && (createdWikiWorkspace !== undefined || batchCreatedWorkspaces.length > 0)) ||
+          localTemplateCreatedWorkspace !== undefined ||
+          createdHtmlWorkspace !== undefined
         ? (
           <>
             <DoneImportActionsTitleText variant='titleLarge'>{t('NextStep')}</DoneImportActionsTitleText>
 
-            {(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : createdWikiWorkspace ? [createdWikiWorkspace] : [])
-              .concat(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : [])
-              .filter(ws => ws.isSubWiki !== true)
+            {([
+              ...(batchCreatedWorkspaces.length > 0 ? batchCreatedWorkspaces : createdWikiWorkspace ? [createdWikiWorkspace] : []),
+              ...(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : []),
+              ...(createdHtmlWorkspace ? [createdHtmlWorkspace] : []),
+            ] satisfies Array<IWikiWorkspace | IHtmlWorkspace>)
+              .filter(ws => ws.type !== 'wiki' || ws.isSubWiki !== true)
               .map((ws) => (
                 <OpenWikiButton
                   key={ws.id}
