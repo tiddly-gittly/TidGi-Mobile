@@ -5,6 +5,7 @@ import { type IHtmlWorkspace, useWorkspaceStore } from '../../../store/workspace
 import { importHtmlWorkspace, syncHtmlWorkspaceWithServer } from '..';
 
 const mockFiles = new Map<string, string>();
+const mockPersistedValues = new Map<string, unknown>();
 
 jest.mock('expo-file-system', () => ({
   Paths: {
@@ -15,9 +16,15 @@ jest.mock('expo-file-system', () => ({
 
 jest.mock('../../../utils/expoFileSystemStorage', () => ({
   expoFileSystemStorage: {
-    getItem: jest.fn(() => Promise.resolve(null)),
-    removeItem: jest.fn(() => Promise.resolve()),
-    setItem: jest.fn(() => Promise.resolve()),
+    getItem: jest.fn((name: string) => Promise.resolve(mockPersistedValues.get(name) ?? null)),
+    removeItem: jest.fn((name: string) => {
+      mockPersistedValues.delete(name);
+      return Promise.resolve();
+    }),
+    setItem: jest.fn((name: string, value: unknown) => {
+      mockPersistedValues.set(name, value);
+      return Promise.resolve();
+    }),
   },
 }));
 
@@ -53,6 +60,7 @@ function makeServer(): IServerInfo {
 describe('HtmlWorkspaceService', () => {
   beforeEach(() => {
     mockFiles.clear();
+    mockPersistedValues.clear();
     jest.spyOn(global, 'fetch').mockReset();
     useWorkspaceStore.setState({
       customWikiFolderPath: null,
@@ -149,5 +157,30 @@ describe('HtmlWorkspaceService', () => {
 
     expect(mockFiles.get(workspace.htmlFileLocation)).toBe('<html>remote update</html>');
     expect(useWorkspaceStore.getState().workspaces[0]).toMatchObject({ remoteRevision: 'r2' });
+  });
+
+  it('persists HTML workspace name changes through workspace settings updates', () => {
+    const workspace: IHtmlWorkspace = {
+      htmlFileLocation: 'file:///documents/wikis/html-wikis/html-wiki/wiki.html',
+      id: 'html-wiki',
+      name: 'HTML Wiki',
+      remoteHtmlUrl: 'http://desktop.local:5212/tidgi-html-sync/file',
+      remoteRevision: 'r1',
+      syncedServers: [],
+      type: 'html',
+    };
+    useWorkspaceStore.setState({ workspaces: [workspace] });
+
+    useWorkspaceStore.getState().update(workspace.id, { name: 'Renamed HTML Wiki' });
+
+    const persistedValue = mockPersistedValues.get('wiki-storage') as { state?: { workspaces?: IHtmlWorkspace[] } } | undefined;
+    expect(useWorkspaceStore.getState().workspaces[0]).toMatchObject({ name: 'Renamed HTML Wiki', type: 'html' });
+    expect(persistedValue?.state?.workspaces).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: workspace.id,
+        name: 'Renamed HTML Wiki',
+        type: 'html',
+      }),
+    ]));
   });
 });

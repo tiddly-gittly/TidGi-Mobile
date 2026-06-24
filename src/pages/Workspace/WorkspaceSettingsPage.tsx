@@ -1,11 +1,15 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { RootStackParameterList } from '../../App';
-import { useWorkspaceStore } from '../../store/workspace';
-import { WorkspaceSettings } from '../WikiSettings/WorkspaceSettings';
+import { type IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
+
+const LazyWorkspaceSettings = lazy<React.ComponentType<{ workspace: IWikiWorkspace }>>(async () => {
+  const module: typeof import('../WikiSettings/WorkspaceSettings.js') = await import('../WikiSettings/WorkspaceSettings.js');
+  return { default: module.WorkspaceSettings };
+});
 
 export function WorkspaceSettingsPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceSettingsPage'>): JSX.Element {
   const { t } = useTranslation();
@@ -53,7 +57,9 @@ export function WorkspaceSettingsPage({ route, navigation }: StackScreenProps<Ro
 
   return (
     <PageContainer testID='workspace-settings-page'>
-      <WorkspaceSettings workspace={wiki} />
+      <Suspense fallback={<Text>{t('Loading')}</Text>}>
+        <LazyWorkspaceSettings workspace={wiki} />
+      </Suspense>
     </PageContainer>
   );
 }
