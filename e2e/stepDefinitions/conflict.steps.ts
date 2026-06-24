@@ -16,6 +16,7 @@
  *   mobile  (X → Z): modifies same file differently (via adb), committed during sync
  *   sync: mobile pushes Z → desktop merges Y+Z → resolves conflict → mobile fetches result
  */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument -- @types/node v25 resolves some Node.js APIs as any under TS 6 */
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
@@ -76,8 +77,8 @@ function writeDesktopTiddler(tiddlerFilename: string, content: string): void {
 /**
  * Return the current HEAD commit hash of the desktop wiki git repo.
  */
-function execGit(args: string[], cwd = DESKTOP_WIKI_PATH): string {
-  return execSync(`git -C "${cwd}" ${args.join(' ')}`, {
+function execGit(gitArguments: string[], cwd = DESKTOP_WIKI_PATH): string {
+  return execSync(`git -C "${cwd}" ${gitArguments.join(' ')}`, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   }).trim();

@@ -20,6 +20,7 @@
  *   - The deep-link URL passed via `url:` tells the dev-client to auto-connect
  *     to Metro without user interaction.
  */
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument -- @types/node v25 resolves some Node.js APIs as any under TS 6 */
 
 import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, setDefaultTimeout, Status } from '@cucumber/cucumber';
 import { execFileSync, execSync } from 'child_process';
@@ -49,6 +50,8 @@ function getLanIp(): string {
   // Allow override via env for CI / VPN / special setups.
   if (process.env.TIDGI_HOST_IP) return process.env.TIDGI_HOST_IP;
 
+  // @types/node v25 can resolve networkInterfaces() as any under this TS setup;
+  // annotate the result so the loop variables are typed.
   const nics = networkInterfaces();
 
   // Exclude virtual/VPN adapters that happen to contain "Ethernet" etc.

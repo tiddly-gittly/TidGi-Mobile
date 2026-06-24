@@ -11,6 +11,7 @@
  * ║  This file uses only Node.js APIs — no execSync / spawnSync.    ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
+/* eslint-disable @typescript-eslint/no-unsafe-return -- @types/node v25 resolves networkInterfaces() as any under TS 6 */
 import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { get as httpGet } from 'node:http';
@@ -217,10 +218,11 @@ export function writeBaselineWikiFiles(): void {
   ]);
 }
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function getLanIp(): string {
   if (process.env.TIDGI_HOST_IP) return process.env.TIDGI_HOST_IP;
 
+  // @types/node v25 can resolve networkInterfaces() as any under this TS setup;
+  // annotate the result so the loop variables are typed.
   const nics = networkInterfaces();
 
   const excludedNames = ['virtual', 'hyper-v', 'wsl', 'vmware', 'docker', 'tailscale', 'vpn', 'loopback', 'pseudo'];
