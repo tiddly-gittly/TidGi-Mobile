@@ -1,8 +1,9 @@
 import type { MemeLoopChatAdapter } from '@memeloop/react-ui/chat';
 import { NativeAgentChatView } from '@memeloop/react-ui/native';
 import type { ChatMessage, Device } from 'memeloop';
-import { type FC, useCallback, useEffect, useMemo, useState } from 'react';
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { MobileAgentLoopService } from '../../services/AgentLoopService';
 import { deviceNetworkService } from '../../services/DeviceNetworkService';
 
 const LOCAL_EXECUTION_TARGET_ID = 'local';
@@ -63,6 +64,29 @@ export const AgentChat: FC = () => {
   const [agentLoopDevices, setAgentLoopDevices] = useState<Device[]>([]);
   const [error, setError] = useState<Error | null>(null);
 
+  // Singleton Mobile Agent Loop Service — created once per component mount.
+  // LLM config is read from deviceNetworkService cloud config; falls back to
+  // environment-aware defaults so that the local loop can boot on first launch.
+  const loopServiceReference = useRef<MobileAgentLoopService | null>(null);
+  const getLoopService = useCallback(() => {
+    if (!loopServiceReference.current) {
+      const cloudConfig = deviceNetworkService.getCloudConfig();
+      loopServiceReference.current = new MobileAgentLoopService({
+        llm: {
+          // When configured, the cloud deployment serves as the LLM proxy
+          baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
+          apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.7,
+        },
+        systemPrompt: 'You are a helpful AI assistant running on TidGi Mobile. Keep responses concise and helpful.',
+        maxIterations: 8,
+      });
+    }
+    return loopServiceReference.current;
+  }, []);
+
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
@@ -77,7 +101,7 @@ export const AgentChat: FC = () => {
         unsubscribe = deviceNetworkService.observeDevices(nextDevices => {
           setAgentLoopDevices(nextDevices.filter(device => device.peerId !== identity.peerId && device.trusted && device.capabilities.agentLoop));
         });
-      } catch (error_) {
+      } catch (error_: unknown) {
         setError(error_ instanceof Error ? error_ : new Error(String(error_)));
       }
     })();
@@ -128,7 +152,7 @@ export const AgentChat: FC = () => {
         ...currentMessages,
         createMessage('assistant', `Remote turn was sent to ${peerId}. Pull details on remote messages to inspect full run output.`),
       ]);
-    } catch (error_) {
+    } catch (error_: unknown) {
       const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
       setError(nextError);
       throw nextError;
@@ -153,10 +177,31 @@ export const AgentChat: FC = () => {
       if (nextPeerId) {
         await sendRemoteMessage(nextPeerId, lastUserMessage.content);
       } else {
-        setMessages(currentMessages => [...currentMessages, createMessage('assistant', `Restarted locally: ${lastUserMessage.content}`)]);
+        // Local restart: remove messages after the last user message, then re-run
+        setIsRunning(true);
+        const loopService = getLoopService();
+        const truncated = deleteTurnFromMessages(messages, lastUserMessage.messageId);
+        setMessages(truncated);
+
+        const unsubscribe = loopService.onMessage('mobile-agent-demo', (message) => {
+          setMessages(currentMessages => [...currentMessages, message]);
+        });
+
+        loopService.sendMessage('mobile-agent-demo', lastUserMessage.content, truncated)
+          .then((result) => {
+            unsubscribe();
+            if (result.error) setError(result.error);
+          })
+          .catch((error_: unknown) => {
+            unsubscribe();
+            setError(error_ instanceof Error ? error_ : new Error(String(error_)));
+          })
+          .finally(() => {
+            setIsRunning(false);
+          });
       }
     }
-  }, [activeExecutionTargetId, messages, sendRemoteMessage]);
+  }, [activeExecutionTargetId, messages, sendRemoteMessage, getLoopService]);
 
   const loadMessageDetail = useCallback(async (message: ChatMessage) => {
     if (!message.detailRef) return null;
@@ -186,16 +231,42 @@ export const AgentChat: FC = () => {
       const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
       if (peerId) return sendRemoteMessage(peerId, text);
 
+      // Local execution via MobileAgentLoopService
       setIsRunning(true);
+      const loopService = getLoopService();
+
       const userMessage = createMessage('user', text);
-      const assistantMessage = createMessage('assistant', `Mobile demo received: ${text}`);
-      setMessages(currentMessages => [...currentMessages, userMessage, assistantMessage]);
-      setIsRunning(false);
-      return Promise.resolve();
+      setMessages(currentMessages => [...currentMessages, userMessage]);
+
+      // Subscribe to streaming messages from the loop
+      const unsubscribe = loopService.onMessage('mobile-agent-demo', (message) => {
+        setMessages(currentMessages => [...currentMessages, message]);
+      });
+
+      return loopService.sendMessage('mobile-agent-demo', text, messages)
+        .then((result) => {
+          unsubscribe();
+          if (result.error) {
+            setError(result.error);
+          }
+        })
+        .catch((error_: unknown) => {
+          unsubscribe();
+          const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
+          setError(nextError);
+          throw nextError;
+        })
+        .finally(() => {
+          setIsRunning(false);
+        });
     },
     cancel: () => {
       const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
-      if (peerId) void deviceNetworkService.sendRpc(peerId, 'memeloop.agent.cancel', { conversationId: 'mobile-agent-demo' });
+      if (peerId) {
+        void deviceNetworkService.sendRpc(peerId, 'memeloop.agent.cancel', { conversationId: 'mobile-agent-demo' });
+      } else {
+        getLoopService().cancel('mobile-agent-demo');
+      }
       setIsRunning(false);
       return Promise.resolve();
     },
@@ -206,13 +277,39 @@ export const AgentChat: FC = () => {
     retryTurn: (userMessageId) => {
       const userMessage = messages.find(message => message.messageId === userMessageId);
       if (!userMessage) return Promise.resolve();
-      setMessages(currentMessages => [
-        ...currentMessages,
-        createMessage('assistant', `Retry demo response for: ${userMessage.content}`),
-      ]);
-      return Promise.resolve();
+
+      const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
+      if (peerId) {
+        // Re-send the user message to the remote peer
+        return sendRemoteMessage(peerId, userMessage.content);
+      }
+
+      // Local retry: remove messages after user message, then re-run
+      setIsRunning(true);
+      const loopService = getLoopService();
+      const truncated = deleteTurnFromMessages(messages, userMessageId);
+      setMessages(truncated);
+
+      const unsubscribe = loopService.onMessage('mobile-agent-demo', (message) => {
+        setMessages(currentMessages => [...currentMessages, message]);
+      });
+
+      return loopService.sendMessage('mobile-agent-demo', userMessage.content, truncated)
+        .then((result) => {
+          unsubscribe();
+          if (result.error) setError(result.error);
+        })
+        .catch((error_: unknown) => {
+          unsubscribe();
+          const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
+          setError(nextError);
+          throw nextError;
+        })
+        .finally(() => {
+          setIsRunning(false);
+        });
     },
-  }), [activeExecutionTargetId, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget]);
+  }), [activeExecutionTargetId, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
 
   return (
     <NativeAgentChatView
