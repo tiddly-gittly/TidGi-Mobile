@@ -72,14 +72,9 @@ export const AgentChat: FC = () => {
     if (!loopServiceReference.current) {
       const cloudConfig = deviceNetworkService.getCloudConfig();
       loopServiceReference.current = new MobileAgentLoopService({
-        llm: {
-          // When configured, the cloud deployment serves as the LLM proxy
-          baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
-          apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
-          model: 'gpt-4o-mini',
-          maxTokens: 4096,
-          temperature: 0.7,
-        },
+        name: 'tidgi-mobile',
+        baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
+        apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
       });
     }
     return loopServiceReference.current;

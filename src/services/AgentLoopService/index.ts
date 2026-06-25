@@ -1,8 +1,8 @@
 /**
  * Mobile Agent Loop Service — wraps memeloop core for React Native.
  *
- * Creates minimal RN-compatible adapters (in-memory storage, fetch LLM, stub
- * tools) and delegates to `runAgentToolLoopTurn` from the core.
+ * Uses core's createFetchLLMProvider (pure fetch, no Node deps) and
+ * delegates loop execution to runAgentToolLoopTurn.
  */
 import type {
   AgentFrameworkContext,
@@ -10,17 +10,18 @@ import type {
   AgentInstanceState,
   AgentLoopInput,
   ChatMessage,
+  FetchLLMProviderConfig,
   IAgentStorage,
   ILLMProvider,
   IToolRegistry,
 } from 'memeloop';
-import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop';
+import {
+  createFetchLLMProvider,
+  getBuiltinLoopProfiles,
+  runAgentToolLoopTurn,
+} from 'memeloop';
 
-import { createMobileLLMProvider, type MobileLLMProviderConfig } from './llmProvider';
-
-export interface AgentLoopServiceConfig {
-  llm: MobileLLMProviderConfig;
-}
+export type AgentLoopServiceConfig = FetchLLMProviderConfig;
 
 export interface SendMessageResult {
   messages: ChatMessage[];
@@ -51,7 +52,6 @@ function createChatMessage(
   };
 }
 
-/** In-memory storage adapter. */
 function createMemoryStorage(): IAgentStorage {
   const store = new Map<string, ChatMessage[]>();
   return {
@@ -99,15 +99,7 @@ export class MobileAgentLoopService {
   private onProgressCallbacks = new Map<string, Array<(status: string) => void>>();
 
   constructor(config: AgentLoopServiceConfig) {
-    const mobileLLM = createMobileLLMProvider(config.llm);
-    this.llmProvider = {
-      name: 'tidgi-mobile',
-      async *chat(request) {
-        const { messages } = request as { messages: Array<{ role: string; content: string }> };
-        const response = await mobileLLM.chat(messages);
-        yield response.content;
-      },
-    };
+    this.llmProvider = createFetchLLMProvider(config);
     this.storage = createMemoryStorage();
   }
 
