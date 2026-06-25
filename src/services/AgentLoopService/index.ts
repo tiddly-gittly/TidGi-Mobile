@@ -10,18 +10,11 @@ import type {
   AgentInstanceState,
   AgentLoopInput,
   ChatMessage,
-  FetchLLMProviderConfig,
   IAgentStorage,
   ILLMProvider,
   IToolRegistry,
 } from 'memeloop';
-import {
-  createFetchLLMProvider,
-  getBuiltinLoopProfiles,
-  runAgentToolLoopTurn,
-} from 'memeloop';
-
-export type AgentLoopServiceConfig = FetchLLMProviderConfig;
+import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop';
 
 export interface SendMessageResult {
   messages: ChatMessage[];
@@ -98,8 +91,8 @@ export class MobileAgentLoopService {
   private onMessageCallbacks = new Map<string, Array<(message: ChatMessage) => void>>();
   private onProgressCallbacks = new Map<string, Array<(status: string) => void>>();
 
-  constructor(config: AgentLoopServiceConfig) {
-    this.llmProvider = createFetchLLMProvider(config);
+  constructor(llmProvider: ILLMProvider) {
+    this.llmProvider = llmProvider;
     this.storage = createMemoryStorage();
   }
 
