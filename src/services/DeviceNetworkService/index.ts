@@ -180,7 +180,7 @@ export class DeviceNetworkService {
   private identity?: RawSeedDeviceIdentity;
   private started = false;
   private readonly trustStore = new SecureStoreDeviceTrustStore();
-  private cloudConfig?: { cloudUrl: string; accessToken: string };
+  private cloudConfig?: { cloudUrl: string; accessToken: string; provider?: string };
   private cloudClient?: MobileCloudClient;
   private cloudAuthorizer?: CloudDeviceAuthorizer;
   private cloudGrantCache = new Map<string, DeviceConnectionGrant>();
@@ -246,13 +246,13 @@ export class DeviceNetworkService {
     this.relayReservation = undefined;
   }
 
-  public configureCloud(config: { cloudUrl: string; accessToken: string }): void {
+  public configureCloud(config: { cloudUrl: string; accessToken: string; provider?: string }): void {
     this.cloudConfig = config;
     this.cloudClient = new MobileCloudClient(config.cloudUrl, config.accessToken);
   }
 
   /** Returns the current cloud configuration, or undefined if not configured. */
-  public getCloudConfig(): { cloudUrl: string; accessToken: string } | undefined {
+  public getCloudConfig(): { cloudUrl: string; accessToken: string; provider?: string } | undefined {
     return this.cloudConfig ? { ...this.cloudConfig } : undefined;
   }
 
