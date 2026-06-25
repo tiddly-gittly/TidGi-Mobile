@@ -1,5 +1,5 @@
 /**
- * Mobile Agent Loop Service — wraps memeloop/loop-api core for React Native.
+ * Mobile Agent Loop Service — wraps memeloop core for React Native.
  *
  * Creates minimal RN-compatible adapters (in-memory storage, fetch LLM, stub
  * tools) and delegates to `runAgentToolLoopTurn` from the core.
@@ -13,8 +13,8 @@ import type {
   IAgentStorage,
   ILLMProvider,
   IToolRegistry,
-} from 'memeloop/loop-api';
-import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop/loop-api';
+} from 'memeloop';
+import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop';
 
 import { createMobileLLMProvider, type MobileLLMProviderConfig } from './llmProvider';
 
