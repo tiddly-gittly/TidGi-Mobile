@@ -4,8 +4,14 @@ packages:
 
 allowBuilds:
   '@ipshipyard/node-datachannel': true
+  '@parcel/watcher': set this to true or false
   detox: true
+  dprint: set this to true or false
+  dtrace-provider: set this to true or false
+  esbuild: set this to true or false
+  less: set this to true or false
   svelte-preprocess: true
+  unrs-resolver: set this to true or false
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
