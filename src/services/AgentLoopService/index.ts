@@ -1,22 +1,30 @@
 /**
- * Mobile Agent Loop Service — manages local AI agent execution.
- * Replaces the previous demo echo with real ReAct loop execution.
+ * Mobile Agent Loop Service — wraps memeloop/loop-api core for React Native.
+ *
+ * Creates minimal RN-compatible adapters (in-memory storage, fetch LLM, stub
+ * tools) and delegates to `runAgentToolLoopTurn` from the core.
  */
-import type { ChatMessage } from 'memeloop';
-import { runAgentLoop } from './agentLoop';
+import type {
+  AgentFrameworkContext,
+  AgentInstanceModel,
+  AgentInstanceState,
+  AgentLoopInput,
+  ChatMessage,
+  IAgentStorage,
+  ILLMProvider,
+  IToolRegistry,
+} from 'memeloop/loop-api';
+import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop/loop-api';
+
 import { createMobileLLMProvider, type MobileLLMProviderConfig } from './llmProvider';
-import type { AgentLoopContext, ToolDefinition } from './types';
 
 export interface AgentLoopServiceConfig {
   llm: MobileLLMProviderConfig;
-  systemPrompt?: string;
-  maxIterations?: number;
-  tools?: ToolDefinition[];
 }
 
 export interface SendMessageResult {
   messages: ChatMessage[];
-  finishReason: AgentLoopContext extends { finishReason: infer R } ? R : string;
+  state: AgentInstanceState;
   error?: Error;
 }
 
@@ -27,7 +35,11 @@ function newMessageId(): string {
   return `mobile-agent-${Date.now()}-${messageCounter}`;
 }
 
-function createChatMessage(conversationId: string, role: ChatMessage['role'], content: string): ChatMessage {
+function createChatMessage(
+  conversationId: string,
+  role: ChatMessage['role'],
+  content: string,
+): ChatMessage {
   return {
     messageId: newMessageId(),
     conversationId,
@@ -39,30 +51,68 @@ function createChatMessage(conversationId: string, role: ChatMessage['role'], co
   };
 }
 
+/** In-memory storage adapter. */
+function createMemoryStorage(): IAgentStorage {
+  const store = new Map<string, ChatMessage[]>();
+  return {
+    async listConversations() { return []; },
+    async getMessages(conversationId) {
+      return store.get(conversationId) ?? [];
+    },
+    async appendMessage(message) {
+      const msgs = store.get(message.conversationId) ?? [];
+      msgs.push(message);
+      store.set(message.conversationId, msgs);
+    },
+    async upsertConversationMetadata() { /* noop */ },
+    async insertMessagesIfAbsent(messages) {
+      for (const message of messages) {
+        const existing = store.get(message.conversationId) ?? [];
+        if (!existing.some((m) => m.messageId === message.messageId)) {
+          existing.push(message);
+        }
+        store.set(message.conversationId, existing);
+      }
+    },
+    async getAttachment() { return null; },
+    async saveAttachment() { /* noop */ },
+    async getAgentDefinition() { return null; },
+    async saveAgentInstance() { /* noop */ },
+    async getConversationMeta() { return null; },
+  };
+}
+
+function createStubToolRegistry(): IToolRegistry {
+  const tools = new Map<string, unknown>();
+  return {
+    registerTool(id, impl) { tools.set(id, impl); },
+    getTool(id) { return tools.get(id); },
+    listTools() { return Array.from(tools.keys()); },
+  };
+}
+
 export class MobileAgentLoopService {
-  private readonly llmProvider;
-  private readonly systemPrompt: string;
-  private readonly maxIterations: number;
-  private readonly tools: Map<string, ToolDefinition>;
+  private readonly llmProvider: ILLMProvider;
+  private readonly storage: IAgentStorage;
   private cancelledConversations = new Set<string>();
   private onMessageCallbacks = new Map<string, Array<(message: ChatMessage) => void>>();
   private onProgressCallbacks = new Map<string, Array<(status: string) => void>>();
 
   constructor(config: AgentLoopServiceConfig) {
-    this.llmProvider = createMobileLLMProvider(config.llm);
-    this.systemPrompt = config.systemPrompt || 'You are a helpful AI assistant running on TidGi Mobile.';
-    this.maxIterations = config.maxIterations || 16;
-    this.tools = new Map();
-    for (const tool of config.tools || []) {
-      this.tools.set(tool.name, tool);
-    }
+    const mobileLLM = createMobileLLMProvider(config.llm);
+    this.llmProvider = {
+      name: 'tidgi-mobile',
+      async *chat(request) {
+        const { messages } = request as { messages: Array<{ role: string; content: string }> };
+        const response = await mobileLLM.chat(messages);
+        yield response.content;
+      },
+    };
+    this.storage = createMemoryStorage();
   }
 
-  /**
-   * Register a callback for new messages during loop execution.
-   */
   onMessage(conversationId: string, callback: (message: ChatMessage) => void): () => void {
-    const callbacks = this.onMessageCallbacks.get(conversationId) || [];
+    const callbacks = this.onMessageCallbacks.get(conversationId) ?? [];
     callbacks.push(callback);
     this.onMessageCallbacks.set(conversationId, callbacks);
     return () => {
@@ -71,11 +121,8 @@ export class MobileAgentLoopService {
     };
   }
 
-  /**
-   * Register a callback for progress updates.
-   */
   onProgress(conversationId: string, callback: (status: string) => void): () => void {
-    const callbacks = this.onProgressCallbacks.get(conversationId) || [];
+    const callbacks = this.onProgressCallbacks.get(conversationId) ?? [];
     callbacks.push(callback);
     this.onProgressCallbacks.set(conversationId, callbacks);
     return () => {
@@ -84,65 +131,68 @@ export class MobileAgentLoopService {
     };
   }
 
-  /**
-   * Cancel a running conversation.
-   */
   cancel(conversationId: string): void {
     this.cancelledConversations.add(conversationId);
   }
 
-  /**
-   * Send a message to the agent and run the ReAct loop.
-   */
   async sendMessage(
     conversationId: string,
     text: string,
     existingMessages: ChatMessage[] = [],
   ): Promise<SendMessageResult> {
-    // Clear cancellation flag for new turn
     this.cancelledConversations.delete(conversationId);
 
     const userMessage = createChatMessage(conversationId, 'user', text);
+    const allMessages = [...existingMessages, userMessage];
+    await this.storage.insertMessagesIfAbsent(allMessages);
 
-    const context: AgentLoopContext = {
-      conversationId,
-      messages: [...existingMessages, userMessage],
-      tools: this.tools,
+    const context: AgentFrameworkContext = {
+      storage: this.storage,
       llmProvider: this.llmProvider,
-      systemPrompt: this.systemPrompt,
-      maxIterations: this.maxIterations,
+      tools: createStubToolRegistry(),
+      syncAdapters: [],
+      network: { start: async () => {}, stop: async () => {} },
       isCancelled: () => this.cancelledConversations.has(conversationId),
-      onProgress: (status: string) => {
-        for (const callback of this.onProgressCallbacks.get(conversationId) || []) {
-          callback(status);
-        }
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      agentToolLoop: {
+        maxIterations: 8,
+        isCancelled: () => this.cancelledConversations.has(conversationId),
       },
-      onMessage: (message: ChatMessage) => {
-        for (const callback of this.onMessageCallbacks.get(conversationId) || []) {
-          callback(message);
-        }
+      resolveAgentRuntimeView: async (agentId, msgs) => {
+        const profiles = getBuiltinLoopProfiles();
+        const profile = profiles[0] ?? {
+          id: 'memeloop:general-assistant', name: 'General Assistant',
+          description: '', tools: [], version: '1',
+        };
+        return {
+          ...profile,
+          id: agentId,
+          agentDefId: profile.id,
+          messages: msgs,
+          version: profile.version ?? '1',
+          status: { state: 'working' as const, modified: new Date() },
+          created: new Date(),
+        } as AgentInstanceModel;
       },
     };
 
-    const result = await runAgentLoop(context);
-    return {
-      messages: result.messages,
-      finishReason: result.finishReason,
-      error: result.error,
-    };
-  }
+    const input: AgentLoopInput = { conversationId, message: text, userMessage };
 
-  /**
-   * Register a tool.
-   */
-  registerTool(tool: ToolDefinition): void {
-    this.tools.set(tool.name, tool);
-  }
+    try {
+      const result = await runAgentToolLoopTurn(context, input, {
+        onProgress: (status) => {
+          for (const cb of this.onProgressCallbacks.get(conversationId) ?? []) cb(status);
+        },
+      });
 
-  /**
-   * Unregister a tool.
-   */
-  unregisterTool(name: string): boolean {
-    return this.tools.delete(name);
+      const finalMessages = await this.storage.getMessages(conversationId);
+      for (const msg of finalMessages) {
+        for (const cb of this.onMessageCallbacks.get(conversationId) ?? []) cb(msg);
+      }
+      return { messages: finalMessages, state: result.state };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      return { messages: allMessages, state: 'failed', error: err };
+    }
   }
 }

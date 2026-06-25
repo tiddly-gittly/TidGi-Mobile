@@ -80,8 +80,6 @@ export const AgentChat: FC = () => {
           maxTokens: 4096,
           temperature: 0.7,
         },
-        systemPrompt: 'You are a helpful AI assistant running on TidGi Mobile. Keep responses concise and helpful.',
-        maxIterations: 8,
       });
     }
     return loopServiceReference.current;
