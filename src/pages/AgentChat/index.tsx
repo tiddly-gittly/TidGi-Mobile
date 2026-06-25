@@ -1,7 +1,7 @@
 import type { MemeLoopChatAdapter } from '@memeloop/react-ui/chat';
 import { NativeAgentChatView } from '@memeloop/react-ui/native';
 import type { ChatMessage, Device } from 'memeloop';
-import { createOpenaiProvider } from 'memeloop/openai';
+import { createLLMProvider, type LLMProviderId } from 'memeloop/llm-providers';
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { MobileAgentLoopService } from '../../services/AgentLoopService';
@@ -72,7 +72,8 @@ export const AgentChat: FC = () => {
   const getLoopService = useCallback(() => {
     if (!loopServiceReference.current) {
       const cloudConfig = deviceNetworkService.getCloudConfig();
-      const provider = createOpenaiProvider({
+      const provider = createLLMProvider({
+        provider: (cloudConfig?.provider as LLMProviderId | undefined) ?? 'openai',
         name: 'tidgi-mobile',
         baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
         apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
