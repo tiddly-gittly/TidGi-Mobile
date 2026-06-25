@@ -77,7 +77,7 @@ const emptyCapabilities: DeviceCapabilities = {
   tools: [],
   mcpServers: [],
   hasWiki: false,
-  agentLoop: false,
+  agentLoop: true,
   imChannels: [],
   wikis: [],
 };
@@ -249,6 +249,11 @@ export class DeviceNetworkService {
   public configureCloud(config: { cloudUrl: string; accessToken: string }): void {
     this.cloudConfig = config;
     this.cloudClient = new MobileCloudClient(config.cloudUrl, config.accessToken);
+  }
+
+  /** Returns the current cloud configuration, or undefined if not configured. */
+  public getCloudConfig(): { cloudUrl: string; accessToken: string } | undefined {
+    return this.cloudConfig ? { ...this.cloudConfig } : undefined;
   }
 
   public async syncCloudDevices(): Promise<CloudDeviceRecord[]> {
