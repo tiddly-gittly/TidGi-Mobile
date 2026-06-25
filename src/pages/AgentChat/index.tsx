@@ -69,19 +69,26 @@ export const AgentChat: FC = () => {
   // LLM config is read from deviceNetworkService cloud config; falls back to
   // environment-aware defaults so that the local loop can boot on first launch.
   const loopServiceReference = useRef<MobileAgentLoopService | null>(null);
-  const getLoopService = useCallback(() => {
-    if (!loopServiceReference.current) {
-      const cloudConfig = deviceNetworkService.getCloudConfig();
-      const provider = createLLMProvider({
-        provider: (cloudConfig?.provider as LLMProviderId | undefined) ?? 'openai',
-        name: 'tidgi-mobile',
-        baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
-        apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
-      });
-      loopServiceReference.current = new MobileAgentLoopService(provider);
-    }
-    return loopServiceReference.current;
+  const initializeLoopService = useCallback(async () => {
+    if (loopServiceReference.current) return;
+    const cloudConfig = deviceNetworkService.getCloudConfig();
+    const provider = await createLLMProvider({
+      provider: (cloudConfig?.provider as LLMProviderId | undefined) ?? 'openai',
+      name: 'tidgi-mobile',
+      baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
+      apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
+    });
+    loopServiceReference.current = new MobileAgentLoopService(provider);
   }, []);
+
+  const getLoopService = useCallback(async () => {
+    await initializeLoopService();
+    return loopServiceReference.current!;
+  }, [initializeLoopService]);
+
+  useEffect(() => {
+    void initializeLoopService();
+  }, [initializeLoopService]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -175,7 +182,7 @@ export const AgentChat: FC = () => {
       } else {
         // Local restart: remove messages after the last user message, then re-run
         setIsRunning(true);
-        const loopService = getLoopService();
+        const loopService = await getLoopService();
         const truncated = deleteTurnFromMessages(messages, lastUserMessage.messageId);
         setMessages(truncated);
 
@@ -220,16 +227,19 @@ export const AgentChat: FC = () => {
     activeExecutionTargetId,
     setExecutionTarget,
     loadMessageDetail,
-    sendMessage: (input) => {
+    sendMessage: async (input) => {
       const text = input.text.trim();
-      if (!text) return Promise.resolve();
+      if (!text) return;
 
       const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
-      if (peerId) return sendRemoteMessage(peerId, text);
+      if (peerId) {
+        await sendRemoteMessage(peerId, text);
+        return;
+      }
 
       // Local execution via MobileAgentLoopService
       setIsRunning(true);
-      const loopService = getLoopService();
+      const loopService = await getLoopService();
 
       const userMessage = createMessage('user', text);
       setMessages(currentMessages => [...currentMessages, userMessage]);
@@ -239,50 +249,49 @@ export const AgentChat: FC = () => {
         setMessages(currentMessages => [...currentMessages, message]);
       });
 
-      return loopService.sendMessage('mobile-agent-demo', text, messages)
-        .then((result) => {
-          unsubscribe();
-          if (result.error) {
-            setError(result.error);
-          }
-        })
-        .catch((error_: unknown) => {
-          unsubscribe();
-          const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
-          setError(nextError);
-          throw nextError;
-        })
-        .finally(() => {
-          setIsRunning(false);
-        });
+      try {
+        const result = await loopService.sendMessage('mobile-agent-demo', text, messages);
+        unsubscribe();
+        if (result.error) {
+          setError(result.error);
+        }
+      } catch (error_: unknown) {
+        unsubscribe();
+        const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
+        setError(nextError);
+        throw nextError;
+      } finally {
+        setIsRunning(false);
+      }
     },
-    cancel: () => {
+    cancel: async () => {
       const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
       if (peerId) {
         void deviceNetworkService.sendRpc(peerId, 'memeloop.agent.cancel', { conversationId: 'mobile-agent-demo' });
       } else {
-        getLoopService().cancel('mobile-agent-demo');
+        const loopService = await getLoopService();
+        loopService.cancel('mobile-agent-demo');
       }
       setIsRunning(false);
-      return Promise.resolve();
     },
     deleteTurn: (userMessageId) => {
       setMessages(currentMessages => deleteTurnFromMessages(currentMessages, userMessageId));
       return Promise.resolve();
     },
-    retryTurn: (userMessageId) => {
+    retryTurn: async (userMessageId) => {
       const userMessage = messages.find(message => message.messageId === userMessageId);
-      if (!userMessage) return Promise.resolve();
+      if (!userMessage) return;
 
       const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
       if (peerId) {
         // Re-send the user message to the remote peer
-        return sendRemoteMessage(peerId, userMessage.content);
+        await sendRemoteMessage(peerId, userMessage.content);
+        return;
       }
 
       // Local retry: remove messages after user message, then re-run
       setIsRunning(true);
-      const loopService = getLoopService();
+      const loopService = await getLoopService();
       const truncated = deleteTurnFromMessages(messages, userMessageId);
       setMessages(truncated);
 
@@ -290,20 +299,18 @@ export const AgentChat: FC = () => {
         setMessages(currentMessages => [...currentMessages, message]);
       });
 
-      return loopService.sendMessage('mobile-agent-demo', userMessage.content, truncated)
-        .then((result) => {
-          unsubscribe();
-          if (result.error) setError(result.error);
-        })
-        .catch((error_: unknown) => {
-          unsubscribe();
-          const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
-          setError(nextError);
-          throw nextError;
-        })
-        .finally(() => {
-          setIsRunning(false);
-        });
+      try {
+        const result = await loopService.sendMessage('mobile-agent-demo', userMessage.content, truncated);
+        unsubscribe();
+        if (result.error) setError(result.error);
+      } catch (error_: unknown) {
+        unsubscribe();
+        const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
+        setError(nextError);
+        throw nextError;
+      } finally {
+        setIsRunning(false);
+      }
     },
   }), [activeExecutionTargetId, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
 
