@@ -2,8 +2,9 @@
  * Detox + Cucumber lifecycle hooks.
  *
  * Connects Detox to Cucumber so that artifacts (screenshots, logs) are saved
- * per-scenario. The desktop TidGi app must already be running and reachable at
- * the URL stored in TIDGI_DESKTOP_URL.
+ * per-scenario. The hooks start the local mock TiddlyWiki server automatically;
+ * TIDGI_DESKTOP_URL only needs overriding when tests should target a different
+ * reachable host/port.
  *
  * App reset strategy:
  *   - @smoke and @settings: reuse the running app instance, navigate back to
@@ -25,7 +26,7 @@
 import { After, AfterAll, AfterStep, Before, BeforeAll, ITestCaseHookParameter, setDefaultTimeout, Status } from '@cucumber/cucumber';
 import { execFileSync, execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
-import detox from 'detox/internals';
+import detox from 'detox/internals.js';
 import { mkdirSync, writeFileSync } from 'fs';
 import { get as httpGet } from 'node:http';
 import { networkInterfaces } from 'os';
@@ -139,7 +140,8 @@ const MOCK_WIKI_GIT_ENV = {
 function getDetoxLaunchArguments(): Record<string, string> {
   return {
     // Pattern matches the LAN IP:8081 Metro connections.
-    detoxURLBlacklist: JSON.stringify([`.*${LAN_IP.replace(/\./g, '\\.')}:8081.*`]),
+    detoxEnableSynchronization: '0',
+    detoxURLBlacklistRegex: JSON.stringify([`.*${LAN_IP.replace(/\./g, '\\.')}:8081.*`]),
     TIDGI_DESKTOP_URL: DEFAULT_DESKTOP_URL,
   };
 }
@@ -471,9 +473,6 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   } catch { /* non-fatal — the disableOnboarding=1 URL param is a fallback */ }
 
   await detox.init();
-  // Disable synchronization once for the whole test suite. Must happen after
-  // detox.init() so the worker context is available.
-  await device.disableSynchronization().catch(() => {});
   console.log('[BeforeAll] Detox initialized. Each scenario launches a clean app instance.');
 });
 
@@ -516,7 +515,7 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
     url: EXPO_DEV_CLIENT_URL,
     launchArgs: getDetoxLaunchArguments(),
   });
-  await device.disableSynchronization();
+  await device.disableSynchronization().catch(() => {});
   await dismissExpoOverlays(15_000);
   await waitFor(element(by.id(MAIN_MENU_ID)))
     .toBeVisible()

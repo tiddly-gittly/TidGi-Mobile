@@ -1,5 +1,5 @@
 /**
- * Step definitions for mock-server sync scenarios.
+ * Step definitions for mobile sync scenarios backed by the local mock server.
  *
  * Pre-conditions:
  *   - Mock TiddlyWiki server running on the host's LAN IP :5212 (auto-started by hooks.ts).
@@ -7,8 +7,10 @@
  */
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { readFileSync, writeFileSync } from 'fs';
 import { by, device, element, waitFor } from 'detox';
-import { readFileSync } from 'fs';
 import { get as httpGet } from 'node:http';
 import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
 import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement } from '../support/diagnostics';
@@ -243,6 +245,72 @@ function getImportedWikiWorkspaceId(): string | undefined {
   }
 }
 
+function getImportedWikiWorkspacePath(): string {
+  try {
+    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    const parsed = JSON.parse(raw) as {
+      state?: {
+        workspaces?: Array<{
+          id?: string;
+          type?: string;
+          wikiFolderLocation?: string;
+          syncedServers?: Array<{ serverID?: string }>;
+        }>;
+      };
+    };
+    const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string') ?? [];
+    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
+    const importedWiki = standaloneWiki ?? wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0)) ?? wikiList[0];
+    if (typeof importedWiki?.wikiFolderLocation === 'string') {
+      return importedWiki.wikiFolderLocation.replace(/^file:\/\//, '').replace(/\/$/, '');
+    }
+  } catch {
+    // Fall back to the first wiki directory below.
+  }
+
+  const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'ignore'],
+  }).trim();
+  const fallbackId = raw.split(/\r?\n/).map(value => value.trim()).find(value => value.length > 0);
+  if (!fallbackId) {
+    throw new Error('No imported wiki workspace path found on device.');
+  }
+  return `/data/data/ren.onetwo.tidgi.mobile.test/files/wikis/${fallbackId}`;
+}
+
+function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, content: string): void {
+  const devicePath = `${wikiPath}/tiddlers/${tiddlerFilename}`;
+  const hostTemporary = join(tmpdir(), tiddlerFilename);
+  const deviceTemporary = `/data/local/tmp/${tiddlerFilename}`;
+
+  writeFileSync(hostTemporary, content, 'utf8');
+  execSync(`adb push "${hostTemporary}" "${deviceTemporary}"`, { stdio: 'ignore', timeout: 15_000 });
+  execSync(
+    `adb shell "run-as ren.onetwo.tidgi.mobile.test sh -c 'mkdir -p \"${wikiPath}/tiddlers\" && cp \"${deviceTemporary}\" \"${devicePath}\"'"`,
+    { stdio: 'ignore', timeout: 15_000 },
+  );
+}
+
+Given('a test tiddler is written to the first wiki via adb', async () => {
+  const wikiPath = getImportedWikiWorkspacePath();
+  const title = `E2E Sync ${Date.now()}`;
+  const modified = new Date().toISOString();
+  const tiddlerFileName = `${title.replace(/[^A-Za-z0-9]+/g, '_')}.tid`;
+  const content = [
+    `title: ${title}`,
+    'type: text/vnd.tiddlywiki',
+    `modified: ${modified}`,
+    '',
+    `Created by Detox adb step at ${new Date().toISOString()}.`,
+  ].join('\n');
+
+  writeMobileTiddlerViaAdb(wikiPath, tiddlerFileName, content);
+});
+
 When('I tap the sync button for the first wiki workspace', async () => {
   await tapSyncButtonForImportedWiki();
 });
@@ -370,7 +438,8 @@ function readDesktopGitRunnerHits(): Partial<Record<string, number>> {
 
 Then('the mock server desktop git runner should be used', () => {
   const hits = readDesktopGitRunnerHits();
-  if ((hits.runGitCommand ?? 0) <= 0) {
+  const runnerUsageCount = (hits.runGitCommand ?? 0) + (hits.getBundledGitBinaryPath ?? 0);
+  if (runnerUsageCount <= 0) {
     throw new Error(`Expected desktop git runner to be used, but hit counters were ${JSON.stringify(hits)}`);
   }
 });

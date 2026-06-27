@@ -51,6 +51,14 @@ module.exports = {
     jest: undefined,
   },
 
+  behavior: {
+    init: {
+      // APKs are downloaded/installed before the run. Reinstalling in Detox's
+      // worker setup is slow on physical devices and wipes dev-client state.
+      reinstallApp: false,
+    },
+  },
+
   // NOTE: do not set a fixed server port here — Detox 20's `server.port`
   // config prevents the WebSocket server from starting (ws-server never logs
   // "listening"). Instead, the `detox:test` package.json script resets all

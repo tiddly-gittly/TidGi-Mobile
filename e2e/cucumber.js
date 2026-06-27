@@ -6,7 +6,7 @@
  *   CUCUMBER_TAGS='@smoke'              – only smoke tests
  *   CUCUMBER_TAGS='@settings'           – only settings tests
  *   CUCUMBER_TAGS='@workspace'          – only workspace navigation tests
- *   CUCUMBER_TAGS='@mobilesync'         – only desktop-sync tests (requires desktop)
+ *   CUCUMBER_TAGS='@mobilesync'         – only mobile sync tests (auto-starts local mock server)
  *   CUCUMBER_TAGS='@smoke or @settings' – smoke + settings
  *   CUCUMBER_TAGS='@workspace'          – workspace navigation (requires a pre-existing wiki workspace)
  *   (default) smoke + settings (works on a clean device)

@@ -7,14 +7,15 @@ Feature: Data Safety - verify no corruption when saving new tiddlers
   # Saving a new user tiddler would then trigger cleanup of the wrong
   # file, deleting system plugin tiddlers.
   #
-  # Pre-condition: A wiki workspace with system plugins must exist.
+  # Pre-condition: the Detox hooks start the local mock server automatically.
+  # Each scenario imports a fresh mock wiki so it does not depend on scenario order.
 
   Background:
     Given the app is on the main menu screen
 
   @sync
   Scenario: Creating a new tiddler does not delete any existing files
-    Given at least one wiki workspace exists
+    Given a fresh mock server wiki is imported
     When I tap the first wiki workspace
     Then I should see the wiki webview
     And I wait 10 seconds for the wiki to fully load
@@ -24,7 +25,7 @@ Feature: Data Safety - verify no corruption when saving new tiddlers
 
   @sync
   Scenario: Saving a new user tiddler via adb does not corrupt the file index
-    Given at least one wiki workspace exists
+    Given a fresh mock server wiki is imported
     And a test tiddler is written to the first wiki via adb
     When I tap the first wiki workspace
     Then I should see the wiki webview
