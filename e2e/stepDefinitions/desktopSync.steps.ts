@@ -298,7 +298,7 @@ function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, con
 Given('a test tiddler is written to the first wiki via adb', async () => {
   const wikiPath = getImportedWikiWorkspacePath();
   const title = `E2E Sync ${Date.now()}`;
-  const modified = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+  const modified = new Date().toISOString();
   const tiddlerFileName = `${title.replace(/[^A-Za-z0-9]+/g, '_')}.tid`;
   const content = [
     `title: ${title}`,
