@@ -5,16 +5,19 @@
  * tiddler must not delete system plugin files.
  *
  * Pre-conditions:
- *   - Device connected via USB, `adb reverse` set up.
- *   - At least one wiki workspace must exist on the device.
+ *   - Device connected via USB.
+ *   - Scenario imports a fresh mock server wiki before opening it.
  */
 
-import { Given, Then, When } from '@cucumber/cucumber';
-import { execSync } from 'child_process';
+import { Then, When } from '@cucumber/cucumber';
+import { execFileSync, execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
-import { diagnosticError, waitForElement } from '../support/diagnostics';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { diagnosticError } from '../support/diagnostics';
 
-const UI_TIMEOUT = 15_000;
+const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,7 +29,7 @@ const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, m
 function getFirstWikiWorkspacePath(): string {
   try {
     const raw = execSync(
-      'adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage',
+      `adb shell run-as ${APP_PACKAGE} cat /data/data/${APP_PACKAGE}/files/persistStorage/wiki-storage`,
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
     );
     const parsed = JSON.parse(raw) as {
@@ -46,12 +49,12 @@ function getFirstWikiWorkspacePath(): string {
 
   // Fallback: list wiki directories
   const list = execSync(
-    'adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis',
+    `adb shell run-as ${APP_PACKAGE} ls /data/data/${APP_PACKAGE}/files/wikis`,
     { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
   ).trim();
   const first = list.split(/\r?\n/).find(line => line.length > 0);
   if (first) {
-    return `/data/data/ren.onetwo.tidgi.mobile.test/files/wikis/${first.trim()}`;
+    return `/data/data/${APP_PACKAGE}/files/wikis/${first.trim()}`;
   }
   throw new Error('No wiki workspace found on device');
 }
@@ -65,16 +68,34 @@ interface GitStatusEntry {
  * Run git status and return parsed entries.
  */
 function getGitStatus(wikiPath: string): GitStatusEntry[] {
-  const result = execSync(
-    `adb shell run-as ren.onetwo.tidgi.mobile.test git -C "${wikiPath}" status --short 2>&1`,
-    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] },
-  );
-  const lines = result.split(/\r?\n/).filter(line => line.trim().length > 0);
-  return lines.map(line => {
-    const status = line.substring(0, 2).trim();
-    const file = line.substring(3).trim();
-    return { status, file };
-  });
+  const tempRoot = mkdtempSync(join(tmpdir(), 'tidgi-mobile-e2e-wiki-'));
+  const archivePath = join(tempRoot, 'wiki.tar');
+  const extractPath = join(tempRoot, 'wiki');
+
+  try {
+    mkdirSync(extractPath, { recursive: true });
+    const archive = execFileSync('adb', ['exec-out', 'run-as', APP_PACKAGE, 'tar', '-C', wikiPath, '-cf', '-', '.'], {
+      maxBuffer: 120 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    writeFileSync(archivePath, archive);
+    execFileSync('tar', ['-xf', archivePath, '-C', extractPath], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+
+    const result = execFileSync('git', ['-C', extractPath, 'status', '--short'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30_000,
+    });
+    const lines = result.split(/\r?\n/).filter(line => line.trim().length > 0);
+    return lines.map(line => {
+      const status = line.substring(0, 2).trim();
+      const file = line.substring(3).trim();
+      return { status, file };
+    });
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 }
 
 function pressBackViaAdb(): void {
@@ -144,7 +165,7 @@ Then('the workspace git working tree should contain the newly added tiddler', { 
   const statusEntries = getGitStatus(wikiPath);
 
   const added = statusEntries.filter(
-    e => (e.status === 'A' || e.status === '??') && e.file.includes('E2ETestTiddler'),
+    e => (e.status === 'A' || e.status === '??') && e.file.includes('E2E_Sync'),
   );
   if (added.length === 0) {
     throw diagnosticError(
