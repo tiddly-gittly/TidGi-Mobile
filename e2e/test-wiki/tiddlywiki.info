@@ -1,0 +1,10 @@
+{
+  "description": "E2E Mock Wiki",
+  "plugins": [
+    "tiddlywiki/filesystem",
+    "tiddlywiki/tiddlyweb"
+  ],
+  "themes": [
+    "tiddlywiki/vanilla"
+  ]
+}

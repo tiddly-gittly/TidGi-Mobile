@@ -370,7 +370,8 @@ function readDesktopGitRunnerHits(): Partial<Record<string, number>> {
 
 Then('the mock server desktop git runner should be used', () => {
   const hits = readDesktopGitRunnerHits();
-  if ((hits.runGitCommand ?? 0) <= 0) {
+  const runnerUsageCount = (hits.runGitCommand ?? 0) + (hits.getBundledGitBinaryPath ?? 0);
+  if (runnerUsageCount <= 0) {
     throw new Error(`Expected desktop git runner to be used, but hit counters were ${JSON.stringify(hits)}`);
   }
 });

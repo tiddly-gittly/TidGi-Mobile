@@ -25,7 +25,6 @@ const REPO_ROOT = process.cwd();
 const TEST_WIKI_DIR = join(REPO_ROOT, 'e2e', 'test-wiki');
 const PORT = 5212;
 const PLUGIN_JSON = '$__plugins_linonetwo_tw-mobile-sync.json';
-const PLUGIN_NAME = '$:/plugins/linonetwo/tw-mobile-sync';
 // tw-mobile-sync is a sibling of TidGi-Mobile under the same parent (e.g. github/).
 // From REPO_ROOT (TidGi-Mobile), go up one level then into tw-mobile-sync.
 const TW_MOBILE_SYNC_ROOT = resolve(REPO_ROOT, '..', 'tw-mobile-sync');
@@ -55,7 +54,7 @@ function readHits() {
   try {
     return JSON.parse(fs.readFileSync(HITS_FILE, 'utf8'));
   } catch {
-    return { runGitCommand: 0, readWorkspaceFile: 0, writeWorkspaceFile: 0, writeTempGitFile: 0, deleteTempGitFile: 0 };
+    return { getBundledGitBinaryPath: 0, runGitCommand: 0, readWorkspaceFile: 0, writeWorkspaceFile: 0, writeTempGitFile: 0, deleteTempGitFile: 0 };
   }
 }
 
@@ -112,6 +111,10 @@ exports.startup = function startup() {
   };
 
   const gitServer = {
+    async getBundledGitBinaryPath() {
+      bumpHit('getBundledGitBinaryPath');
+      return 'git';
+    },
     async runGitCommand(workspaceId, gitArguments, environment) {
       bumpHit('runGitCommand');
       return await runGit(ensureWorkspacePath(workspaceId), gitArguments, environment);
@@ -197,6 +200,7 @@ export function writeBaselineWikiFiles(): void {
   writeFileSync(
     DESKTOP_GIT_RUNNER_HITS,
     JSON.stringify({
+      getBundledGitBinaryPath: 0,
       runGitCommand: 0,
       readWorkspaceFile: 0,
       writeWorkspaceFile: 0,
@@ -207,15 +211,6 @@ export function writeBaselineWikiFiles(): void {
   );
 
   writeDesktopGitRunnerStartupModule();
-
-  // Force the desktop runner so the plugin exercises the same gitServer
-  // delegation path used inside TidGi Desktop.
-  putTid(`$__plugins_linonetwo_tw-mobile-sync_Config_GitRunner.tid`, [
-    `title: ${PLUGIN_NAME}/Config/GitRunner`,
-    'description: Git runner used by mobile sync endpoints. "desktop" delegates to TidGi Desktop\'s dugite-based gitServer; "system" uses the system git binary directly.',
-    '',
-    'desktop',
-  ]);
 }
 
 function getLanIp(): string {
