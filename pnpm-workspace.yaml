@@ -3,15 +3,15 @@ packages:
   - plugins
 
 allowBuilds:
-  '@parcel/watcher': true
   '@ipshipyard/node-datachannel': true
+  '@parcel/watcher': false
   detox: true
-  dprint: true
-  dtrace-provider: true
-  esbuild: true
-  less: true
+  dprint: false
+  dtrace-provider: false
+  esbuild: false
+  less: false
   svelte-preprocess: true
-  unrs-resolver: true
+  unrs-resolver: false
 
 minimumReleaseAgeExclude:
   - expo-tiddlywiki-filesystem-android-external-storage@2.12.3
