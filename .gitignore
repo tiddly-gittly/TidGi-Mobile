@@ -65,6 +65,6 @@ e2e/reports/
 Trace-*.json
 artifacts/analyzeTrace.mjs
 
-# E2E test-wiki runtime state (fixture base files stay tracked)
-e2e/test-wiki/.desktop-git-runner-hits.json
-e2e/test-wiki/tiddlers/$__StoryList.tid
+# E2E test-wiki is fully generated at runtime by mock-server/setup.ts
+# (writeBaselineWikiFiles). Do not commit Desktop/E2E auto-sync dumps.
+e2e/test-wiki/

@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Block accidental Desktop/E2E runtime dumps from entering the repo.
+set -eu
+
+blocked="$(git diff --cached --name-only --diff-filter=ACM | grep -E '^e2e/test-wiki(/|$)' || true)"
+if [ -n "$blocked" ]; then
+  echo "pre-commit: refusing to commit generated E2E wiki fixtures:"
+  echo "$blocked"
+  echo ""
+  echo "e2e/test-wiki/ is produced at runtime by e2e/mock-server/setup.ts"
+  echo "(writeBaselineWikiFiles). Keep it gitignored."
+  exit 1
+fi
