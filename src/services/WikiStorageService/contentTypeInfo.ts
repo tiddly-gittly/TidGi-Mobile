@@ -3,8 +3,8 @@
 // This is generated at build time by extracting the registerFileType() registrations
 // from the bundled TW core, so plugin-added types are automatically included.
 
-// Generated: 2026-06-13T06:23:43.749Z
-// TiddlyWiki version: 5.4.0
+// Generated: 2026-07-21T10:03:11.170Z
+// TiddlyWiki version: 5.4.1
 
 export interface ContentTypeInfoEntry {
   encoding: 'utf8' | 'base64' | 'utf16le';

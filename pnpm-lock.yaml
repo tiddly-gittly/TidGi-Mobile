@@ -274,8 +274,8 @@ importers:
         specifier: ^6.1.3
         version: 6.1.3
       tiddlywiki:
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^5.4.1
+        version: 5.4.1
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@25.2.3)(typescript@6.0.3)
@@ -7551,8 +7551,8 @@ packages:
     engines: {node: '>=14.17.6'}
     hasBin: true
 
-  tiddlywiki@5.4.0:
-    resolution: {integrity: sha512-KD7kskwijrj4tOBjHY0XldQiQ2bnNNEsCXcGaYdIUeTqEMoKVK436Gkscc+qUwQE7APRyQ6t1gvbOKOLly1MvA==}
+  tiddlywiki@5.4.1:
+    resolution: {integrity: sha512-5Pnk7j8cUMoQHD0CarOWd4ixITURsN4DJxLfg8AGYSMiQoOHH6bp8JDCAgSdvZHRCQmvXtbm5FRxBFBT6WG24A==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -16691,7 +16691,7 @@ snapshots:
       simple-git: 3.30.0
       stylus: 0.59.0
       tailwindcss: 3.4.19(tsx@4.21.0)(yaml@2.8.2)
-      tiddlywiki: 5.4.0
+      tiddlywiki: 5.4.1
       uglify-js: 3.19.3
       ws: 8.16.0
     optionalDependencies:
@@ -16712,7 +16712,7 @@ snapshots:
       - utf-8-validate
       - yaml
 
-  tiddlywiki@5.4.0: {}
+  tiddlywiki@5.4.1: {}
 
   tiny-case@1.0.3: {}
 
