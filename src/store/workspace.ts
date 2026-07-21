@@ -132,7 +132,11 @@ interface WikiActions {
       | (Omit<IHtmlWorkspace, 'htmlFileLocation'> & { id?: string })
       | (Omit<IPageWorkspace, 'id' | 'name'> & { name?: IPageWorkspace['name'] }),
   ) => IWorkspace | undefined;
-  addServer: (id: string, newServerID: string) => void;
+  addServer: (
+    id: string,
+    newServerID: string,
+    auth?: Pick<IWikiServerSync, 'token' | 'tokenAuthHeaderName' | 'tokenAuthHeaderValue'>,
+  ) => void;
   remove: (id: string) => void;
   removeAll: () => void;
   removeSyncedServersFromWorkspace: (serverIDToRemove: string) => void;
@@ -255,7 +259,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             }
           });
         },
-        addServer(id, newServerID) {
+        addServer(id, newServerID, auth) {
           set((state) => {
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             if (oldWikiIndex >= 0) {
@@ -270,16 +274,40 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 LAST_SYNC_TO_SYNC_ALL,
               );
               console.log(`Add new server to wiki ${oldWiki.name} with last sync ${lastSync} to server ${newServerID}`);
-              const updatedServers = [...oldWiki.syncedServers, {
-                serverID: newServerID,
-                lastSync,
-                syncActive: true,
-              }];
-              state.workspaces[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
+              const existingIndex = oldWiki.syncedServers.findIndex(item => item.serverID === newServerID);
+              if (existingIndex >= 0) {
+                // Same server re-linked (e.g. QR re-scan): refresh auth tokens.
+                const existing = oldWiki.syncedServers[existingIndex];
+                oldWiki.syncedServers[existingIndex] = {
+                  ...existing,
+                  ...(auth?.token !== undefined ? { token: auth.token } : {}),
+                  ...(auth?.tokenAuthHeaderName !== undefined ? { tokenAuthHeaderName: auth.tokenAuthHeaderName } : {}),
+                  ...(auth?.tokenAuthHeaderValue !== undefined ? { tokenAuthHeaderValue: auth.tokenAuthHeaderValue } : {}),
+                };
+              } else {
+                const updatedServers = [...oldWiki.syncedServers, {
+                  serverID: newServerID,
+                  lastSync,
+                  syncActive: true,
+                  ...auth,
+                }];
+                state.workspaces[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
+              }
 
               // Propagate the new server to all sub-wikis attached to this main wiki.
               state.workspaces.forEach((workspace) => {
                 if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
+                  const subExistingIndex = workspace.syncedServers.findIndex(item => item.serverID === newServerID);
+                  if (subExistingIndex >= 0) {
+                    const existing = workspace.syncedServers[subExistingIndex];
+                    workspace.syncedServers[subExistingIndex] = {
+                      ...existing,
+                      ...(auth?.token !== undefined ? { token: auth.token } : {}),
+                      ...(auth?.tokenAuthHeaderName !== undefined ? { tokenAuthHeaderName: auth.tokenAuthHeaderName } : {}),
+                      ...(auth?.tokenAuthHeaderValue !== undefined ? { tokenAuthHeaderValue: auth.tokenAuthHeaderValue } : {}),
+                    };
+                    return;
+                  }
                   const subLastSync = workspace.syncedServers.reduce<number>(
                     (max, server) => (server.lastSync > max ? server.lastSync : max),
                     LAST_SYNC_TO_SYNC_ALL,
@@ -288,6 +316,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                     serverID: newServerID,
                     lastSync: subLastSync,
                     syncActive: true,
+                    ...auth,
                   }];
                   workspace.syncedServers = uniqBy(subUpdatedServers, 'serverID');
                 }

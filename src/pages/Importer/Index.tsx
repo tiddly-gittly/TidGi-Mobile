@@ -1,7 +1,6 @@
 import { StackScreenProps } from '@react-navigation/stack';
 import { Buffer } from 'buffer';
 import { Asset } from 'expo-asset';
-import { BarcodeScanningResult, Camera, PermissionStatus } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
@@ -12,13 +11,14 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import bundledWikiTemplateZip from '../../../assets/wiki-template.zip';
 import { RootStackParameterList } from '../../App';
+import { useQRCodeScanner } from '../../hooks/useQRCodeScanner';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
 import { fetchHtmlSyncInfo, importHtmlWorkspace } from '../../services/HtmlWorkspaceService';
 import { importBundledWikiTemplate, normalizeGitCloneUrl } from '../../services/WikiImportService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { GitQRData, ImportQRData, isHtmlQRData, isImportQRData, parseImportQRCode } from '../../utils/importQRCode';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
-import { GitQRData, HtmlQRData, ImportQRData } from './types';
 
 function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
   if (arrayA.length !== arrayB.length) return false;
@@ -140,10 +140,6 @@ function deriveWorkspaceIdFromGitUrl(gitUrl: string, preferredName?: string): st
   return `${safeSlug}-${Date.now().toString(36)}`;
 }
 
-function isHtmlQRData(qrData: ImportQRData | undefined): qrData is HtmlQRData {
-  return qrData !== undefined && 'syncType' in qrData;
-}
-
 export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> = ({ navigation, route }) => {
   const { t } = useTranslation();
 
@@ -181,8 +177,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   }
 
   const autoImportTriggeredReference = useRef(false);
-  const [hasPermission, setHasPermission] = useState<undefined | boolean>();
-  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const templateCloneUri = deriveTemplateCloneUri(
     route.params.uri,
     route.params.localTemplateAsset,
@@ -202,7 +196,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const [selectedSubWikiIds, setSelectedSubWikiIds] = useState<string[]>([]);
   const [useExternalStorage, setUseExternalStorage] = useState(false);
   const [useStandardGitProtocol, setUseStandardGitProtocol] = useState(false);
-  const scanHandledReference = useRef(false);
 
   const addServer = useServerStore(state => state.add);
   const allServers = useServerStore(useShallow(state => Object.values(state.servers)));
@@ -280,18 +273,39 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const onManualJSONInput = useCallback((text: string) => {
     try {
       const parsed = JSON.parse(text) as unknown;
-      if (
-        parsed !== null &&
-        typeof parsed === 'object' &&
-        'baseUrl' in parsed &&
-        'workspaceId' in parsed
-      ) {
-        fillFromQRCodeData(parsed as ImportQRData);
+      if (isImportQRData(parsed)) {
+        fillFromQRCodeData(parsed);
       }
     } catch {
       // Invalid JSON, ignore
     }
   }, [fillFromQRCodeData]);
+
+  const handleRawQRScan = useCallback((data: string) => {
+    const result = parseImportQRCode(data);
+    if (result.ok) {
+      fillFromQRCodeData(result.data);
+      return;
+    }
+    if (result.error === 'invalid_format') {
+      console.error('Invalid QR code format:', result.detail);
+      Alert.alert(t('Import.QRCodeInvalidFormat'), result.detail);
+      return;
+    }
+    console.error('Failed to parse QR code:', result.detail);
+    console.error('Raw QR code data:', result.raw);
+    Alert.alert(
+      t('Import.QRCodeParseError'),
+      `Error: ${result.detail}\n\nRaw data: ${result.raw}`,
+    );
+  }, [fillFromQRCodeData, t]);
+
+  const {
+    handleBarcodeScanned,
+    qrScannerOpen,
+    setQrScannerOpen,
+    toggleScanner,
+  } = useQRCodeScanner({ onRawScan: handleRawQRScan });
 
   useEffect(() => {
     if (templateCloneUri === undefined) return;
@@ -307,7 +321,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
     setManualEdit(false);
     setShowSavedServers(false);
     setQrScannerOpen(false);
-  }, [templateCloneUri, fillFromQRCodeData, route.params.workspaceName]);
+  }, [templateCloneUri, fillFromQRCodeData, route.params.workspaceName, setQrScannerOpen]);
 
   const fetchWorkspaceInfoFromServer = useCallback(async (server: IServerInfo) => {
     setIsLoadingServerInfo(true);
@@ -332,14 +346,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         throw new Error(`HTTP ${response.status}`);
       }
       const parsed = await response.json() as unknown;
-      if (
-        parsed !== null &&
-        typeof parsed === 'object' &&
-        'baseUrl' in parsed &&
-        'workspaceId' in parsed &&
-        typeof (parsed as { baseUrl?: unknown }).baseUrl === 'string' &&
-        typeof (parsed as { workspaceId?: unknown }).workspaceId === 'string'
-      ) {
+      if (isImportQRData(parsed)) {
         fillFromQRCodeData(parsed as GitQRData);
         setManualEdit(false);
         setShowSavedServers(false);
@@ -350,72 +357,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       Alert.alert(t('Import.FetchFromSavedServerFailed'), `${server.name}: ${(error as Error).message}`);
     } finally {
       setIsLoadingServerInfo(false);
-    }
-  }, [fillFromQRCodeData, t]);
-
-  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
-    if (scanHandledReference.current) {
-      return;
-    }
-    const { data, type } = scanningResult;
-    if (type === 'qr') {
-      scanHandledReference.current = true;
-      try {
-        setQrScannerOpen(false);
-
-        // Some Android QR scanners (ZXing via expo-camera) mis-decode UTF-8
-        // Byte-mode QR codes as Latin-1: each UTF-8 byte becomes a separate
-        // JS character, turning CJK continuation bytes (0x80-0xBF) into C1
-        // control characters that are illegal in JSON strings.
-        // Fix: re-encode the string as bytes and decode as UTF-8.
-        const parseJson = (raw: string): unknown => {
-          // Strip BOM and try plain parse first
-          const cleaned = raw.replace(/^\uFEFF/, '').trim();
-          try {
-            return JSON.parse(cleaned);
-          } catch {
-            // Re-decode as if the bytes were incorrectly treated as Latin-1
-            try {
-              const bytes = Uint8Array.from({ length: cleaned.length }, (_, index) => cleaned.charCodeAt(index));
-              const reDecoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-              return JSON.parse(reDecoded);
-            } catch {
-              // Last resort: just re-throw the original parse error
-              return JSON.parse(cleaned);
-            }
-          }
-        };
-
-        const parsed = parseJson(data);
-
-        if (
-          parsed !== null &&
-          typeof parsed === 'object' &&
-          'baseUrl' in parsed &&
-          'workspaceId' in parsed &&
-          typeof (parsed as { baseUrl: unknown }).baseUrl === 'string' &&
-          typeof (parsed as { workspaceId: unknown }).workspaceId === 'string'
-          // token is optional
-        ) {
-          // Valid Git QR code
-          const qr = parsed as ImportQRData;
-          fillFromQRCodeData(qr);
-          return;
-        } else {
-          console.error('Invalid QR code format:', parsed);
-          Alert.alert(
-            t('Import.QRCodeInvalidFormat'),
-            JSON.stringify(parsed, null, 2),
-          );
-        }
-      } catch (error) {
-        console.error('Failed to parse QR code:', error);
-        console.error('Raw QR code data:', data);
-        Alert.alert(
-          t('Import.QRCodeParseError'),
-          `Error: ${(error as Error).message}\n\nRaw data: ${data}`,
-        );
-      }
     }
   }, [fillFromQRCodeData, t]);
 
@@ -610,23 +551,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       onToggleSavedServers={() => {
         setShowSavedServers(previous => !previous);
       }}
-      onToggleScanner={() => {
-        if (hasPermission !== true) {
-          // Camera permission not granted — request it first.
-          void Camera.requestCameraPermissionsAsync().then(({ status }) => {
-            setHasPermission(status === PermissionStatus.GRANTED);
-            if (status === PermissionStatus.GRANTED) {
-              scanHandledReference.current = false;
-              setQrScannerOpen(true);
-            }
-          });
-          return;
-        }
-        if (!qrScannerOpen) {
-          scanHandledReference.current = false;
-        }
-        setQrScannerOpen(previous => !previous);
-      }}
+      onToggleScanner={toggleScanner}
       qrData={qrData}
       qrScannerOpen={qrScannerOpen}
       selectedSubWikiIds={selectedSubWikiIds}
@@ -639,15 +564,6 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       setUseStandardGitProtocol={setUseStandardGitProtocol}
     />
   );
-
-  if (hasPermission === undefined) {
-    // Camera permission still loading — render the full importer page anyway
-    // so manual JSON input is accessible. Only the QR scanner section is hidden.
-  }
-  if (hasPermission === false) {
-    // Camera permission denied — still render the importer page.
-    // QR scanner will be unavailable but manual input works.
-  }
 
   const autoStartImport = route.params.autoStartImport;
   const isLocalTemplate = typeof route.params.localTemplateAsset === 'string';

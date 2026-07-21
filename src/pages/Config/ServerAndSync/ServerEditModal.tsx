@@ -1,58 +1,21 @@
 import { Picker } from '@react-native-picker/picker';
-import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert } from 'react-native';
 import { Button, Checkbox, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
+import { QRCodeScanner } from '../../../components/QRCodeScanner';
+import { useQRCodeScanner } from '../../../hooks/useQRCodeScanner';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
 import { useWorkspaceStore } from '../../../store/workspace';
+import { extractServerFieldsFromQR } from '../../../utils/importQRCode';
 
 interface ServerEditModalProps {
   id?: string;
   onClose: () => void;
 }
-
-const SmallCameraView = styled(CameraView)`
-  height: 80%;
-  width: 100%;
-`;
-const ScanQRButton = styled(Button)`
-  margin: 10px;
-  padding: 20px;
-  height: 3em;
-`;
-
-interface QRScannerProps {
-  handleBarcodeScanned: (scanningResult: BarcodeScanningResult) => void;
-  hasPermission: boolean | null;
-  qrScannerOpen: boolean;
-  setQrScannerOpen: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-const QRScanner: React.FC<QRScannerProps> = ({ qrScannerOpen, hasPermission, handleBarcodeScanned, setQrScannerOpen }) => {
-  const { t } = useTranslation();
-  return (
-    <>
-      {qrScannerOpen && hasPermission && (
-        <SmallCameraView
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        />
-      )}
-      <ScanQRButton
-        mode={'outlined'}
-        onPress={() => {
-          setQrScannerOpen(!qrScannerOpen);
-        }}
-      >
-        <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
-      </ScanQRButton>
-    </>
-  );
-};
 
 interface ServerFormProps {
   editedName: string;
@@ -136,40 +99,47 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   const server = useServerStore(state => id === undefined ? undefined : state.servers[id]);
   const [updateServer, deleteServer] = useServerStore(useShallow(state => [state.update, state.remove]));
   const removeSyncedServersFromWorkspace = useWorkspaceStore(state => state.removeSyncedServersFromWorkspace);
+  const updateWorkspace = useWorkspaceStore(state => state.update);
   const onRemoveServer = useCallback((serverIDToRemove: string) => {
     void Haptics.impactAsync();
     deleteServer(serverIDToRemove);
     removeSyncedServersFromWorkspace(serverIDToRemove);
   }, [deleteServer, removeSyncedServersFromWorkspace]);
 
-  // States for each field in the server type
   const [editedName, setEditedName] = useState(server?.name ?? '');
   const [editedUri, setEditedUri] = useState(server?.uri ?? '');
   const [editedProvider, setEditedProvider] = useState<ServerProvider>(server?.provider ?? ServerProvider.TidGiDesktop);
   const [editedStatus, setEditedStatus] = useState<ServerStatus>(server?.status ?? ServerStatus.online);
   const [editedUseStandardGitProtocol, setEditedUseStandardGitProtocol] = useState(server?.useStandardGitProtocol ?? false);
+  const [pendingAuth, setPendingAuth] = useState<
+    {
+      token?: string;
+      tokenAuthHeaderName?: string;
+      tokenAuthHeaderValue?: string;
+      workspaceId?: string;
+    } | undefined
+  >();
 
-  const [qrScannerOpen, setQrScannerOpen] = useState(false);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === PermissionStatus.GRANTED);
-    };
-    void getCameraPermissions();
-  }, []);
-
-  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
-    const { data, type } = scanningResult;
-    if (type === 'qr') {
-      try {
-        setQrScannerOpen(false);
-        setEditedUri(data);
-      } catch (error) {
-        console.warn('Not a valid URL', error);
-      }
+  const handleRawQRScan = useCallback((data: string) => {
+    const fields = extractServerFieldsFromQR(data);
+    if (fields === undefined) {
+      Alert.alert(t('Import.QRCodeParseError'), data);
+      return;
     }
-  }, []);
+    setEditedUri(fields.uri);
+    if (fields.name) {
+      setEditedName(fields.name);
+    }
+    setEditedUseStandardGitProtocol(fields.useStandardGitProtocol);
+    setPendingAuth({
+      token: fields.token,
+      tokenAuthHeaderName: fields.tokenAuthHeaderName,
+      tokenAuthHeaderValue: fields.tokenAuthHeaderValue,
+      workspaceId: fields.workspaceId,
+    });
+  }, [t]);
+
+  const { handleBarcodeScanned, qrScannerOpen, toggleScanner } = useQRCodeScanner({ onRawScan: handleRawQRScan });
 
   if (id === undefined || server === undefined) {
     return (
@@ -188,16 +158,40 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       status: editedStatus,
       useStandardGitProtocol: editedUseStandardGitProtocol,
     });
+
+    // Refresh auth on the QR's workspace (and its sub-wikis) when this server is linked.
+    if (pendingAuth !== undefined && (pendingAuth.token !== undefined || pendingAuth.tokenAuthHeaderName !== undefined || pendingAuth.tokenAuthHeaderValue !== undefined)) {
+      const workspaces = useWorkspaceStore.getState().workspaces;
+      for (const workspace of workspaces) {
+        if (workspace.type !== 'wiki' && workspace.type !== 'html') continue;
+        if (!workspace.syncedServers.some(item => item.serverID === server.id)) continue;
+        const isTargetWorkspace = pendingAuth.workspaceId === undefined ||
+          workspace.id === pendingAuth.workspaceId ||
+          (workspace.type === 'wiki' && workspace.mainWikiID === pendingAuth.workspaceId);
+        if (!isTargetWorkspace) continue;
+        updateWorkspace(workspace.id, {
+          syncedServers: workspace.syncedServers.map(item =>
+            item.serverID === server.id
+              ? {
+                ...item,
+                ...(pendingAuth.token !== undefined ? { token: pendingAuth.token } : {}),
+                ...(pendingAuth.tokenAuthHeaderName !== undefined ? { tokenAuthHeaderName: pendingAuth.tokenAuthHeaderName } : {}),
+                ...(pendingAuth.tokenAuthHeaderValue !== undefined ? { tokenAuthHeaderValue: pendingAuth.tokenAuthHeaderValue } : {}),
+              }
+              : item
+          ),
+        });
+      }
+    }
     onClose();
   };
 
   return (
     <ModalContainer>
-      <QRScanner
+      <QRCodeScanner
         qrScannerOpen={qrScannerOpen}
-        hasPermission={hasPermission}
         handleBarcodeScanned={handleBarcodeScanned}
-        setQrScannerOpen={setQrScannerOpen}
+        onToggleScanner={toggleScanner}
       />
       <ServerForm
         editedName={editedName}

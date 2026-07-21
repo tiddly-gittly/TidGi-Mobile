@@ -1,28 +1,21 @@
 import { Picker } from '@react-native-picker/picker';
-import { BarcodeScanningResult, Camera, CameraView, PermissionStatus } from 'expo-camera';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Alert } from 'react-native';
 import { Button, Checkbox, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
+import { QRCodeScanner } from '../../components/QRCodeScanner';
+import { useQRCodeScanner } from '../../hooks/useQRCodeScanner';
 import { useServerStore } from '../../store/server';
-import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IHtmlWorkspace, IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { extractServerFieldsFromQR, ServerFieldsFromQR } from '../../utils/importQRCode';
 
 interface WikiEditModalProps {
   id: string | undefined;
   onClose: () => void;
 }
-
-const SmallCameraView = styled(CameraView)`
-  height: 80%;
-  width: 100%;
-`;
-const ScanQRButton = styled(Button)`
-  margin: 10px;
-  padding: 20px;
-  height: 3em;
-`;
 
 export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): JSX.Element {
   const { t } = useTranslation();
@@ -34,23 +27,22 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     [id, workspaces],
   );
   const theme = useTheme();
-  const [_hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [addServerToWiki] = useWorkspaceStore(useShallow(state => [state.addServer]));
   const addServer = useServerStore(useShallow(state => state.add));
   const [serverName, setServerName] = useState('');
   const [serverUrlString, setServerUrlString] = useState('');
   const [useStandardGitProtocol, setUseStandardGitProtocol] = useState(false);
+  const [scannedAuth, setScannedAuth] = useState<Pick<IWikiServerSync, 'token' | 'tokenAuthHeaderName' | 'tokenAuthHeaderValue'> | undefined>();
   const pickerStyle = useMemo(() => ({ color: theme.colors.onSurface, backgroundColor: theme.colors.surface }), [theme.colors.onSurface, theme.colors.surface]);
   const servers = useServerStore(useShallow(state => state.servers));
   const availableServersToPick = useMemo(() => {
     if (wiki === undefined) return [];
     return Object.entries(useServerStore.getState().servers)
-      .filter(([id]) => wiki.syncedServers.map(item => item.serverID).includes(id))
-      .map(([id, server]) => {
-        const lastSync = wiki.syncedServers.find(item => item.serverID === id)?.lastSync;
+      .filter(([serverId]) => wiki.syncedServers.map(item => item.serverID).includes(serverId))
+      .map(([serverId, server]) => {
+        const lastSync = wiki.syncedServers.find(item => item.serverID === serverId)?.lastSync;
         return {
-          id,
+          id: serverId,
           label: `${server.name} (${lastSync === undefined ? '-' : new Date(lastSync).toLocaleString()})`,
         };
       });
@@ -62,37 +54,41 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     if (selectedServer) {
       setServerUrlString(selectedServer.uri);
       setServerName(selectedServer.name);
+      setScannedAuth(undefined);
     }
   }, [pickerSelectedServerID, servers]);
 
-  useEffect(() => {
-    void (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === PermissionStatus.GRANTED);
-    })();
+  const applyServerFields = useCallback((fields: ServerFieldsFromQR) => {
+    setServerUrlString(fields.uri);
+    if (fields.name) {
+      setServerName(fields.name);
+    }
+    setUseStandardGitProtocol(fields.useStandardGitProtocol);
+    setScannedAuth({
+      token: fields.token,
+      tokenAuthHeaderName: fields.tokenAuthHeaderName,
+      tokenAuthHeaderValue: fields.tokenAuthHeaderValue,
+    });
   }, []);
 
-  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
-    const { data, type } = scanningResult;
-    if (type === 'qr') {
-      try {
-        setQrScannerOpen(false);
-        setServerUrlString(data);
-        // QR codes always come from TidGi Desktop which uses the bundle protocol
-        setUseStandardGitProtocol(false);
-      } catch (error) {
-        console.warn('Not a valid URL', error);
-      }
+  const handleRawQRScan = useCallback((data: string) => {
+    const fields = extractServerFieldsFromQR(data);
+    if (fields === undefined) {
+      Alert.alert(t('Import.QRCodeParseError'), data);
+      return;
     }
-  }, []);
+    applyServerFields(fields);
+  }, [applyServerFields, t]);
+
+  const { handleBarcodeScanned, qrScannerOpen, toggleScanner } = useQRCodeScanner({ onRawScan: handleRawQRScan });
 
   const addServerForWiki = useCallback(() => {
     if (id === undefined) return;
     const serverUrl = new URL(serverUrlString);
     const newServer = addServer({ uri: serverUrl.origin, name: serverName, useStandardGitProtocol });
-    addServerToWiki(id, newServer.id);
+    addServerToWiki(id, newServer.id, scannedAuth);
     onClose();
-  }, [addServer, addServerToWiki, id, onClose, serverName, serverUrlString, useStandardGitProtocol]);
+  }, [addServer, addServerToWiki, id, onClose, scannedAuth, serverName, serverUrlString, useStandardGitProtocol]);
 
   if (id === undefined || wiki === undefined) {
     return (
@@ -104,20 +100,11 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
 
   return (
     <ModalContainer>
-      {qrScannerOpen && (
-        <SmallCameraView
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        />
-      )}
-      <ScanQRButton
-        mode={'outlined'}
-        onPress={() => {
-          setQrScannerOpen(!qrScannerOpen);
-        }}
-      >
-        <Text>{t('AddWorkspace.ToggleQRCodeScanner')}</Text>
-      </ScanQRButton>
+      <QRCodeScanner
+        qrScannerOpen={qrScannerOpen}
+        handleBarcodeScanned={handleBarcodeScanned}
+        onToggleScanner={toggleScanner}
+      />
       {availableServersToPick.length > 0 && (
         <>
           <Picker

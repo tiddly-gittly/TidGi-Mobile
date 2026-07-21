@@ -1,20 +1,11 @@
-import { BarcodeScanningResult, CameraView } from 'expo-camera';
+import { BarcodeScanningResult } from 'expo-camera';
 import React from 'react';
 import Collapsible from 'react-native-collapsible';
 import { Button, Checkbox, MD3Colors, Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
+import { QRCodeScanner } from '../../../components/QRCodeScanner';
 import { IServerInfo } from '../../../store/server';
-import { GitQRData } from '../types';
-
-const LargeCameraView = styled(CameraView)`
-  height: 80%;
-  width: 100%;
-`;
-
-const ScanQRButton = styled(Button)`
-  margin: 10px 0;
-  min-height: 3em;
-`;
+import { GitQRData } from '../../../utils/importQRCode';
 
 const QRScannedTitle = styled(Text)`
   margin-top: 10px;
@@ -50,8 +41,6 @@ const AdvancedToggleButton = styled(Button)`
   margin-top: 8px;
   align-self: flex-start;
 `;
-
-const ButtonLabelPadding = 30;
 
 interface IImporterServerConfigsProps {
   allServers: IServerInfo[];
@@ -107,23 +96,14 @@ export function ImporterServerConfigs(props: IImporterServerConfigsProps): JSX.E
 
   return (
     <>
-      {qrScannerOpen && (
-        <LargeCameraView
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ['qr'],
-          }}
-        />
-      )}
-      <ScanQRButton
-        testID='toggle-scanner-button'
-        mode={importStatus === 'idle' ? 'elevated' : 'outlined'}
+      <QRCodeScanner
+        size='large'
+        elevated={importStatus === 'idle'}
         disabled={importStatus !== 'idle'}
-        labelStyle={{ padding: ButtonLabelPadding }}
-        onPress={onToggleScanner}
-      >
-        {t('AddWorkspace.ToggleQRCodeScanner')}
-      </ScanQRButton>
+        qrScannerOpen={qrScannerOpen}
+        handleBarcodeScanned={handleBarcodeScanned}
+        onToggleScanner={onToggleScanner}
+      />
 
       {qrData && importStatus === 'idle' && (
         <>
