@@ -1,7 +1,7 @@
+import { createOpenAI } from '@ai-sdk/openai';
 import type { MemeLoopChatAdapter } from '@memeloop/react-ui/chat';
 import { NativeAgentChatView } from '@memeloop/react-ui/native';
-import type { ChatMessage, Device } from 'memeloop';
-import { createLLMProvider, type LLMProviderId } from 'memeloop/llm-providers';
+import { type ChatMessage, createFetchLLMProvider, type Device } from 'memeloop/mobile';
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { MobileAgentLoopService } from '../../services/AgentLoopService';
@@ -69,25 +69,29 @@ export const AgentChat: FC = () => {
   // LLM config is read from deviceNetworkService cloud config; falls back to
   // environment-aware defaults so that the local loop can boot on first launch.
   const loopServiceReference = useRef<MobileAgentLoopService | null>(null);
-  const initializeLoopService = useCallback(async () => {
+  const initializeLoopService = useCallback(() => {
     if (loopServiceReference.current) return;
     const cloudConfig = deviceNetworkService.getCloudConfig();
-    const provider = await createLLMProvider({
-      provider: (cloudConfig?.provider as LLMProviderId | undefined) ?? 'openai',
-      name: 'tidgi-mobile',
-      baseUrl: cloudConfig?.cloudUrl || 'http://localhost:3000',
+    const modelId = 'gpt-4o-mini';
+    const openai = createOpenAI({
+      baseURL: cloudConfig?.cloudUrl || 'http://localhost:3000',
       apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
+    });
+    const provider = createFetchLLMProvider({
+      name: 'tidgi-mobile',
+      modelId,
+      createModel: requestedModelId => openai(requestedModelId ?? modelId),
     });
     loopServiceReference.current = new MobileAgentLoopService(provider);
   }, []);
 
-  const getLoopService = useCallback(async () => {
-    await initializeLoopService();
-    return loopServiceReference.current!;
+  const getLoopService = useCallback(() => {
+    initializeLoopService();
+    return Promise.resolve(loopServiceReference.current!);
   }, [initializeLoopService]);
 
   useEffect(() => {
-    void initializeLoopService();
+    initializeLoopService();
   }, [initializeLoopService]);
 
   useEffect(() => {

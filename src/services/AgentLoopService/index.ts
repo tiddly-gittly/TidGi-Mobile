@@ -4,17 +4,8 @@
  * Uses core's createFetchLLMProvider (pure fetch, no Node deps) and
  * delegates loop execution to runAgentToolLoopTurn.
  */
-import type {
-  AgentFrameworkContext,
-  AgentInstanceModel,
-  AgentInstanceState,
-  AgentLoopInput,
-  ChatMessage,
-  IAgentStorage,
-  ILLMProvider,
-  IToolRegistry,
-} from 'memeloop';
-import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop';
+import type { AgentFrameworkContext, AgentInstanceModel, AgentInstanceState, AgentLoopInput, ChatMessage, IAgentStorage, ILLMProvider, IToolRegistry } from 'memeloop';
+import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop/mobile';
 
 export interface SendMessageResult {
   messages: ChatMessage[];
@@ -48,17 +39,22 @@ function createChatMessage(
 function createMemoryStorage(): IAgentStorage {
   const store = new Map<string, ChatMessage[]>();
   return {
-    async listConversations() { return []; },
-    async getMessages(conversationId) {
-      return store.get(conversationId) ?? [];
+    listConversations() {
+      return Promise.resolve([]);
     },
-    async appendMessage(message) {
-      const msgs = store.get(message.conversationId) ?? [];
-      msgs.push(message);
-      store.set(message.conversationId, msgs);
+    getMessages(conversationId) {
+      return Promise.resolve(store.get(conversationId) ?? []);
     },
-    async upsertConversationMetadata() { /* noop */ },
-    async insertMessagesIfAbsent(messages) {
+    appendMessage(message) {
+      const messages = store.get(message.conversationId) ?? [];
+      messages.push(message);
+      store.set(message.conversationId, messages);
+      return Promise.resolve();
+    },
+    upsertConversationMetadata() {
+      return Promise.resolve();
+    },
+    insertMessagesIfAbsent(messages) {
       for (const message of messages) {
         const existing = store.get(message.conversationId) ?? [];
         if (!existing.some((m) => m.messageId === message.messageId)) {
@@ -66,21 +62,38 @@ function createMemoryStorage(): IAgentStorage {
         }
         store.set(message.conversationId, existing);
       }
+      return Promise.resolve();
     },
-    async getAttachment() { return null; },
-    async saveAttachment() { /* noop */ },
-    async getAgentDefinition() { return null; },
-    async saveAgentInstance() { /* noop */ },
-    async getConversationMeta() { return null; },
+    getAttachment() {
+      return Promise.resolve(null);
+    },
+    saveAttachment() {
+      return Promise.resolve();
+    },
+    getAgentDefinition() {
+      return Promise.resolve(null);
+    },
+    saveAgentInstance() {
+      return Promise.resolve();
+    },
+    getConversationMeta() {
+      return Promise.resolve(null);
+    },
   };
 }
 
 function createStubToolRegistry(): IToolRegistry {
   const tools = new Map<string, unknown>();
   return {
-    registerTool(id, impl) { tools.set(id, impl); },
-    getTool(id) { return tools.get(id); },
-    listTools() { return Array.from(tools.keys()); },
+    registerTool(id, impl) {
+      tools.set(id, impl);
+    },
+    getTool(id) {
+      return tools.get(id);
+    },
+    listTools() {
+      return Array.from(tools.keys());
+    },
   };
 }
 
@@ -143,21 +156,24 @@ export class MobileAgentLoopService {
         maxIterations: 8,
         isCancelled: () => this.cancelledConversations.has(conversationId),
       },
-      resolveAgentRuntimeView: async (agentId, msgs) => {
+      resolveAgentRuntimeView: (agentId, messages) => {
         const profiles = getBuiltinLoopProfiles();
         const profile = profiles[0] ?? {
-          id: 'memeloop:general-assistant', name: 'General Assistant',
-          description: '', tools: [], version: '1',
+          id: 'memeloop:general-assistant',
+          name: 'General Assistant',
+          description: '',
+          tools: [],
+          version: '1',
         };
-        return {
+        return Promise.resolve({
           ...profile,
           id: agentId,
           agentDefId: profile.id,
-          messages: msgs,
+          messages,
           version: profile.version ?? '1',
           status: { state: 'working' as const, modified: new Date() },
           created: new Date(),
-        } as AgentInstanceModel;
+        } as AgentInstanceModel);
       },
     };
 
@@ -166,18 +182,18 @@ export class MobileAgentLoopService {
     try {
       const result = await runAgentToolLoopTurn(context, input, {
         onProgress: (status) => {
-          for (const cb of this.onProgressCallbacks.get(conversationId) ?? []) cb(status);
+          for (const callback of this.onProgressCallbacks.get(conversationId) ?? []) callback(status);
         },
       });
 
       const finalMessages = await this.storage.getMessages(conversationId);
-      for (const msg of finalMessages) {
-        for (const cb of this.onMessageCallbacks.get(conversationId) ?? []) cb(msg);
+      for (const message of finalMessages) {
+        for (const callback of this.onMessageCallbacks.get(conversationId) ?? []) callback(message);
       }
       return { messages: finalMessages, state: result.state };
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      return { messages: allMessages, state: 'failed', error: err };
+      const error_ = error instanceof Error ? error : new Error(String(error));
+      return { messages: allMessages, state: 'failed', error: error_ };
     }
   }
 }
