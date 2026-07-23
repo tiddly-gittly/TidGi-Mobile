@@ -1,26 +1,22 @@
+import { CloudDeviceAuthorizer, createDeviceIdentity, Libp2pDeviceNetworkService, type RawSeedDeviceIdentity, signDeviceBinding } from '@memeloop/libp2p/browser';
 import * as SecureStore from 'expo-secure-store';
 import {
-  CloudDeviceAuthorizer,
   type CloudDeviceClient,
   type CloudDeviceRecord,
-  createDeviceIdentity,
   type Device,
   type DeviceCapabilities,
   type DeviceConnectionGrant,
   type DeviceRelayReservationToken,
   type DeviceTrustStore,
-  Libp2pDeviceNetworkService,
   type LocalDeviceIdentity,
   type LocalPairingRequestOptions,
   type MemeLoopDuplexStream,
   type MemeLoopProtocol,
   type PairingSession,
-  type RawSeedDeviceIdentity,
-  signDeviceBinding,
   syncCloudDevices,
   type SyncResult,
   type TrustedDeviceRecord,
-} from 'memeloop';
+} from 'memeloop/device-network';
 
 import { useWorkspaceStore } from '../../store/workspace';
 
