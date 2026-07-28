@@ -19,40 +19,16 @@ import {
 } from 'memeloop/device-network';
 
 import { useWorkspaceStore } from '../../store/workspace';
+import { parseStoredIdentity, parseTrustedDeviceRecords, type StoredIdentity } from './storage';
 
 const IDENTITY_KEY = 'device_network_identity_v1';
 const TRUSTED_DEVICES_KEY = 'device_network_trusted_devices_v1';
-
-interface StoredIdentity {
-  peerId: string;
-  publicKeyMultibase: string;
-  encryptedPrivateKey: string;
-  deviceName: string;
-  platform: 'mobile';
-  createdAt: number;
-}
-
-type StoredTrustedDevices = unknown;
-
-function isTrustedDeviceRecord(value: unknown): value is TrustedDeviceRecord {
-  const record = value as Record<string, unknown> | undefined;
-  return Boolean(
-    record &&
-      typeof record.peerId === 'string' &&
-      typeof record.publicKeyMultibase === 'string' &&
-      typeof record.deviceName === 'string' &&
-      typeof record.platform === 'string' &&
-      typeof record.trustMode === 'string' &&
-      typeof record.createdAt === 'number',
-  );
-}
 
 class SecureStoreDeviceTrustStore implements DeviceTrustStore {
   public async loadTrustedDevices(): Promise<TrustedDeviceRecord[]> {
     const storedJson = await SecureStore.getItemAsync(TRUSTED_DEVICES_KEY);
     if (!storedJson) return [];
-    const parsed = JSON.parse(storedJson) as StoredTrustedDevices;
-    return Array.isArray(parsed) ? parsed.filter(isTrustedDeviceRecord) : [];
+    return parseTrustedDeviceRecords(storedJson);
   }
 
   public async saveTrustedDevice(record: TrustedDeviceRecord): Promise<void> {
@@ -175,6 +151,7 @@ export class DeviceNetworkService {
   private core?: Libp2pDeviceNetworkService;
   private identity?: RawSeedDeviceIdentity;
   private started = false;
+  private startPromise?: Promise<void>;
   private readonly trustStore = new SecureStoreDeviceTrustStore();
   private cloudConfig?: { cloudUrl: string; accessToken: string; provider?: string };
   private cloudClient?: MobileCloudClient;
@@ -185,6 +162,13 @@ export class DeviceNetworkService {
 
   public async start(): Promise<void> {
     if (this.started) return;
+    this.startPromise ??= this.startInternal().finally(() => {
+      this.startPromise = undefined;
+    });
+    await this.startPromise;
+  }
+
+  private async startInternal(): Promise<void> {
     await this.ensureIdentity();
 
     let authorizer: CloudDeviceAuthorizer | undefined;
@@ -230,7 +214,8 @@ export class DeviceNetworkService {
   }
 
   public async stop(): Promise<void> {
-    if (!this.started) return;
+    await this.startPromise?.catch(() => undefined);
+    if (!this.started && !this.core) return;
     if (this.cloudHeartbeatTimer) {
       clearInterval(this.cloudHeartbeatTimer);
       this.cloudHeartbeatTimer = undefined;
@@ -422,17 +407,20 @@ export class DeviceNetworkService {
     if (this.identity) return;
     const storedJson = await SecureStore.getItemAsync(IDENTITY_KEY);
     if (storedJson) {
-      const stored = JSON.parse(storedJson) as StoredIdentity;
-      this.identity = {
-        peerId: stored.peerId,
-        publicKeyMultibase: stored.publicKeyMultibase,
-        privateKeyRef: 'secure-store-raw-seed',
-        privateKeyRawSeedBase64Url: stored.encryptedPrivateKey,
-        createdAt: stored.createdAt,
-        deviceName: stored.deviceName,
-        platform: 'mobile',
-      };
-      return;
+      const stored = parseStoredIdentity(storedJson);
+      if (stored) {
+        this.identity = {
+          peerId: stored.peerId,
+          publicKeyMultibase: stored.publicKeyMultibase,
+          privateKeyRef: 'secure-store-raw-seed',
+          privateKeyRawSeedBase64Url: stored.encryptedPrivateKey,
+          createdAt: stored.createdAt,
+          deviceName: stored.deviceName,
+          platform: 'mobile',
+        };
+        return;
+      }
+      console.warn('[DeviceNetworkService] invalid stored identity; generating a replacement');
     }
     const identity = await this.createIdentity();
     await this.saveIdentity(identity);

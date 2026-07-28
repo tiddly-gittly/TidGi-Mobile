@@ -6,6 +6,7 @@
  */
 import type { AgentFrameworkContext, AgentInstanceModel, AgentInstanceState, AgentLoopInput, ChatMessage, IAgentStorage, ILLMProvider, IToolRegistry } from 'memeloop';
 import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop/mobile';
+import { selectNewLoopMessages } from './messages';
 
 export interface SendMessageResult {
   messages: ChatMessage[];
@@ -36,7 +37,11 @@ function createChatMessage(
   };
 }
 
-function createMemoryStorage(): IAgentStorage {
+interface MemoryAgentStorage extends IAgentStorage {
+  replaceMessages(conversationId: string, messages: readonly ChatMessage[]): Promise<void>;
+}
+
+function createMemoryStorage(): MemoryAgentStorage {
   const store = new Map<string, ChatMessage[]>();
   return {
     listConversations() {
@@ -44,6 +49,10 @@ function createMemoryStorage(): IAgentStorage {
     },
     getMessages(conversationId) {
       return Promise.resolve(store.get(conversationId) ?? []);
+    },
+    replaceMessages(conversationId, messages) {
+      store.set(conversationId, [...messages]);
+      return Promise.resolve();
     },
     appendMessage(message) {
       const messages = store.get(message.conversationId) ?? [];
@@ -99,7 +108,7 @@ function createStubToolRegistry(): IToolRegistry {
 
 export class MobileAgentLoopService {
   private readonly llmProvider: ILLMProvider;
-  private readonly storage: IAgentStorage;
+  private readonly storage: MemoryAgentStorage;
   private cancelledConversations = new Set<string>();
   private onMessageCallbacks = new Map<string, Array<(message: ChatMessage) => void>>();
   private onProgressCallbacks = new Map<string, Array<(status: string) => void>>();
@@ -142,7 +151,7 @@ export class MobileAgentLoopService {
 
     const userMessage = createChatMessage(conversationId, 'user', text);
     const allMessages = [...existingMessages, userMessage];
-    await this.storage.insertMessagesIfAbsent(allMessages);
+    await this.storage.replaceMessages(conversationId, allMessages);
 
     const context: AgentFrameworkContext = {
       storage: this.storage,
@@ -187,7 +196,7 @@ export class MobileAgentLoopService {
       });
 
       const finalMessages = await this.storage.getMessages(conversationId);
-      for (const message of finalMessages) {
+      for (const message of selectNewLoopMessages(finalMessages, existingMessages, userMessage.messageId)) {
         for (const callback of this.onMessageCallbacks.get(conversationId) ?? []) callback(message);
       }
       return { messages: finalMessages, state: result.state };

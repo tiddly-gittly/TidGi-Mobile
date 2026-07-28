@@ -99,6 +99,7 @@ export const AgentChat: FC = () => {
 
     void (async () => {
       try {
+        await deviceNetworkService.start();
         const [identity, devices] = await Promise.all([
           deviceNetworkService.getLocalIdentity(),
           deviceNetworkService.listDevices(),
