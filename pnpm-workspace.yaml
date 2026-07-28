@@ -13,6 +13,11 @@ allowBuilds:
   svelte-preprocess: true
   unrs-resolver: false
 
+minimumReleaseAgeExclude:
+  - '@memeloop/libp2p@0.1.0'
+  - '@memeloop/react-ui@0.1.0'
+  - memeloop@0.1.0
+
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - detox
