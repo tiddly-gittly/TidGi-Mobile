@@ -188,7 +188,6 @@ function DeviceNetworkItem() {
     try {
       await Haptics.selectionAsync();
       await action();
-      await network.refresh();
     } catch (error) {
       setActionError(errorMessage(error));
     } finally {

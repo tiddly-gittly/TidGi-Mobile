@@ -43,25 +43,28 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
 
   useEffect(() => {
     mountedReference.current = true;
+    let unsubscribe: (() => void) | undefined;
+    let unsubscribePairingSessions: (() => void) | undefined;
     void (async () => {
       try {
         await refresh();
+        if (!mountedReference.current) return;
+        unsubscribe = deviceNetworkService.observeDevices((nextDevices) => {
+          if (mountedReference.current) setDevices(nextDevices);
+        });
+        unsubscribePairingSessions = deviceNetworkService.observePairingSessions((nextSessions) => {
+          if (mountedReference.current) setPairingSessions(nextSessions);
+        });
       } catch (startError) {
         if (mountedReference.current) {
           setError(startError instanceof Error ? startError : new Error(String(startError)));
         }
       }
     })();
-    const unsubscribe = deviceNetworkService.observeDevices((nextDevices) => {
-      if (mountedReference.current) setDevices(nextDevices);
-    });
-    const unsubscribePairingSessions = deviceNetworkService.observePairingSessions((nextSessions) => {
-      if (mountedReference.current) setPairingSessions(nextSessions);
-    });
     return () => {
       mountedReference.current = false;
-      unsubscribe();
-      unsubscribePairingSessions();
+      unsubscribe?.();
+      unsubscribePairingSessions?.();
     };
   }, [refresh]);
 
