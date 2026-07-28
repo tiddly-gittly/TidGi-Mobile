@@ -28,10 +28,10 @@
     "detox:test:ios": "node scripts/runDetox.mjs ios.simulator.dev-client"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/openai": "^4.0.20",
     "@expo/vector-icons": "^15.0.3",
-    "@memeloop/libp2p": "file:../memeloop/packages/memeloop-libp2p",
-    "@memeloop/react-ui": "file:../memeloop/packages/memeloop-react-ui",
+    "@memeloop/libp2p": "^0.1.0",
+    "@memeloop/react-ui": "^0.1.0",
     "@noble/ed25519": "^2.2.3",
     "@noble/hashes": "^1.7.0",
     "@react-native-community/datetimepicker": "~8.4.4",
@@ -68,7 +68,7 @@
     "i18next": "^25.2.1",
     "immer": "^10.1.1",
     "lodash": "^4.17.21",
-    "memeloop": "file:../memeloop/packages/memeloop",
+    "memeloop": "^0.1.0",
     "p-timeout": "^6.1.4",
     "react": "19.1.0",
     "react-i18next": "^15.4.0",
