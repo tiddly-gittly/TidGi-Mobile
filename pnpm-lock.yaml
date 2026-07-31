@@ -18,8 +18,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(memeloop@0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
-        specifier: ^0.1.0
-        version: 0.1.0(41fc7b257184234c6f900ea8220987d9)
+        specifier: ^0.1.1
+        version: 0.1.1(41fc7b257184234c6f900ea8220987d9)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -2483,8 +2483,8 @@ packages:
     peerDependencies:
       memeloop: ^0.1.0
 
-  '@memeloop/react-ui@0.1.0':
-    resolution: {integrity: sha512-VLY6y8jkAOp6h/pbaKzxA5fWzd+AdacedaOgAJvXlPT9+d8tv0/7Ele2GVxNdG8fb8Q5IbbEncoAkG3kYXig7g==}
+  '@memeloop/react-ui@0.1.1':
+    resolution: {integrity: sha512-uSNYiot56APn4nlOLThmKCRNdKHwV2t3beYfiOD9sXZ3u2KHH3mrt1enTvnvAB5yXFJlNZXzmrxogNWaHpw/QQ==}
     peerDependencies:
       '@assistant-ui/react': '>=0.14.0'
       '@mui/icons-material': '>=6.0.0'
@@ -12393,7 +12393,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.1.0(41fc7b257184234c6f900ea8220987d9)':
+  '@memeloop/react-ui@0.1.1(41fc7b257184234c6f900ea8220987d9)':
     dependencies:
       '@assistant-ui/react': 0.14.23(@types/react@19.1.17)(immer@10.1.1)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.2.2(react@19.1.0))
       '@mui/icons-material': 9.1.1(@mui/material@9.1.1(@types/react@19.1.17)(react-dom@18.2.0(react@19.1.0))(react@19.1.0))(@types/react@19.1.17)(react@19.1.0)
