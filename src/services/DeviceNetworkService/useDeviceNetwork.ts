@@ -2,16 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Device, LocalDeviceIdentity, LocalPairingRequestOptions, PairingSession, SyncResult } from 'memeloop';
 
-import { deviceNetworkService } from './index';
+import { type DeviceNetworkCloudStatus, deviceNetworkService } from './index';
 
 export interface UseDeviceNetworkResult {
   started: boolean;
   localDevice?: Device;
   devices: Device[];
   pairingSessions: PairingSession[];
+  cloudStatus: DeviceNetworkCloudStatus;
   error?: Error;
   refresh(): Promise<void>;
   requestLocalPairing(peerId: string, options?: LocalPairingRequestOptions): Promise<PairingSession>;
+  requestPairingInvite(serializedInvite: string): Promise<PairingSession>;
   acceptPairing(sessionId: string): Promise<void>;
   rejectPairing(sessionId: string): Promise<void>;
   removeTrustedDevice(peerId: string): Promise<void>;
@@ -24,6 +26,7 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
   const [localDevice, setLocalDevice] = useState<Device | undefined>();
   const [devices, setDevices] = useState<Device[]>([]);
   const [pairingSessions, setPairingSessions] = useState<PairingSession[]>([]);
+  const [cloudStatus, setCloudStatus] = useState(deviceNetworkService.getCloudStatus());
   const [error, setError] = useState<Error | undefined>();
   const mountedReference = useRef(false);
 
@@ -45,6 +48,7 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
     mountedReference.current = true;
     let unsubscribe: (() => void) | undefined;
     let unsubscribePairingSessions: (() => void) | undefined;
+    const unsubscribeCloudStatus = deviceNetworkService.observeCloudStatus(setCloudStatus);
     void (async () => {
       try {
         await refresh();
@@ -65,11 +69,18 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
       mountedReference.current = false;
       unsubscribe?.();
       unsubscribePairingSessions?.();
+      unsubscribeCloudStatus();
     };
   }, [refresh]);
 
   const requestLocalPairing = useCallback(async (peerId: string, options?: LocalPairingRequestOptions) => {
     const session = await deviceNetworkService.requestLocalPairing(peerId, options);
+    await refresh();
+    return session;
+  }, [refresh]);
+
+  const requestPairingInvite = useCallback(async (serializedInvite: string) => {
+    const session = await deviceNetworkService.requestPairingInvite(serializedInvite);
     await refresh();
     return session;
   }, [refresh]);
@@ -105,9 +116,11 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
     localDevice,
     devices,
     pairingSessions,
+    cloudStatus,
     error,
     refresh,
     requestLocalPairing,
+    requestPairingInvite,
     acceptPairing,
     rejectPairing,
     removeTrustedDevice,
