@@ -757,6 +757,17 @@
   },
   "DeviceNetwork": {
     "AcceptPairing": "Accept",
+    "AccessToken": "Cloud access token",
+    "ClearCloudConfiguration": "Clear cloud configuration",
+    "CloudConfiguration": "MemeLoop Cloud",
+    "CloudState": {
+      "connecting": "Connecting to MemeLoop Cloud…",
+      "error": "Cloud connection failed. The app will retry with bounded backoff when it returns to the foreground or a heartbeat detects network recovery.",
+      "idle": "Cloud is configured and waiting to connect.",
+      "not-configured": "Cloud is not configured. Cloud directory, relay, and the local mobile agent are unavailable; local invite pairing remains available.",
+      "online": "Cloud registration, directory, and relay are online."
+    },
+    "CloudUrl": "MemeLoop Cloud URL",
     "Devices": "Devices",
     "DevicesDescription": "Nearby devices can be paired locally. Cloud account devices appear here after directory sync.",
     "Direction": {
@@ -767,6 +778,10 @@
     "NoDevices": "No nearby or trusted devices yet.",
     "NoPendingPairing": "No pairing requests waiting for confirmation.",
     "Pair": "Pair",
+    "PairByInvite": "Pair with an invite",
+    "PairByInviteDescription": "React Native has no mDNS discovery. Scan or paste a MemeLoop pairing invite containing the peer's WebSocket multiaddrs.",
+    "PairingInvite": "MemeLoop pairing invite",
+    "PairInvite": "Pair invite",
     "PairingRequests": "Pairing requests",
     "Reachability": {
       "connecting": "Connecting",
@@ -780,6 +795,8 @@
     "RemoveTrustedDeviceConfirm": "Remove local trust for {{deviceName}}?",
     "Sync": "Sync",
     "SyncCloudDevices": "Sync cloud devices",
+    "Provider": "Agent routing type",
+    "Model": "LLM model",
     "TrustMode": {
       "cloud-account": "Cloud account",
       "local-pairing": "Local pairing"

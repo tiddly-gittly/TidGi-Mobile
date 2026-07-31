@@ -5,7 +5,9 @@ import { type ChatMessage, createFetchLLMProvider, type Device } from 'memeloop/
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { MobileAgentLoopService } from '../../services/AgentLoopService';
+import { mobileAgentStorage } from '../../services/AgentStorageService';
 import { deviceNetworkService } from '../../services/DeviceNetworkService';
+import { cloudLlmConnection } from '../../services/DeviceNetworkService/cloudConfig';
 
 const LOCAL_EXECUTION_TARGET_ID = 'local';
 const REMOTE_EXECUTION_TARGET_PREFIX = 'peer:';
@@ -64,23 +66,27 @@ export const AgentChat: FC = () => {
   const [localPeerId, setLocalPeerId] = useState<string | undefined>();
   const [agentLoopDevices, setAgentLoopDevices] = useState<Device[]>([]);
   const [error, setError] = useState<Error | null>(null);
+  const [cloudConfigured, setCloudConfigured] = useState(deviceNetworkService.getCloudStatus().configured);
 
   // Singleton Mobile Agent Loop Service — created once per component mount.
-  // LLM config is read from deviceNetworkService cloud config; falls back to
-  // environment-aware defaults so that the local loop can boot on first launch.
+  // LLM config comes only from persisted settings. An unconfigured install is
+  // explicitly unavailable instead of silently sending data to localhost with
+  // a test token.
   const loopServiceReference = useRef<MobileAgentLoopService | null>(null);
   const initializeLoopService = useCallback(() => {
     if (loopServiceReference.current) return;
     const cloudConfig = deviceNetworkService.getCloudConfig();
-    const modelId = 'gpt-4o-mini';
+    if (!cloudConfig) throw new Error('cloud_not_configured');
+    const connection = cloudLlmConnection(cloudConfig);
     const openai = createOpenAI({
-      baseURL: cloudConfig?.cloudUrl || 'http://localhost:3000',
-      apiKey: cloudConfig?.accessToken || 'tidgi-mobile-dev',
+      baseURL: connection.baseURL,
+      apiKey: connection.apiKey,
+      ...(connection.headers ? { headers: connection.headers } : {}),
     });
     const provider = createFetchLLMProvider({
       name: 'tidgi-mobile',
-      modelId,
-      createModel: requestedModelId => openai(requestedModelId ?? modelId),
+      modelId: connection.modelId,
+      createModel: requestedModelId => openai(requestedModelId ?? connection.modelId),
     });
     loopServiceReference.current = new MobileAgentLoopService(provider);
   }, []);
@@ -91,19 +97,21 @@ export const AgentChat: FC = () => {
   }, [initializeLoopService]);
 
   useEffect(() => {
-    initializeLoopService();
-  }, [initializeLoopService]);
-
-  useEffect(() => {
     let unsubscribe: (() => void) | undefined;
+    const unsubscribeCloudStatus = deviceNetworkService.observeCloudStatus(status => {
+      setCloudConfigured(status.configured);
+      if (!status.configured || status.state === 'idle') loopServiceReference.current = null;
+    });
 
     void (async () => {
       try {
         await deviceNetworkService.start();
-        const [identity, devices] = await Promise.all([
+        const [identity, devices, storedMessages] = await Promise.all([
           deviceNetworkService.getLocalIdentity(),
           deviceNetworkService.listDevices(),
+          mobileAgentStorage.getMessages('mobile-agent-demo'),
         ]);
+        if (storedMessages.length > 0) setMessages(storedMessages);
         setLocalPeerId(identity.peerId);
         setAgentLoopDevices(devices.filter(device => device.peerId !== identity.peerId && device.trusted && device.capabilities.agentLoop));
         unsubscribe = deviceNetworkService.observeDevices(nextDevices => {
@@ -116,6 +124,7 @@ export const AgentChat: FC = () => {
 
     return () => {
       unsubscribe?.();
+      unsubscribeCloudStatus();
     };
   }, []);
 
@@ -125,6 +134,7 @@ export const AgentChat: FC = () => {
       label: 'This phone',
       description: localPeerId ? `Run locally on ${localPeerId}` : 'Run locally on this phone',
       kind: 'local',
+      disabled: !cloudConfigured,
     },
     ...agentLoopDevices.map(device => ({
       id: remoteExecutionTargetId(device.peerId),
@@ -133,7 +143,7 @@ export const AgentChat: FC = () => {
       kind: 'remote' as const,
       disabled: !device.trusted,
     })),
-  ], [agentLoopDevices, localPeerId]);
+  ], [agentLoopDevices, cloudConfigured, localPeerId]);
 
   const sendRemoteMessage = useCallback(async (peerId: string, text: string) => {
     setIsRunning(true);
@@ -156,10 +166,15 @@ export const AgentChat: FC = () => {
         },
       });
       await deviceNetworkService.syncWithDevice(peerId);
-      setMessages(currentMessages => [
-        ...currentMessages,
-        createMessage('assistant', `Remote turn was sent to ${peerId}. Pull details on remote messages to inspect full run output.`),
-      ]);
+      const syncedMessages = await mobileAgentStorage.getMessages('mobile-agent-demo');
+      setMessages(
+        syncedMessages.length > 0
+          ? syncedMessages
+          : currentMessages => [
+            ...currentMessages,
+            createMessage('assistant', `Remote turn was sent to ${peerId}, but it did not publish conversation messages to sync.`),
+          ],
+      );
     } catch (error_: unknown) {
       const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
       setError(nextError);
@@ -243,6 +258,7 @@ export const AgentChat: FC = () => {
       }
 
       // Local execution via MobileAgentLoopService
+      if (!cloudConfigured) throw new Error('Configure MemeLoop Cloud in Device Network settings before running the local agent.');
       setIsRunning(true);
       const loopService = await getLoopService();
 
@@ -317,7 +333,7 @@ export const AgentChat: FC = () => {
         setIsRunning(false);
       }
     },
-  }), [activeExecutionTargetId, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
+  }), [activeExecutionTargetId, cloudConfigured, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
 
   return (
     <NativeAgentChatView

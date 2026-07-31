@@ -1,16 +1,20 @@
 import * as Haptics from 'expo-haptics';
 import type { Device, PairingSession } from 'memeloop';
-import React, { ComponentType, useCallback, useMemo, useState } from 'react';
+import React, { ComponentType, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Button, Chip, Divider, Modal, Portal, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { Button, Chip, Divider, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 import BackgroundSyncStatus from '../../../components/BackgroundSync';
 import { LogViewerDialog } from '../../../components/LogViewerDialog';
 import { ImporterButton } from '../../../components/NavigationButtons';
+import { QRCodeScanner } from '../../../components/QRCodeScanner';
 import { ServerList } from '../../../components/ServerList';
 import { SyncAllTextButton } from '../../../components/SyncButton';
+import { useQRCodeScanner } from '../../../hooks/useQRCodeScanner';
 import { defaultLanguage, detectedLanguage, supportedLanguages } from '../../../i18n';
+import { deviceNetworkService } from '../../../services/DeviceNetworkService';
+import { clearCloudConfig, loadCloudConfig, saveCloudConfig } from '../../../services/DeviceNetworkService/cloudConfig';
 import { useDeviceNetwork } from '../../../services/DeviceNetworkService/useDeviceNetwork';
 import { useConfigStore } from '../../../store/config';
 import { IServerInfo } from '../../../store/server';
@@ -176,12 +180,27 @@ function DeviceNetworkItem() {
   const network = useDeviceNetwork();
   const [busyAction, setBusyAction] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
+  const [cloudUrl, setCloudUrl] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [provider, setProvider] = useState('openai');
+  const [model, setModel] = useState('gpt-4o-mini');
+  const [pairingInvite, setPairingInvite] = useState('');
+
+  useEffect(() => {
+    void loadCloudConfig().then((config) => {
+      if (!config) return;
+      setCloudUrl(config.cloudUrl);
+      setAccessToken(config.accessToken);
+      setProvider(config.provider ?? 'openai');
+      setModel(config.model ?? 'gpt-4o-mini');
+    });
+  }, []);
 
   const pendingSessions = useMemo(() => network.pairingSessions.filter(session => session.status === 'pending'), [network.pairingSessions]);
   const pendingPeerIds = useMemo(() => new Set(pendingSessions.map(session => session.remotePeerId)), [pendingSessions]);
   const visibleError = actionError ?? network.error?.message;
 
-  const runAction = async (actionKey: string, action: () => Promise<void>) => {
+  const runAction = useCallback(async (actionKey: string, action: () => Promise<void>) => {
     setBusyAction(actionKey);
     setActionError(undefined);
     try {
@@ -192,7 +211,16 @@ function DeviceNetworkItem() {
     } finally {
       setBusyAction(undefined);
     }
-  };
+  }, []);
+
+  const qrScanner = useQRCodeScanner({
+    onRawScan: (data) => {
+      setPairingInvite(data);
+      void runAction('pair-invite', async () => {
+        await network.requestPairingInvite(data);
+      });
+    },
+  });
 
   const confirmRemoveTrustedDevice = (device: Device) => {
     Alert.alert(
@@ -316,6 +344,60 @@ function DeviceNetworkItem() {
 
   return (
     <View style={styles.deviceNetworkPanel}>
+      <Text variant='titleMedium'>{t('DeviceNetwork.CloudConfiguration')}</Text>
+      <Text variant='bodySmall' style={styles.deviceNetworkEmpty}>
+        {t(`DeviceNetwork.CloudState.${network.cloudStatus.state}`)}
+      </Text>
+      <TextInput
+        mode='outlined'
+        label={t('DeviceNetwork.CloudUrl')}
+        autoCapitalize='none'
+        autoCorrect={false}
+        value={cloudUrl}
+        onChangeText={setCloudUrl}
+      />
+      <TextInput
+        mode='outlined'
+        label={t('DeviceNetwork.AccessToken')}
+        autoCapitalize='none'
+        autoCorrect={false}
+        secureTextEntry
+        value={accessToken}
+        onChangeText={setAccessToken}
+      />
+      <TextInput mode='outlined' label={t('DeviceNetwork.Provider')} value={provider} onChangeText={setProvider} autoCapitalize='none' />
+      <TextInput mode='outlined' label={t('DeviceNetwork.Model')} value={model} onChangeText={setModel} autoCapitalize='none' />
+      <View style={styles.deviceNetworkToolbar}>
+        <Button
+          mode='contained'
+          disabled={busyAction !== undefined || cloudUrl.trim() === '' || accessToken.trim() === ''}
+          onPress={() => {
+            void runAction('save-cloud', async () => {
+              const config = await saveCloudConfig({ cloudUrl, accessToken, provider, model });
+              await deviceNetworkService.applyCloudConfig(config);
+              await network.refresh();
+            });
+          }}
+        >
+          {t('Common.Save')}
+        </Button>
+        <Button
+          mode='outlined'
+          disabled={busyAction !== undefined || !network.cloudStatus.configured}
+          onPress={() => {
+            void runAction('clear-cloud', async () => {
+              await clearCloudConfig();
+              setAccessToken('');
+              await deviceNetworkService.applyCloudConfig(undefined);
+              await network.refresh();
+            });
+          }}
+        >
+          {t('DeviceNetwork.ClearCloudConfiguration')}
+        </Button>
+      </View>
+      {network.cloudStatus.error && <Text variant='bodySmall' style={styles.deviceNetworkError}>{network.cloudStatus.error}</Text>}
+      <Divider style={styles.deviceNetworkDivider} />
       <View style={styles.deviceNetworkHeader}>
         <View style={styles.deviceNetworkTextBlock}>
           <Text variant='titleLarge'>{t('DeviceNetwork.LocalDevice')}</Text>
@@ -344,7 +426,7 @@ function DeviceNetworkItem() {
           compact
           mode='outlined'
           icon='cloud-sync-outline'
-          disabled={busyAction !== undefined}
+          disabled={busyAction !== undefined || !network.cloudStatus.configured}
           onPress={() => {
             void runAction('cloud-sync', async () => {
               await network.syncCloudDevices();
@@ -355,6 +437,37 @@ function DeviceNetworkItem() {
         </Button>
       </View>
       {visibleError && <Text variant='bodySmall' style={styles.deviceNetworkError}>{visibleError}</Text>}
+      <Divider style={styles.deviceNetworkDivider} />
+      <Text variant='titleMedium'>{t('DeviceNetwork.PairByInvite')}</Text>
+      <Text variant='bodySmall' style={styles.deviceNetworkEmpty}>{t('DeviceNetwork.PairByInviteDescription')}</Text>
+      <TextInput
+        mode='outlined'
+        multiline
+        label={t('DeviceNetwork.PairingInvite')}
+        value={pairingInvite}
+        onChangeText={setPairingInvite}
+      />
+      <View style={styles.deviceNetworkToolbar}>
+        <Button
+          mode='contained'
+          icon='qrcode-scan'
+          disabled={busyAction !== undefined || pairingInvite.trim() === ''}
+          onPress={() => {
+            void runAction('pair-invite', async () => {
+              await network.requestPairingInvite(pairingInvite);
+            });
+          }}
+        >
+          {t('DeviceNetwork.PairInvite')}
+        </Button>
+      </View>
+      <QRCodeScanner
+        disabled={busyAction !== undefined}
+        handleBarcodeScanned={qrScanner.handleBarcodeScanned}
+        onToggleScanner={qrScanner.toggleScanner}
+        qrScannerOpen={qrScanner.qrScannerOpen}
+        testID='device-network-pairing-invite-scanner'
+      />
       <Divider style={styles.deviceNetworkDivider} />
       <Text variant='titleMedium'>{t('DeviceNetwork.PairingRequests')}</Text>
       {pendingSessions.length === 0

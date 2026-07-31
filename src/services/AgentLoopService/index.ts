@@ -4,8 +4,9 @@
  * Uses core's createFetchLLMProvider (pure fetch, no Node deps) and
  * delegates loop execution to runAgentToolLoopTurn.
  */
-import type { AgentFrameworkContext, AgentInstanceModel, AgentInstanceState, AgentLoopInput, ChatMessage, IAgentStorage, ILLMProvider, IToolRegistry } from 'memeloop';
+import type { AgentFrameworkContext, AgentInstanceModel, AgentInstanceState, AgentLoopInput, ChatMessage, ILLMProvider, IToolRegistry } from 'memeloop';
 import { getBuiltinLoopProfiles, runAgentToolLoopTurn } from 'memeloop/mobile';
+import { type MobileAgentStorage, mobileAgentStorage } from '../AgentStorageService';
 import { selectNewLoopMessages } from './messages';
 
 export interface SendMessageResult {
@@ -37,60 +38,6 @@ function createChatMessage(
   };
 }
 
-interface MemoryAgentStorage extends IAgentStorage {
-  replaceMessages(conversationId: string, messages: readonly ChatMessage[]): Promise<void>;
-}
-
-function createMemoryStorage(): MemoryAgentStorage {
-  const store = new Map<string, ChatMessage[]>();
-  return {
-    listConversations() {
-      return Promise.resolve([]);
-    },
-    getMessages(conversationId) {
-      return Promise.resolve(store.get(conversationId) ?? []);
-    },
-    replaceMessages(conversationId, messages) {
-      store.set(conversationId, [...messages]);
-      return Promise.resolve();
-    },
-    appendMessage(message) {
-      const messages = store.get(message.conversationId) ?? [];
-      messages.push(message);
-      store.set(message.conversationId, messages);
-      return Promise.resolve();
-    },
-    upsertConversationMetadata() {
-      return Promise.resolve();
-    },
-    insertMessagesIfAbsent(messages) {
-      for (const message of messages) {
-        const existing = store.get(message.conversationId) ?? [];
-        if (!existing.some((m) => m.messageId === message.messageId)) {
-          existing.push(message);
-        }
-        store.set(message.conversationId, existing);
-      }
-      return Promise.resolve();
-    },
-    getAttachment() {
-      return Promise.resolve(null);
-    },
-    saveAttachment() {
-      return Promise.resolve();
-    },
-    getAgentDefinition() {
-      return Promise.resolve(null);
-    },
-    saveAgentInstance() {
-      return Promise.resolve();
-    },
-    getConversationMeta() {
-      return Promise.resolve(null);
-    },
-  };
-}
-
 function createStubToolRegistry(): IToolRegistry {
   const tools = new Map<string, unknown>();
   return {
@@ -108,14 +55,14 @@ function createStubToolRegistry(): IToolRegistry {
 
 export class MobileAgentLoopService {
   private readonly llmProvider: ILLMProvider;
-  private readonly storage: MemoryAgentStorage;
+  private readonly storage: MobileAgentStorage;
   private cancelledConversations = new Set<string>();
   private onMessageCallbacks = new Map<string, Array<(message: ChatMessage) => void>>();
   private onProgressCallbacks = new Map<string, Array<(status: string) => void>>();
 
-  constructor(llmProvider: ILLMProvider) {
+  constructor(llmProvider: ILLMProvider, storage: MobileAgentStorage = mobileAgentStorage) {
     this.llmProvider = llmProvider;
-    this.storage = createMemoryStorage();
+    this.storage = storage;
   }
 
   onMessage(conversationId: string, callback: (message: ChatMessage) => void): () => void {

@@ -42,7 +42,7 @@ const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
 `;
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
-import { deviceNetworkService } from './services/DeviceNetworkService';
+import { initializeDeviceNetworkRuntime } from './services/DeviceNetworkService/runtime';
 import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
@@ -84,11 +84,22 @@ export const App: React.FC = () => {
     initializeMobileLogger();
     const cleanupAnalytics = initializeMobileAnalytics();
     void trackMobileAppLaunch();
-    void deviceNetworkService.start().catch((error: unknown) => {
-      console.warn('[DeviceNetwork] failed to start', error);
-    });
+    let cleanupDeviceNetwork: (() => void) | undefined;
+    let disposed = false;
+    void initializeDeviceNetworkRuntime()
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else cleanupDeviceNetwork = cleanup;
+      })
+      .catch((error: unknown) => {
+        console.warn('[DeviceNetwork] failed to initialize', error);
+      });
 
-    return cleanupAnalytics;
+    return () => {
+      disposed = true;
+      cleanupDeviceNetwork?.();
+      cleanupAnalytics();
+    };
   }, []);
 
   return (
