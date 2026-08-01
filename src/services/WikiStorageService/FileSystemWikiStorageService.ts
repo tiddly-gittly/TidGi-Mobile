@@ -41,9 +41,10 @@ import {
   getTiddlerFileExtension,
   getTypeEncoding,
   isBase64EncodedBodyFile,
+  isKnownContentType,
   parseMetadataFile,
   processFields,
-  shouldUseSeparateMetaFile,
+  registerContentTypeInfo,
 } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
@@ -104,6 +105,20 @@ export class FileSystemWikiStorageService {
 
   getWorkspace(): IWikiWorkspace {
     return this.#workspace;
+  }
+
+  /**
+   * Register content type mappings discovered at runtime by the WebView.
+   *
+   * The static contentTypeInfo.ts is generated from TW's empty edition at build
+   * time and does not include plugin types. The WebView syncadaptor calls this
+   * after boot to sync `$tw.config.contentTypeInfo` so the native layer can
+   * correctly save/load tiddlers created by plugins (e.g. whiteboard's
+   * application/vnd.tldraw+json).
+   */
+  registerContentTypeInfo(info: Record<string, { encoding: 'utf8' | 'base64' | 'utf16le'; extension: string | string[] }>): void {
+    registerContentTypeInfo(info);
+    this.#logger.log(`Registered ${Object.keys(info).length} runtime content type(s)`);
   }
 
   // ─── File Index (≈ desktop boot.files population) ──────────────────────
@@ -364,8 +379,6 @@ export class FileSystemWikiStorageService {
         });
 
         const processedFields = processFields({ title, ...mutableFields });
-        const isSeparateMetaType = shouldUseSeparateMetaFile(processedFields);
-        const expectedExtension = getTiddlerFileExtension(processedFields);
         const changeCount = '0';
         const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
@@ -379,6 +392,13 @@ export class FileSystemWikiStorageService {
         // in place. If the type changed (e.g. default → markdown), generate a new
         // path and delete the old file to match desktop's move semantic.
         const oldPath = this.#tiddlerFilePathByTitle.get(title);
+        // Resolve the target extension. Plugin types unknown to the build-time
+        // static table will be resolved via the runtime registry after the
+        // WebView syncs $tw.config.contentTypeInfo. If still unknown, conservatively
+        // reuse the existing file's extension to avoid converting a plugin file
+        // (e.g. .tldr whiteboard) into a .tid and corrupting its format.
+        const expectedExtension = this.#resolveTargetExtension(processedFields, oldPath);
+        const isSeparateMetaType = expectedExtension !== '.tid';
         // Safety: if index is corrupted (e.g. native batch parser ordering bug),
         // the oldPath might belong to a different title. Verify via reverse index.
         const oldPathOwner = oldPath ? this.#getIndexedTitleForPath(oldPath) : undefined;
@@ -490,6 +510,52 @@ export class FileSystemWikiStorageService {
 
   #isSameFilePath(firstPath: string, secondPath: string): boolean {
     return toPlainPath(firstPath).replace(/\/$/, '') === toPlainPath(secondPath).replace(/\/$/, '');
+  }
+
+  /**
+   * Resolve the target file extension for a tiddler write.
+   *
+   * Priority:
+   *   1. _canonical_uri tiddlers always use .tid
+   *   2. If the tiddler type is known (static or runtime registry) and maps to a
+   *      non-.tid extension, use that extension
+   *   3. If the type is unknown but an existing non-.tid file is already indexed
+   *      for this title, reuse its extension to avoid corrupting plugin files
+   *      (e.g. whiteboard's .tldr)
+   *   4. Fallback to .tid
+   *
+   * This prevents plugin-created files from being silently converted to .tid
+   * when the mobile build-time static contentTypeInfo lacks the plugin type.
+   */
+  #resolveTargetExtension(fields: { type?: string; _canonical_uri?: string }, oldPath: string | undefined): string {
+    // _canonical_uri forces .tid format (official TW behavior)
+    if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
+      return '.tid';
+    }
+
+    const typeExtension = getTiddlerFileExtension(fields);
+    if (typeExtension !== '.tid') {
+      return typeExtension;
+    }
+
+    // Type resolved to .tid. If the type is actually unknown to us (plugin type
+    // not in static/runtime registry) but an existing non-.tid file is indexed,
+    // preserve that extension to avoid corrupting plugin files (e.g. whiteboard's
+    // .tldr). If the type is explicitly wikitext, we intentionally move to .tid.
+    if (!isKnownContentType(fields.type)) {
+      if (typeof oldPath === 'string') {
+        const plainOldPath = toPlainPath(oldPath);
+        const lastDotIndex = plainOldPath.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+          const oldExtension = plainOldPath.slice(lastDotIndex);
+          if (oldExtension !== '.tid') {
+            return oldExtension;
+          }
+        }
+      }
+    }
+
+    return '.tid';
   }
 
   #getIndexedTitleForPath(filePath: string): string | undefined {

@@ -7,8 +7,95 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 
-import contentTypeInfo, { getExtensionForType, getTypeEncoding, usesSeparateMetaFile } from './contentTypeInfo';
-export { getExtensionForType, getTypeEncoding, usesSeparateMetaFile };
+import contentTypeInfo, { type ContentTypeInfoEntry } from './contentTypeInfo';
+
+/**
+ * Runtime content type registry that can be extended by the WebView after
+ * plugins have registered their own types via $tw.utils.registerFileType().
+ *
+ * The static contentTypeInfo.ts is generated from TW's empty edition at build
+ * time, so it does not include plugin types such as whiteboard's
+ * application/vnd.tldraw+json. The WebView syncadaptor syncs the full runtime
+ * $tw.config.contentTypeInfo into this map so the native layer can correctly
+ * save/load plugin tiddlers.
+ */
+const runtimeContentTypeInfo = new Map<string, ContentTypeInfoEntry>();
+
+/**
+ * Register additional content type mappings discovered at runtime.
+ * Later registrations override earlier ones, allowing the WebView to
+ * update/extend the build-time static table.
+ */
+export function registerContentTypeInfo(info: Record<string, ContentTypeInfoEntry>): void {
+  for (const [type, entry] of Object.entries(info)) {
+    runtimeContentTypeInfo.set(type, entry);
+  }
+}
+
+/**
+ * Clear runtime registrations. Useful for tests.
+ */
+export function clearContentTypeInfo(): void {
+  runtimeContentTypeInfo.clear();
+}
+
+function getContentTypeEntry(tiddlerType: string | undefined): ContentTypeInfoEntry | undefined {
+  if (!tiddlerType) return undefined;
+  return runtimeContentTypeInfo.get(tiddlerType) ?? (contentTypeInfo[tiddlerType] as ContentTypeInfoEntry | undefined);
+}
+
+/**
+ * Check whether a tiddler type is known to the native layer (static build-time
+ * table or runtime registrations from the WebView). Unknown types fall back
+ * to .tid extension, so this helper is needed to distinguish "explicitly
+ * wikitext" from "unknown plugin type".
+ */
+export function isKnownContentType(tiddlerType: string | undefined): boolean {
+  if (!tiddlerType) return false;
+  return getContentTypeEntry(tiddlerType) !== undefined;
+}
+
+/**
+ * Get the file extension (with leading dot, e.g. `.tid`, `.md`) for a tiddler type.
+ * Checks runtime registrations first, then the build-time static table.
+ * Falls back to '.tid' for unknown or untyped tiddlers.
+ */
+export function getExtensionForType(tiddlerType: string | undefined): string {
+  if (!tiddlerType) return '.tid';
+  const entry = getContentTypeEntry(tiddlerType);
+  if (!entry) return '.tid';
+  return Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
+}
+
+/**
+ * Get the file encoding for a tiddler type's body file.
+ * Checks runtime registrations first, then the build-time static table.
+ * Falls back to 'utf8' for unknown types.
+ */
+export function getTypeEncoding(tiddlerType: string | undefined): 'utf8' | 'base64' {
+  if (!tiddlerType) return 'utf8';
+  const entry = getContentTypeEntry(tiddlerType);
+  if (!entry) return 'utf8';
+  return entry.encoding === 'base64' ? 'base64' : 'utf8';
+}
+
+/**
+ * Whether a tiddler type stores body and metadata as separate files.
+ * Checks runtime registrations first, then the build-time static table.
+ * Desktop TW writes .tid as self-contained (header+body), and every other
+ * extension as body-only + .meta companion.
+ */
+export function usesSeparateMetaFile(tiddlerType: string | undefined): boolean {
+  if (!tiddlerType) return false;
+  const entry = getContentTypeEntry(tiddlerType);
+  if (entry) {
+    const extension = Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
+    return extension !== '.tid';
+  }
+  // Unknown type: conservatively assume separate-meta if caller cannot be sure,
+  // because writing unknown types as .tid can corrupt plugin files.
+  return true;
+}
 
 /**
  * Determine whether a body file (by path) is base64-encoded binary content.
@@ -18,7 +105,8 @@ export { getExtensionForType, getTypeEncoding, usesSeparateMetaFile };
 export function isBase64EncodedBodyFile(bodyFilePath: string): boolean {
   const extension = bodyFilePath.slice(bodyFilePath.lastIndexOf('.'));
   if (!extension || extension === '.tid' || extension === '.meta') return false;
-  for (const info of Object.values(contentTypeInfo)) {
+  const allEntries = [...runtimeContentTypeInfo.values(), ...Object.values(contentTypeInfo)];
+  for (const info of allEntries) {
     const extensions = Array.isArray(info.extension) ? info.extension : [info.extension];
     if (extensions.includes(extension)) {
       return info.encoding === 'base64';
