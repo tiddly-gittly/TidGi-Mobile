@@ -40,8 +40,18 @@ jest.mock('expo-file-system', () => {
   };
 });
 
+// The storage conformance runner shares the package root with optional LLM
+// helpers. They are irrelevant to this suite and their ESM-only runtime is not
+// executable under Jest 29's CommonJS sandbox.
+jest.mock('ai', () => ({}));
+
 import type { ChatMessage } from 'memeloop';
 import { MobileAgentStorage } from '..';
+
+// The React Native export condition intentionally points at an ESM bundle,
+// while Jest 29 executes this suite as CommonJS. Exercise the exact published
+// conformance helper through the package's CJS artifact.
+const { runStorageConformance } = jest.requireActual<typeof import('memeloop')>('../../../../node_modules/memeloop/dist/index.cjs');
 
 function message(messageId: string, lamportClock: number, content = messageId): ChatMessage {
   return {
@@ -83,5 +93,39 @@ describe('MobileAgentStorage', () => {
     const reloaded = new MobileAgentStorage();
     await expect(reloaded.getAttachment('hash')).resolves.toEqual(reference);
     await expect(reloaded.readAttachmentData('hash')).resolves.toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('merges UI snapshots without deleting messages received from sync', async () => {
+    const storage = new MobileAgentStorage();
+    await storage.insertMessagesIfAbsent([
+      message('local-user', 1, 'Build the game'),
+      message('synced-result', 2, 'Remote result'),
+    ]);
+
+    await storage.replaceMessages('conversation-1', [message('local-user', 1, 'Build the game')]);
+
+    await expect(storage.getMessages('conversation-1')).resolves.toEqual([
+      message('local-user', 1, 'Build the game'),
+      message('synced-result', 2, 'Remote result'),
+    ]);
+  });
+
+  it('persists and atomically advances the Lamport clock', async () => {
+    const storage = new MobileAgentStorage();
+    await storage.insertMessagesIfAbsent([message('synced-high-water', 41)]);
+
+    await expect(Promise.all([
+      storage.nextLamportClockForConversation('conversation-1'),
+      storage.nextLamportClockForConversation('conversation-1'),
+    ])).resolves.toEqual([42, 43]);
+
+    const reloaded = new MobileAgentStorage();
+    await expect(reloaded.nextLamportClockForConversation('conversation-1')).resolves.toBe(44);
+  });
+
+  it('passes the MemeLoop storage conformance suite', async () => {
+    const report = await runStorageConformance(new MobileAgentStorage(), { conversationId: 'mobile-storage-conformance' });
+    expect(report.failures).toEqual([]);
+    expect(report.passed).toBe(report.checks);
   });
 });

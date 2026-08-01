@@ -15,29 +15,6 @@ export interface SendMessageResult {
   error?: Error;
 }
 
-let messageCounter = 0;
-
-function newMessageId(): string {
-  messageCounter++;
-  return `mobile-agent-${Date.now()}-${messageCounter}`;
-}
-
-function createChatMessage(
-  conversationId: string,
-  role: ChatMessage['role'],
-  content: string,
-): ChatMessage {
-  return {
-    messageId: newMessageId(),
-    conversationId,
-    originNodeId: 'tidgi-mobile',
-    timestamp: Date.now(),
-    lamportClock: messageCounter,
-    role,
-    content,
-  };
-}
-
 function createStubToolRegistry(): IToolRegistry {
   const tools = new Map<string, unknown>();
   return {
@@ -89,14 +66,23 @@ export class MobileAgentLoopService {
     this.cancelledConversations.add(conversationId);
   }
 
+  async createMessage(
+    conversationId: string,
+    role: ChatMessage['role'],
+    content: string,
+  ): Promise<ChatMessage> {
+    return this.storage.createMessage(conversationId, role, content);
+  }
+
   async sendMessage(
     conversationId: string,
     text: string,
     existingMessages: ChatMessage[] = [],
+    preparedUserMessage?: ChatMessage,
   ): Promise<SendMessageResult> {
     this.cancelledConversations.delete(conversationId);
 
-    const userMessage = createChatMessage(conversationId, 'user', text);
+    const userMessage = preparedUserMessage ?? await this.createMessage(conversationId, 'user', text);
     const allMessages = [...existingMessages, userMessage];
     await this.storage.replaceMessages(conversationId, allMessages);
 

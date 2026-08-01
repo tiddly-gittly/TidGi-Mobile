@@ -26,6 +26,7 @@ import { mobileAgentStorage } from '../AgentStorageService';
 import { buildMobileCapabilities } from './capabilities';
 import { type DeviceNetworkCloudConfig, normalizeCloudConfig } from './cloudConfig';
 import { cloudTrustPeerIdsToRemove, locallyPairedRecord, shouldApplyCloudTrust } from './cloudTrust';
+import { assertMobilePairingMultiaddrs } from './pairingNetworkPolicy';
 import { CloudRecoveryCoordinator, type CloudRecoveryReason } from './recovery';
 import { parseStoredIdentity, parseTrustedDeviceRecords, type StoredIdentity } from './storage';
 
@@ -212,14 +213,15 @@ export class DeviceNetworkService {
     if (this.cloudClient) {
       try {
         const publicKey = await this.cloudClient.getConnectionGrantPublicKey();
-        authorizer = new CloudDeviceAuthorizer({
+        const cloudAuthorizer = new CloudDeviceAuthorizer({
           localPeerId: this.identity!.peerId,
           grantVerificationPublicKeyMultibase: publicKey.publicKeyMultibase,
           // A persisted cloud-account record must never bypass a current grant.
           // Only explicit local pairing is accepted without Cloud authorization.
           getTrustedDevice: (peerId) => locallyPairedRecord(this.core?.getTrustedDevice(peerId)),
         });
-        this.cloudAuthorizer = authorizer;
+        authorizer = cloudAuthorizer;
+        this.cloudAuthorizer = cloudAuthorizer;
       } catch (error) {
         console.warn('[DeviceNetworkService] cloud grant public key fetch failed', error);
       }
@@ -407,6 +409,7 @@ export class DeviceNetworkService {
 
   public async requestPairingInvite(serializedInvite: string): Promise<PairingSession> {
     const invite = parseDevicePairingInvite(serializedInvite);
+    assertMobilePairingMultiaddrs(invite.multiaddrs);
     return this.requestLocalPairing(invite.peerId, { multiaddrs: invite.multiaddrs });
   }
 

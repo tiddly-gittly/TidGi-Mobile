@@ -7,6 +7,7 @@ interface PersistedAgentData {
   conversations: Partial<Record<string, ConversationMeta>>;
   definitions: Partial<Record<string, AgentDefinition>>;
   instances: Partial<Record<string, AgentInstanceMeta>>;
+  lamportClocks: Partial<Record<string, number>>;
   messages: Partial<Record<string, ChatMessage[]>>;
 }
 
@@ -15,11 +16,25 @@ const emptyData = (): PersistedAgentData => ({
   conversations: {},
   definitions: {},
   instances: {},
+  lamportClocks: {},
   messages: {},
 });
 
 function sortMessages(messages: readonly ChatMessage[]): ChatMessage[] {
   return [...messages].sort((left, right) => left.lamportClock - right.lamportClock || left.timestamp - right.timestamp || left.messageId.localeCompare(right.messageId));
+}
+
+function mergeMessages(existing: readonly ChatMessage[], incoming: readonly ChatMessage[]): ChatMessage[] {
+  const byId = new Map(existing.map(message => [message.messageId, message]));
+  for (const message of incoming) byId.set(message.messageId, message);
+  return sortMessages([...byId.values()]);
+}
+
+function recordLamportClock(data: PersistedAgentData, message: ChatMessage): void {
+  const current = data.lamportClocks[message.conversationId] ?? 0;
+  if (Number.isSafeInteger(message.lamportClock) && message.lamportClock > current) {
+    data.lamportClocks[message.conversationId] = message.lamportClock;
+  }
 }
 
 function metadataFromMessages(conversationId: string, messages: readonly ChatMessage[], existing?: ConversationMeta): ConversationMeta {
@@ -63,8 +78,10 @@ export class MobileAgentStorage implements IAgentStorage {
 
   public async replaceMessages(conversationId: string, messages: readonly ChatMessage[]): Promise<void> {
     await this.mutate((data) => {
-      data.messages[conversationId] = sortMessages(messages);
-      data.conversations[conversationId] = metadataFromMessages(conversationId, messages, data.conversations[conversationId]);
+      const merged = mergeMessages(data.messages[conversationId] ?? [], messages);
+      data.messages[conversationId] = merged;
+      for (const message of merged) recordLamportClock(data, message);
+      data.conversations[conversationId] = metadataFromMessages(conversationId, merged, data.conversations[conversationId]);
     });
   }
 
@@ -79,6 +96,7 @@ export class MobileAgentStorage implements IAgentStorage {
         const existing = data.messages[message.conversationId] ?? [];
         if (!existing.some(item => item.messageId === message.messageId)) existing.push(message);
         data.messages[message.conversationId] = existing;
+        recordLamportClock(data, message);
         affected.add(message.conversationId);
       }
       for (const conversationId of affected) {
@@ -90,8 +108,43 @@ export class MobileAgentStorage implements IAgentStorage {
   }
 
   public async getMaxLamportClockForConversation(conversationId: string): Promise<number> {
-    const messages = (await this.load()).messages[conversationId] ?? [];
-    return messages.reduce((maximum, message) => Math.max(maximum, message.lamportClock), 0);
+    const data = await this.load();
+    const messages = data.messages[conversationId] ?? [];
+    return Math.max(
+      data.lamportClocks[conversationId] ?? 0,
+      messages.reduce((maximum, message) => Math.max(maximum, message.lamportClock), 0),
+    );
+  }
+
+  /** Atomically reserves the next durable Lamport clock for a conversation. */
+  public async nextLamportClockForConversation(conversationId: string): Promise<number> {
+    let nextClock = 0;
+    await this.mutate((data) => {
+      const messageMaximum = (data.messages[conversationId] ?? [])
+        .reduce((maximum, message) => Math.max(maximum, message.lamportClock), 0);
+      nextClock = Math.max(data.lamportClocks[conversationId] ?? 0, messageMaximum) + 1;
+      data.lamportClocks[conversationId] = nextClock;
+    });
+    return nextClock;
+  }
+
+  public async createMessage(
+    conversationId: string,
+    role: ChatMessage['role'],
+    content: string,
+    originNodeId = 'tidgi-mobile',
+  ): Promise<ChatMessage> {
+    const lamportClock = await this.nextLamportClockForConversation(conversationId);
+    const timestamp = Date.now();
+    return {
+      messageId: `mobile-agent-${conversationId}-${timestamp}-${lamportClock}`,
+      conversationId,
+      originNodeId,
+      timestamp,
+      lamportClock,
+      role,
+      content,
+    };
   }
 
   public async upsertConversationMetadata(meta: ConversationMeta): Promise<void> {
@@ -149,6 +202,7 @@ export class MobileAgentStorage implements IAgentStorage {
         conversations: parsed.conversations ?? {},
         definitions: parsed.definitions ?? {},
         instances: parsed.instances ?? {},
+        lamportClocks: parsed.lamportClocks ?? {},
         messages: parsed.messages ?? {},
       };
     } catch (error) {

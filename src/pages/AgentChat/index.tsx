@@ -32,22 +32,6 @@ function peerIdFromExecutionTarget(targetId: string): string | undefined {
   return targetId.startsWith(REMOTE_EXECUTION_TARGET_PREFIX) ? targetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length) : undefined;
 }
 
-let messageCounter = 0;
-
-function createMessage(role: ChatMessage['role'], content: string): ChatMessage {
-  messageCounter += 1;
-  const now = Date.now();
-  return {
-    messageId: `mobile-agent-${now}-${messageCounter}`,
-    conversationId: 'mobile-agent-demo',
-    originNodeId: 'tidgi-mobile',
-    timestamp: now,
-    lamportClock: messageCounter,
-    role,
-    content,
-  };
-}
-
 function deleteTurnFromMessages(messages: readonly ChatMessage[], userMessageId: string): ChatMessage[] {
   const startIndex = messages.findIndex(message => message.messageId === userMessageId);
   if (startIndex < 0) return [...messages];
@@ -58,9 +42,7 @@ function deleteTurnFromMessages(messages: readonly ChatMessage[], userMessageId:
 }
 
 export const AgentChat: FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    createMessage('assistant', 'TidGi Mobile agent chat is ready.'),
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [activeExecutionTargetId, setActiveExecutionTargetId] = useState(LOCAL_EXECUTION_TARGET_ID);
   const [localPeerId, setLocalPeerId] = useState<string | undefined>();
@@ -167,14 +149,17 @@ export const AgentChat: FC = () => {
       });
       await deviceNetworkService.syncWithDevice(peerId);
       const syncedMessages = await mobileAgentStorage.getMessages('mobile-agent-demo');
-      setMessages(
-        syncedMessages.length > 0
-          ? syncedMessages
-          : currentMessages => [
-            ...currentMessages,
-            createMessage('assistant', `Remote turn was sent to ${peerId}, but it did not publish conversation messages to sync.`),
-          ],
-      );
+      if (syncedMessages.length > 0) {
+        setMessages(syncedMessages);
+      } else {
+        const fallbackMessage = await mobileAgentStorage.createMessage(
+          'mobile-agent-demo',
+          'assistant',
+          `Remote turn was sent to ${peerId}, but it did not publish conversation messages to sync.`,
+        );
+        await mobileAgentStorage.appendMessage(fallbackMessage);
+        setMessages(currentMessages => [...currentMessages, fallbackMessage]);
+      }
     } catch (error_: unknown) {
       const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
       setError(nextError);
@@ -262,7 +247,7 @@ export const AgentChat: FC = () => {
       setIsRunning(true);
       const loopService = await getLoopService();
 
-      const userMessage = createMessage('user', text);
+      const userMessage = await loopService.createMessage('mobile-agent-demo', 'user', text);
       setMessages(currentMessages => [...currentMessages, userMessage]);
 
       // Subscribe to streaming messages from the loop
@@ -271,7 +256,7 @@ export const AgentChat: FC = () => {
       });
 
       try {
-        const result = await loopService.sendMessage('mobile-agent-demo', text, messages);
+        const result = await loopService.sendMessage('mobile-agent-demo', text, messages, userMessage);
         unsubscribe();
         if (result.error) {
           setError(result.error);
