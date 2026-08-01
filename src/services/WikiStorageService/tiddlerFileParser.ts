@@ -18,6 +18,11 @@ import contentTypeInfo, { type ContentTypeInfoEntry } from './contentTypeInfo';
  * application/vnd.tldraw+json. The WebView syncadaptor syncs the full runtime
  * $tw.config.contentTypeInfo into this map so the native layer can correctly
  * save/load plugin tiddlers.
+ *
+ * Note: this registry is module-level (shared across workspaces). Content type
+ * mappings are global conventions (e.g. application/vnd.tldraw+json -> .tldr),
+ * so sharing them is the intended behavior. If different wikis register the
+ * same type with different extensions, the last registration wins.
  */
 const runtimeContentTypeInfo = new Map<string, ContentTypeInfoEntry>();
 
@@ -71,6 +76,10 @@ export function getExtensionForType(tiddlerType: string | undefined): string {
  * Get the file encoding for a tiddler type's body file.
  * Checks runtime registrations first, then the build-time static table.
  * Falls back to 'utf8' for unknown types.
+ *
+ * Note: this mirrors the historical behavior of contentTypeInfo.ts, which only
+ * distinguishes 'base64' from everything else. The only core type using
+ * 'utf16le' is application/hta and is not relevant for mobile plugin files.
  */
 export function getTypeEncoding(tiddlerType: string | undefined): 'utf8' | 'base64' {
   if (!tiddlerType) return 'utf8';

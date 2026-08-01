@@ -621,4 +621,40 @@ describe('FileSystemWikiStorageService storage safety', () => {
     expect(service.getTrackedTiddlerFilePath('My Custom')).toBe(customPath);
     expect(mockFileSystem.readFileSync(customPath)).toBe('body-after-registration');
   });
+
+  it('preserves unknown plugin extension when routing generates a new path', async () => {
+    const mainWorkspace = createWorkspace('/storage/emulated/0/TidGi/main');
+    const subWikiWorkspace: IWikiWorkspace = {
+      id: 'sub',
+      name: 'Sub Wiki',
+      syncedServers: [],
+      type: 'wiki',
+      wikiFolderLocation: '/storage/emulated/0/TidGi/sub',
+      isSubWiki: true,
+      mainWikiID: mainWorkspace.id,
+    };
+    mockWorkspaces = [mainWorkspace, subWikiWorkspace];
+
+    // Whiteboard file exists in main workspace but is being routed to sub-wiki.
+    const mainPath = `${mainWorkspace.wikiFolderLocation}/tiddlers/My Whiteboard.tldr`;
+    const mainMetaPath = `${mainPath}.meta`;
+    mockFileSystem.writeFileSync(mainPath, '{"shapes":[]}');
+    mockFileSystem.writeFileSync(mainMetaPath, 'title: My Whiteboard\ntype: application/vnd.tldraw+json');
+
+    const service = await createIndexedService(mainWorkspace);
+
+    await service.saveTiddler('My Whiteboard', {
+      text: '{"shapes":[{"id":"x"}]}',
+      title: 'My Whiteboard',
+      type: 'application/vnd.tldraw+json',
+    }, subWikiWorkspace.id);
+
+    // New path in sub-wiki must keep .tldr, not become .tid.
+    const subPath = `${subWikiWorkspace.wikiFolderLocation}/My Whiteboard.tldr`;
+    const subMetaPath = `${subPath}.meta`;
+    expect(service.getTrackedTiddlerFilePath('My Whiteboard')).toBe(subPath);
+    expect(mockFileSystem.readFileSync(subPath)).toBe('{"shapes":[{"id":"x"}]}');
+    expect(mockFileSystem.readFileSync(subMetaPath)).toContain('type: application/vnd.tldraw+json');
+    expect(mockFileSystem.existsSync(`${subWikiWorkspace.wikiFolderLocation}/My Whiteboard.tid`)).toBe(false);
+  });
 });

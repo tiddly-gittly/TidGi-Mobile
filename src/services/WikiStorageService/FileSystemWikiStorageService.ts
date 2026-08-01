@@ -421,7 +421,12 @@ export class FileSystemWikiStorageService {
           await ensureDirectory(tiddlerFolderPath);
 
           const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
-          fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
+          // RoutingService derives its extension from the tiddler type. For unknown
+          // plugin types it may return .tid while our conservative fallback resolved
+          // expectedExtension to the existing file's extension (e.g. .tldr). Ensure
+          // the generated path matches expectedExtension so we don't write separate-
+          // meta content into a .tid file and corrupt the body format.
+          fullPath = `${targetWorkspace.wikiFolderLocation}/${this.#replaceExtension(relativePath, expectedExtension)}`;
         }
 
         // Ensure parent directory exists
@@ -560,6 +565,21 @@ export class FileSystemWikiStorageService {
 
   #getIndexedTitleForPath(filePath: string): string | undefined {
     return this.#titleByFilePath.get(toPlainPath(filePath));
+  }
+
+  /**
+   * Replace the file extension in a relative path with the target extension.
+   * Preserves directory prefixes and title sanitization produced by the routing
+   * service. If the path has no extension, the target extension is appended.
+   */
+  #replaceExtension(relativePath: string, targetExtension: string): string {
+    const lastDotIndex = relativePath.lastIndexOf('.');
+    const lastSlashIndex = relativePath.lastIndexOf('/');
+    const hasExtension = lastDotIndex > lastSlashIndex && lastDotIndex > 0;
+    if (hasExtension) {
+      return `${relativePath.slice(0, lastDotIndex)}${targetExtension}`;
+    }
+    return `${relativePath}${targetExtension}`;
   }
 
   #resolveDeleteFilePath(title: string, exactFilePath: string | undefined, registryPath: string | undefined): string | undefined {
