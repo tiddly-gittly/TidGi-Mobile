@@ -15,11 +15,11 @@ importers:
         specifier: ^15.0.3
         version: 15.0.3(expo-font@14.0.11(expo@54.0.33(@babel/core@7.26.8)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       '@memeloop/libp2p':
-        specifier: ^0.1.0
-        version: 0.1.0(memeloop@0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3)))
+        specifier: ^0.2.0
+        version: 0.2.0(memeloop@0.2.0(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
         specifier: ^0.1.1
-        version: 0.1.1(41fc7b257184234c6f900ea8220987d9)
+        version: 0.1.1(0a35bf17478b2cc3421e22035aca88c1)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -129,8 +129,8 @@ importers:
         specifier: ^4.17.21
         version: 4.17.21
       memeloop:
-        specifier: ^0.1.3
-        version: 0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3))
+        specifier: ^0.2.0
+        version: 0.2.0(@ai-sdk/openai@4.0.20(zod@4.4.3))
       p-timeout:
         specifier: ^6.1.4
         version: 6.1.4
@@ -2484,10 +2484,10 @@ packages:
   '@libp2p/websockets@10.1.17':
     resolution: {integrity: sha512-vFhuadZIMUiVm7bKROxrmwi8fQqHO1kTKzxbztLFHI6Hxx8Z0y5VPQmxqsqQLm85YxehxPTbhOmi0cNzop00/w==}
 
-  '@memeloop/libp2p@0.1.0':
-    resolution: {integrity: sha512-z6Qj4comXLdVcD+wgUFl7GdVhNK/MGpe1XIYOQRIJQAz5BTUSxPLWbKwzexRmkHcDgnZwYmh3pg1u6WWO+w9aQ==}
+  '@memeloop/libp2p@0.2.0':
+    resolution: {integrity: sha512-1MOAwnAaeRcpv9Td+EynhGQ0fNtIMrmPxMGr2oJxysNSOvLs03oqETIef1Q380yYzb90FJzr3TY3kWbkLzQk7A==}
     peerDependencies:
-      memeloop: ^0.1.0
+      memeloop: ^0.2.0
 
   '@memeloop/react-ui@0.1.1':
     resolution: {integrity: sha512-uSNYiot56APn4nlOLThmKCRNdKHwV2t3beYfiOD9sXZ3u2KHH3mrt1enTvnvAB5yXFJlNZXzmrxogNWaHpw/QQ==}
@@ -7265,8 +7265,8 @@ packages:
   mdn-data@2.0.14:
     resolution: {integrity: sha512-dn6wd0uw5GsdswPFfsgMp5NSB0/aDe6fK94YJV/AJDYXL6HVLWBsxeq7js7Ad+mU2K9LAlwpk6kN2D5mwCPVow==}
 
-  memeloop@0.1.3:
-    resolution: {integrity: sha512-l8bxJECB09orvqt1o46L3W2KSes4/4BT50C0yjiAB1mjO6/UrLaRhYPlWIxMVLOHNxjdSeklaxDCNaI1J23ncw==}
+  memeloop@0.2.0:
+    resolution: {integrity: sha512-1yAVX8sdRLLMFnyJgBiMx+qUa96j4xSAMPHlciVE6ghGIEBUWry7gdod4hi23dyxWPue1mYTssA+PXRjCLll4A==}
     peerDependencies:
       '@ai-sdk/anthropic': ^4.0.19
       '@ai-sdk/azure': ^4.0.0
@@ -12426,7 +12426,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/libp2p@0.1.0(memeloop@0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
+  '@memeloop/libp2p@0.2.0(memeloop@0.2.0(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
       '@chainsafe/libp2p-yamux': 8.0.1
@@ -12442,13 +12442,13 @@ snapshots:
       '@libp2p/websockets': 10.1.17
       '@multiformats/multiaddr': 13.0.3
       libp2p: 3.3.6
-      memeloop: 0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3))
+      memeloop: 0.2.0(@ai-sdk/openai@4.0.20(zod@4.4.3))
       uint8arrays: 6.1.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.1.1(41fc7b257184234c6f900ea8220987d9)':
+  '@memeloop/react-ui@0.1.1(0a35bf17478b2cc3421e22035aca88c1)':
     dependencies:
       '@assistant-ui/react': 0.14.23(@types/react@19.1.17)(immer@10.1.1)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.2.2(react@19.1.0))
       '@mui/icons-material': 9.1.1(@mui/material@9.1.1(@types/react@19.1.17)(react-dom@18.2.0(react@19.1.0))(react@19.1.0))(@types/react@19.1.17)(react@19.1.0)
@@ -12456,7 +12456,7 @@ snapshots:
       '@rjsf/core': 6.6.2(@rjsf/utils@6.6.2(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       '@rjsf/utils': 6.6.2(react@19.1.0)
       '@rjsf/validator-ajv8': 6.6.2(@rjsf/utils@6.6.2(react@19.1.0))
-      memeloop: 0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3))
+      memeloop: 0.2.0(@ai-sdk/openai@4.0.20(zod@4.4.3))
       react: 19.1.0
       react-dom: 18.2.0(react@19.1.0)
     optionalDependencies:
@@ -18076,7 +18076,7 @@ snapshots:
 
   mdn-data@2.0.14: {}
 
-  memeloop@0.1.3(@ai-sdk/openai@4.0.20(zod@4.4.3)):
+  memeloop@0.2.0(@ai-sdk/openai@4.0.20(zod@4.4.3)):
     dependencies:
       acorn: 8.17.0
       ai: 7.0.37(zod@4.4.3)
