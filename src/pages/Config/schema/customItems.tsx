@@ -4,6 +4,7 @@ import React, { ComponentType, useCallback, useEffect, useMemo, useState } from 
 import { useTranslation } from 'react-i18next';
 import { Alert, StyleSheet, View } from 'react-native';
 import { Button, Chip, Divider, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import QRCode from 'react-native-qrcode-svg';
 import { styled, ThemeProvider } from 'styled-components/native';
 import BackgroundSyncStatus from '../../../components/BackgroundSync';
 import { LogViewerDialog } from '../../../components/LogViewerDialog';
@@ -184,6 +185,7 @@ function DeviceNetworkItem() {
   const [accessToken, setAccessToken] = useState('');
   const [provider, setProvider] = useState('openai');
   const [model, setModel] = useState('gpt-4o-mini');
+  const [generatedPairingInvite, setGeneratedPairingInvite] = useState('');
   const [pairingInvite, setPairingInvite] = useState('');
 
   useEffect(() => {
@@ -442,6 +444,32 @@ function DeviceNetworkItem() {
       <Divider style={styles.deviceNetworkDivider} />
       <Text variant='titleMedium'>{t('DeviceNetwork.PairByInvite')}</Text>
       <Text variant='bodySmall' style={styles.deviceNetworkEmpty}>{t('DeviceNetwork.PairByInviteDescription')}</Text>
+      <Button
+        mode='outlined'
+        icon='qrcode'
+        disabled={busyAction !== undefined || network.localDevice === undefined}
+        onPress={() => {
+          void runAction('create-pairing-invite', async () => {
+            setGeneratedPairingInvite(await network.createPairingInvite());
+          });
+        }}
+      >
+        {t('DeviceNetwork.GeneratePairingInvite')}
+      </Button>
+      {generatedPairingInvite !== '' && (
+        <View style={styles.deviceNetworkQrInvite}>
+          <QRCode value={generatedPairingInvite} size={220} />
+          <Text variant='bodySmall'>{t('DeviceNetwork.PairingInviteQrDescription')}</Text>
+          <TextInput
+            mode='outlined'
+            multiline
+            editable={false}
+            selectTextOnFocus
+            label={t('DeviceNetwork.OwnPairingInvite')}
+            value={generatedPairingInvite}
+          />
+        </View>
+      )}
       <TextInput
         mode='outlined'
         multiline
@@ -537,6 +565,10 @@ const styles = StyleSheet.create({
   deviceNetworkPanel: {
     gap: 8,
     marginBottom: 8,
+  },
+  deviceNetworkQrInvite: {
+    alignItems: 'center',
+    gap: 8,
   },
   deviceNetworkRow: {
     borderTopColor: 'rgba(128, 128, 128, 0.18)',

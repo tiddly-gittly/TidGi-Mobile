@@ -48,6 +48,7 @@ function metadataFromMessages(conversationId: string, messages: readonly ChatMes
     lastMessageTimestamp: last?.timestamp ?? existing?.lastMessageTimestamp ?? Date.now(),
     messageCount: sorted.length,
     originNodeId: existing?.originNodeId || firstUser?.originNodeId || last?.originNodeId || 'tidgi-mobile',
+    originClock: Math.max(existing?.originClock ?? 0, last?.lamportClock ?? 0),
     definitionId: existing?.definitionId || 'memeloop:general-assistant',
     ...(existing?.instanceDelta ? { instanceDelta: existing.instanceDelta } : {}),
     isUserInitiated: existing?.isUserInitiated ?? true,

@@ -48,7 +48,8 @@ export const AgentChat: FC = () => {
   const [localPeerId, setLocalPeerId] = useState<string | undefined>();
   const [agentLoopDevices, setAgentLoopDevices] = useState<Device[]>([]);
   const [error, setError] = useState<Error | null>(null);
-  const [cloudConfigured, setCloudConfigured] = useState(deviceNetworkService.getCloudStatus().configured);
+  const initialCloudStatus = deviceNetworkService.getCloudStatus();
+  const [cloudAvailable, setCloudAvailable] = useState(initialCloudStatus.state === 'online' || initialCloudStatus.state === 'degraded');
 
   // Singleton Mobile Agent Loop Service — created once per component mount.
   // LLM config comes only from persisted settings. An unconfigured install is
@@ -81,8 +82,9 @@ export const AgentChat: FC = () => {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     const unsubscribeCloudStatus = deviceNetworkService.observeCloudStatus(status => {
-      setCloudConfigured(status.configured);
-      if (!status.configured || status.state === 'idle') loopServiceReference.current = null;
+      const available = status.state === 'online' || status.state === 'degraded';
+      setCloudAvailable(available);
+      if (!available) loopServiceReference.current = null;
     });
 
     void (async () => {
@@ -116,7 +118,7 @@ export const AgentChat: FC = () => {
       label: 'This phone',
       description: localPeerId ? `Run locally on ${localPeerId}` : 'Run locally on this phone',
       kind: 'local',
-      disabled: !cloudConfigured,
+      disabled: !cloudAvailable,
     },
     ...agentLoopDevices.map(device => ({
       id: remoteExecutionTargetId(device.peerId),
@@ -125,7 +127,7 @@ export const AgentChat: FC = () => {
       kind: 'remote' as const,
       disabled: !device.trusted,
     })),
-  ], [agentLoopDevices, cloudConfigured, localPeerId]);
+  ], [agentLoopDevices, cloudAvailable, localPeerId]);
 
   const sendRemoteMessage = useCallback(async (peerId: string, text: string) => {
     setIsRunning(true);
@@ -143,6 +145,7 @@ export const AgentChat: FC = () => {
           lastMessageTimestamp: Date.now(),
           messageCount: messages.length,
           originNodeId: localPeerId ?? 'tidgi-mobile',
+          originClock: messages.reduce((maximum, message) => Math.max(maximum, message.lamportClock), 0),
           definitionId: 'mobile-agent-demo',
           isUserInitiated: true,
         },
@@ -243,7 +246,7 @@ export const AgentChat: FC = () => {
       }
 
       // Local execution via MobileAgentLoopService
-      if (!cloudConfigured) throw new Error('Configure MemeLoop Cloud in Device Network settings before running the local agent.');
+      if (!cloudAvailable) throw new Error('Connect MemeLoop Cloud in Device Network settings before running the local agent.');
       setIsRunning(true);
       const loopService = await getLoopService();
 
@@ -318,7 +321,7 @@ export const AgentChat: FC = () => {
         setIsRunning(false);
       }
     },
-  }), [activeExecutionTargetId, cloudConfigured, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
+  }), [activeExecutionTargetId, cloudAvailable, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
 
   return (
     <NativeAgentChatView
