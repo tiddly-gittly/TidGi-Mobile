@@ -85,6 +85,16 @@ export async function saveCloudConfig(config: DeviceNetworkCloudConfig): Promise
   return normalized;
 }
 
+/** Applies verified credentials before making them durable. */
+export async function applyAndSaveCloudConfig(
+  config: DeviceNetworkCloudConfig,
+  applyVerifiedConfig: (config: DeviceNetworkCloudConfig) => Promise<DeviceNetworkCloudConfig>,
+): Promise<DeviceNetworkCloudConfig> {
+  const normalized = normalizeCloudConfig(config);
+  const applied = await applyVerifiedConfig(normalized);
+  return saveCloudConfig(applied);
+}
+
 export async function clearCloudConfig(): Promise<void> {
   await SecureStore.deleteItemAsync(CLOUD_CONFIG_KEY);
 }

@@ -14,7 +14,7 @@ import { SyncAllTextButton } from '../../../components/SyncButton';
 import { useQRCodeScanner } from '../../../hooks/useQRCodeScanner';
 import { defaultLanguage, detectedLanguage, supportedLanguages } from '../../../i18n';
 import { deviceNetworkService } from '../../../services/DeviceNetworkService';
-import { clearCloudConfig, loadCloudConfig, saveCloudConfig } from '../../../services/DeviceNetworkService/cloudConfig';
+import { applyAndSaveCloudConfig, clearCloudConfig, loadCloudConfig } from '../../../services/DeviceNetworkService/cloudConfig';
 import { useDeviceNetwork } from '../../../services/DeviceNetworkService/useDeviceNetwork';
 import { useConfigStore } from '../../../store/config';
 import { IServerInfo } from '../../../store/server';
@@ -374,8 +374,10 @@ function DeviceNetworkItem() {
           disabled={busyAction !== undefined || cloudUrl.trim() === '' || accessToken.trim() === ''}
           onPress={() => {
             void runAction('save-cloud', async () => {
-              const config = await saveCloudConfig({ cloudUrl, accessToken, provider, model });
-              await deviceNetworkService.applyCloudConfig(config);
+              await applyAndSaveCloudConfig(
+                { cloudUrl, accessToken, provider, model },
+                config => deviceNetworkService.applyVerifiedCloudConfig(config),
+              );
               await network.refresh();
             });
           }}

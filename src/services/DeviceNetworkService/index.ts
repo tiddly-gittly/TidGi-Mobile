@@ -5,12 +5,14 @@ import {
   type CloudDeviceClient,
   type CloudDeviceRecord,
   type Device,
+  type DeviceAuthorizer,
   type DeviceCapabilities,
   type DeviceConnectionGrant,
   type DeviceRelayReservationToken,
   type DeviceTrustStore,
   type LocalDeviceIdentity,
   type LocalPairingRequestOptions,
+  LocalTrustDeviceAuthorizer,
   type MemeLoopDuplexStream,
   type MemeLoopProtocol,
   type PairingSession,
@@ -22,8 +24,8 @@ import {
 import { useWorkspaceStore } from '../../store/workspace';
 import { mobileAgentStorage } from '../AgentStorageService';
 import { buildMobileCapabilities } from './capabilities';
-import type { DeviceNetworkCloudConfig } from './cloudConfig';
-import { cloudTrustPeerIdsToRemove, shouldApplyCloudTrust } from './cloudTrust';
+import { type DeviceNetworkCloudConfig, normalizeCloudConfig } from './cloudConfig';
+import { cloudTrustPeerIdsToRemove, locallyPairedRecord, shouldApplyCloudTrust } from './cloudTrust';
 import { CloudRecoveryCoordinator, type CloudRecoveryReason } from './recovery';
 import { parseStoredIdentity, parseTrustedDeviceRecords, type StoredIdentity } from './storage';
 
@@ -205,7 +207,7 @@ export class DeviceNetworkService {
   private async startInternal(): Promise<void> {
     await this.ensureIdentity();
 
-    let authorizer: CloudDeviceAuthorizer | undefined;
+    let authorizer: DeviceAuthorizer = this.createLocalPairingAuthorizer();
     this.cloudAuthorizer = undefined;
     if (this.cloudClient) {
       try {
@@ -213,7 +215,9 @@ export class DeviceNetworkService {
         authorizer = new CloudDeviceAuthorizer({
           localPeerId: this.identity!.peerId,
           grantVerificationPublicKeyMultibase: publicKey.publicKeyMultibase,
-          getTrustedDevice: (peerId) => this.core?.getTrustedDevice(peerId),
+          // A persisted cloud-account record must never bypass a current grant.
+          // Only explicit local pairing is accepted without Cloud authorization.
+          getTrustedDevice: (peerId) => locallyPairedRecord(this.core?.getTrustedDevice(peerId)),
         });
         this.cloudAuthorizer = authorizer;
       } catch (error) {
@@ -295,6 +299,19 @@ export class DeviceNetworkService {
     await this.stop();
     this.configureCloud(config);
     await this.start();
+  }
+
+  /** Validates account credentials before replacing a working runtime config. */
+  public async applyVerifiedCloudConfig(config: DeviceNetworkCloudConfig): Promise<DeviceNetworkCloudConfig> {
+    const normalized = normalizeCloudConfig(config);
+    const client = new MobileCloudClient(normalized.cloudUrl, normalized.accessToken);
+    await Promise.all([
+      client.getConnectionGrantPublicKey(),
+      // The key endpoint may be public; listing devices proves this token.
+      client.listDevices(),
+    ]);
+    await this.applyCloudConfig(normalized);
+    return normalized;
   }
 
   public scheduleCloudRecovery(reason: CloudRecoveryReason): void {
@@ -511,6 +528,12 @@ export class DeviceNetworkService {
 
   private hasCloudAuthorizer(): boolean {
     return this.cloudAuthorizer !== undefined;
+  }
+
+  private createLocalPairingAuthorizer(): LocalTrustDeviceAuthorizer {
+    return new LocalTrustDeviceAuthorizer({
+      getTrustedDevice: peerId => locallyPairedRecord(this.core?.getTrustedDevice(peerId)),
+    });
   }
 
   private currentRelayReservations(): string[] {
