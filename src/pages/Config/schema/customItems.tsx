@@ -178,6 +178,7 @@ function errorMessage(error: unknown): string {
 
 function DeviceNetworkItem() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const network = useDeviceNetwork();
   const [busyAction, setBusyAction] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
@@ -244,7 +245,7 @@ function DeviceNetworkItem() {
   };
 
   const renderPairingSession = (session: PairingSession) => (
-    <View key={session.sessionId} style={styles.deviceNetworkRow}>
+    <View key={session.sessionId} style={[styles.deviceNetworkRow, { borderTopColor: theme.colors.outlineVariant }]}>
       <View style={styles.deviceNetworkTextBlock}>
         <Text variant='titleMedium'>{session.remoteDeviceName}</Text>
         <Text variant='bodySmall'>{t(`DeviceNetwork.Direction.${session.direction}`)} · {shortPeerId(session.remotePeerId)}</Text>
@@ -284,7 +285,7 @@ function DeviceNetworkItem() {
     const isPending = pendingPeerIds.has(device.peerId);
     const canPair = device.trustMode === 'local-pairing' && device.trusted !== true && device.reachability.state !== 'offline' && !isPending;
     return (
-      <View key={device.peerId} style={styles.deviceNetworkRow}>
+      <View key={device.peerId} style={[styles.deviceNetworkRow, { borderTopColor: theme.colors.outlineVariant }]}>
         <View style={styles.deviceNetworkTextBlock}>
           <Text variant='titleMedium'>{device.displayName}</Text>
           <Text variant='bodySmall'>{shortPeerId(device.peerId)}</Text>
@@ -400,7 +401,7 @@ function DeviceNetworkItem() {
           {t('DeviceNetwork.ClearCloudConfiguration')}
         </Button>
       </View>
-      {network.cloudStatus.error && <Text variant='bodySmall' style={styles.deviceNetworkError}>{network.cloudStatus.error}</Text>}
+      {network.cloudStatus.error && <Text variant='bodySmall' style={[styles.deviceNetworkError, { color: theme.colors.error }]}>{network.cloudStatus.error}</Text>}
       <Divider style={styles.deviceNetworkDivider} />
       <View style={styles.deviceNetworkHeader}>
         <View style={styles.deviceNetworkTextBlock}>
@@ -440,7 +441,7 @@ function DeviceNetworkItem() {
           {t('DeviceNetwork.SyncCloudDevices')}
         </Button>
       </View>
-      {visibleError && <Text variant='bodySmall' style={styles.deviceNetworkError}>{visibleError}</Text>}
+      {visibleError && <Text variant='bodySmall' style={[styles.deviceNetworkError, { color: theme.colors.error }]}>{visibleError}</Text>}
       <Divider style={styles.deviceNetworkDivider} />
       <Text variant='titleMedium'>{t('DeviceNetwork.PairByInvite')}</Text>
       <Text variant='bodySmall' style={styles.deviceNetworkEmpty}>{t('DeviceNetwork.PairByInviteDescription')}</Text>
@@ -554,7 +555,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   deviceNetworkError: {
-    color: '#b3261e',
     marginTop: 8,
   },
   deviceNetworkHeader: {
@@ -571,7 +571,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deviceNetworkRow: {
-    borderTopColor: 'rgba(128, 128, 128, 0.18)',
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 10,
     marginTop: 10,
