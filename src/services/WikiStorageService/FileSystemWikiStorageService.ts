@@ -25,6 +25,7 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
+import { type ContentTypeInfoEntry } from './contentTypeInfo';
 import {
   deleteFileWithEmptyParentsCleanup,
   ensureDirectory,
@@ -36,16 +37,7 @@ import {
   writeBinaryFileFromBase64,
   writeTextFile,
 } from './fileOperations';
-import {
-  getBodyFilePathFromMetaPath,
-  getTiddlerFileExtension,
-  getTypeEncoding,
-  isBase64EncodedBodyFile,
-  isKnownContentType,
-  parseMetadataFile,
-  processFields,
-  registerContentTypeInfo,
-} from './tiddlerFileParser';
+import { ContentTypeRegistry, getBodyFilePathFromMetaPath, parseMetadataFile, processFields, replaceFileExtension } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
@@ -57,6 +49,7 @@ import { IWikiServerStatusObject } from './types';
 export class FileSystemWikiStorageService {
   readonly #workspace: IWikiWorkspace;
   readonly #configStore = useConfigStore;
+  readonly #contentTypeRegistry: ContentTypeRegistry;
   readonly #routingService: TiddlerRoutingService;
   readonly #logger: IScopedLogger;
   /**
@@ -84,7 +77,8 @@ export class FileSystemWikiStorageService {
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
-    this.#routingService = new TiddlerRoutingService();
+    this.#contentTypeRegistry = new ContentTypeRegistry();
+    this.#routingService = new TiddlerRoutingService(this.#contentTypeRegistry);
     this.#logger = logFor(workspace.id);
   }
 
@@ -116,8 +110,8 @@ export class FileSystemWikiStorageService {
    * correctly save/load tiddlers created by plugins (e.g. whiteboard's
    * application/vnd.tldraw+json).
    */
-  registerContentTypeInfo(info: Record<string, { encoding: 'utf8' | 'base64' | 'utf16le'; extension: string | string[] }>): void {
-    registerContentTypeInfo(info);
+  registerContentTypeInfo(info: Record<string, ContentTypeInfoEntry>): void {
+    this.#contentTypeRegistry.register(info);
     this.#logger.log(`Registered ${Object.keys(info).length} runtime content type(s)`);
   }
 
@@ -426,7 +420,7 @@ export class FileSystemWikiStorageService {
           // expectedExtension to the existing file's extension (e.g. .tldr). Ensure
           // the generated path matches expectedExtension so we don't write separate-
           // meta content into a .tid file and corrupt the body format.
-          fullPath = `${targetWorkspace.wikiFolderLocation}/${this.#replaceExtension(relativePath, expectedExtension)}`;
+          fullPath = `${targetWorkspace.wikiFolderLocation}/${replaceFileExtension(relativePath, expectedExtension)}`;
         }
 
         // Ensure parent directory exists
@@ -538,7 +532,7 @@ export class FileSystemWikiStorageService {
       return '.tid';
     }
 
-    const typeExtension = getTiddlerFileExtension(fields);
+    const typeExtension = this.#contentTypeRegistry.getBodyFileExtension(fields);
     if (typeExtension !== '.tid') {
       return typeExtension;
     }
@@ -547,7 +541,7 @@ export class FileSystemWikiStorageService {
     // not in static/runtime registry) but an existing non-.tid file is indexed,
     // preserve that extension to avoid corrupting plugin files (e.g. whiteboard's
     // .tldr). If the type is explicitly wikitext, we intentionally move to .tid.
-    if (!isKnownContentType(fields.type)) {
+    if (!this.#contentTypeRegistry.isKnown(fields.type)) {
       if (typeof oldPath === 'string') {
         const plainOldPath = toPlainPath(oldPath);
         const lastDotIndex = plainOldPath.lastIndexOf('.');
@@ -565,21 +559,6 @@ export class FileSystemWikiStorageService {
 
   #getIndexedTitleForPath(filePath: string): string | undefined {
     return this.#titleByFilePath.get(toPlainPath(filePath));
-  }
-
-  /**
-   * Replace the file extension in a relative path with the target extension.
-   * Preserves directory prefixes and title sanitization produced by the routing
-   * service. If the path has no extension, the target extension is appended.
-   */
-  #replaceExtension(relativePath: string, targetExtension: string): string {
-    const lastDotIndex = relativePath.lastIndexOf('.');
-    const lastSlashIndex = relativePath.lastIndexOf('/');
-    const hasExtension = lastDotIndex > lastSlashIndex && lastDotIndex > 0;
-    if (hasExtension) {
-      return `${relativePath.slice(0, lastDotIndex)}${targetExtension}`;
-    }
-    return `${relativePath}${targetExtension}`;
   }
 
   #resolveDeleteFilePath(title: string, exactFilePath: string | undefined, registryPath: string | undefined): string | undefined {
@@ -703,7 +682,7 @@ export class FileSystemWikiStorageService {
   async #saveSeparateMetaTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
     const headerLines = this.#buildTiddlerHeaderLines(title, fields);
     const tiddlerType = (fields.type ?? 'text/plain') as string;
-    const encoding = getTypeEncoding(tiddlerType);
+    const encoding = this.#contentTypeRegistry.getEncoding(tiddlerType);
     // Body file: write with correct encoding (utf8 text or decoded base64 binary)
     if (encoding === 'base64') {
       await writeBinaryFileFromBase64(filePath, text);
@@ -812,7 +791,8 @@ export class FileSystemWikiStorageService {
     try {
       // Non-.tid body files: encoding matters for binary types
       if (!filePath.toLowerCase().endsWith('.tid')) {
-        return isBase64EncodedBodyFile(filePath)
+        const extension = filePath.slice(filePath.lastIndexOf('.'));
+        return this.#contentTypeRegistry.isBase64EncodedExtension(extension)
           ? await readBinaryFileAsBase64(filePath)
           : await readTextFile(filePath);
       }

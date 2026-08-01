@@ -2,8 +2,11 @@
 // Maps tiddler type → { encoding, extension } for determining on-disk file format.
 // This is generated at build time by extracting the registerFileType() registrations
 // from the bundled TW core, so plugin-added types are automatically included.
+//
+// Lookups are performed through ContentTypeRegistry in tiddlerFileParser.ts,
+// which can also be extended at runtime with plugin-registered types.
 
-// Generated: 2026-07-21T10:03:11.170Z
+// Generated: 2026-08-01T18:08:18.530Z
 // TiddlyWiki version: 5.4.1
 
 export interface ContentTypeInfoEntry {
@@ -67,35 +70,3 @@ const contentTypeInfo: Record<string, ContentTypeInfoEntry> = {
 };
 
 export default contentTypeInfo;
-
-/**
- * Get the file extension (with leading dot, e.g. `.tid`, `.md`) for a tiddler type.
- * Falls back to '.tid' for unknown or untyped tiddlers.
- */
-export function getExtensionForType(tiddlerType: string | undefined): string {
-  if (!tiddlerType) return '.tid';
-  const entry = contentTypeInfo[tiddlerType] as ContentTypeInfoEntry | undefined;
-  if (!entry) return '.tid';
-  return Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
-}
-
-/**
- * Whether a tiddler type stores body and metadata as separate files.
- * Desktop TW writes .tid as self-contained (header+body), and every other
- * extension as body-only + .meta companion.
- */
-export function usesSeparateMetaFile(tiddlerType: string | undefined): boolean {
-  return getExtensionForType(tiddlerType) !== '.tid';
-}
-
-/**
- * Get the file encoding for a tiddler type's body file.
- * Desktop TW passes this to fs.writeFile for binary-safe writes.
- * Falls back to 'utf8' for unknown types.
- */
-export function getTypeEncoding(tiddlerType: string | undefined): 'utf8' | 'base64' {
-  if (!tiddlerType) return 'utf8';
-  const entry = contentTypeInfo[tiddlerType] as ContentTypeInfoEntry | undefined;
-  if (!entry) return 'utf8';
-  return entry.encoding === 'base64' ? 'base64' : 'utf8';
-}

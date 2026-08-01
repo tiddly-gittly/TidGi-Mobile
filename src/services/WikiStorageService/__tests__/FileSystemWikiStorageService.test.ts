@@ -364,7 +364,6 @@ jest.mock('../tidgiConfigManager', () => ({
 }));
 
 const { FileSystemWikiStorageService } = jest.requireActual<typeof import('../FileSystemWikiStorageService')>('../FileSystemWikiStorageService');
-const { clearContentTypeInfo } = jest.requireActual<typeof import('../tiddlerFileParser')>('../tiddlerFileParser');
 
 type FileSystemWikiStorageServiceInstance = InstanceType<typeof FileSystemWikiStorageService>;
 
@@ -387,7 +386,6 @@ describe('FileSystemWikiStorageService storage safety', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFileSystem.reset();
-    clearContentTypeInfo();
   });
 
   it('does not delete a system tiddler when deleteTiddler receives a filepath owned by another title', async () => {

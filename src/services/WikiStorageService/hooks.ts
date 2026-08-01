@@ -2,10 +2,10 @@ import { useEffect, useMemo } from 'react';
 import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { IWikiWorkspace } from '../../store/workspace';
 import { WikiStorageServiceIPCDescriptor } from './descriptor';
-import { getOrCreateWikiStorageService } from './registry';
+import { wikiStorageServiceRegistry } from './registry';
 
 export function useWikiStorageService(workspace: IWikiWorkspace) {
-  const wikiStorageService = useMemo(() => getOrCreateWikiStorageService(workspace), [workspace]);
+  const wikiStorageService = useMemo(() => wikiStorageServiceRegistry.getOrCreate(workspace), [workspace]);
 
   useEffect(() => {
     // Build the file index (≈ desktop boot.files population) once after creation.

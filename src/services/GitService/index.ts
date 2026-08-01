@@ -382,17 +382,47 @@ async function normalizeRepositoryTextFilesToLF(directory: string): Promise<numb
   return normalizedCount;
 }
 
-const gitAttributesAppliedDirectories = new Set<string>();
+/**
+ * Tracks directories where mobile git attributes/config have already been
+ * applied this session. Encapsulated as a class to avoid module-level mutable
+ * state spread across loose functions.
+ */
+class GitCheckoutPolicyCache {
+  readonly #attributesApplied = new Set<string>();
+  readonly #configApplied = new Set<string>();
+
+  hasAttributes(directory: string): boolean {
+    return this.#attributesApplied.has(directory);
+  }
+
+  markAttributesApplied(directory: string): void {
+    this.#attributesApplied.add(directory);
+  }
+
+  hasConfig(directory: string): boolean {
+    return this.#configApplied.has(directory);
+  }
+
+  markConfigApplied(directory: string): void {
+    this.#configApplied.add(directory);
+  }
+
+  clear(directory: string): void {
+    this.#attributesApplied.delete(directory);
+    this.#configApplied.delete(directory);
+  }
+}
+
+const gitCheckoutPolicyCache = new GitCheckoutPolicyCache();
 const clearGitTextCheckoutPolicyCache = (directory: string) => {
-  gitAttributesAppliedDirectories.delete(directory);
-  gitConfigAppliedDirectories.delete(directory);
+  gitCheckoutPolicyCache.clear(directory);
 };
 
 async function ensureGitAttributesForMobile(
   directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  if (gitAttributesAppliedDirectories.has(directory)) return;
+  if (gitCheckoutPolicyCache.hasAttributes(directory)) return;
 
   onProgress?.('Applying git attributes…', 0, 1);
 
@@ -415,7 +445,7 @@ async function ensureGitAttributesForMobile(
     await writeUtf8File(attributesPath, updated);
   }
 
-  gitAttributesAppliedDirectories.add(directory);
+  gitCheckoutPolicyCache.markAttributesApplied(directory);
   onProgress?.('Applying git attributes…', 1, 1);
 }
 
@@ -750,19 +780,11 @@ export async function gitCommit(workspace: IWikiWorkspace, message: string): Pro
  * These are set via gitSetConfig (JS-side) so changes take effect
  * immediately without rebuilding the native APK.
  */
-/**
- * Tracks directories where mobile git config has already been applied this session.
- * These settings (protocol version, pack limits) never change at runtime, so there is
- * no need to write them on every push/fetch — each write is a JNI→Kotlin→JGit→file-I/O
- * round trip that adds tens of milliseconds of pure overhead.
- */
-const gitConfigAppliedDirectories = new Set<string>();
-
 export async function ensureGitConfigForMobile(
   directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  if (gitConfigAppliedDirectories.has(directory)) return;
+  if (gitCheckoutPolicyCache.hasConfig(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
     ['core', null, 'autocrlf', 'false'],
@@ -790,7 +812,7 @@ export async function ensureGitConfigForMobile(
     onProgress?.('Applying git configuration…', index + 1, settings.length);
   }
   console.log('[ensureGitConfig] Applied mobile git config settings');
-  gitConfigAppliedDirectories.add(directory);
+  gitCheckoutPolicyCache.markConfigApplied(directory);
 }
 
 export async function gitPushToIncoming(
