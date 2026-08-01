@@ -16,3 +16,8 @@ export function shouldApplyCloudTrust(
 ): boolean {
   return existing?.trustMode !== 'local-pairing' && !cloudDevice.revokedAt;
 }
+
+/** Cloud-account records never bypass a current signed Cloud grant. */
+export function locallyPairedRecord(record: TrustedDeviceRecord | undefined): TrustedDeviceRecord | undefined {
+  return record?.trustMode === 'local-pairing' ? record : undefined;
+}

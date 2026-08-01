@@ -9,7 +9,7 @@ jest.mock('expo-secure-store', () => ({
   },
 }));
 
-import { clearCloudConfig, cloudLlmConnection, loadCloudConfig, normalizeCloudConfig, saveCloudConfig } from '../cloudConfig';
+import { applyAndSaveCloudConfig, clearCloudConfig, cloudLlmConnection, loadCloudConfig, normalizeCloudConfig, saveCloudConfig } from '../cloudConfig';
 
 describe('device network cloud configuration', () => {
   beforeEach(() => {
@@ -55,6 +55,24 @@ describe('device network cloud configuration', () => {
       baseURL: 'https://cloud.example.test/api/llm/v1',
       headers: { 'x-agent-type': 'planner' },
       modelId: 'model-1',
+    });
+  });
+
+  it('does not persist manually entered credentials until verification and apply succeed', async () => {
+    const config = { cloudUrl: 'https://cloud.example.test', accessToken: 'bad-token' };
+    const apply = jest.fn().mockRejectedValue(new Error('401 unauthorized'));
+
+    await expect(applyAndSaveCloudConfig(config, apply)).rejects.toThrow('401 unauthorized');
+    await expect(loadCloudConfig()).resolves.toBeUndefined();
+
+    apply.mockResolvedValue({ ...config, accessToken: 'verified-token' });
+    await expect(applyAndSaveCloudConfig(config, apply)).resolves.toEqual({
+      ...config,
+      accessToken: 'verified-token',
+    });
+    await expect(loadCloudConfig()).resolves.toEqual({
+      ...config,
+      accessToken: 'verified-token',
     });
   });
 });
