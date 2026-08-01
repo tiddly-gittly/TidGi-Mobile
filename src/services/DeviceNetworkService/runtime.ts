@@ -9,7 +9,7 @@ interface DeviceNetworkRuntimeAppState {
 }
 
 interface DeviceNetworkRuntimeService {
-  configureCloud(config: Awaited<ReturnType<typeof loadCloudConfig>>): void;
+  configureCloud(config: Awaited<ReturnType<typeof loadCloudConfig>>): Promise<void>;
   scheduleCloudRecovery(reason: 'app-foreground'): void;
   start(): Promise<void>;
 }
@@ -26,7 +26,7 @@ export async function initializeDeviceNetworkRuntime(dependencies: DeviceNetwork
   const loadConfig = dependencies.loadConfig ?? loadCloudConfig;
   const service = dependencies.service ?? deviceNetworkService;
   const cloudConfig = await loadConfig();
-  service.configureCloud(cloudConfig);
+  await service.configureCloud(cloudConfig);
   await service.start();
 
   let previousState: AppStateStatus = appState.currentState;

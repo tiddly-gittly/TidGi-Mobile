@@ -756,14 +756,17 @@
     "CloudConfiguration": "MemeLoop 云端",
     "CloudState": {
       "connecting": "正在连接 MemeLoop 云端……",
+      "degraded": "云端心跳可用，但中继或设备目录处于降级状态；手机端在中继恢复前不会报告可靠的入站连接。",
       "error": "云端连接失败。应用回到前台或心跳检测到网络恢复时，会以有界退避方式重试。",
       "idle": "云端已配置，正在等待连接。",
       "not-configured": "尚未配置云端；云设备目录、中继和手机本地智能体不可用，但仍可通过邀请进行本地配对。",
+      "offline": "MemeLoop 云端当前离线；本地配对仍可使用，云连接会按有界退避继续恢复。",
       "online": "云端注册、设备目录和中继均已在线。"
     },
     "CloudUrl": "MemeLoop 云端地址",
     "Devices": "设备",
     "DevicesDescription": "附近设备可本地配对；云端同账号设备会在同步设备目录后显示。",
+    "GeneratePairingInvite": "生成签名配对二维码",
     "Direction": {
       "inbound": "收到请求",
       "outbound": "已发起请求"
@@ -771,10 +774,12 @@
     "LocalDevice": "本机设备",
     "NoDevices": "还没有附近设备或已信任设备。",
     "NoPendingPairing": "暂无等待确认的配对请求。",
+    "OwnPairingInvite": "本设备的签名配对邀请",
     "Pair": "配对",
     "PairByInvite": "通过邀请配对",
-    "PairByInviteDescription": "React Native 不支持 mDNS 发现。请扫描或粘贴包含对端 WebSocket multiaddr 的 MemeLoop 配对邀请。",
+    "PairByInviteDescription": "React Native 不支持 mDNS 发现。请扫描或粘贴短期有效、由设备身份签名的 MemeLoop 配对邀请。",
     "PairingInvite": "MemeLoop 配对邀请",
+    "PairingInviteQrDescription": "请在另一台设备上扫描这个短期有效的签名二维码；其中的 PeerId 和所有地址均受本设备身份签名保护。",
     "PairInvite": "发起邀请配对",
     "PairingRequests": "配对请求",
     "Reachability": {

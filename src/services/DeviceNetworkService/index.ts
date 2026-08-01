@@ -1,4 +1,12 @@
-import { CloudDeviceAuthorizer, createDeviceIdentity, Libp2pDeviceNetworkService, type RawSeedDeviceIdentity, signDeviceBinding } from '@memeloop/libp2p/browser';
+import {
+  CloudDeviceAuthorizer,
+  createDeviceIdentity,
+  createSignedDevicePairingInvite,
+  Libp2pDeviceNetworkService,
+  parseVerifiedDevicePairingInvite,
+  type RawSeedDeviceIdentity,
+  signDeviceBinding,
+} from '@memeloop/libp2p/browser';
 import { Buffer } from 'buffer';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -7,16 +15,18 @@ import {
   type Device,
   type DeviceAuthorizer,
   type DeviceCapabilities,
+  type DeviceCloudConnectionSnapshot,
+  type DeviceCloudConnectionStatus,
   type DeviceConnectionGrant,
   type DeviceRelayReservationToken,
   type DeviceTrustStore,
+  encodeDevicePairingInvite,
   type LocalDeviceIdentity,
   type LocalPairingRequestOptions,
   LocalTrustDeviceAuthorizer,
   type MemeLoopDuplexStream,
   type MemeLoopProtocol,
   type PairingSession,
-  parseDevicePairingInvite,
   type SyncResult,
   type TrustedDeviceRecord,
 } from 'memeloop/device-network';
@@ -25,10 +35,11 @@ import { useWorkspaceStore } from '../../store/workspace';
 import { mobileAgentStorage } from '../AgentStorageService';
 import { buildMobileCapabilities } from './capabilities';
 import { type DeviceNetworkCloudConfig, normalizeCloudConfig } from './cloudConfig';
+import { createMobileCloudConnectionCoordinator } from './cloudCoordinator';
 import { cloudTrustPeerIdsToRemove, locallyPairedRecord, shouldApplyCloudTrust } from './cloudTrust';
-import { assertMobilePairingMultiaddrs } from './pairingNetworkPolicy';
-import { CloudRecoveryCoordinator, type CloudRecoveryReason } from './recovery';
+import { createMobilePairingInvite, parseMobilePairingInvite } from './pairingInvites';
 import { parseStoredIdentity, parseTrustedDeviceRecords, type StoredIdentity } from './storage';
+import { mobileDeviceSyncStateStore } from './syncStateStore';
 
 const IDENTITY_KEY = 'device_network_identity_v1';
 const TRUSTED_DEVICES_KEY = 'device_network_trusted_devices_v1';
@@ -38,9 +49,34 @@ const RELAY_RENEWAL_WINDOW_MS = 2 * 60_000;
 
 export interface DeviceNetworkCloudStatus {
   configured: boolean;
+  components?: DeviceCloudConnectionSnapshot['components'];
   error?: string;
+  generation?: number;
   lastConnectedAt?: number;
-  state: 'not-configured' | 'idle' | 'connecting' | 'online' | 'error';
+  state: DeviceCloudConnectionStatus;
+}
+
+function cloudErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (typeof error === 'symbol' || typeof error === 'function' || error === undefined) return 'unknown_cloud_error';
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return 'unknown_cloud_error';
+  }
+}
+
+class SwitchableDeviceAuthorizer implements DeviceAuthorizer {
+  constructor(private delegate: DeviceAuthorizer) {}
+
+  public setDelegate(delegate: DeviceAuthorizer): void {
+    this.delegate = delegate;
+  }
+
+  public canOpenProtocol(input: Parameters<DeviceAuthorizer['canOpenProtocol']>[0]): Promise<boolean> {
+    return this.delegate.canOpenProtocol(input);
+  }
 }
 
 class SecureStoreDeviceTrustStore implements DeviceTrustStore {
@@ -68,6 +104,7 @@ class MobileCloudClient implements CloudDeviceClient {
   constructor(
     private readonly baseUrl: string,
     private readonly accessToken: string,
+    private readonly externalSignal?: AbortSignal,
   ) {}
 
   public async listDevices(): Promise<CloudDeviceRecord[]> {
@@ -147,8 +184,13 @@ class MobileCloudClient implements CloudDeviceClient {
       }
     }
     const controller = new AbortController();
+    const abortFromExternalSignal = () => {
+      controller.abort(this.externalSignal?.reason);
+    };
+    if (this.externalSignal?.aborted) abortFromExternalSignal();
+    else this.externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true });
     const timeout = setTimeout(() => {
-      controller.abort();
+      controller.abort(new Error('cloud_request_timeout'));
     }, CLOUD_REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
@@ -174,6 +216,7 @@ class MobileCloudClient implements CloudDeviceClient {
       }
     } finally {
       clearTimeout(timeout);
+      this.externalSignal?.removeEventListener('abort', abortFromExternalSignal);
     }
   }
 }
@@ -184,18 +227,36 @@ export class DeviceNetworkService {
   private started = false;
   private startPromise?: Promise<void>;
   private readonly trustStore = new SecureStoreDeviceTrustStore();
+  private readonly authorizer: SwitchableDeviceAuthorizer;
   private cloudConfig?: DeviceNetworkCloudConfig;
   private cloudClient?: MobileCloudClient;
-  private cloudAuthorizer?: CloudDeviceAuthorizer;
   private cloudGrantCache = new Map<string, DeviceConnectionGrant>();
-  private cloudHeartbeatTimer?: ReturnType<typeof setInterval>;
+  private lastCloudDevices: CloudDeviceRecord[] = [];
   private relayReservation?: DeviceRelayReservationToken;
-  private suppressInitialCloudRecovery = false;
   private cloudStatus: DeviceNetworkCloudStatus = { configured: false, state: 'not-configured' };
   private readonly cloudStatusListeners = new Set<(status: DeviceNetworkCloudStatus) => void>();
-  private readonly cloudRecovery = new CloudRecoveryCoordinator({
-    recover: async (reason) => this.recoverCloudConnectivityInternal(reason),
-  });
+  private readonly cloudCoordinator;
+
+  constructor() {
+    this.authorizer = new SwitchableDeviceAuthorizer(this.createLocalPairingAuthorizer());
+    this.cloudCoordinator = createMobileCloudConnectionCoordinator<DeviceNetworkCloudConfig>({
+      adapter: {
+        isConfigured: (configuration): configuration is DeviceNetworkCloudConfig => configuration !== undefined,
+        ensureAuthorizer: (configuration, signal) => this.ensureCloudAuthorizer(configuration, signal),
+        registerDevice: (configuration, signal) => this.registerCloudDevice(configuration, signal),
+        ensureRelay: (configuration, signal) => this.ensureRelayReservation(configuration, signal),
+        heartbeat: (configuration, signal) => this.sendCloudHeartbeat(configuration, signal),
+        syncDirectory: (configuration, signal) => this.fetchCloudDirectory(configuration, signal),
+        classifyError: error => this.classifyCloudError(error),
+      },
+      onStatus: snapshot => {
+        this.applyCloudCoordinatorSnapshot(snapshot);
+      },
+      logWarning: (message, error) => {
+        console.warn(`[DeviceNetworkService] ${message}`, error);
+      },
+    });
+  }
 
   public async start(): Promise<void> {
     if (this.started) return;
@@ -208,78 +269,54 @@ export class DeviceNetworkService {
   private async startInternal(): Promise<void> {
     await this.ensureIdentity();
 
-    let authorizer: DeviceAuthorizer = this.createLocalPairingAuthorizer();
-    this.cloudAuthorizer = undefined;
-    if (this.cloudClient) {
-      try {
-        const publicKey = await this.cloudClient.getConnectionGrantPublicKey();
-        const cloudAuthorizer = new CloudDeviceAuthorizer({
-          localPeerId: this.identity!.peerId,
-          grantVerificationPublicKeyMultibase: publicKey.publicKeyMultibase,
-          // A persisted cloud-account record must never bypass a current grant.
-          // Only explicit local pairing is accepted without Cloud authorization.
-          getTrustedDevice: (peerId) => locallyPairedRecord(this.core?.getTrustedDevice(peerId)),
-        });
-        authorizer = cloudAuthorizer;
-        this.cloudAuthorizer = cloudAuthorizer;
-      } catch (error) {
-        console.warn('[DeviceNetworkService] cloud grant public key fetch failed', error);
-      }
-    }
-
     const capabilities = this.buildCapabilities();
     this.core = new Libp2pDeviceNetworkService({
       identity: this.identity!,
       capabilities,
       trustStore: this.trustStore,
-      authorizer,
+      authorizer: this.authorizer,
       // js-libp2p mDNS is not available in React Native. Pairing uses a
       // signed identity exchange over a QR/multiaddr invite instead.
       enableMdns: false,
       syncStorage: mobileAgentStorage,
+      syncStateStore: mobileDeviceSyncStateStore,
     });
     await this.core.start();
     this.started = true;
-
-    if (this.cloudClient && !this.suppressInitialCloudRecovery) {
-      this.scheduleCloudHeartbeat();
-      if (this.hasCloudAuthorizer()) {
-        try {
-          await this.cloudRecovery.runNow('startup');
-        } catch (error) {
-          console.warn('[DeviceNetworkService] initial cloud recovery failed', error);
-        }
-      } else {
-        this.setCloudStatus({ configured: true, state: 'error', error: 'cloud_authorizer_unavailable' });
-      }
-    }
+    // setConfiguration creates a fresh AbortController after a prior stop().
+    await this.cloudCoordinator.setConfiguration(this.cloudConfig);
+    await this.cloudCoordinator.start().catch((error: unknown) => {
+      console.warn('[DeviceNetworkService] initial cloud maintenance failed', error);
+    });
   }
 
   public async stop(): Promise<void> {
     await this.startPromise?.catch(() => undefined);
     if (!this.started && !this.core) return;
-    if (this.cloudHeartbeatTimer) {
-      clearInterval(this.cloudHeartbeatTimer);
-      this.cloudHeartbeatTimer = undefined;
-    }
+    await this.cloudCoordinator.stop();
     await this.core?.stop();
     this.core = undefined;
     this.started = false;
     this.cloudGrantCache.clear();
     this.relayReservation = undefined;
-    this.cloudAuthorizer = undefined;
+    this.authorizer.setDelegate(this.createLocalPairingAuthorizer());
   }
 
-  public configureCloud(config?: DeviceNetworkCloudConfig): void {
-    this.cloudConfig = config ? { ...config } : undefined;
-    this.cloudClient = config ? new MobileCloudClient(config.cloudUrl, config.accessToken) : undefined;
-    this.cloudAuthorizer = undefined;
+  public async configureCloud(config?: DeviceNetworkCloudConfig): Promise<void> {
+    const normalized = config ? normalizeCloudConfig(config) : undefined;
+    const restartCoordinator = this.started;
+    this.authorizer.setDelegate(this.createLocalPairingAuthorizer());
     this.cloudGrantCache.clear();
-    this.setCloudStatus(
-      config
-        ? { configured: true, state: 'idle' }
-        : { configured: false, state: 'not-configured' },
-    );
+    // Abort and drain the old generation before mutating host state. Otherwise
+    // an old directory commit could race with account trust cleanup.
+    await this.cloudCoordinator.stop();
+    this.cloudConfig = normalized ? { ...normalized } : undefined;
+    this.cloudClient = normalized ? new MobileCloudClient(normalized.cloudUrl, normalized.accessToken) : undefined;
+    this.lastCloudDevices = [];
+    this.relayReservation = undefined;
+    await this.removeCloudAccountTrust();
+    await this.cloudCoordinator.setConfiguration(normalized);
+    if (restartCoordinator) await this.cloudCoordinator.start();
   }
 
   /** Returns the current cloud configuration, or undefined if not configured. */
@@ -288,7 +325,10 @@ export class DeviceNetworkService {
   }
 
   public getCloudStatus(): DeviceNetworkCloudStatus {
-    return { ...this.cloudStatus };
+    return {
+      ...this.cloudStatus,
+      ...(this.cloudStatus.components ? { components: { ...this.cloudStatus.components } } : {}),
+    };
   }
 
   public observeCloudStatus(listener: (status: DeviceNetworkCloudStatus) => void): () => void {
@@ -298,9 +338,8 @@ export class DeviceNetworkService {
   }
 
   public async applyCloudConfig(config?: DeviceNetworkCloudConfig): Promise<void> {
-    await this.stop();
-    this.configureCloud(config);
-    await this.start();
+    await this.configureCloud(config);
+    if (!this.started) await this.start();
   }
 
   /** Validates account credentials before replacing a working runtime config. */
@@ -316,18 +355,25 @@ export class DeviceNetworkService {
     return normalized;
   }
 
-  public scheduleCloudRecovery(reason: CloudRecoveryReason): void {
-    if (this.cloudClient) this.cloudRecovery.schedule(reason);
+  public scheduleCloudRecovery(_reason: 'app-foreground' | 'manual' = 'manual'): void {
+    if (!this.cloudClient) return;
+    void this.cloudCoordinator.runNow().catch((error: unknown) => {
+      console.warn('[DeviceNetworkService] scheduled cloud maintenance failed', error);
+    });
   }
 
-  public async recoverCloudConnectivity(reason: CloudRecoveryReason = 'manual'): Promise<void> {
+  public async recoverCloudConnectivity(_reason: 'app-foreground' | 'manual' = 'manual'): Promise<void> {
     if (!this.cloudClient) throw new Error('cloud_not_configured');
-    await this.cloudRecovery.runNow(reason);
+    await this.cloudCoordinator.runNow();
   }
 
   public async syncCloudDevices(): Promise<CloudDeviceRecord[]> {
     if (!this.cloudClient) throw new Error('cloud_not_configured');
-    const result = await this.cloudClient.listDevices();
+    await this.cloudCoordinator.runNow();
+    return [...this.lastCloudDevices];
+  }
+
+  private async applyCloudDirectory(result: CloudDeviceRecord[]): Promise<void> {
     if (this.core) {
       const storedRecords = await this.trustStore.loadTrustedDevices();
       for (const peerId of cloudTrustPeerIdsToRemove(storedRecords, result)) {
@@ -375,7 +421,7 @@ export class DeviceNetworkService {
         });
       }
     }
-    return result;
+    this.lastCloudDevices = [...result];
   }
 
   public async getLocalIdentity(): Promise<LocalDeviceIdentity> {
@@ -408,9 +454,21 @@ export class DeviceNetworkService {
   }
 
   public async requestPairingInvite(serializedInvite: string): Promise<PairingSession> {
-    const invite = parseDevicePairingInvite(serializedInvite);
-    assertMobilePairingMultiaddrs(invite.multiaddrs);
+    const invite = await parseMobilePairingInvite(serializedInvite, {
+      parseVerifiedInvite: parseVerifiedDevicePairingInvite,
+    });
     return this.requestLocalPairing(invite.peerId, { multiaddrs: invite.multiaddrs });
+  }
+
+  public async createPairingInvite(): Promise<string> {
+    await this.start();
+    await this.ensureIdentity();
+    if (!this.core || !this.identity) throw new Error('device_network_not_started');
+    return createMobilePairingInvite(this.identity, this.core.getMultiaddrs(), {
+      createSignedInvite: createSignedDevicePairingInvite,
+      encodeInvite: encodeDevicePairingInvite,
+      parseVerifiedInvite: parseVerifiedDevicePairingInvite,
+    });
   }
 
   public async acceptPairing(sessionId: string): Promise<void> {
@@ -449,88 +507,103 @@ export class DeviceNetworkService {
     return this.core!.syncWithDevice(peerId, grant);
   }
 
-  private async registerCloudDevice(capabilities: DeviceCapabilities): Promise<void> {
-    if (!this.cloudClient || !this.identity || !this.core) return;
-    const nonce = await this.cloudClient.createBindingNonce();
-    await this.cloudClient.registerDevice({
+  private async ensureCloudAuthorizer(configuration: DeviceNetworkCloudConfig, signal: AbortSignal) {
+    if (!this.identity) throw new Error('device_identity_unavailable');
+    const client = new MobileCloudClient(configuration.cloudUrl, configuration.accessToken, signal);
+    const publicKey = await client.getConnectionGrantPublicKey();
+    const cloudAuthorizer = new CloudDeviceAuthorizer({
+      localPeerId: this.identity.peerId,
+      grantVerificationPublicKeyMultibase: publicKey.publicKeyMultibase,
+      // A Cloud directory record never bypasses a current signed grant. Only
+      // explicit local pairing remains available while Cloud is unavailable.
+      getTrustedDevice: peerId => locallyPairedRecord(this.core?.getTrustedDevice(peerId)),
+    });
+    return {
+      commit: () => {
+        this.authorizer.setDelegate(cloudAuthorizer);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  private async registerCloudDevice(configuration: DeviceNetworkCloudConfig, signal: AbortSignal) {
+    if (!this.identity || !this.core) throw new Error('device_network_not_started');
+    const client = new MobileCloudClient(configuration.cloudUrl, configuration.accessToken, signal);
+    const nonce = await client.createBindingNonce();
+    await client.registerDevice({
       identity: this.identity,
       cloudNonce: nonce.nonce,
       signature: await signDeviceBinding({ identity: this.identity, accountId: nonce.accountId, nonce: nonce.nonce }),
-      capabilities,
+      capabilities: this.buildCapabilities(),
       multiaddrs: this.core.getMultiaddrs(),
       relayReservations: [],
     });
-    try {
-      this.relayReservation = await this.cloudClient.createRelayReservation({ peerId: this.identity.peerId });
-      await this.core.configureRelayReservation(this.relayReservation);
-    } catch (error) {
-      console.warn('[DeviceNetworkService] relay reservation failed', error);
+    return undefined;
+  }
+
+  private async ensureRelayReservation(configuration: DeviceNetworkCloudConfig, signal: AbortSignal) {
+    if (!this.identity || !this.core) throw new Error('device_network_not_started');
+    if (this.relayReservation?.expiresAt && this.relayReservation.expiresAt > Date.now() + RELAY_RENEWAL_WINDOW_MS) {
+      return undefined;
     }
-    await this.sendCloudHeartbeat();
-    this.scheduleCloudHeartbeat();
+    const client = new MobileCloudClient(configuration.cloudUrl, configuration.accessToken, signal);
+    const reservation = await client.createRelayReservation({ peerId: this.identity.peerId });
+    return {
+      commit: async () => {
+        this.relayReservation = reservation;
+        await this.core?.configureRelayReservation(reservation);
+      },
+    };
   }
 
-  private scheduleCloudHeartbeat(): void {
-    if (this.cloudHeartbeatTimer) clearInterval(this.cloudHeartbeatTimer);
-    this.cloudHeartbeatTimer = setInterval(() => {
-      if (this.relayReservation && this.relayReservation.expiresAt <= Date.now() + RELAY_RENEWAL_WINDOW_MS) {
-        this.scheduleCloudRecovery('relay-expiring');
-        return;
-      }
-      void this.sendCloudHeartbeat().catch((error: unknown) => {
-        console.warn('[DeviceNetworkService] cloud heartbeat failed', error);
-        this.scheduleCloudRecovery('heartbeat-failed');
-      });
-    }, 60_000);
-  }
-
-  private async sendCloudHeartbeat(): Promise<void> {
-    if (!this.cloudClient || !this.identity || !this.core) return;
-    await this.cloudClient.heartbeat({
+  private async sendCloudHeartbeat(configuration: DeviceNetworkCloudConfig, signal: AbortSignal) {
+    if (!this.identity || !this.core) throw new Error('device_network_not_started');
+    const client = new MobileCloudClient(configuration.cloudUrl, configuration.accessToken, signal);
+    await client.heartbeat({
       peerId: this.identity.peerId,
       capabilities: this.buildCapabilities(),
       multiaddrs: this.core.getMultiaddrs(),
       relayReservations: this.currentRelayReservations(),
     });
+    return undefined;
   }
 
-  private async recoverCloudConnectivityInternal(reason: CloudRecoveryReason): Promise<void> {
-    if (!this.cloudClient) throw new Error('cloud_not_configured');
-    await this.start();
-    this.setCloudStatus({ configured: true, state: 'connecting' });
-    try {
-      if (!this.hasCloudAuthorizer()) {
-        if (reason === 'startup') throw new Error('cloud_authorizer_unavailable');
-        // The node may have started offline with only local-pairing trust. Once
-        // the network returns, rebuild it so CloudDeviceAuthorizer is actually
-        // installed; a green registration status alone would be misleading.
-        await this.stop();
-        this.suppressInitialCloudRecovery = true;
-        try {
-          await this.start();
-        } finally {
-          this.suppressInitialCloudRecovery = false;
-        }
-        if (!this.hasCloudAuthorizer()) throw new Error('cloud_authorizer_unavailable');
-      }
-      await this.registerCloudDevice(this.buildCapabilities());
-      const synced = await this.syncCloudDevices();
-      this.setCloudStatus({ configured: true, state: 'online', lastConnectedAt: Date.now() });
-      console.info('[DeviceNetworkService] cloud connectivity recovered', { count: synced.length });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.setCloudStatus({ configured: true, state: 'error', error: message });
-      throw error;
+  private async fetchCloudDirectory(configuration: DeviceNetworkCloudConfig, signal: AbortSignal) {
+    const devices = await new MobileCloudClient(configuration.cloudUrl, configuration.accessToken, signal).listDevices();
+    return { commit: async () => this.applyCloudDirectory(devices) };
+  }
+
+  private async removeCloudAccountTrust(): Promise<void> {
+    const records = await this.trustStore.loadTrustedDevices();
+    for (const record of records) {
+      if (record.trustMode !== 'cloud-account') continue;
+      if (this.core) await this.core.removeTrustedDevice(record.peerId);
+      else await this.trustStore.removeTrustedDevice(record.peerId);
     }
   }
 
-  private setCloudStatus(status: DeviceNetworkCloudStatus): void {
-    this.cloudStatus = status;
+  private applyCloudCoordinatorSnapshot(snapshot: DeviceCloudConnectionSnapshot): void {
+    const connected = snapshot.status === 'online' || snapshot.status === 'degraded';
+    this.cloudStatus = {
+      configured: snapshot.status !== 'not-configured',
+      state: snapshot.status,
+      generation: snapshot.generation,
+      components: { ...snapshot.components },
+      ...(snapshot.lastError ? { error: cloudErrorMessage(snapshot.lastError) } : {}),
+      ...(connected
+        ? { lastConnectedAt: Date.now() }
+        : this.cloudStatus.lastConnectedAt
+        ? { lastConnectedAt: this.cloudStatus.lastConnectedAt }
+        : {}),
+    };
     for (const listener of this.cloudStatusListeners) listener(this.getCloudStatus());
   }
 
-  private hasCloudAuthorizer(): boolean {
-    return this.cloudAuthorizer !== undefined;
+  private classifyCloudError(error: unknown): 'error' | 'offline' {
+    const message = error instanceof Error ? error.message : String(error);
+    return /^(400|401|403|404)\b|cloud_config|invalid_json|public_key|identity_/.test(message)
+      ? 'error'
+      : 'offline';
   }
 
   private createLocalPairingAuthorizer(): LocalTrustDeviceAuthorizer {
@@ -540,8 +613,7 @@ export class DeviceNetworkService {
   }
 
   private currentRelayReservations(): string[] {
-    const relayedAddresses = this.core?.getMultiaddrs().filter((address) => address.includes('/p2p-circuit')) ?? [];
-    return relayedAddresses.length > 0 ? relayedAddresses : this.relayReservation?.relayMultiaddrs ?? [];
+    return this.relayReservation?.relayMultiaddrs ?? [];
   }
 
   private async resolveOutboundGrant(peerId: string): Promise<DeviceConnectionGrant | undefined> {

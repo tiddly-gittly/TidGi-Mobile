@@ -43,7 +43,7 @@ jest.mock('expo-file-system', () => {
 // The storage conformance runner shares the package root with optional LLM
 // helpers. They are irrelevant to this suite and their ESM-only runtime is not
 // executable under Jest 29's CommonJS sandbox.
-jest.mock('ai', () => ({}));
+jest.mock('ai', () => ({}), { virtual: true });
 
 import type { ChatMessage } from 'memeloop';
 import { MobileAgentStorage } from '..';
@@ -81,7 +81,7 @@ describe('MobileAgentStorage', () => {
       message('assistant', 2),
     ]);
     await expect(second.listConversations()).resolves.toEqual([
-      expect.objectContaining({ conversationId: 'conversation-1', messageCount: 2, title: 'Plan a game' }),
+      expect.objectContaining({ conversationId: 'conversation-1', messageCount: 2, originClock: 2, title: 'Plan a game' }),
     ]);
   });
 

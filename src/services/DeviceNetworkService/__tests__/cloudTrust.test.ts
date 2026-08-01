@@ -46,11 +46,11 @@ describe('mobile cloud trust reconciliation', () => {
 
     await expect(authorizer.canOpenProtocol({
       remotePeerId: cloudAccount.peerId,
-      protocol: '/memeloop/sync/1.0.0',
+      protocol: '/memeloop/sync/2.0.0',
     })).resolves.toBe(false);
     await expect(authorizer.canOpenProtocol({
       remotePeerId: localPairing.peerId,
-      protocol: '/memeloop/sync/1.0.0',
+      protocol: '/memeloop/sync/2.0.0',
     })).resolves.toBe(true);
   });
 

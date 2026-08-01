@@ -12,6 +12,7 @@ export interface UseDeviceNetworkResult {
   cloudStatus: DeviceNetworkCloudStatus;
   error?: Error;
   refresh(): Promise<void>;
+  createPairingInvite(): Promise<string>;
   requestLocalPairing(peerId: string, options?: LocalPairingRequestOptions): Promise<PairingSession>;
   requestPairingInvite(serializedInvite: string): Promise<PairingSession>;
   acceptPairing(sessionId: string): Promise<void>;
@@ -79,6 +80,8 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
     return session;
   }, [refresh]);
 
+  const createPairingInvite = useCallback(() => deviceNetworkService.createPairingInvite(), []);
+
   const requestPairingInvite = useCallback(async (serializedInvite: string) => {
     const session = await deviceNetworkService.requestPairingInvite(serializedInvite);
     await refresh();
@@ -119,6 +122,7 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
     cloudStatus,
     error,
     refresh,
+    createPairingInvite,
     requestLocalPairing,
     requestPairingInvite,
     acceptPairing,

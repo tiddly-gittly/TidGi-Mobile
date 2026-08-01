@@ -592,14 +592,17 @@
     "CloudConfiguration": "MemeLoop Cloud",
     "CloudState": {
       "connecting": "Connecting to MemeLoop Cloud…",
+      "degraded": "クラウドのハートビートは利用できますが、中継またはデバイス一覧が縮退しています。中継が復旧するまで、モバイルは信頼できる受信接続をオンラインとして扱いません。",
       "error": "Cloud connection failed; bounded retries resume on foreground or heartbeat recovery.",
       "idle": "Cloud is configured and waiting to connect.",
       "not-configured": "Cloud is not configured. Cloud directory, relay, and local mobile agent are unavailable; invite pairing remains available.",
+      "offline": "MemeLoop Cloud はオフラインです。ローカルペアリングは利用でき、クラウド接続は上限付きバックオフで再試行します。",
       "online": "Cloud registration, directory, and relay are online."
     },
     "CloudUrl": "MemeLoop Cloud URL",
     "Devices": "Devices",
     "DevicesDescription": "Nearby devices can be paired locally. Cloud account devices appear here after directory sync.",
+    "GeneratePairingInvite": "署名付きペアリング QR を生成",
     "Direction": {
       "inbound": "Incoming request",
       "outbound": "Outgoing request"
@@ -607,10 +610,12 @@
     "LocalDevice": "This device",
     "NoDevices": "No nearby or trusted devices yet.",
     "NoPendingPairing": "No pairing requests waiting for confirmation.",
+    "OwnPairingInvite": "このデバイスの署名付きペアリング招待",
     "Pair": "Pair",
     "PairByInvite": "Pair with an invite",
-    "PairByInviteDescription": "React Native has no mDNS discovery. Scan or paste a MemeLoop invite with WebSocket multiaddrs.",
+    "PairByInviteDescription": "React Native では mDNS 検出を利用できません。有効期限の短い、デバイス ID で署名された MemeLoop 招待をスキャンまたは貼り付けてください。",
     "PairingInvite": "MemeLoop pairing invite",
+    "PairingInviteQrDescription": "別のデバイスでこの短期有効の署名付き QR コードをスキャンしてください。PeerId とすべてのアドレスはこのデバイス ID に結び付けられています。",
     "PairInvite": "Pair invite",
     "PairingRequests": "Pairing requests",
     "Reachability": {
