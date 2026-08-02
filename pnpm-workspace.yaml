@@ -13,10 +13,14 @@ allowBuilds:
   svelte-preprocess: true
   unrs-resolver: false
 
+peerDependencyRules:
+  allowedVersions:
+    memeloop: '>=0.1.0 <0.3.0'
+
 minimumReleaseAgeExclude:
-  - '@memeloop/libp2p@0.2.0'
+  - '@memeloop/libp2p@0.2.1'
   - '@memeloop/react-ui@0.1.0 || 0.1.1'
-  - 'memeloop@0.2.0'
+  - 'memeloop@0.2.1'
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
