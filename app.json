@@ -22,6 +22,9 @@
       "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access camera to Scan QR code.",
         "NSLocalNetworkUsageDescription": "Allow $(PRODUCT_NAME) to connect directly to your trusted MemeLoop devices on the local network.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
