@@ -6,6 +6,7 @@ import { type DeviceNetworkCloudStatus, deviceNetworkService } from './index';
 
 export interface UseDeviceNetworkResult {
   started: boolean;
+  pairingInviteAvailable: boolean;
   localDevice?: Device;
   devices: Device[];
   pairingSessions: PairingSession[];
@@ -116,6 +117,7 @@ export function useDeviceNetwork(): UseDeviceNetworkResult {
 
   return {
     started,
+    pairingInviteAvailable: deviceNetworkService.canCreatePairingInvite(),
     localDevice,
     devices,
     pairingSessions,

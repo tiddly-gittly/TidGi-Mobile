@@ -25,6 +25,13 @@ describe('Mobile signed pairing invites', () => {
     expect(mockEncodeInvite).toHaveBeenCalledWith(signedInvite);
   });
 
+  it('refuses to advertise a signed invite that has no dialable address', async () => {
+    const identity = { peerId: 'peer-a' } as LocalDeviceIdentity;
+
+    await expect(createMobilePairingInvite(identity, [], dependencies)).rejects.toThrow('pairing_invite_unreachable');
+    expect(mockCreateSignedInvite).not.toHaveBeenCalled();
+  });
+
   it('only returns invites accepted by the shared identity verifier and Mobile transport policy', async () => {
     const verifiedInvite = { peerId: 'peer-a', multiaddrs: [privateAddress], signature: 'verified' } as DevicePairingInvite;
     mockParseVerifiedInvite.mockResolvedValue(verifiedInvite);

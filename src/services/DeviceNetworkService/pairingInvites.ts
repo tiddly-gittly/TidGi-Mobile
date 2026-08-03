@@ -16,6 +16,7 @@ export async function createMobilePairingInvite(
   multiaddrs: string[],
   dependencies: MobilePairingInviteDependencies,
 ): Promise<string> {
+  if (multiaddrs.length === 0) throw new Error('pairing_invite_unreachable');
   assertMobilePairingMultiaddrs(multiaddrs);
   return dependencies.encodeInvite(await dependencies.createSignedInvite({ identity, multiaddrs }));
 }
