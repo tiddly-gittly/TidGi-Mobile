@@ -460,6 +460,10 @@ export class DeviceNetworkService {
     return this.requestLocalPairing(invite.peerId, { multiaddrs: invite.multiaddrs });
   }
 
+  public canCreatePairingInvite(): boolean {
+    return (this.core?.getMultiaddrs().length ?? 0) > 0;
+  }
+
   public async createPairingInvite(): Promise<string> {
     await this.start();
     await this.ensureIdentity();

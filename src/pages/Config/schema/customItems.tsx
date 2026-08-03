@@ -346,9 +346,9 @@ function DeviceNetworkItem() {
   };
 
   return (
-    <View style={styles.deviceNetworkPanel}>
+    <View testID='device-network-panel' style={styles.deviceNetworkPanel}>
       <Text variant='titleMedium'>{t('DeviceNetwork.CloudConfiguration')}</Text>
-      <Text variant='bodySmall' style={styles.deviceNetworkEmpty}>
+      <Text testID='device-network-cloud-status' variant='bodySmall' style={styles.deviceNetworkEmpty}>
         {t(`DeviceNetwork.CloudState.${network.cloudStatus.state}`)}
       </Text>
       <TextInput
@@ -406,7 +406,7 @@ function DeviceNetworkItem() {
       <View style={styles.deviceNetworkHeader}>
         <View style={styles.deviceNetworkTextBlock}>
           <Text variant='titleLarge'>{t('DeviceNetwork.LocalDevice')}</Text>
-          <Text variant='bodySmall'>
+          <Text testID='device-network-local-device' variant='bodySmall'>
             {network.localDevice
               ? `${network.localDevice.displayName} · ${network.localDevice.platform} · ${shortPeerId(network.localDevice.peerId)}`
               : t('Loading')}
@@ -446,9 +446,10 @@ function DeviceNetworkItem() {
       <Text variant='titleMedium'>{t('DeviceNetwork.PairByInvite')}</Text>
       <Text variant='bodySmall' style={styles.deviceNetworkEmpty}>{t('DeviceNetwork.PairByInviteDescription')}</Text>
       <Button
+        testID='device-network-generate-pairing-invite'
         mode='outlined'
         icon='qrcode'
-        disabled={busyAction !== undefined || network.localDevice === undefined}
+        disabled={busyAction !== undefined || network.localDevice === undefined || !network.pairingInviteAvailable}
         onPress={() => {
           void runAction('create-pairing-invite', async () => {
             setGeneratedPairingInvite(await network.createPairingInvite());
@@ -458,10 +459,11 @@ function DeviceNetworkItem() {
         {t('DeviceNetwork.GeneratePairingInvite')}
       </Button>
       {generatedPairingInvite !== '' && (
-        <View style={styles.deviceNetworkQrInvite}>
+        <View testID='device-network-generated-pairing-invite' style={styles.deviceNetworkQrInvite}>
           <QRCode value={generatedPairingInvite} size={220} />
           <Text variant='bodySmall'>{t('DeviceNetwork.PairingInviteQrDescription')}</Text>
           <TextInput
+            testID='device-network-generated-pairing-invite-value'
             mode='outlined'
             multiline
             editable={false}
@@ -472,6 +474,7 @@ function DeviceNetworkItem() {
         </View>
       )}
       <TextInput
+        testID='device-network-pairing-invite-input'
         mode='outlined'
         multiline
         label={t('DeviceNetwork.PairingInvite')}
@@ -480,6 +483,7 @@ function DeviceNetworkItem() {
       />
       <View style={styles.deviceNetworkToolbar}>
         <Button
+          testID='device-network-pair-invite'
           mode='contained'
           icon='qrcode-scan'
           disabled={busyAction !== undefined || pairingInvite.trim() === ''}
