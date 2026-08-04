@@ -30,7 +30,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.20",
     "@expo/vector-icons": "^15.0.3",
-    "@memeloop/libp2p": "^0.2.1",
+    "@memeloop/libp2p": "0.2.2",
     "@memeloop/react-ui": "^0.1.1",
     "@noble/ed25519": "^2.2.3",
     "@noble/hashes": "^1.7.0",
@@ -68,7 +68,7 @@
     "i18next": "^25.2.1",
     "immer": "^10.1.1",
     "lodash": "^4.17.21",
-    "memeloop": "^0.2.1",
+    "memeloop": "0.2.2",
     "p-timeout": "^6.1.4",
     "react": "19.1.0",
     "react-i18next": "^15.4.0",
