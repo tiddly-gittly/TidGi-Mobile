@@ -108,16 +108,10 @@ jobs:
 
       - name: Build release notes
         run: |
-          cat > /tmp/ios-artifacts/RELEASE_NOTES.md <<'EOF'
-          ## TidGi iOS 预发布版
-
-          这是一个提供给爱思助手、AltServer、SideStore 等侧载工具使用的 IPA 包。
-
-          - 采用 iPhoneOS 真机架构构建
-          - 不依赖 Apple Developer Program 的发布签名
-          - 由用户侧工具在安装时重新签名后再安装到设备
-
-          使用前请确保你的侧载工具和 Apple 账号登录流程可用。
+          RELEASE_TAG="$GITHUB_REF_NAME"
+          cat > /tmp/ios-artifacts/RELEASE_NOTES.md <<EOF
+          ## TidGi-Mobile ${RELEASE_TAG} 发布报告
+          ## TidGi-Mobile ${RELEASE_TAG} Release Report
           EOF
 
       - name: Upload IPA artifact
