@@ -1,4 +1,4 @@
-name: Build iOS Dev Client
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
 
 jobs:
   build-ios:
-    name: Build iOS Simulator app (debug)
+    name: Build iOS IPA
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -55,19 +55,6 @@ jobs:
           pnpm run build:tw-assets
           pnpm run build:wiki-template
 
-      - name: Install expo-dev-client
-        run: pnpm install expo-dev-client -w
-
-      - name: Modify app.json for dev-client
-        run: |
-          node -e "
-          const fs = require('fs');
-          const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
-          appJson.expo.name = 'TidGi Test';
-          appJson.expo.ios.bundleIdentifier = 'ren.onetwo.tidgi.mobile.test';
-          fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
-          "
-
       - name: Expo prebuild (iOS)
         run: pnpm exec expo prebuild -p ios --clean
 
@@ -82,7 +69,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      - name: Build iOS Simulator app (debug, no signing)
+      - name: Build unsigned iOS app
         run: |
           cd ios
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
@@ -91,36 +78,64 @@ jobs:
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
-            -configuration Debug \
-            -sdk iphonesimulator \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            -quiet
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            build
 
-      - name: Package .app into artifact
+      - name: Package unsigned IPA
         run: |
-          mkdir -p /tmp/ios-artifacts
-          APP_PATH=$(find ios/build -name "*.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
-            cd "$(dirname "$APP_PATH")"
-            zip -r /tmp/ios-artifacts/TidGi-Test-Simulator.zip "$(basename "$APP_PATH")"
+          set -euo pipefail
+
+          cd ios
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Build failed: no .app found in build/Build/Products/Release-iphoneos"
+            exit 1
           fi
 
-      - name: Upload iOS artifact
+          mkdir -p /tmp/ios-artifacts
+          STAGING_DIR="$RUNNER_TEMP/ipa-staging"
+          rm -rf "$STAGING_DIR"
+          mkdir -p "$STAGING_DIR/Payload"
+          cp -R "$APP_PATH" "$STAGING_DIR/Payload/"
+          (cd "$STAGING_DIR" && zip -qry /tmp/ios-artifacts/TidGi.ipa Payload)
+
+      - name: Build release notes
+        run: |
+          cat > /tmp/ios-artifacts/RELEASE_NOTES.md <<'EOF'
+          ## TidGi iOS 预发布版
+
+          这是一个提供给爱思助手、AltServer、SideStore 等侧载工具使用的 IPA 包。
+
+          - 采用 iPhoneOS 真机架构构建
+          - 不依赖 Apple Developer Program 的发布签名
+          - 由用户侧工具在安装时重新签名后再安装到设备
+
+          使用前请确保你的侧载工具和 Apple 账号登录流程可用。
+          EOF
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v5
         with:
-          name: ios-simulator-app-${{ github.run_number }}-${{ github.sha }}
+          name: ios-ipa-${{ github.run_number }}-${{ github.sha }}
           path: |
-            /tmp/ios-artifacts/TidGi-Test-Simulator.zip
-          if-no-files-found: warn
+            /tmp/ios-artifacts/TidGi.ipa
+          if-no-files-found: error
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          draft: true
+          draft: false
+          prerelease: true
           generate_release_notes: false
-          files: /tmp/ios-artifacts/TidGi-Test-Simulator.zip
+          body_path: /tmp/ios-artifacts/RELEASE_NOTES.md
+          files: /tmp/ios-artifacts/TidGi.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
