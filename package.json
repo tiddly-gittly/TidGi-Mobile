@@ -31,7 +31,7 @@
     "@ai-sdk/openai": "^4.0.20",
     "@expo/vector-icons": "^15.0.3",
     "@memeloop/libp2p": "0.2.2",
-    "@memeloop/react-ui": "^0.1.1",
+    "@memeloop/react-ui": "0.1.2",
     "@noble/ed25519": "^2.2.3",
     "@noble/hashes": "^1.7.0",
     "@react-native-community/datetimepicker": "~8.4.4",

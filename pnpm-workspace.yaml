@@ -19,7 +19,7 @@ peerDependencyRules:
 
 minimumReleaseAgeExclude:
   - '@memeloop/libp2p@0.2.2'
-  - '@memeloop/react-ui@0.1.0 || 0.1.1'
+  - '@memeloop/react-ui@0.1.0 || 0.1.1 || 0.1.2'
   - 'memeloop@0.2.2'
 
 onlyBuiltDependencies:
