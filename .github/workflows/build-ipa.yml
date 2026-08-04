@@ -108,10 +108,70 @@ jobs:
 
       - name: Build release notes
         run: |
+          set -euo pipefail
+
           RELEASE_TAG="$GITHUB_REF_NAME"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)
+          CURRENT_DATE=$(git log -1 --format=%cs "$RELEASE_TAG")
+          PREVIOUS_DATE="N/A"
+          TAG_RANGE="${RELEASE_TAG}"
+          if [ -n "$PREVIOUS_TAG" ]; then
+            PREVIOUS_DATE=$(git log -1 --format=%cs "$PREVIOUS_TAG")
+            TAG_RANGE="${PREVIOUS_TAG} → ${RELEASE_TAG}"
+          fi
+
+          COMMIT_COUNT=$(git rev-list --count "${PREVIOUS_TAG:+$PREVIOUS_TAG..}${RELEASE_TAG}")
+          DIFF_STATS=$(git diff --shortstat "${PREVIOUS_TAG:+$PREVIOUS_TAG..}${RELEASE_TAG}" | sed 's/^ *//')
+          if [ -z "$DIFF_STATS" ]; then
+            DIFF_STATS="1 file changed"
+          fi
+
           cat > /tmp/ios-artifacts/RELEASE_NOTES.md <<EOF
-          ## TidGi-Mobile ${RELEASE_TAG} 发布报告
-          ## TidGi-Mobile ${RELEASE_TAG} Release Report
+          <details>
+            <summary>## TidGi-Mobile ${RELEASE_TAG} 发布报告</summary>
+
+          **发布时间**: ${PREVIOUS_DATE} ~ ${CURRENT_DATE}<br>
+          **标签范围**: ${TAG_RANGE}<br>
+          **提交数**: ${COMMIT_COUNT} 个提交<br>
+          **变更概览**: ${DIFF_STATS}
+
+          ---
+
+          ### 🍎 iOS 预发布变更
+
+          #### 1. 产出可供侧载工具重签的 IPA
+          - iOS CI 现在构建 iPhoneOS 真机架构 `.app` 并封装为 `.ipa`
+          - 面向爱思助手、AltServer、SideStore 等用户侧重签场景
+          - 不再依赖仓库内 Apple Developer Program 发布证书
+
+          #### 2. 保持统一的 GitHub Release 聚合发布
+          - 继续使用常规 `v*.*.*` tag 触发 Android APK / AAB / iOS IPA
+          - 所有产物继续汇总到同一个 GitHub Release
+
+          </details>
+
+          <details>
+            <summary>## TidGi-Mobile ${RELEASE_TAG} Release Report</summary>
+
+          **Release Period**: ${PREVIOUS_DATE} ~ ${CURRENT_DATE}<br>
+          **Tag Range**: ${TAG_RANGE}<br>
+          **Commits**: ${COMMIT_COUNT} commit(s)<br>
+          **Change Summary**: ${DIFF_STATS}
+
+          ---
+
+          ### 🍎 iOS Prerelease Changes
+
+          #### 1. Produce an IPA intended for user-side resigning
+          - The iOS CI now builds an iPhoneOS device `.app` and packages it as an `.ipa`
+          - Targets user-side resign flows such as Aisi Assistant, AltServer, and SideStore
+          - No longer depends on repository-managed Apple Developer Program distribution signing
+
+          #### 2. Keep one aggregated GitHub Release across platforms
+          - The regular `v*.*.*` tag still triggers Android APK / AAB / iOS IPA builds together
+          - All assets continue to be attached to the same GitHub Release
+
+          </details>
           EOF
 
       - name: Upload IPA artifact
