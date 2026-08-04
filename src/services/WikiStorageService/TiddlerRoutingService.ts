@@ -9,13 +9,19 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 import { IWikiWorkspace } from '../../store/workspace';
-import { getTiddlerFileExtension } from './tiddlerFileParser';
+import { ContentTypeRegistry } from './tiddlerFileParser';
 import { readTidgiConfig } from './tidgiConfigManager';
 
 /**
  * Service for computing tiddler file paths within a workspace.
  */
 export class TiddlerRoutingService {
+  readonly #contentTypeRegistry: ContentTypeRegistry;
+
+  constructor(contentTypeRegistry: ContentTypeRegistry) {
+    this.#contentTypeRegistry = contentTypeRegistry;
+  }
+
   /**
    * Get file path for a tiddler (async — uses config from disk)
    * Returns relative path within workspace
@@ -42,7 +48,7 @@ export class TiddlerRoutingService {
     if (sanitized.length > 200) {
       sanitized = sanitized.substring(0, 200);
     }
-    const extension = getTiddlerFileExtension(fields);
+    const extension = this.#contentTypeRegistry.getBodyFileExtension(fields);
     if (workspace.isSubWiki === true) {
       return `${sanitized}${extension}`;
     }
@@ -67,7 +73,7 @@ export class TiddlerRoutingService {
       sanitized = sanitized.substring(0, 200);
     }
 
-    const extension = getTiddlerFileExtension(fields);
+    const extension = this.#contentTypeRegistry.getBodyFileExtension(fields);
 
     // Apply fileSystemPathFilter if configured and enabled
     if (config.fileSystemPathFilterEnable && typeof config.fileSystemPathFilter === 'string' && config.fileSystemPathFilter.length > 0) {

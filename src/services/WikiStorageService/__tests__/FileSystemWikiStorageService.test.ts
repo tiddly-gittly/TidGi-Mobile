@@ -511,4 +511,148 @@ describe('FileSystemWikiStorageService storage safety', () => {
     expect(service.getTrackedTiddlerFilePath('$:/plugins/test/B')).toBe(pluginPath);
     expect(service.getTrackedTiddlerFilePath('User')).toBe(userPath);
   });
+
+  it('saves plugin-typed tiddlers using runtime contentTypeInfo instead of fallback .tid', async () => {
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const service = await createIndexedService(workspace);
+
+    // Simulate the WebView syncadaptor syncing plugin-registered types after boot.
+    service.registerContentTypeInfo({
+      'application/vnd.tldraw+json': { encoding: 'utf8', extension: '.tldr' },
+    });
+
+    await service.saveTiddler('My Whiteboard', {
+      text: '{"shapes":[]}',
+      title: 'My Whiteboard',
+      type: 'application/vnd.tldraw+json',
+    });
+
+    const whiteboardPath = `${workspace.wikiFolderLocation}/tiddlers/My Whiteboard.tldr`;
+    const metaPath = `${whiteboardPath}.meta`;
+    expect(service.getTrackedTiddlerFilePath('My Whiteboard')).toBe(whiteboardPath);
+    expect(mockFileSystem.existsSync(whiteboardPath)).toBe(true);
+    expect(mockFileSystem.readFileSync(whiteboardPath)).toBe('{"shapes":[]}');
+    expect(mockFileSystem.existsSync(metaPath)).toBe(true);
+    expect(mockFileSystem.readFileSync(metaPath)).toContain('type: application/vnd.tldraw+json');
+    expect(mockFileSystem.existsSync(`${workspace.wikiFolderLocation}/tiddlers/My Whiteboard.tid`)).toBe(false);
+  });
+
+  it('preserves existing non-.tid file extension when plugin type is unknown to native layer', async () => {
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const whiteboardPath = `${workspace.wikiFolderLocation}/tiddlers/My Whiteboard.tldr`;
+    const metaPath = `${whiteboardPath}.meta`;
+    mockFileSystem.writeFileSync(whiteboardPath, '{"shapes":[]}');
+    mockFileSystem.writeFileSync(metaPath, 'title: My Whiteboard\ntype: application/vnd.tldraw+json');
+    const service = await createIndexedService(workspace);
+
+    // The plugin type is NOT registered — this simulates an older app build or a
+    // plugin type that the WebView failed to sync. Saving must not convert to .tid.
+    await service.saveTiddler('My Whiteboard', {
+      text: '{"shapes":[{"id":"x"}]}',
+      title: 'My Whiteboard',
+      type: 'application/vnd.tldraw+json',
+    });
+
+    expect(service.getTrackedTiddlerFilePath('My Whiteboard')).toBe(whiteboardPath);
+    expect(mockFileSystem.existsSync(whiteboardPath)).toBe(true);
+    expect(mockFileSystem.readFileSync(whiteboardPath)).toBe('{"shapes":[{"id":"x"}]}');
+    expect(mockFileSystem.existsSync(metaPath)).toBe(true);
+    expect(mockFileSystem.readFileSync(metaPath)).toContain('type: application/vnd.tldraw+json');
+    expect(mockFileSystem.existsSync(`${workspace.wikiFolderLocation}/tiddlers/My Whiteboard.tid`)).toBe(false);
+  });
+
+  it('still converts an existing plugin file to .tid when the user explicitly changes type to wikitext', async () => {
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const whiteboardPath = `${workspace.wikiFolderLocation}/tiddlers/My Whiteboard.tldr`;
+    const metaPath = `${whiteboardPath}.meta`;
+    mockFileSystem.writeFileSync(whiteboardPath, '{"shapes":[]}');
+    mockFileSystem.writeFileSync(metaPath, 'title: My Whiteboard\ntype: application/vnd.tldraw+json');
+    const service = await createIndexedService(workspace);
+
+    // text/vnd.tiddlywiki is a known type; explicit type change should move
+    // the file to .tid even if it was previously stored as .tldr.
+    const tidPath = `${workspace.wikiFolderLocation}/tiddlers/My Whiteboard.tid`;
+    await service.saveTiddler('My Whiteboard', {
+      text: 'Converted to wikitext',
+      title: 'My Whiteboard',
+      type: 'text/vnd.tiddlywiki',
+    });
+
+    expect(service.getTrackedTiddlerFilePath('My Whiteboard')).toBe(tidPath);
+    expect(mockFileSystem.existsSync(tidPath)).toBe(true);
+    expect(mockFileSystem.readFileSync(tidPath)).toContain('Converted to wikitext');
+    expect(mockFileSystem.existsSync(whiteboardPath)).toBe(false);
+    expect(mockFileSystem.existsSync(metaPath)).toBe(false);
+  });
+
+  it('preserves unknown file extension and writes separate meta when registering a new runtime type afterwards', async () => {
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const customPath = `${workspace.wikiFolderLocation}/tiddlers/My Custom.custom`;
+    const metaPath = `${customPath}.meta`;
+    mockFileSystem.writeFileSync(customPath, 'body-before');
+    mockFileSystem.writeFileSync(metaPath, 'title: My Custom\ntype: application/x-custom');
+    const service = await createIndexedService(workspace);
+
+    // First save without knowing the type: should preserve .custom via fallback.
+    await service.saveTiddler('My Custom', {
+      text: 'body-after',
+      title: 'My Custom',
+      type: 'application/x-custom',
+    });
+    expect(service.getTrackedTiddlerFilePath('My Custom')).toBe(customPath);
+    expect(mockFileSystem.readFileSync(customPath)).toBe('body-after');
+    expect(mockFileSystem.readFileSync(metaPath)).toContain('type: application/x-custom');
+
+    // Now the WebView registers the type. Subsequent saves should use the registered info.
+    service.registerContentTypeInfo({
+      'application/x-custom': { encoding: 'utf8', extension: '.custom' },
+    });
+    await service.saveTiddler('My Custom', {
+      text: 'body-after-registration',
+      title: 'My Custom',
+      type: 'application/x-custom',
+    });
+    expect(service.getTrackedTiddlerFilePath('My Custom')).toBe(customPath);
+    expect(mockFileSystem.readFileSync(customPath)).toBe('body-after-registration');
+  });
+
+  it('preserves unknown plugin extension when routing generates a new path', async () => {
+    const mainWorkspace = createWorkspace('/storage/emulated/0/TidGi/main');
+    const subWikiWorkspace: IWikiWorkspace = {
+      id: 'sub',
+      name: 'Sub Wiki',
+      syncedServers: [],
+      type: 'wiki',
+      wikiFolderLocation: '/storage/emulated/0/TidGi/sub',
+      isSubWiki: true,
+      mainWikiID: mainWorkspace.id,
+    };
+    mockWorkspaces = [mainWorkspace, subWikiWorkspace];
+
+    // Whiteboard file exists in main workspace but is being routed to sub-wiki.
+    const mainPath = `${mainWorkspace.wikiFolderLocation}/tiddlers/My Whiteboard.tldr`;
+    const mainMetaPath = `${mainPath}.meta`;
+    mockFileSystem.writeFileSync(mainPath, '{"shapes":[]}');
+    mockFileSystem.writeFileSync(mainMetaPath, 'title: My Whiteboard\ntype: application/vnd.tldraw+json');
+
+    const service = await createIndexedService(mainWorkspace);
+
+    await service.saveTiddler('My Whiteboard', {
+      text: '{"shapes":[{"id":"x"}]}',
+      title: 'My Whiteboard',
+      type: 'application/vnd.tldraw+json',
+    }, subWikiWorkspace.id);
+
+    // New path in sub-wiki must keep .tldr, not become .tid.
+    const subPath = `${subWikiWorkspace.wikiFolderLocation}/My Whiteboard.tldr`;
+    const subMetaPath = `${subPath}.meta`;
+    expect(service.getTrackedTiddlerFilePath('My Whiteboard')).toBe(subPath);
+    expect(mockFileSystem.readFileSync(subPath)).toBe('{"shapes":[{"id":"x"}]}');
+    expect(mockFileSystem.readFileSync(subMetaPath)).toContain('type: application/vnd.tldraw+json');
+    expect(mockFileSystem.existsSync(`${subWikiWorkspace.wikiFolderLocation}/My Whiteboard.tid`)).toBe(false);
+  });
 });

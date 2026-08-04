@@ -12,7 +12,7 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { navigateIfNotAlreadyThere, navigationReference } from '../../utils/RootNavigation';
 import type { WikiHookService } from '../WikiHookService';
 import { FileSystemWikiStorageService as WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
-import { getReadyWikiStorageService } from '../WikiStorageService/registry';
+import { wikiStorageServiceRegistry } from '../WikiStorageService/registry';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
 /**
@@ -97,7 +97,7 @@ export class NativeService {
     if (currentWikiStorageService !== undefined && currentRouteWiki?.id === workspace.id) {
       return currentWikiStorageService;
     }
-    return await getReadyWikiStorageService(workspace);
+    return await wikiStorageServiceRegistry.getReady(workspace);
   }
 
   public async getCurrentWikiHookServices() {

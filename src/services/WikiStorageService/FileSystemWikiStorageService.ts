@@ -25,6 +25,7 @@ import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { trackNewUserTiddlerCreated } from '../AnalyticsService';
 import { gitDiffChangedFiles } from '../GitService';
 import { type IScopedLogger, logFor } from '../LoggerService';
+import { type ContentTypeInfoEntry } from './contentTypeInfo';
 import {
   deleteFileWithEmptyParentsCleanup,
   ensureDirectory,
@@ -36,15 +37,7 @@ import {
   writeBinaryFileFromBase64,
   writeTextFile,
 } from './fileOperations';
-import {
-  getBodyFilePathFromMetaPath,
-  getTiddlerFileExtension,
-  getTypeEncoding,
-  isBase64EncodedBodyFile,
-  parseMetadataFile,
-  processFields,
-  shouldUseSeparateMetaFile,
-} from './tiddlerFileParser';
+import { ContentTypeRegistry, getBodyFilePathFromMetaPath, parseMetadataFile, processFields, replaceFileExtension } from './tiddlerFileParser';
 import { TiddlerRoutingService } from './TiddlerRoutingService';
 import { readTidgiConfig } from './tidgiConfigManager';
 import { IWikiServerStatusObject } from './types';
@@ -56,6 +49,7 @@ import { IWikiServerStatusObject } from './types';
 export class FileSystemWikiStorageService {
   readonly #workspace: IWikiWorkspace;
   readonly #configStore = useConfigStore;
+  readonly #contentTypeRegistry: ContentTypeRegistry;
   readonly #routingService: TiddlerRoutingService;
   readonly #logger: IScopedLogger;
   /**
@@ -83,7 +77,8 @@ export class FileSystemWikiStorageService {
 
   constructor(workspace: IWikiWorkspace) {
     this.#workspace = workspace;
-    this.#routingService = new TiddlerRoutingService();
+    this.#contentTypeRegistry = new ContentTypeRegistry();
+    this.#routingService = new TiddlerRoutingService(this.#contentTypeRegistry);
     this.#logger = logFor(workspace.id);
   }
 
@@ -104,6 +99,20 @@ export class FileSystemWikiStorageService {
 
   getWorkspace(): IWikiWorkspace {
     return this.#workspace;
+  }
+
+  /**
+   * Register content type mappings discovered at runtime by the WebView.
+   *
+   * The static contentTypeInfo.ts is generated from TW's empty edition at build
+   * time and does not include plugin types. The WebView syncadaptor calls this
+   * after boot to sync `$tw.config.contentTypeInfo` so the native layer can
+   * correctly save/load tiddlers created by plugins (e.g. whiteboard's
+   * application/vnd.tldraw+json).
+   */
+  registerContentTypeInfo(info: Record<string, ContentTypeInfoEntry>): void {
+    this.#contentTypeRegistry.register(info);
+    this.#logger.log(`Registered ${Object.keys(info).length} runtime content type(s)`);
   }
 
   // ─── File Index (≈ desktop boot.files population) ──────────────────────
@@ -364,8 +373,6 @@ export class FileSystemWikiStorageService {
         });
 
         const processedFields = processFields({ title, ...mutableFields });
-        const isSeparateMetaType = shouldUseSeparateMetaFile(processedFields);
-        const expectedExtension = getTiddlerFileExtension(processedFields);
         const changeCount = '0';
         const Etag = `"default/${encodeURIComponent(title)}/${changeCount}:"`;
 
@@ -379,6 +386,13 @@ export class FileSystemWikiStorageService {
         // in place. If the type changed (e.g. default → markdown), generate a new
         // path and delete the old file to match desktop's move semantic.
         const oldPath = this.#tiddlerFilePathByTitle.get(title);
+        // Resolve the target extension. Plugin types unknown to the build-time
+        // static table will be resolved via the runtime registry after the
+        // WebView syncs $tw.config.contentTypeInfo. If still unknown, conservatively
+        // reuse the existing file's extension to avoid converting a plugin file
+        // (e.g. .tldr whiteboard) into a .tid and corrupting its format.
+        const expectedExtension = this.#resolveTargetExtension(processedFields, oldPath);
+        const isSeparateMetaType = expectedExtension !== '.tid';
         // Safety: if index is corrupted (e.g. native batch parser ordering bug),
         // the oldPath might belong to a different title. Verify via reverse index.
         const oldPathOwner = oldPath ? this.#getIndexedTitleForPath(oldPath) : undefined;
@@ -401,7 +415,12 @@ export class FileSystemWikiStorageService {
           await ensureDirectory(tiddlerFolderPath);
 
           const relativePath = await this.#routingService.getTiddlerFilePath(title, processedFields as ITiddlerFields, targetWorkspace);
-          fullPath = `${targetWorkspace.wikiFolderLocation}/${relativePath}`;
+          // RoutingService derives its extension from the tiddler type. For unknown
+          // plugin types it may return .tid while our conservative fallback resolved
+          // expectedExtension to the existing file's extension (e.g. .tldr). Ensure
+          // the generated path matches expectedExtension so we don't write separate-
+          // meta content into a .tid file and corrupt the body format.
+          fullPath = `${targetWorkspace.wikiFolderLocation}/${replaceFileExtension(relativePath, expectedExtension)}`;
         }
 
         // Ensure parent directory exists
@@ -490,6 +509,52 @@ export class FileSystemWikiStorageService {
 
   #isSameFilePath(firstPath: string, secondPath: string): boolean {
     return toPlainPath(firstPath).replace(/\/$/, '') === toPlainPath(secondPath).replace(/\/$/, '');
+  }
+
+  /**
+   * Resolve the target file extension for a tiddler write.
+   *
+   * Priority:
+   *   1. _canonical_uri tiddlers always use .tid
+   *   2. If the tiddler type is known (static or runtime registry) and maps to a
+   *      non-.tid extension, use that extension
+   *   3. If the type is unknown but an existing non-.tid file is already indexed
+   *      for this title, reuse its extension to avoid corrupting plugin files
+   *      (e.g. whiteboard's .tldr)
+   *   4. Fallback to .tid
+   *
+   * This prevents plugin-created files from being silently converted to .tid
+   * when the mobile build-time static contentTypeInfo lacks the plugin type.
+   */
+  #resolveTargetExtension(fields: { type?: string; _canonical_uri?: string }, oldPath: string | undefined): string {
+    // _canonical_uri forces .tid format (official TW behavior)
+    if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
+      return '.tid';
+    }
+
+    const typeExtension = this.#contentTypeRegistry.getBodyFileExtension(fields);
+    if (typeExtension !== '.tid') {
+      return typeExtension;
+    }
+
+    // Type resolved to .tid. If the type is actually unknown to us (plugin type
+    // not in static/runtime registry) but an existing non-.tid file is indexed,
+    // preserve that extension to avoid corrupting plugin files (e.g. whiteboard's
+    // .tldr). If the type is explicitly wikitext, we intentionally move to .tid.
+    if (!this.#contentTypeRegistry.isKnown(fields.type)) {
+      if (typeof oldPath === 'string') {
+        const plainOldPath = toPlainPath(oldPath);
+        const lastDotIndex = plainOldPath.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+          const oldExtension = plainOldPath.slice(lastDotIndex);
+          if (oldExtension !== '.tid') {
+            return oldExtension;
+          }
+        }
+      }
+    }
+
+    return '.tid';
   }
 
   #getIndexedTitleForPath(filePath: string): string | undefined {
@@ -617,7 +682,7 @@ export class FileSystemWikiStorageService {
   async #saveSeparateMetaTiddler(title: string, text: string, fields: Record<string, unknown>, filePath: string): Promise<void> {
     const headerLines = this.#buildTiddlerHeaderLines(title, fields);
     const tiddlerType = (fields.type ?? 'text/plain') as string;
-    const encoding = getTypeEncoding(tiddlerType);
+    const encoding = this.#contentTypeRegistry.getEncoding(tiddlerType);
     // Body file: write with correct encoding (utf8 text or decoded base64 binary)
     if (encoding === 'base64') {
       await writeBinaryFileFromBase64(filePath, text);
@@ -726,7 +791,8 @@ export class FileSystemWikiStorageService {
     try {
       // Non-.tid body files: encoding matters for binary types
       if (!filePath.toLowerCase().endsWith('.tid')) {
-        return isBase64EncodedBodyFile(filePath)
+        const extension = filePath.slice(filePath.lastIndexOf('.'));
+        return this.#contentTypeRegistry.isBase64EncodedExtension(extension)
           ? await readBinaryFileAsBase64(filePath)
           : await readTextFile(filePath);
       }

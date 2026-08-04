@@ -2,6 +2,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 // import { escape } from 'html-escaper';
+import 'zx/globals';
+
+// On Windows or in environments without bash, zx's auto-detected shell may leave
+// $.quote unset. Ensure a default quote function is available before any $ use.
+$.quote ??= quote;
 
 $.cwd = 'plugins';
 await $`npm run build`;

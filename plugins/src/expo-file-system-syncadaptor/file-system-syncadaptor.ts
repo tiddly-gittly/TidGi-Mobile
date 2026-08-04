@@ -266,6 +266,14 @@ class TidGiMobileFileSystemSyncAdaptor {
       this.configSyncer();
     }
     try {
+      // Sync the full runtime content type registry from the WebView to the native
+      // storage layer. The build-time static table only contains types from TW's
+      // empty edition; plugins like tw-whiteboard register additional types such as
+      // application/vnd.tldraw+json at boot. Without this sync, the native layer
+      // would fallback unknown types to .tid and corrupt plugin files on save.
+      if (typeof this.wikiStorageService.registerContentTypeInfo === 'function') {
+        this.wikiStorageService.registerContentTypeInfo($tw.config.contentTypeInfo);
+      }
       const status = await this.wikiStorageService.getStatus();
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime: IPC may return undefined even though type says otherwise
       if (status === undefined) {

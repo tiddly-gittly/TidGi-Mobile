@@ -7,57 +7,151 @@
 
 import type { ITiddlerFields } from 'tiddlywiki';
 
-import contentTypeInfo, { getExtensionForType, getTypeEncoding, usesSeparateMetaFile } from './contentTypeInfo';
-export { getExtensionForType, getTypeEncoding, usesSeparateMetaFile };
+import contentTypeInfo, { type ContentTypeInfoEntry } from './contentTypeInfo';
 
 /**
- * Determine whether a body file (by path) is base64-encoded binary content.
- * Looks up the file extension in contentTypeInfo to match TW's registerFileType.
- * Returns true for extensions like .jpg, .png, .pdf, .wasm, etc.
+ * Content type registry that knows how to map a tiddler MIME type to its on-disk
+ * representation (file extension and body encoding).
+ *
+ * It combines:
+ *   1. A static table generated at build time from TiddlyWiki's empty edition
+ *      (`contentTypeInfo.ts`). This does not include plugin types.
+ *   2. A mutable runtime table that the WebView syncadaptor populates with
+ *      `$tw.config.contentTypeInfo` after plugins have registered their types.
+ *
+ * Encapsulating the registry as a class keeps mutable state out of the module
+ * closure and makes it easy to inject into services (e.g. TiddlerRoutingService).
  */
-export function isBase64EncodedBodyFile(bodyFilePath: string): boolean {
-  const extension = bodyFilePath.slice(bodyFilePath.lastIndexOf('.'));
-  if (!extension || extension === '.tid' || extension === '.meta') return false;
-  for (const info of Object.values(contentTypeInfo)) {
-    const extensions = Array.isArray(info.extension) ? info.extension : [info.extension];
-    if (extensions.includes(extension)) {
-      return info.encoding === 'base64';
+export class ContentTypeRegistry {
+  readonly #staticInfo: Readonly<Record<string, ContentTypeInfoEntry>>;
+  readonly #runtimeInfo = new Map<string, ContentTypeInfoEntry>();
+
+  constructor(staticInfo: Readonly<Record<string, ContentTypeInfoEntry>> = contentTypeInfo) {
+    this.#staticInfo = staticInfo;
+  }
+
+  /**
+   * Register additional content type mappings discovered at runtime.
+   * Later registrations override earlier ones, allowing the WebView to
+   * update/extend the build-time static table.
+   */
+  register(info: Record<string, ContentTypeInfoEntry>): void {
+    for (const [type, entry] of Object.entries(info)) {
+      this.#runtimeInfo.set(type, entry);
     }
   }
-  return false;
+
+  /**
+   * Clear runtime registrations. Useful for tests.
+   */
+  clear(): void {
+    this.#runtimeInfo.clear();
+  }
+
+  /**
+   * Check whether a tiddler type is known to the registry (static build-time
+   * table or runtime registrations from the WebView). Unknown types fall back
+   * to .tid extension, so this helper is needed to distinguish "explicitly
+   * wikitext" from "unknown plugin type".
+   */
+  isKnown(tiddlerType: string | undefined): boolean {
+    return this.#getEntry(tiddlerType) !== undefined;
+  }
+
+  /**
+   * Get the file extension (with leading dot, e.g. `.tid`, `.md`) for a tiddler type.
+   * Checks runtime registrations first, then the build-time static table.
+   * Falls back to '.tid' for unknown or untyped tiddlers.
+   */
+  getExtension(tiddlerType: string | undefined): string {
+    if (!tiddlerType) return '.tid';
+    const entry = this.#getEntry(tiddlerType);
+    if (!entry) return '.tid';
+    return Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
+  }
+
+  /**
+   * Get the file encoding for a tiddler type's body file.
+   * Checks runtime registrations first, then the build-time static table.
+   * Falls back to 'utf8' for unknown types.
+   *
+   * Note: this mirrors the historical behavior of contentTypeInfo.ts, which only
+   * distinguishes 'base64' from everything else. The only core type using
+   * 'utf16le' is application/hta and is not relevant for mobile plugin files.
+   */
+  getEncoding(tiddlerType: string | undefined): 'utf8' | 'base64' {
+    if (!tiddlerType) return 'utf8';
+    const entry = this.#getEntry(tiddlerType);
+    if (!entry) return 'utf8';
+    return entry.encoding === 'base64' ? 'base64' : 'utf8';
+  }
+
+  /**
+   * Whether a tiddler type stores body and metadata as separate files.
+   * Checks runtime registrations first, then the build-time static table.
+   * Desktop TW writes .tid as self-contained (header+body), and every other
+   * extension as body-only + .meta companion.
+   */
+  usesSeparateMetaFile(tiddlerType: string | undefined): boolean {
+    if (!tiddlerType) return false;
+    const entry = this.#getEntry(tiddlerType);
+    if (entry) {
+      const extension = Array.isArray(entry.extension) ? entry.extension[0] : entry.extension;
+      return extension !== '.tid';
+    }
+    // Unknown type: conservatively assume separate-meta if caller cannot be sure,
+    // because writing unknown types as .tid can corrupt plugin files.
+    return true;
+  }
+
+  /**
+   * Get the file extension for a tiddler's body file, respecting canonical URI
+   * override (forces .tid extension).
+   */
+  getBodyFileExtension(fields: { type?: string; _canonical_uri?: string }): string {
+    if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
+      return '.tid';
+    }
+    return this.getExtension(fields.type);
+  }
+
+  /**
+   * Determine whether a body file extension is base64-encoded binary content.
+   * Looks up the extension in contentTypeInfo to match TW's registerFileType.
+   * Returns true for extensions like .jpg, .png, .pdf, .wasm, etc.
+   */
+  isBase64EncodedExtension(extension: string): boolean {
+    if (!extension || extension === '.tid' || extension === '.meta') return false;
+    for (const info of [...this.#runtimeInfo.values(), ...Object.values(this.#staticInfo)]) {
+      const extensions = Array.isArray(info.extension) ? info.extension : [info.extension];
+      if (extensions.includes(extension)) {
+        return info.encoding === 'base64';
+      }
+    }
+    return false;
+  }
+
+  #getEntry(tiddlerType: string | undefined): ContentTypeInfoEntry | undefined {
+    if (!tiddlerType) return undefined;
+    return this.#runtimeInfo.get(tiddlerType) ?? this.#staticInfo[tiddlerType];
+  }
 }
 
 /**
- * Determine the on-disk storage strategy for a tiddler, mirroring the official
- * TW `$tw.utils.generateTiddlerFileInfo` logic in `core-server/filesystem.js`.
+ * Replace the file extension in a relative path with the target extension.
+ * Preserves directory prefixes and title sanitization produced by the routing
+ * service. If the path has no extension, the target extension is appended.
  *
- * Rules:
- *   - text/vnd.tiddlywiki, text/vnd.tiddlywiki-multiple, or has _canonical_uri
- *     → self-contained `.tid` file (no .meta companion)
- *   - Everything else → body file + `.meta` companion
+ * This is a pure utility function with no side effects.
  */
-export function shouldUseSeparateMetaFile(fields: { type?: string; _canonical_uri?: string }): boolean {
-  const tiddlerType = fields.type || 'text/vnd.tiddlywiki';
-  // text/vnd.tiddlywiki and text/vnd.tiddlywiki-multiple are always .tid
-  if (tiddlerType === 'text/vnd.tiddlywiki' || tiddlerType === 'text/vnd.tiddlywiki-multiple') {
-    return false;
+export function replaceFileExtension(relativePath: string, targetExtension: string): string {
+  const lastDotIndex = relativePath.lastIndexOf('.');
+  const lastSlashIndex = relativePath.lastIndexOf('/');
+  const hasExtension = lastDotIndex > lastSlashIndex && lastDotIndex > 0;
+  if (hasExtension) {
+    return `${relativePath.slice(0, lastDotIndex)}${targetExtension}`;
   }
-  // Tiddlers with _canonical_uri (e.g. external images) are always .tid
-  if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
-    return false;
-  }
-  return true;
-}
-
-/**
- * Get the file extension for a tiddler's body file, respecting canonical URI
- * override (forces .tid extension).
- */
-export function getTiddlerFileExtension(fields: { type?: string; _canonical_uri?: string }): string {
-  if (typeof fields._canonical_uri === 'string' && fields._canonical_uri.length > 0) {
-    return '.tid';
-  }
-  return getExtensionForType(fields.type);
+  return `${relativePath}${targetExtension}`;
 }
 
 /**
