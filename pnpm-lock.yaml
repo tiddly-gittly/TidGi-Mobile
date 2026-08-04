@@ -18,8 +18,8 @@ importers:
         specifier: 0.2.2
         version: 0.2.2(memeloop@0.2.2(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
-        specifier: ^0.1.1
-        version: 0.1.1(8e59204a7d9347bb47b19097941baa8b)
+        specifier: 0.1.2
+        version: 0.1.2(030125668e23198dfe7fff50c8941549)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -2492,8 +2492,8 @@ packages:
     peerDependencies:
       memeloop: ^0.2.2
 
-  '@memeloop/react-ui@0.1.1':
-    resolution: {integrity: sha512-uSNYiot56APn4nlOLThmKCRNdKHwV2t3beYfiOD9sXZ3u2KHH3mrt1enTvnvAB5yXFJlNZXzmrxogNWaHpw/QQ==}
+  '@memeloop/react-ui@0.1.2':
+    resolution: {integrity: sha512-C4+xiZxFdeqfUhdl5Pdit3+WTjKpj2YWL2rzY3nn7wqU+LhIRfQqD8MY7Pm8i/74jlgE7buhNjQdI0gLZIZNCg==}
     peerDependencies:
       '@assistant-ui/react': '>=0.14.0'
       '@mui/icons-material': '>=6.0.0'
@@ -2502,7 +2502,7 @@ packages:
       '@rjsf/mui': '*'
       '@rjsf/utils': '>=6.0.0'
       '@rjsf/validator-ajv8': '>=6.0.0'
-      memeloop: ^0.1.0
+      memeloop: ^0.2.0
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
       react-native: '*'
@@ -12463,7 +12463,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.1.1(8e59204a7d9347bb47b19097941baa8b)':
+  '@memeloop/react-ui@0.1.2(030125668e23198dfe7fff50c8941549)':
     dependencies:
       '@assistant-ui/react': 0.14.23(@types/react@19.1.17)(immer@10.1.1)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.2.2(react@19.1.0))
       '@mui/icons-material': 9.1.1(@mui/material@9.1.1(@types/react@19.1.17)(react-dom@18.2.0(react@19.1.0))(react@19.1.0))(@types/react@19.1.17)(react@19.1.0)
