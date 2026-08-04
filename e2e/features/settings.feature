@@ -64,3 +64,12 @@ Feature: Settings - verify preference screens read and write correctly
   Scenario: Settings screen shows language section
     When I scroll down to "语言/Lang"
     Then I should see the language section header
+
+  # ── MemeLoop device network ────────────────────────────────────────────────
+
+  @settings-device-network
+  Scenario: Expose the signed pairing and QR scanner entry points
+    When I scroll down to "设备网络"
+    Then I should see the local MemeLoop device identity
+    And I should see the signed MemeLoop pairing invite action
+    And I should see the MemeLoop pairing scanner entry

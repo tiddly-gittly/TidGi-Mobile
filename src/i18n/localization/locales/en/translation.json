@@ -439,6 +439,8 @@
     "AutoOpenDefaultWiki": "Auto Open Default Wiki",
     "AutoOpenDefaultWikiDescription": "Automatically opens the default wiki when the app is opened, saving you from clicking on the list page.",
     "ClearServerList": "Clear Server List",
+    "DeviceNetwork": "Device Network",
+    "DeviceNetworkDescription": "Discover nearby devices, confirm local pairing codes, and manage trusted MemeLoop devices.",
     "SyncNowDescription": "Try to synchronize all wikis immediately, as long as they have a connectable server now.",
     "RegisterBackgroundSyncTask": "Register Background Sync Task",
     "UnregisterBackgroundSyncTask": "Unregister Background Sync Task",
@@ -752,6 +754,59 @@
     "EnableExternal": "Use Device Storage",
     "GrantPermission": "Grant File Access Permission",
     "ResetToDefault": "Reset to Default (Internal Storage)"
+  },
+  "DeviceNetwork": {
+    "AcceptPairing": "Accept",
+    "AccessToken": "Cloud access token",
+    "ClearCloudConfiguration": "Clear cloud configuration",
+    "CloudConfiguration": "MemeLoop Cloud",
+    "CloudState": {
+      "connecting": "Connecting to MemeLoop Cloud…",
+      "degraded": "Cloud heartbeat is available, but relay or directory maintenance is degraded. Mobile waits for relay recovery before reporting reliable inbound connectivity.",
+      "error": "Cloud connection failed. The app will retry with bounded backoff when it returns to the foreground or a heartbeat detects network recovery.",
+      "idle": "Cloud is configured and waiting to connect.",
+      "not-configured": "Cloud is not configured. Cloud directory, relay, and the local mobile agent are unavailable; local invite pairing remains available.",
+      "offline": "MemeLoop Cloud is offline. Local pairing remains available while bounded reconnect retries continue.",
+      "online": "Cloud registration, directory, and relay are online."
+    },
+    "CloudUrl": "MemeLoop Cloud URL",
+    "Devices": "Devices",
+    "DevicesDescription": "Nearby devices can be paired locally. Cloud account devices appear here after directory sync.",
+    "GeneratePairingInvite": "Generate signed pairing QR",
+    "Direction": {
+      "inbound": "Incoming request",
+      "outbound": "Outgoing request"
+    },
+    "LocalDevice": "This device",
+    "NoDevices": "No nearby or trusted devices yet.",
+    "NoPendingPairing": "No pairing requests waiting for confirmation.",
+    "OwnPairingInvite": "This device's signed pairing invite",
+    "Pair": "Pair",
+    "PairByInvite": "Pair with an invite",
+    "PairByInviteDescription": "React Native has no mDNS discovery. Scan or paste a short-lived, identity-signed MemeLoop pairing invite.",
+    "PairingInvite": "MemeLoop pairing invite",
+    "PairingInviteQrDescription": "Scan this short-lived signed QR code on another device. Every address and PeerId is covered by this device identity's signature.",
+    "PairInvite": "Pair invite",
+    "PairingRequests": "Pairing requests",
+    "Reachability": {
+      "connecting": "Connecting",
+      "nearby": "Nearby",
+      "offline": "Offline",
+      "online": "Online"
+    },
+    "Refresh": "Refresh devices",
+    "RejectPairing": "Reject",
+    "RemoveTrustedDevice": "Remove trusted device",
+    "RemoveTrustedDeviceConfirm": "Remove local trust for {{deviceName}}?",
+    "Sync": "Sync",
+    "SyncCloudDevices": "Sync cloud devices",
+    "Provider": "Agent routing type",
+    "Model": "LLM model",
+    "TrustMode": {
+      "cloud-account": "Cloud account",
+      "local-pairing": "Local pairing"
+    },
+    "Trusted": "Trusted"
   },
   "Common": {
     "OK": "OK",

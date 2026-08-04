@@ -317,6 +317,8 @@
     "SyncIntervalDescription": "この期間が経過すると、自動的にGithubにバックアップを開始します。ローカルワークスペースの場合は、ローカルGitバックアップを作成します（アプリを再起動した後に有効になります）",
     "DefaultUserName": "ユーザー名",
     "DefaultUserNameDetail": "Wiki内のユーザー名です。これは再起動後にのみ有効になり、新しく作成または編集されたTiddlersの作成者フィールドに入力されます。ワークスペース設定で設定されたユーザー名によってオーバーライドされます。",
+    "DeviceNetwork": "Device Network",
+    "DeviceNetworkDescription": "Discover nearby devices, confirm local pairing codes, and manage trusted MemeLoop devices.",
     "ShowSideBarDetail": "サイドバーを使用すると、ワークスペース間を簡単に切り替えることができます。",
     "ShowSideBarText": "サイドバーにボタンのラベルを表示",
     "ShowNavigationBar": "ナビゲーションバーを表示",
@@ -582,6 +584,59 @@
     "EnableExternal": "デバイスストレージを使う",
     "GrantPermission": "ファイルアクセス権限を許可",
     "ResetToDefault": "デフォルト（内部ストレージ）に戻す"
+  },
+  "DeviceNetwork": {
+    "AcceptPairing": "Accept",
+    "AccessToken": "Cloud access token",
+    "ClearCloudConfiguration": "Clear cloud configuration",
+    "CloudConfiguration": "MemeLoop Cloud",
+    "CloudState": {
+      "connecting": "Connecting to MemeLoop Cloud…",
+      "degraded": "クラウドのハートビートは利用できますが、中継またはデバイス一覧が縮退しています。中継が復旧するまで、モバイルは信頼できる受信接続をオンラインとして扱いません。",
+      "error": "Cloud connection failed; bounded retries resume on foreground or heartbeat recovery.",
+      "idle": "Cloud is configured and waiting to connect.",
+      "not-configured": "Cloud is not configured. Cloud directory, relay, and local mobile agent are unavailable; invite pairing remains available.",
+      "offline": "MemeLoop Cloud はオフラインです。ローカルペアリングは利用でき、クラウド接続は上限付きバックオフで再試行します。",
+      "online": "Cloud registration, directory, and relay are online."
+    },
+    "CloudUrl": "MemeLoop Cloud URL",
+    "Devices": "Devices",
+    "DevicesDescription": "Nearby devices can be paired locally. Cloud account devices appear here after directory sync.",
+    "GeneratePairingInvite": "署名付きペアリング QR を生成",
+    "Direction": {
+      "inbound": "Incoming request",
+      "outbound": "Outgoing request"
+    },
+    "LocalDevice": "This device",
+    "NoDevices": "No nearby or trusted devices yet.",
+    "NoPendingPairing": "No pairing requests waiting for confirmation.",
+    "OwnPairingInvite": "このデバイスの署名付きペアリング招待",
+    "Pair": "Pair",
+    "PairByInvite": "Pair with an invite",
+    "PairByInviteDescription": "React Native では mDNS 検出を利用できません。有効期限の短い、デバイス ID で署名された MemeLoop 招待をスキャンまたは貼り付けてください。",
+    "PairingInvite": "MemeLoop pairing invite",
+    "PairingInviteQrDescription": "別のデバイスでこの短期有効の署名付き QR コードをスキャンしてください。PeerId とすべてのアドレスはこのデバイス ID に結び付けられています。",
+    "PairInvite": "Pair invite",
+    "PairingRequests": "Pairing requests",
+    "Reachability": {
+      "connecting": "Connecting",
+      "nearby": "Nearby",
+      "offline": "Offline",
+      "online": "Online"
+    },
+    "Refresh": "Refresh devices",
+    "RejectPairing": "Reject",
+    "RemoveTrustedDevice": "Remove trusted device",
+    "RemoveTrustedDeviceConfirm": "Remove local trust for {{deviceName}}?",
+    "Sync": "Sync",
+    "SyncCloudDevices": "Sync cloud devices",
+    "Provider": "Agent routing type",
+    "Model": "LLM model",
+    "TrustMode": {
+      "cloud-account": "Cloud account",
+      "local-pairing": "Local pairing"
+    },
+    "Trusted": "Trusted"
   },
   "WarningMessage": "警告メッセージ"
 }

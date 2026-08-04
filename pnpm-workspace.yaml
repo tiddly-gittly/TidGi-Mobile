@@ -2,6 +2,26 @@ packages:
   - .
   - plugins
 
+allowBuilds:
+  '@ipshipyard/node-datachannel': true
+  '@parcel/watcher': false
+  detox: true
+  dprint: false
+  dtrace-provider: false
+  esbuild: false
+  less: false
+  svelte-preprocess: true
+  unrs-resolver: false
+
+peerDependencyRules:
+  allowedVersions:
+    memeloop: '>=0.1.0 <0.3.0'
+
+minimumReleaseAgeExclude:
+  - '@memeloop/libp2p@0.2.2'
+  - '@memeloop/react-ui@0.1.0 || 0.1.1 || 0.1.2'
+  - 'memeloop@0.2.2'
+
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - detox

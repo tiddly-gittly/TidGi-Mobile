@@ -13,6 +13,7 @@ import { PaperProvider } from 'react-native-paper';
 import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
+import { AgentChat } from './pages/AgentChat';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
@@ -41,12 +42,14 @@ const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
 `;
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
+import { initializeDeviceNetworkRuntime } from './services/DeviceNetworkService/runtime';
 import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
+  AgentChat: undefined;
   Config: undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
@@ -81,8 +84,22 @@ export const App: React.FC = () => {
     initializeMobileLogger();
     const cleanupAnalytics = initializeMobileAnalytics();
     void trackMobileAppLaunch();
+    let cleanupDeviceNetwork: (() => void) | undefined;
+    let disposed = false;
+    void initializeDeviceNetworkRuntime()
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else cleanupDeviceNetwork = cleanup;
+      })
+      .catch((error: unknown) => {
+        console.warn('[DeviceNetwork] failed to initialize', error);
+      });
 
-    return cleanupAnalytics;
+    return () => {
+      disposed = true;
+      cleanupDeviceNetwork?.();
+      cleanupAnalytics();
+    };
   }, []);
 
   return (
@@ -130,6 +147,14 @@ export const App: React.FC = () => {
                       }}
                     />
                   ),
+                })}
+              />
+              <Stack.Screen
+                name='AgentChat'
+                component={AgentChat}
+                options={() => ({
+                  headerTitle: 'Agent',
+                  headerTitleStyle: { color: theme.colors.primary },
                 })}
               />
               <Stack.Screen
