@@ -7,16 +7,21 @@
  */
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
+import { by, device, element, waitFor } from 'detox';
+import { readFileSync, writeFileSync } from 'fs';
+import { get as httpGet } from 'node:http';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { readFileSync, writeFileSync } from 'fs';
-import { by, device, element, waitFor } from 'detox';
-import { get as httpGet } from 'node:http';
 import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
 import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
+const configuredDesktopUrl: unknown = process.env.TIDGI_DESKTOP_URL;
+const realDesktopUrl = typeof configuredDesktopUrl === 'string' ? configuredDesktopUrl : undefined;
+// A multi-gigabyte workspace can spend more than ten minutes rebuilding its
+// JGit index on a physical device after the archive has been extracted.
+const IMPORT_TIMEOUT = realDesktopUrl === undefined ? NETWORK_TIMEOUT : 30 * 60_000;
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 function adbKeyEvent(key: number): void {
@@ -43,8 +48,8 @@ async function navigateToImporterScreen(): Promise<void> {
   await waitForElement(by.id('importer-screen'), 10_000, 'importer-screen');
 }
 
-async function assertMockServerReachable(): Promise<void> {
-  const url = getMockServerUrl();
+async function assertSyncServerReachable(): Promise<void> {
+  const url = realDesktopUrl ?? getMockServerUrl();
   // The mock server is started without TiddlyWeb Basic Auth so the mobile
   // client can access Git endpoints anonymously. We just check /status is up.
   const statusCode = await new Promise<number>((resolve, reject) => {
@@ -62,7 +67,7 @@ async function assertMockServerReachable(): Promise<void> {
   }
 }
 
-async function enterMockServerUrl(): Promise<void> {
+async function enterSyncServerUrl(): Promise<void> {
   // Open the manual JSON configuration panel if it is not already open.
   try {
     await waitFor(element(by.id('toggle-manual-config-button'))).toExist().withTimeout(2_000);
@@ -73,13 +78,31 @@ async function enterMockServerUrl(): Promise<void> {
   }
 
   await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input');
-  const url = getMockServerUrl();
-  const qrPayload = JSON.stringify({
-    baseUrl: url,
-    workspaceId: 'standalone',
-    workspaceName: 'E2E Mock Wiki',
-    useStandardGitProtocol: false,
-  });
+  const url = realDesktopUrl ?? getMockServerUrl();
+  const qrPayload = realDesktopUrl === undefined
+    ? JSON.stringify({
+      baseUrl: url,
+      workspaceId: 'standalone',
+      workspaceName: 'E2E Mock Wiki',
+      useStandardGitProtocol: false,
+    })
+    : await new Promise<string>((resolve, reject) => {
+      const request = httpGet(`${url}/tw-mobile-sync/git/mobile-sync-info`, response => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          if (response.statusCode !== 200) {
+            reject(new Error(`Failed to fetch mobile sync info from ${url} (HTTP ${response.statusCode ?? 0})`));
+            return;
+          }
+          resolve(Buffer.concat(chunks).toString('utf8'));
+        });
+      });
+      request.setTimeout(10_000, () => {
+        request.destroy(new Error(`Timed out fetching mobile sync info from ${url}`));
+      });
+      request.on('error', reject);
+    });
   await element(by.id('manual-json-input')).clearText();
   await element(by.id('manual-json-input')).typeText(qrPayload);
 
@@ -94,10 +117,19 @@ async function enterMockServerUrl(): Promise<void> {
 
 async function tapImportWikiConfirmButton(): Promise<void> {
   await waitForElement(by.id('import-wiki-confirm-button'), UI_TIMEOUT, 'import-wiki-confirm-button');
+  try {
+    await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(1_000);
+  } catch {
+    // A real Desktop payload can include multiple sub-workspaces, pushing the
+    // button below the physical device viewport.
+    execSync('adb shell input swipe 540 1850 540 500 500', { stdio: 'ignore', timeout: 3_000 });
+    await delay(750);
+    await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(UI_TIMEOUT);
+  }
   await element(by.id('import-wiki-confirm-button')).tap();
 }
 
-async function waitForImportSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
+async function waitForImportSuccess(maxWaitMs = IMPORT_TIMEOUT): Promise<void> {
   const start = Date.now();
   const pollInterval = 1_500;
 
@@ -145,8 +177,8 @@ async function waitForImportedWikiInWorkspaceList(): Promise<void> {
 
 async function importFreshMockServerWiki(): Promise<void> {
   await navigateToImporterScreen();
-  await assertMockServerReachable();
-  await enterMockServerUrl();
+  await assertSyncServerReachable();
+  await enterSyncServerUrl();
   await tapImportWikiConfirmButton();
   await waitForImportSuccess();
   await waitForImportedWikiInWorkspaceList();
@@ -162,18 +194,18 @@ Then('I should see the importer screen', async () => {
 });
 
 Then('the mock server is reachable', { timeout: 30_000 }, async () => {
-  await assertMockServerReachable();
+  await assertSyncServerReachable();
 });
 
 When('I enter the mock server URL', async () => {
-  await enterMockServerUrl();
+  await enterSyncServerUrl();
 });
 
 When('I tap the import wiki confirm button', async () => {
   await tapImportWikiConfirmButton();
 });
 
-Then('the import should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {
+Then('the import should complete successfully', { timeout: IMPORT_TIMEOUT + 30_000 }, async () => {
   await waitForImportSuccess();
 });
 

@@ -28,11 +28,14 @@ function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
   return true;
 }
 
-const Container = styled.View`
+const Container = styled.ScrollView.attrs({
+  contentContainerStyle: {
+    flexGrow: 1,
+    padding: 20,
+  },
+  keyboardShouldPersistTaps: 'handled',
+})`
   flex: 1;
-  padding: 20px;
-  height: 100%;
-  overflow-y: scroll;
 `;
 const ImportWikiButton = styled(Button)`
   margin-top: 20px;

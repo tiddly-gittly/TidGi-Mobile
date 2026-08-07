@@ -89,7 +89,7 @@ const CLONE_RETRY_DELAY_MS = 3_000;
 const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
-const LOCAL_GIT_INFO_ATTRIBUTES_RULE = '* text=auto eol=lf';
+const LEGACY_LOCAL_GIT_INFO_ATTRIBUTES_RULE = '* text=auto eol=lf';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -238,19 +238,11 @@ function deduplicateNFC(
 
 const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_FILE_EXTENSIONS = new Set(['.tid', '.js', '.ts', '.tsx', '.json', '.md', '.txt', '.css', '.html', '.xml', '.yml', '.yaml', '.meta']);
-const LINE_ENDING_NORMALIZATION_EXTENSIONS = new Set([...TEXT_FILE_EXTENSIONS, '.info', '.ini', '.svg', '.toml']);
-const LINE_ENDING_NORMALIZATION_FILE_NAMES = new Set(['.editorconfig', '.gitattributes', '.gitignore', '.gitmodules']);
 
 function getFileExtension(filePath: string): string {
   const dotIndex = filePath.lastIndexOf('.');
   if (dotIndex < 0) return '';
   return filePath.slice(dotIndex).toLowerCase();
-}
-
-function getFileName(filePath: string): string {
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  const slashIndex = normalizedPath.lastIndexOf('/');
-  return slashIndex >= 0 ? normalizedPath.slice(slashIndex + 1) : normalizedPath;
 }
 
 function getImageMimeType(filePath: string): string {
@@ -278,12 +270,6 @@ function isTextFile(filePath: string): boolean {
 
 function isImageFile(filePath: string): boolean {
   return IMAGE_FILE_EXTENSIONS.has(getFileExtension(filePath));
-}
-
-function shouldNormalizeLineEndings(filePath: string): boolean {
-  const fileName = getFileName(filePath).toLowerCase();
-  if (LINE_ENDING_NORMALIZATION_FILE_NAMES.has(fileName)) return true;
-  return LINE_ENDING_NORMALIZATION_EXTENSIONS.has(getFileExtension(fileName));
 }
 
 function normalizeLineEndingsToLF(content: string): string {
@@ -318,68 +304,6 @@ async function ensureDirectoryExists(path: string): Promise<void> {
   if (!info.exists) {
     await FileSystemLegacy.makeDirectoryAsync(toFileUri(path), { intermediates: true });
   }
-}
-
-async function listAllFilesInternal(directory: string): Promise<string[]> {
-  const results: string[] = [];
-  const directoryUri = `${toFileUri(directory).replace(/\/+$/, '')}/`;
-
-  let entries: string[] = [];
-  try {
-    entries = await FileSystemLegacy.readDirectoryAsync(directoryUri);
-  } catch {
-    return results;
-  }
-
-  for (const entry of entries) {
-    if (entry === '.git') continue;
-    const entryUri = `${directoryUri}${entry}`;
-    const info = await FileSystemLegacy.getInfoAsync(entryUri);
-    if (!info.exists) continue;
-    if (info.isDirectory) {
-      results.push(...await listAllFilesInternal(toPlainPath(entryUri)));
-      continue;
-    }
-    results.push(toPlainPath(entryUri));
-  }
-
-  return results;
-}
-
-async function listAllRepositoryFiles(directory: string): Promise<string[]> {
-  if (isExternalPath(directory)) {
-    const plainDirectory = directory.replace(/\/+$/, '');
-    const relativePaths = await ExternalStorage.readDirRecursive(plainDirectory).catch(() => [] as string[]);
-    return relativePaths
-      .filter(relativePath => !relativePath.startsWith('.git/'))
-      .map(relativePath => `${plainDirectory}/${relativePath}`);
-  }
-
-  return listAllFilesInternal(directory);
-}
-
-async function normalizeRepositoryTextFilesToLF(directory: string): Promise<number> {
-  const filePaths = await listAllRepositoryFiles(directory);
-  let normalizedCount = 0;
-
-  for (const filePath of filePaths) {
-    if (!shouldNormalizeLineEndings(filePath)) continue;
-
-    let content: string;
-    try {
-      content = await readUtf8File(filePath);
-    } catch {
-      continue;
-    }
-
-    const normalizedContent = normalizeLineEndingsToLF(content);
-    if (normalizedContent === content) continue;
-
-    await writeUtf8File(filePath, normalizedContent);
-    normalizedCount += 1;
-  }
-
-  return normalizedCount;
 }
 
 /**
@@ -437,11 +361,16 @@ async function ensureGitAttributesForMobile(
     existing = '';
   }
 
-  const existingRules = existing.split('\n').map(line => line.trim());
-  if (!existingRules.includes(LOCAL_GIT_INFO_ATTRIBUTES_RULE)) {
-    const updated = existing === '' || existing.endsWith('\n')
-      ? `${existing}${LOCAL_GIT_INFO_ATTRIBUTES_RULE}\n`
-      : `${existing}\n${LOCAL_GIT_INFO_ATTRIBUTES_RULE}\n`;
+  // Older mobile versions injected a global LF rule here. Native checkout
+  // writes Git blobs byte-for-byte and does not run Git's smudge filters, so
+  // that rule makes historical CRLF blobs appear modified even when their
+  // visible contents are unchanged. Remove the legacy rule and preserve any
+  // user-authored local attributes.
+  const updated = existing
+    .split('\n')
+    .filter(line => line.trim() !== LEGACY_LOCAL_GIT_INFO_ATTRIBUTES_RULE)
+    .join('\n');
+  if (updated !== existing) {
     await writeUtf8File(attributesPath, updated);
   }
 
@@ -451,16 +380,10 @@ async function ensureGitAttributesForMobile(
 
 async function ensureGitTextCheckoutPolicy(
   directory: string,
-  options: { normalizeWorkingTreeTextFiles?: boolean } = {},
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
   await ensureGitAttributesForMobile(directory, onProgress);
   await ensureGitConfigForMobile(directory, onProgress);
-
-  if (options.normalizeWorkingTreeTextFiles === true) {
-    const normalizedCount = await normalizeRepositoryTextFilesToLF(directory);
-    console.log(`[ensureGitTextCheckoutPolicy] Normalized ${normalizedCount} files to LF in ${directory}`);
-  }
 }
 
 // ── Clone ──────────────────────────────────────────────────────────
@@ -490,7 +413,7 @@ export async function gitCloneToDirectory(
       if (didArchive) {
         console.log('[gitClone] Fast archive clone succeeded');
         onProgress?.('Writing files to disk…', 0, 1);
-        await ensureGitTextCheckoutPolicy(directory, {}, onProgress);
+        await ensureGitTextCheckoutPolicy(directory, onProgress);
         onProgress?.('Writing files to disk…', 1, 1);
         return;
       }
@@ -548,7 +471,7 @@ export async function gitCloneToDirectory(
       await gitCloneNative(remote, url, directory, onProgress);
       onProgress?.('Writing files to disk…', 0, 1);
       try {
-        await ensureGitTextCheckoutPolicy(directory, {}, onProgress);
+        await ensureGitTextCheckoutPolicy(directory, onProgress);
       } catch (policyError) {
         console.warn('[gitClone] Failed to apply local git text checkout policy after native clone:', (policyError as Error).message);
       }
@@ -689,7 +612,7 @@ async function tryArchiveClone(
   } catch { /* ignore */ }
 
   await configureGitRemote(directory, remote);
-  await ensureGitTextCheckoutPolicy(directory, { normalizeWorkingTreeTextFiles: true });
+  await ensureGitTextCheckoutPolicy(directory);
 
   console.log('[archiveClone] Rebuilding .git/index…');
   onProgress?.('Building git index…', 0, 0);
