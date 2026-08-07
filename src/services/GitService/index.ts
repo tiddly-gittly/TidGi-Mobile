@@ -386,6 +386,26 @@ async function ensureGitTextCheckoutPolicy(
   await ensureGitConfigForMobile(directory, onProgress);
 }
 
+/**
+ * A full archive is a snapshot of Desktop's HEAD, but the copied
+ * remote-tracking refs can lag when Desktop auto-commits pending files just
+ * before creating that archive. Record the snapshot HEAD as the remote state
+ * observed by this clone so a fresh import is not incorrectly shown as ahead.
+ */
+async function alignArchiveRemoteTrackingReference(directory: string): Promise<void> {
+  const branch = await getCurrentBranch(directory);
+  const headResult = parseNativeResult<{ ok: boolean; oid?: string; error?: string }>(
+    await ExternalStorage.gitResolveRef(directory, 'HEAD'),
+  );
+  if (!headResult.ok || typeof headResult.oid !== 'string' || headResult.oid.length === 0) {
+    throw new Error(headResult.error ?? 'Could not resolve archive HEAD');
+  }
+
+  const remoteReferencePath = `${directory}/.git/refs/remotes/origin/${branch}`;
+  await ensureDirectoryExists(remoteReferencePath.slice(0, remoteReferencePath.lastIndexOf('/')));
+  await writeUtf8File(remoteReferencePath, `${headResult.oid}\n`);
+}
+
 // ── Clone ──────────────────────────────────────────────────────────
 
 export async function gitCloneToDirectory(
@@ -620,6 +640,7 @@ async function tryArchiveClone(
     const indexResult = parseNativeResult<{ ok: boolean; entries?: number; error?: string }>(await ExternalStorage.buildGitIndex(directory));
     if (indexResult.ok) {
       console.log(`[archiveClone] .git/index rebuilt: ${indexResult.entries} entries`);
+      await alignArchiveRemoteTrackingReference(directory);
     } else {
       // If the index cannot be rebuilt, the working tree and HEAD will be out of sync:
       // git status will report every file as a modification.

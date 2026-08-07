@@ -423,12 +423,21 @@ Then('the unsynced count should be zero after sync', async () => {
   await assertUnsyncedCountIsZero();
 });
 
+Then('the imported wiki should have zero unsynced changes', async () => {
+  await assertUnsyncedCountIsZero();
+});
+
 async function assertUnsyncedCountIsZero(): Promise<void> {
   const wikiId = getImportedWikiWorkspaceId();
   if (!wikiId) throw new Error('No wiki workspace found.');
   await element(by.id(`workspace-settings-icon-${wikiId}`)).tap();
   await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
   await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count');
+  const attributes = await element(by.id('workspace-unsynced-count')).getAttributes();
+  const countText = Array.isArray(attributes) ? undefined : (attributes as { text?: unknown }).text;
+  if (typeof countText !== 'string' || !/^0(?:\s|$)/.test(countText)) {
+    throw new Error(`Expected zero unsynced changes, received ${JSON.stringify(countText)}`);
+  }
   try {
     await device.pressBack();
   } catch {
