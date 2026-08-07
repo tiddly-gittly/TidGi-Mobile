@@ -710,8 +710,9 @@ export async function ensureGitConfigForMobile(
   if (gitCheckoutPolicyCache.hasConfig(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
+    // Do not infer text conversions from the mobile platform. Repository-owned
+    // .gitattributes remains authoritative for paths that declare an EOL rule.
     ['core', null, 'autocrlf', 'false'],
-    ['core', null, 'eol', 'lf'],
     // Disable delta compression entirely — mobile only pushes small changes,
     // and delta search over large object stores causes OOM.
     ['pack', null, 'window', '2'],

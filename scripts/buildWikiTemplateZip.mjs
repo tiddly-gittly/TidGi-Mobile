@@ -27,13 +27,11 @@ const outDir = resolve(projectRoot, 'assets');
 const outZip = resolve(outDir, 'wiki-template.zip');
 
 const INITIAL_COMMIT_MESSAGE = 'Initial Commit with TidGi Mobile';
-const MOBILE_GIT_ATTRIBUTES = '* text=auto eol=lf\n';
 
 // Mirrors ensureGitConfigForMobile() in src/services/GitService/index.ts
 const MOBILE_GIT_CONFIG = [
   ['protocol.version', '0'],
   ['core.autocrlf', 'false'],
-  ['core.eol', 'lf'],
   ['pack.window', '2'],
   ['pack.depth', '0'],
   ['pack.windowmemory', String(5 * 1024 * 1024)],
@@ -120,9 +118,6 @@ function initMobileGitRepo(stagingDir) {
   for (const [key, value] of MOBILE_GIT_CONFIG) {
     execSync(`git config ${key} ${value}`, { cwd: stagingDir, stdio: 'inherit' });
   }
-
-  mkdirSync(join(stagingDir, '.git', 'info'), { recursive: true });
-  writeFileSync(join(stagingDir, '.git', 'info', 'attributes'), MOBILE_GIT_ATTRIBUTES, 'utf8');
 
   execSync('git add -A', { cwd: stagingDir, stdio: 'inherit' });
   execSync(`git commit -m "${INITIAL_COMMIT_MESSAGE}"`, { cwd: stagingDir, stdio: 'inherit', env: gitEnv });
