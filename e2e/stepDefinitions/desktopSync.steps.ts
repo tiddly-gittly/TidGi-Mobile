@@ -19,6 +19,8 @@ const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
 const configuredDesktopUrl: unknown = process.env.TIDGI_DESKTOP_URL;
 const realDesktopUrl = typeof configuredDesktopUrl === 'string' ? configuredDesktopUrl : undefined;
+const configuredDesktopQrJson: unknown = process.env.TIDGI_DESKTOP_QR_JSON;
+const realDesktopQrJson = typeof configuredDesktopQrJson === 'string' ? configuredDesktopQrJson : undefined;
 // A multi-gigabyte workspace can spend more than ten minutes rebuilding its
 // JGit index on a physical device after the archive has been extracted.
 const IMPORT_TIMEOUT = realDesktopUrl === undefined ? NETWORK_TIMEOUT : 30 * 60_000;
@@ -62,8 +64,9 @@ async function assertSyncServerReachable(): Promise<void> {
     });
     request.on('error', reject);
   });
-  if (statusCode !== 200 && statusCode !== 204) {
-    throw new Error(`Mock server not reachable at ${url}/status (HTTP ${statusCode})`);
+  const isReachable = realDesktopUrl === undefined ? statusCode === 200 || statusCode === 204 : statusCode >= 200 && statusCode < 500;
+  if (!isReachable) {
+    throw new Error(`Sync server not reachable at ${url}/status (HTTP ${statusCode})`);
   }
 }
 
@@ -86,7 +89,7 @@ async function enterSyncServerUrl(): Promise<void> {
       workspaceName: 'E2E Mock Wiki',
       useStandardGitProtocol: false,
     })
-    : await new Promise<string>((resolve, reject) => {
+    : realDesktopQrJson ?? await new Promise<string>((resolve, reject) => {
       const request = httpGet(`${url}/tw-mobile-sync/git/mobile-sync-info`, response => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -122,7 +125,7 @@ async function tapImportWikiConfirmButton(): Promise<void> {
   } catch {
     // A real Desktop payload can include multiple sub-workspaces, pushing the
     // button below the physical device viewport.
-    execSync('adb shell input swipe 540 1850 540 500 500', { stdio: 'ignore', timeout: 3_000 });
+    await element(by.id('importer-screen')).swipe('up', 'fast', 0.75);
     await delay(750);
     await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(UI_TIMEOUT);
   }
