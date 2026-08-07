@@ -22,6 +22,7 @@ Feature: Desktop Sync - Import, create changes, and sync wiki through the local 
     And I tap the import wiki confirm button
     Then the import should complete successfully
     And I should see the imported wiki in the workspace list
+    And the imported wiki should have zero unsynced changes
 
   # ── Open ──────────────────────────────────────────────────────────────────────
 

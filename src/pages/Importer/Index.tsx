@@ -28,11 +28,9 @@ function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
   return true;
 }
 
-const Container = styled.View`
+const Container = styled.ScrollView`
   flex: 1;
   padding: 20px;
-  height: 100%;
-  overflow-y: scroll;
 `;
 const ImportWikiButton = styled(Button)`
   margin-top: 20px;
@@ -569,7 +567,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
   const isLocalTemplate = typeof route.params.localTemplateAsset === 'string';
 
   return (
-    <Container testID='importer-screen'>
+    <Container testID='importer-screen' keyboardShouldPersistTaps='handled'>
       {/* Hide server config if is importing from template, for simplicity for new users. */}
       {!isLocalTemplate && autoStartImport !== true && importStatus === 'idle' && serverConfigs}
       {!isLocalTemplate && importStatus === 'idle' && !qrScannerOpen && qrData && createdHtmlWorkspace === undefined && (
