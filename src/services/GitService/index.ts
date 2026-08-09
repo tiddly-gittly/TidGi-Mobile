@@ -10,6 +10,7 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import pTimeout from 'p-timeout';
 import { IWikiWorkspace } from '../../store/workspace';
+import { removeLegacyMobileLfAttributesRule } from './mobileGitSetup';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -89,7 +90,6 @@ const CLONE_RETRY_DELAY_MS = 3_000;
 const MAX_SAFE_PACK_BYTES = 80 * 1024 * 1024;
 const DEFAULT_TIDGI_TOKEN_AUTH_HEADER_PREFIX = 'x-tidgi-auth-token';
 const DEFAULT_TIDGI_USER_NAME = 'TidGi User';
-const LEGACY_LOCAL_GIT_INFO_ATTRIBUTES_RULE = '* text=auto eol=lf';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -272,10 +272,6 @@ function isImageFile(filePath: string): boolean {
   return IMAGE_FILE_EXTENSIONS.has(getFileExtension(filePath));
 }
 
-function normalizeLineEndingsToLF(content: string): string {
-  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
 async function readUtf8File(path: string): Promise<string> {
   if (isExternalPath(path)) {
     return ExternalStorage.readFileUtf8(path);
@@ -306,21 +302,17 @@ async function ensureDirectoryExists(path: string): Promise<void> {
   }
 }
 
-/**
- * Tracks directories where mobile git attributes/config have already been
- * applied this session. Encapsulated as a class to avoid module-level mutable
- * state spread across loose functions.
- */
-class GitCheckoutPolicyCache {
-  readonly #attributesApplied = new Set<string>();
+/** Tracks repositories where one-time mobile Git setup has run this session. */
+class MobileGitSetupCache {
+  readonly #legacyAttributesMigrated = new Set<string>();
   readonly #configApplied = new Set<string>();
 
-  hasAttributes(directory: string): boolean {
-    return this.#attributesApplied.has(directory);
+  hasMigratedLegacyAttributes(directory: string): boolean {
+    return this.#legacyAttributesMigrated.has(directory);
   }
 
-  markAttributesApplied(directory: string): void {
-    this.#attributesApplied.add(directory);
+  markLegacyAttributesMigrated(directory: string): void {
+    this.#legacyAttributesMigrated.add(directory);
   }
 
   hasConfig(directory: string): boolean {
@@ -332,33 +324,32 @@ class GitCheckoutPolicyCache {
   }
 
   clear(directory: string): void {
-    this.#attributesApplied.delete(directory);
+    this.#legacyAttributesMigrated.delete(directory);
     this.#configApplied.delete(directory);
   }
 }
 
-const gitCheckoutPolicyCache = new GitCheckoutPolicyCache();
-const clearGitTextCheckoutPolicyCache = (directory: string) => {
-  gitCheckoutPolicyCache.clear(directory);
+const mobileGitSetupCache = new MobileGitSetupCache();
+const clearMobileGitSetupCache = (directory: string) => {
+  mobileGitSetupCache.clear(directory);
 };
 
-async function ensureGitAttributesForMobile(
+async function migrateLegacyMobileGitAttributes(
   directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  if (gitCheckoutPolicyCache.hasAttributes(directory)) return;
+  if (mobileGitSetupCache.hasMigratedLegacyAttributes(directory)) return;
 
-  onProgress?.('Applying git attributes…', 0, 1);
+  onProgress?.('Migrating git attributes…', 0, 1);
 
-  const infoDirectory = `${directory}/.git/info`;
-  const attributesPath = `${infoDirectory}/attributes`;
-  await ensureDirectoryExists(infoDirectory);
+  const attributesPath = `${directory}/.git/info/attributes`;
 
   let existing = '';
   try {
-    existing = normalizeLineEndingsToLF(await readUtf8File(attributesPath));
+    existing = await readUtf8File(attributesPath);
   } catch {
-    existing = '';
+    // Most repositories do not have local attributes. There is nothing to
+    // create now that mobile no longer owns an EOL policy.
   }
 
   // Older mobile versions injected a global LF rule here. Native checkout
@@ -366,23 +357,20 @@ async function ensureGitAttributesForMobile(
   // that rule makes historical CRLF blobs appear modified even when their
   // visible contents are unchanged. Remove the legacy rule and preserve any
   // user-authored local attributes.
-  const updated = existing
-    .split('\n')
-    .filter(line => line.trim() !== LEGACY_LOCAL_GIT_INFO_ATTRIBUTES_RULE)
-    .join('\n');
+  const updated = removeLegacyMobileLfAttributesRule(existing);
   if (updated !== existing) {
     await writeUtf8File(attributesPath, updated);
   }
 
-  gitCheckoutPolicyCache.markAttributesApplied(directory);
-  onProgress?.('Applying git attributes…', 1, 1);
+  mobileGitSetupCache.markLegacyAttributesMigrated(directory);
+  onProgress?.('Migrating git attributes…', 1, 1);
 }
 
-async function ensureGitTextCheckoutPolicy(
+async function ensureMobileGitSetup(
   directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  await ensureGitAttributesForMobile(directory, onProgress);
+  await migrateLegacyMobileGitAttributes(directory, onProgress);
   await ensureGitConfigForMobile(directory, onProgress);
 }
 
@@ -420,7 +408,7 @@ export async function gitCloneToDirectory(
     : `${baseUrl}/tw-mobile-sync/git/${remote.workspaceId}`;
   const directory = toPlainPath(directoryInput);
 
-  clearGitTextCheckoutPolicyCache(directory);
+  clearMobileGitSetupCache(directory);
 
   console.log('Git clone URL:', url);
   console.log('Git clone directory:', directory);
@@ -433,13 +421,13 @@ export async function gitCloneToDirectory(
       if (didArchive) {
         console.log('[gitClone] Fast archive clone succeeded');
         onProgress?.('Writing files to disk…', 0, 1);
-        await ensureGitTextCheckoutPolicy(directory, onProgress);
+        await ensureMobileGitSetup(directory, onProgress);
         onProgress?.('Writing files to disk…', 1, 1);
         return;
       }
-      clearGitTextCheckoutPolicyCache(directory);
+      clearMobileGitSetupCache(directory);
     } catch (error) {
-      clearGitTextCheckoutPolicyCache(directory);
+      clearMobileGitSetupCache(directory);
       const message = (error as Error).message;
       if (isConnectionAbortError(message)) {
         console.warn('[gitClone] Archive download interrupted:', message);
@@ -491,9 +479,9 @@ export async function gitCloneToDirectory(
       await gitCloneNative(remote, url, directory, onProgress);
       onProgress?.('Writing files to disk…', 0, 1);
       try {
-        await ensureGitTextCheckoutPolicy(directory, onProgress);
-      } catch (policyError) {
-        console.warn('[gitClone] Failed to apply local git text checkout policy after native clone:', (policyError as Error).message);
+        await ensureMobileGitSetup(directory, onProgress);
+      } catch (setupError) {
+        console.warn('[gitClone] Failed to apply mobile Git setup after native clone:', (setupError as Error).message);
       }
       onProgress?.('Writing files to disk…', 1, 1);
       return;
@@ -632,7 +620,7 @@ async function tryArchiveClone(
   } catch { /* ignore */ }
 
   await configureGitRemote(directory, remote);
-  await ensureGitTextCheckoutPolicy(directory);
+  await ensureMobileGitSetup(directory);
 
   console.log('[archiveClone] Rebuilding .git/index…');
   onProgress?.('Building git index…', 0, 0);
@@ -649,7 +637,7 @@ async function tryArchiveClone(
       throw new Error(`buildGitIndex failed: ${indexResult.error ?? 'unknown'}`);
     }
   } catch (error) {
-    console.warn('[archiveClone] Failed to rebuild .git/index, falling back to native clone:', (error as Error).message);
+    console.warn('[archiveClone] Failed to prepare archive repository, falling back to native clone:', (error as Error).message);
     // Clean up the partially-extracted directory so the fallback clone can proceed.
     try {
       if (isExternalPath(directory)) {
@@ -728,7 +716,7 @@ export async function ensureGitConfigForMobile(
   directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  if (gitCheckoutPolicyCache.hasConfig(directory)) return;
+  if (mobileGitSetupCache.hasConfig(directory)) return;
   const settings: Array<[string, string | null, string, string]> = [
     ['protocol', null, 'version', '0'],
     // Do not infer text conversions from the mobile platform. Repository-owned
@@ -757,7 +745,7 @@ export async function ensureGitConfigForMobile(
     onProgress?.('Applying git configuration…', index + 1, settings.length);
   }
   console.log('[ensureGitConfig] Applied mobile git config settings');
-  gitCheckoutPolicyCache.markConfigApplied(directory);
+  mobileGitSetupCache.markConfigApplied(directory);
 }
 
 export async function gitPushToIncoming(
@@ -837,7 +825,7 @@ export async function gitFetchAndReset(
   );
   const headBefore = headBeforeResult.ok ? (headBeforeResult.oid ?? '') : '';
 
-  await ensureGitTextCheckoutPolicy(directory);
+  await ensureMobileGitSetup(directory);
 
   // Request a bundle from the desktop containing commits we don't have
   const bundleUrl = `${remote.baseUrl}/tw-mobile-sync/git/${remote.workspaceId}/create-bundle`;
@@ -1011,9 +999,23 @@ export async function gitGetRemoteOids(workspace: IWikiWorkspace, depth = 300): 
   }
 }
 
-export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise<number> {
+interface IGitStatusScanOptions {
+  /** Run an explicit user-requested scan even during the post-import quiet period. */
+  ignoreDeferredScan?: boolean;
+  /** Surface native failures instead of treating an unavailable count as zero. */
+  throwOnError?: boolean;
+}
+
+export async function gitGetAheadCommitCount(
+  workspace: IWikiWorkspace,
+  options: IGitStatusScanOptions = {},
+): Promise<number> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
-  if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
+  if (
+    options.ignoreDeferredScan !== true &&
+    typeof workspace.deferStatusScanUntil === 'number' &&
+    Date.now() < workspace.deferStatusScanUntil
+  ) return 0;
   try {
     const branch = await getCurrentBranch(directory);
     const remoteReference = `origin/${branch}`;
@@ -1041,6 +1043,9 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
     );
     if (!localResult.ok || !localResult.commits) {
       localResult = parseNativeResult(await ExternalStorage.gitLog(directory, 'HEAD', LOG_DEPTH));
+    }
+    if ((!localResult.ok || !localResult.commits) && options.throwOnError === true) {
+      throw new Error('Could not read local commit history');
     }
     const localCommits = localResult.ok ? (localResult.commits ?? []) : [];
 
@@ -1071,6 +1076,9 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
     const remoteResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }> }>(
       await ExternalStorage.gitLog(directory, remoteReference, LOG_DEPTH),
     );
+    if (!remoteResult.ok && options.throwOnError === true && workspace.syncedServers.length > 0) {
+      throw new Error(`Could not read ${remoteReference} commit history`);
+    }
     const remoteCommits = remoteResult.ok ? (remoteResult.commits ?? []) : [];
     const remoteOids = new Set(remoteCommits.map(c => c.oid));
     let aheadCount = 0;
@@ -1081,6 +1089,7 @@ export async function gitGetAheadCommitCount(workspace: IWikiWorkspace): Promise
     return aheadCount;
   } catch (error) {
     console.error(`Failed to get ahead commit count: ${(error as Error).message}`);
+    if (options.throwOnError === true) throw error;
     return 0;
   }
 }
@@ -1195,14 +1204,22 @@ export async function gitHasChanges(workspace: IWikiWorkspace): Promise<boolean>
 
 // ── Unsynced commit count ──────────────────────────────────────────
 
-export async function gitGetUnsyncedCommitCount(workspace: IWikiWorkspace): Promise<number> {
-  if (typeof workspace.deferStatusScanUntil === 'number' && Date.now() < workspace.deferStatusScanUntil) return 0;
+export async function gitGetUnsyncedCommitCount(
+  workspace: IWikiWorkspace,
+  options: IGitStatusScanOptions = {},
+): Promise<number> {
+  if (
+    options.ignoreDeferredScan !== true &&
+    typeof workspace.deferStatusScanUntil === 'number' &&
+    Date.now() < workspace.deferStatusScanUntil
+  ) return 0;
   try {
-    const aheadCount = await gitGetAheadCommitCount(workspace);
-    const hasUncommittedChanges = await gitHasChanges(workspace).catch(() => false);
+    const aheadCount = await gitGetAheadCommitCount(workspace, options);
+    const hasUncommittedChanges = await gitHasChanges(workspace);
     return aheadCount + (hasUncommittedChanges ? 1 : 0);
   } catch (error) {
     console.error(`Failed to get unsynced commit count: ${(error as Error).message}`);
+    if (options.throwOnError === true) throw error;
     return 0;
   }
 }
@@ -1260,7 +1277,7 @@ export async function gitInit(workspace: IWikiWorkspace): Promise<void> {
     const resultJson = await ExternalStorage.gitInit(directory, 'main');
     const result = parseNativeResult<{ ok: boolean; error?: string }>(resultJson);
     if (!result.ok) throw new Error(result.error ?? 'Unknown init error');
-    await ensureGitTextCheckoutPolicy(directory);
+    await ensureMobileGitSetup(directory);
     console.log(`Initialized git repository at ${directory}`);
   } catch (error) {
     console.error(`Git init failed: ${(error as Error).message}`);

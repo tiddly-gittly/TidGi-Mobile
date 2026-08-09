@@ -17,6 +17,7 @@ import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement }
 
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
+const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
 const configuredDesktopUrl: unknown = process.env.TIDGI_DESKTOP_URL;
 const realDesktopUrl = typeof configuredDesktopUrl === 'string' ? configuredDesktopUrl : undefined;
 const configuredDesktopQrJson: unknown = process.env.TIDGI_DESKTOP_QR_JSON;
@@ -125,8 +126,7 @@ async function tapImportWikiConfirmButton(): Promise<void> {
   } catch {
     // A real Desktop payload can include multiple sub-workspaces, pushing the
     // button below the physical device viewport.
-    await element(by.id('importer-screen')).swipe('up', 'fast', 0.75);
-    await delay(750);
+    await element(by.id('importer-screen')).scrollTo('bottom');
     await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(UI_TIMEOUT);
   }
   await element(by.id('import-wiki-confirm-button')).tap();
@@ -249,56 +249,51 @@ async function createTiddlerViaWikiWebView(title: string): Promise<void> {
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
+interface IPersistedWikiWorkspace {
+  id?: string;
+  syncedServers?: Array<{ serverID?: string }>;
+  type?: string;
+  wikiFolderLocation?: string;
+}
+
+function readPersistedWikiWorkspaces(): IPersistedWikiWorkspace[] {
+  const storagePath = `/data/data/${APP_PACKAGE}/files/persistStorage/wiki-storage`;
+  const raw = execSync(`adb shell run-as ${APP_PACKAGE} cat ${storagePath}`, {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'ignore'],
+  });
+  const parsed = JSON.parse(raw) as { state?: { workspaces?: IPersistedWikiWorkspace[] } };
+  return parsed.state?.workspaces?.filter(workspace => workspace.type === 'wiki') ?? [];
+}
+
+function selectImportedWikiWorkspace(): IPersistedWikiWorkspace | undefined {
+  const wikiList = readPersistedWikiWorkspaces();
+  return wikiList.find(workspace => workspace.id === 'standalone') ??
+    wikiList.find(workspace => workspace.syncedServers?.some(server => typeof server.serverID === 'string' && server.serverID.length > 0) === true) ??
+    wikiList[0];
+}
+
+function listWikiDirectoryIds(): string[] {
+  const wikiRoot = `/data/data/${APP_PACKAGE}/files/wikis`;
+  const raw = execSync(`adb shell run-as ${APP_PACKAGE} ls ${wikiRoot}`, {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'ignore'],
+  }).trim();
+  return raw.split(/\r?\n/).map(value => value.trim()).filter(value => value.length > 0);
+}
+
 function getImportedWikiWorkspaceId(): string | undefined {
   try {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    });
-    const parsed = JSON.parse(raw) as {
-      state?: {
-        workspaces?: Array<{
-          id?: string;
-          type?: string;
-          syncedServers?: Array<{ serverID?: string }>;
-        }>;
-      };
-    };
-    const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki') ?? [];
-    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
-    if (standaloneWiki?.id) return standaloneWiki.id;
-    const importedWiki = wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0));
-    if (importedWiki?.id) return importedWiki.id;
-    return wikiList[0]?.id;
+    return selectImportedWikiWorkspace()?.id;
   } catch {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    }).trim();
-    const ids = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
+    const ids = listWikiDirectoryIds();
     return ids.find(id => id === 'standalone') ?? ids[0];
   }
 }
 
 function getImportedWikiWorkspacePath(): string {
   try {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    });
-    const parsed = JSON.parse(raw) as {
-      state?: {
-        workspaces?: Array<{
-          id?: string;
-          type?: string;
-          wikiFolderLocation?: string;
-          syncedServers?: Array<{ serverID?: string }>;
-        }>;
-      };
-    };
-    const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string') ?? [];
-    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
-    const importedWiki = standaloneWiki ?? wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0)) ?? wikiList[0];
+    const importedWiki = selectImportedWikiWorkspace();
     if (typeof importedWiki?.wikiFolderLocation === 'string') {
       return importedWiki.wikiFolderLocation.replace(/^file:\/\//, '').replace(/\/$/, '');
     }
@@ -306,15 +301,11 @@ function getImportedWikiWorkspacePath(): string {
     // Fall back to the first wiki directory below.
   }
 
-  const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'ignore'],
-  }).trim();
-  const fallbackId = raw.split(/\r?\n/).map(value => value.trim()).find(value => value.length > 0);
+  const fallbackId = listWikiDirectoryIds()[0];
   if (!fallbackId) {
     throw new Error('No imported wiki workspace path found on device.');
   }
-  return `/data/data/ren.onetwo.tidgi.mobile.test/files/wikis/${fallbackId}`;
+  return `/data/data/${APP_PACKAGE}/files/wikis/${fallbackId}`;
 }
 
 function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, content: string): void {
@@ -325,7 +316,7 @@ function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, con
   writeFileSync(hostTemporary, content, 'utf8');
   execSync(`adb push "${hostTemporary}" "${deviceTemporary}"`, { stdio: 'ignore', timeout: 15_000 });
   execSync(
-    `adb shell "run-as ren.onetwo.tidgi.mobile.test sh -c 'mkdir -p \"${wikiPath}/tiddlers\" && cp \"${deviceTemporary}\" \"${devicePath}\"'"`,
+    `adb shell "run-as ${APP_PACKAGE} sh -c 'mkdir -p \"${wikiPath}/tiddlers\" && cp \"${deviceTemporary}\" \"${devicePath}\"'"`,
     { stdio: 'ignore', timeout: 15_000 },
   );
 }
@@ -419,15 +410,11 @@ async function waitForSyncSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
   throw diagnosticError(successId, maxWaitMs);
 }
 
-Then('the unsynced count should be zero after sync', async () => {
-  await assertUnsyncedCountIsZero();
+Then('the workspace should have zero unsynced changes', async () => {
+  await assertWorkspaceHasNoUnsyncedChanges();
 });
 
-Then('the imported wiki should have zero unsynced changes', async () => {
-  await assertUnsyncedCountIsZero();
-});
-
-async function assertUnsyncedCountIsZero(): Promise<void> {
+async function assertWorkspaceHasNoUnsyncedChanges(): Promise<void> {
   const wikiId = getImportedWikiWorkspaceId();
   if (!wikiId) throw new Error('No wiki workspace found.');
   await element(by.id(`workspace-settings-icon-${wikiId}`)).tap();
@@ -498,6 +485,6 @@ Given('the imported mock server wiki has a synced tiddler {string} in shared his
   await delay(5_000);
   await tapSyncButtonForImportedWiki();
   await waitForSyncSuccess();
-  await assertUnsyncedCountIsZero();
+  await assertWorkspaceHasNoUnsyncedChanges();
   assertMockServerGitWorkingTreeContains(title);
 });

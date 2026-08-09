@@ -26,7 +26,7 @@ Feature: Conflict Resolution - Mobile and mock server concurrent edits
     And I tap the sync button for the first wiki workspace
     Then the sync should complete successfully
     And the mock server desktop git runner should be used
-    And the unsynced count should be zero after sync
+    And the workspace should have zero unsynced changes
     And the mock server tiddler "E2ETestTiddler.tid" body contains "Mock server conflict line."
     And the mock server tiddler "E2ETestTiddler.tid" body contains "Mobile conflict line."
     And the mock server tiddler "E2ETestTiddler.tid" header contains the mobile modified timestamp
