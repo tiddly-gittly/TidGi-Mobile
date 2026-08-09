@@ -1216,8 +1216,13 @@ export async function gitGetUnsyncedCommitCount(
   ) return 0;
   try {
     const aheadCount = await gitGetAheadCommitCount(workspace, options);
-    const hasUncommittedChanges = await gitHasChanges(workspace);
-    return aheadCount + (hasUncommittedChanges ? 1 : 0);
+    try {
+      const hasUncommittedChanges = await gitHasChanges(workspace);
+      return aheadCount + (hasUncommittedChanges ? 1 : 0);
+    } catch (error) {
+      if (options.throwOnError === true) throw error;
+      return aheadCount;
+    }
   } catch (error) {
     console.error(`Failed to get unsynced commit count: ${(error as Error).message}`);
     if (options.throwOnError === true) throw error;
