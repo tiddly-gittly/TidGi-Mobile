@@ -55,9 +55,12 @@ async function ensureDirectory(path: string): Promise<void> {
 export async function updateGitCloneCache(cacheDirectory: string, sourceDirectory: string): Promise<void> {
   const sourcePlain = toPlainPath(sourceDirectory).replace(/\/+$/, '');
   const cachePlain = toPlainPath(cacheDirectory).replace(/\/+$/, '');
-  const source = new Directory(toFileUri(sourcePlain));
-  if (!source.exists) return;
+  const sourceInfo = sourcePlain.startsWith('/storage/') || sourcePlain.startsWith('/sdcard/')
+    ? await ExternalStorage.getInfo(sourcePlain)
+    : await FileSystemLegacy.getInfoAsync(toFileUri(sourcePlain));
+  if (!sourceInfo.exists) return;
 
+  const source = new Directory(toFileUri(sourcePlain));
   const cacheInfo = await FileSystemLegacy.getInfoAsync(toFileUri(cachePlain));
   if (cacheInfo.exists) {
     await FileSystemLegacy.deleteAsync(toFileUri(cachePlain), { idempotent: true });
