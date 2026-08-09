@@ -9,7 +9,8 @@ import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import { readFileSync, writeFileSync } from 'fs';
-import { get as httpGet } from 'node:http';
+import { ClientRequest, get as httpGet, IncomingMessage } from 'node:http';
+import { get as httpsGet } from 'node:https';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
@@ -28,6 +29,10 @@ const realDesktopQrJson = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_QR_
 // JGit index on a physical device after the archive has been extracted.
 const IMPORT_TIMEOUT = realDesktopUrl === undefined ? NETWORK_TIMEOUT : 30 * 60_000;
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+function getUrl(url: string, callback: (response: IncomingMessage) => void): ClientRequest {
+  return new URL(url).protocol === 'https:' ? httpsGet(url, callback) : httpGet(url, callback);
+}
 
 function adbKeyEvent(key: number): void {
   try {
@@ -58,7 +63,7 @@ async function assertSyncServerReachable(): Promise<void> {
   // The mock server is started without TiddlyWeb Basic Auth so the mobile
   // client can access Git endpoints anonymously. We just check /status is up.
   const statusCode = await new Promise<number>((resolve, reject) => {
-    const request = httpGet(`${url}/status`, response => {
+    const request = getUrl(`${url}/status`, response => {
       response.resume();
       resolve(response.statusCode ?? 0);
     });
@@ -93,7 +98,7 @@ async function enterSyncServerUrl(): Promise<void> {
       useStandardGitProtocol: false,
     })
     : realDesktopQrJson ?? await new Promise<string>((resolve, reject) => {
-      const request = httpGet(`${url}/tw-mobile-sync/git/mobile-sync-info`, response => {
+      const request = getUrl(`${url}/tw-mobile-sync/git/mobile-sync-info`, response => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(chunk));
         response.on('end', () => {
