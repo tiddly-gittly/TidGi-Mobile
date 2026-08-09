@@ -18,10 +18,12 @@ import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement }
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
 const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
-const configuredDesktopUrl: unknown = process.env.TIDGI_DESKTOP_URL;
-const realDesktopUrl = typeof configuredDesktopUrl === 'string' ? configuredDesktopUrl : undefined;
-const configuredDesktopQrJson: unknown = process.env.TIDGI_DESKTOP_QR_JSON;
-const realDesktopQrJson = typeof configuredDesktopQrJson === 'string' ? configuredDesktopQrJson : undefined;
+const nonEmptyEnvironmentValue = (value: string | undefined): string | undefined => {
+  const trimmedValue = value?.trim();
+  return trimmedValue === undefined || trimmedValue.length === 0 ? undefined : trimmedValue;
+};
+const realDesktopUrl = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_URL);
+const realDesktopQrJson = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_QR_JSON);
 // A multi-gigabyte workspace can spend more than ten minutes rebuilding its
 // JGit index on a physical device after the archive has been extracted.
 const IMPORT_TIMEOUT = realDesktopUrl === undefined ? NETWORK_TIMEOUT : 30 * 60_000;
@@ -121,14 +123,22 @@ async function enterSyncServerUrl(): Promise<void> {
 
 async function tapImportWikiConfirmButton(): Promise<void> {
   await waitForElement(by.id('import-wiki-confirm-button'), UI_TIMEOUT, 'import-wiki-confirm-button');
-  try {
-    await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(1_000);
-  } catch {
-    // A real Desktop payload can include multiple sub-workspaces, pushing the
-    // button below the physical device viewport.
-    await element(by.id('importer-screen')).scrollTo('bottom');
-    await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(UI_TIMEOUT);
+  let isVisible = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(1_000);
+      isVisible = true;
+      break;
+    } catch {
+      // A real Desktop payload can include multiple sub-workspaces, pushing
+      // the button below the physical device viewport. Detox scrollToEdge
+      // repeatedly injects gestures on some JOYUI devices and can disconnect
+      // UiAutomation, so use a bounded number of ordinary swipes instead.
+      await element(by.id('importer-screen')).swipe('up', 'fast', 0.6);
+      await delay(500);
+    }
   }
+  if (!isVisible) throw new Error('Import wiki confirm button did not become visible after scrolling');
   await element(by.id('import-wiki-confirm-button')).tap();
 }
 
@@ -172,10 +182,11 @@ async function waitForImportedWikiInWorkspaceList(): Promise<void> {
   await navigateBackToMainMenuScreen();
   await delay(3_000);
 
-  // The sync button has a per-workspace testID; locate the imported wiki first.
+  // Assert the workspace card itself. The sync button testID depends on
+  // whether this workspace has already recorded a successful sync.
   const wikiId = getImportedWikiWorkspaceId();
   if (!wikiId) throw new Error('No imported wiki found in device storage.');
-  await waitForElement(by.id(`sync-icon-button-${wikiId}`), 20_000, `sync-icon-button-${wikiId}`);
+  await waitForElement(by.id(`workspace-item-${wikiId}`), 20_000, `workspace-item-${wikiId}`);
 }
 
 async function importFreshMockServerWiki(): Promise<void> {
@@ -251,6 +262,9 @@ async function createTiddlerViaWikiWebView(title: string): Promise<void> {
 // ── Sync ──────────────────────────────────────────────────────────────────────
 interface IPersistedWikiWorkspace {
   id?: string;
+  isSubWiki?: boolean;
+  mainWikiID?: string | null;
+  name?: string;
   syncedServers?: Array<{ serverID?: string }>;
   type?: string;
   wikiFolderLocation?: string;
@@ -268,8 +282,11 @@ function readPersistedWikiWorkspaces(): IPersistedWikiWorkspace[] {
 
 function selectImportedWikiWorkspace(): IPersistedWikiWorkspace | undefined {
   const wikiList = readPersistedWikiWorkspaces();
-  return wikiList.find(workspace => workspace.id === 'standalone') ??
-    wikiList.find(workspace => workspace.syncedServers?.some(server => typeof server.serverID === 'string' && server.serverID.length > 0) === true) ??
+  const hasSyncServer = (workspace: IPersistedWikiWorkspace): boolean =>
+    workspace.syncedServers?.some(server => typeof server.serverID === 'string' && server.serverID.length > 0) === true;
+  return wikiList.find(workspace => workspace.isSubWiki !== true && hasSyncServer(workspace)) ??
+    wikiList.find(workspace => workspace.id === 'standalone') ??
+    wikiList.find(hasSyncServer) ??
     wikiList[0];
 }
 
@@ -410,27 +427,72 @@ async function waitForSyncSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
   throw diagnosticError(successId, maxWaitMs);
 }
 
-Then('the workspace should have zero unsynced changes', async () => {
-  await assertWorkspaceHasNoUnsyncedChanges();
+Then('the workspace should have zero unsynced changes', { timeout: 10 * 60_000 }, async () => {
+  await assertImportedWorkspacesHaveNoUnsyncedChanges();
 });
 
-async function assertWorkspaceHasNoUnsyncedChanges(): Promise<void> {
-  const wikiId = getImportedWikiWorkspaceId();
-  if (!wikiId) throw new Error('No wiki workspace found.');
-  await element(by.id(`workspace-settings-icon-${wikiId}`)).tap();
+async function assertCurrentWorkspaceHasNoUnsyncedChanges(workspace: IPersistedWikiWorkspace): Promise<void> {
   await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
-  await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count');
+  await waitForElement(by.id('workspace-unsynced-count'), 120_000, 'workspace-unsynced-count');
   const attributes = await element(by.id('workspace-unsynced-count')).getAttributes();
   const countText = Array.isArray(attributes) ? undefined : (attributes as { text?: unknown }).text;
   if (typeof countText !== 'string' || !/^0(?:\s|$)/.test(countText)) {
-    throw new Error(`Expected zero unsynced changes, received ${JSON.stringify(countText)}`);
+    throw new Error(`Expected zero unsynced changes for ${workspace.name ?? workspace.id}, received ${JSON.stringify(countText)}`);
   }
+}
+
+async function pressBackAndWait(): Promise<void> {
   try {
     await device.pressBack();
   } catch {
     adbKeyEvent(4);
   }
   await delay();
+}
+
+async function openSubWikiManager(): Promise<void> {
+  let isVisible = false;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      await waitFor(element(by.id('workspace-subwiki-manager-button'))).toBeVisible().withTimeout(1_000);
+      isVisible = true;
+      break;
+    } catch {
+      await element(by.id('workspace-detail-screen')).swipe('up', 'fast', 0.5);
+      await delay(500);
+    }
+  }
+  if (!isVisible) throw new Error('Sub-wiki manager button did not become visible after scrolling');
+  await element(by.id('workspace-subwiki-manager-button')).tap();
+  await waitForElement(by.id('workspace-subwiki-manager-screen'), 30_000, 'workspace-subwiki-manager-screen');
+}
+
+async function assertImportedWorkspacesHaveNoUnsyncedChanges(): Promise<void> {
+  const mainWiki = selectImportedWikiWorkspace();
+  if (typeof mainWiki?.id !== 'string') throw new Error('No main wiki workspace found.');
+
+  await element(by.id(`workspace-settings-icon-${mainWiki.id}`)).tap();
+  await assertCurrentWorkspaceHasNoUnsyncedChanges(mainWiki);
+
+  const subWikis = readPersistedWikiWorkspaces().filter(
+    workspace => workspace.isSubWiki === true && workspace.mainWikiID === mainWiki.id && typeof workspace.id === 'string',
+  );
+  if (subWikis.length > 0) {
+    await openSubWikiManager();
+    for (const subWiki of subWikis) {
+      const settingsIcon = element(by.id(`workspace-settings-icon-${subWiki.id}`));
+      await waitFor(settingsIcon)
+        .toBeVisible()
+        .whileElement(by.id('workspace-list'))
+        .scroll(200, 'down');
+      await settingsIcon.tap();
+      await assertCurrentWorkspaceHasNoUnsyncedChanges(subWiki);
+      await pressBackAndWait();
+      await waitForElement(by.id('workspace-subwiki-manager-screen'), 30_000, 'workspace-subwiki-manager-screen');
+    }
+    await pressBackAndWait();
+  }
+  await pressBackAndWait();
 }
 
 Then('the mock server git working tree contains {string}', { timeout: 10_000 }, (expectedName: string) => {
@@ -485,6 +547,6 @@ Given('the imported mock server wiki has a synced tiddler {string} in shared his
   await delay(5_000);
   await tapSyncButtonForImportedWiki();
   await waitForSyncSuccess();
-  await assertWorkspaceHasNoUnsyncedChanges();
+  await assertImportedWorkspacesHaveNoUnsyncedChanges();
   assertMockServerGitWorkingTreeContains(title);
 });

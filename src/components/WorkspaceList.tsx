@@ -232,6 +232,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       {reorderable
         ? (
           <ReorderableList
+            testID='workspace-list'
             data={workspacesList}
             renderItem={({ item }) => (
               <ReorderableWorkspaceListItem
@@ -251,6 +252,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
         )
         : (
           <FlatList
+            testID='workspace-list'
             data={workspacesList}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (

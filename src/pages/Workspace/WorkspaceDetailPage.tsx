@@ -1,6 +1,6 @@
 import { useIsFocused } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, Dialog, Portal, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
@@ -34,16 +34,20 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   );
   const isFolderWiki = wiki?.type === 'wiki';
   const canDeleteSubWorkspacesTogether = isFolderWiki && wiki.isSubWiki !== true && subWorkspaces.length > 0;
+  const wikiReference = useRef(wiki);
+  wikiReference.current = wiki;
 
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.Title'));
 
   const wikiId = wiki?.id;
   useEffect(() => {
     setPendingChangeCount(undefined);
-    if (!isFocused || wikiId === undefined || wiki?.type !== 'wiki') return;
+    if (!isFocused || wikiId === undefined || !isFolderWiki) return;
     let cancelled = false;
     const timeout = setTimeout(() => {
-      void gitGetUnsyncedCommitCount(wiki, { ignoreDeferredScan: true, throwOnError: true })
+      const currentWiki = wikiReference.current;
+      if (currentWiki?.type !== 'wiki' || currentWiki.id !== wikiId) return;
+      void gitGetUnsyncedCommitCount(currentWiki, { ignoreDeferredScan: true, throwOnError: true })
         .then((count) => {
           if (!cancelled) setPendingChangeCount(count);
         })
@@ -56,7 +60,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [isFocused, wiki, wikiId]);
+  }, [isFolderWiki, isFocused, wikiId]);
 
   if (!wiki) {
     return (
@@ -126,6 +130,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
       )}
       {isFolderWiki && wiki.isSubWiki !== true && (
         <ActionButton
+          testID='workspace-subwiki-manager-button'
           mode='outlined'
           icon='file-tree'
           onPress={() => {
