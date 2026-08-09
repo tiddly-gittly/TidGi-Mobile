@@ -48,7 +48,8 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
           if (!cancelled) setPendingChangeCount(count);
         })
         .catch((error: unknown) => {
-          console.error(`Failed to refresh workspace unsynced count: ${(error as Error).message}`);
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Failed to refresh workspace unsynced count: ${message}`);
         });
     }, 1_500);
     return () => {

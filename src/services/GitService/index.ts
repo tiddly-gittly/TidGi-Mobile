@@ -1011,6 +1011,7 @@ export async function gitGetAheadCommitCount(
   options: IGitStatusScanOptions = {},
 ): Promise<number> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
+  if (workspace.syncedServers.length === 0) return 0;
   if (
     options.ignoreDeferredScan !== true &&
     typeof workspace.deferStatusScanUntil === 'number' &&
@@ -1076,7 +1077,7 @@ export async function gitGetAheadCommitCount(
     const remoteResult = parseNativeResult<{ ok: boolean; commits?: Array<{ oid: string }> }>(
       await ExternalStorage.gitLog(directory, remoteReference, LOG_DEPTH),
     );
-    if (!remoteResult.ok && options.throwOnError === true && workspace.syncedServers.length > 0) {
+    if (!remoteResult.ok && options.throwOnError === true) {
       throw new Error(`Could not read ${remoteReference} commit history`);
     }
     const remoteCommits = remoteResult.ok ? (remoteResult.commits ?? []) : [];
