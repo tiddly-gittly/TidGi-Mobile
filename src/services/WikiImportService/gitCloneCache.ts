@@ -1,4 +1,4 @@
-import { Paths } from 'expo-file-system';
+import { Directory, Paths } from 'expo-file-system';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { buildGitCloneCacheDirectory } from './gitCloneCacheUtilities';
@@ -45,74 +45,26 @@ async function ensureDirectory(path: string): Promise<void> {
 
 /**
  * Best-effort copy of a prepared wiki directory into the git clone cache (internal storage only).
+ *
+ * Keep this copy entirely native. Reading each file as base64 crosses the
+ * native/JS bridge and requires a contiguous allocation roughly 4/3 the size
+ * of the largest Git pack. Real wikis commonly have 100–200 MB pack files,
+ * which exceeds Android's 256 MB Java heap and can terminate the app after an
+ * otherwise-successful import.
  */
 export async function updateGitCloneCache(cacheDirectory: string, sourceDirectory: string): Promise<void> {
   const sourcePlain = toPlainPath(sourceDirectory).replace(/\/+$/, '');
   const cachePlain = toPlainPath(cacheDirectory).replace(/\/+$/, '');
+  const sourceInfo = sourcePlain.startsWith('/storage/') || sourcePlain.startsWith('/sdcard/')
+    ? await ExternalStorage.getInfo(sourcePlain)
+    : await FileSystemLegacy.getInfoAsync(toFileUri(sourcePlain));
+  if (!sourceInfo.exists) return;
 
-  let relativePaths: string[];
-  if (sourcePlain.startsWith('/storage/') || sourcePlain.startsWith('/sdcard/')) {
-    relativePaths = await ExternalStorage.readDirRecursive(sourcePlain).catch(() => [] as string[]);
-  } else {
-    relativePaths = await listInternalFilesRecursive(sourcePlain);
-  }
-
-  if (relativePaths.length === 0) return;
-
+  const source = new Directory(toFileUri(sourcePlain));
   const cacheInfo = await FileSystemLegacy.getInfoAsync(toFileUri(cachePlain));
   if (cacheInfo.exists) {
     await FileSystemLegacy.deleteAsync(toFileUri(cachePlain), { idempotent: true });
   }
-  await ensureDirectory(cachePlain);
-
-  for (const relativePath of relativePaths) {
-    let content: string;
-    const sourceFilePlain = `${sourcePlain}/${relativePath}`;
-    try {
-      if (sourcePlain.startsWith('/storage/') || sourcePlain.startsWith('/sdcard/')) {
-        content = await ExternalStorage.readFileBase64(sourceFilePlain);
-      } else {
-        content = await FileSystemLegacy.readAsStringAsync(toFileUri(sourceFilePlain), {
-          encoding: FileSystemLegacy.EncodingType.Base64,
-        });
-      }
-    } catch {
-      continue;
-    }
-
-    const destinationPlain = `${cachePlain}/${relativePath}`;
-    await ensureDirectory(getParentDirectory(destinationPlain));
-    await FileSystemLegacy.writeAsStringAsync(toFileUri(destinationPlain), content, {
-      encoding: FileSystemLegacy.EncodingType.Base64,
-    });
-  }
-}
-
-async function listInternalFilesRecursive(directoryPlain: string): Promise<string[]> {
-  const directoryUri = toFileUri(directoryPlain);
-  const results: string[] = [];
-
-  async function walk(currentUri: string, relativePrefix: string): Promise<void> {
-    let entries: string[] = [];
-    try {
-      entries = await FileSystemLegacy.readDirectoryAsync(currentUri.endsWith('/') ? currentUri : `${currentUri}/`);
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const entryUri = `${currentUri.replace(/\/$/, '')}/${entry}`;
-      const relativePath = relativePrefix.length > 0 ? `${relativePrefix}/${entry}` : entry;
-      const info = await FileSystemLegacy.getInfoAsync(entryUri);
-      if (!info.exists) continue;
-      if (info.isDirectory) {
-        await walk(entryUri, relativePath);
-      } else {
-        results.push(relativePath);
-      }
-    }
-  }
-
-  await walk(directoryUri, '');
-  return results;
+  await ensureDirectory(getParentDirectory(cachePlain));
+  source.copy(new Directory(toFileUri(cachePlain)));
 }

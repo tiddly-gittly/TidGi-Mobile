@@ -20,7 +20,7 @@ export function WorkspaceSubWikiManagerPage({ route, navigation }: StackScreenPr
   }
 
   return (
-    <SubWikiPageContainer>
+    <SubWikiPageContainer testID='workspace-subwiki-manager-screen'>
       <SubWikiManager
         workspace={wiki}
         onPressWorkspace={(subWorkspace) => {

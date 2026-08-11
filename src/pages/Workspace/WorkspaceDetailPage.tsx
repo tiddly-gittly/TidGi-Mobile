@@ -1,12 +1,13 @@
+import { useIsFocused } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, Dialog, Portal, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import type { RootStackParameterList } from '../../App';
 import { LogViewerDialog } from '../../components/LogViewerDialog';
-import { gitGetAheadCommitCount } from '../../services/GitService';
+import { gitGetUnsyncedCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
@@ -17,15 +18,14 @@ const ActionButton = styled(Button)`
   border-radius: 8px;
 `;
 
-const getAheadCommitCount = gitGetAheadCommitCount as (workspace: IWikiWorkspace) => Promise<number>;
-
 export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceDetail'>): JSX.Element {
   const { t } = useTranslation();
+  const isFocused = useIsFocused();
   const wiki = useSyncableWorkspace(route.params.id);
   // Combine multiple selector calls into a single useShallow call
   const [removeWorkspace] = useWorkspaceStore(useShallow(state => [state.remove]));
   const allWorkspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  const [pendingCommitCount, setPendingCommitCount] = useState(0);
+  const [pendingChangeCount, setPendingChangeCount] = useState<number>();
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [deleteSubWorkspacesTogether, setDeleteSubWorkspacesTogether] = useState(false);
   const [workspaceLogVisible, setWorkspaceLogVisible] = useState(false);
@@ -34,19 +34,33 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   );
   const isFolderWiki = wiki?.type === 'wiki';
   const canDeleteSubWorkspacesTogether = isFolderWiki && wiki.isSubWiki !== true && subWorkspaces.length > 0;
+  const wikiReference = useRef(wiki);
+  wikiReference.current = wiki;
 
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('WorkspaceSettings.Title'));
 
   const wikiId = wiki?.id;
   useEffect(() => {
-    if (wikiId === undefined || wiki?.type !== 'wiki') return;
+    setPendingChangeCount(undefined);
+    if (!isFocused || wikiId === undefined || !isFolderWiki) return;
+    let cancelled = false;
     const timeout = setTimeout(() => {
-      void getAheadCommitCount(wiki).then(setPendingCommitCount);
+      const currentWiki = wikiReference.current;
+      if (currentWiki?.type !== 'wiki' || currentWiki.id !== wikiId) return;
+      void gitGetUnsyncedCommitCount(currentWiki, { ignoreDeferredScan: true, throwOnError: true })
+        .then((count) => {
+          if (!cancelled) setPendingChangeCount(count);
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Failed to refresh workspace unsynced count: ${message}`);
+        });
     }, 1_500);
     return () => {
+      cancelled = true;
       clearTimeout(timeout);
     };
-  }, [wiki, wikiId]);
+  }, [isFolderWiki, isFocused, wikiId]);
 
   if (!wiki) {
     return (
@@ -58,7 +72,9 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
 
   return (
     <PageContainer testID='workspace-detail-screen'>
-      {isFolderWiki && <Text variant='bodySmall' testID='workspace-unsynced-count'>{t('Sync.UnsyncedCommitCount', { count: pendingCommitCount })}</Text>}
+      {isFolderWiki && pendingChangeCount !== undefined && (
+        <Text variant='bodySmall' testID='workspace-unsynced-count'>{t('Sync.UnsyncedCommitCount', { count: pendingChangeCount })}</Text>
+      )}
 
       <ActionButton
         testID='workspace-sync-button'
@@ -114,6 +130,7 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
       )}
       {isFolderWiki && wiki.isSubWiki !== true && (
         <ActionButton
+          testID='workspace-subwiki-manager-button'
           mode='outlined'
           icon='file-tree'
           onPress={() => {

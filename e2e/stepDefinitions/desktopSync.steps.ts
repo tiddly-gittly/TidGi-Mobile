@@ -7,17 +7,32 @@
  */
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execSync } from 'child_process';
+import { by, device, element, waitFor } from 'detox';
+import { readFileSync, writeFileSync } from 'fs';
+import { ClientRequest, get as httpGet, IncomingMessage } from 'node:http';
+import { get as httpsGet } from 'node:https';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { readFileSync, writeFileSync } from 'fs';
-import { by, device, element, waitFor } from 'detox';
-import { get as httpGet } from 'node:http';
 import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
 import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
 const NETWORK_TIMEOUT = 120_000;
+const APP_PACKAGE = 'ren.onetwo.tidgi.mobile.test';
+const nonEmptyEnvironmentValue = (value: string | undefined): string | undefined => {
+  const trimmedValue = value?.trim();
+  return trimmedValue === undefined || trimmedValue.length === 0 ? undefined : trimmedValue;
+};
+const realDesktopUrl = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_URL);
+const realDesktopQrJson = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_QR_JSON);
+// A multi-gigabyte workspace can spend more than ten minutes rebuilding its
+// JGit index on a physical device after the archive has been extracted.
+const IMPORT_TIMEOUT = realDesktopUrl === undefined ? NETWORK_TIMEOUT : 30 * 60_000;
 const delay = (ms = 1_000) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+function getUrl(url: string, callback: (response: IncomingMessage) => void): ClientRequest {
+  return new URL(url).protocol === 'https:' ? httpsGet(url, callback) : httpGet(url, callback);
+}
 
 function adbKeyEvent(key: number): void {
   try {
@@ -43,12 +58,12 @@ async function navigateToImporterScreen(): Promise<void> {
   await waitForElement(by.id('importer-screen'), 10_000, 'importer-screen');
 }
 
-async function assertMockServerReachable(): Promise<void> {
-  const url = getMockServerUrl();
+async function assertSyncServerReachable(): Promise<void> {
+  const url = realDesktopUrl ?? getMockServerUrl();
   // The mock server is started without TiddlyWeb Basic Auth so the mobile
   // client can access Git endpoints anonymously. We just check /status is up.
   const statusCode = await new Promise<number>((resolve, reject) => {
-    const request = httpGet(`${url}/status`, response => {
+    const request = getUrl(`${url}/status`, response => {
       response.resume();
       resolve(response.statusCode ?? 0);
     });
@@ -57,12 +72,13 @@ async function assertMockServerReachable(): Promise<void> {
     });
     request.on('error', reject);
   });
-  if (statusCode !== 200 && statusCode !== 204) {
-    throw new Error(`Mock server not reachable at ${url}/status (HTTP ${statusCode})`);
+  const isReachable = realDesktopUrl === undefined ? statusCode === 200 || statusCode === 204 : statusCode >= 200 && statusCode < 500;
+  if (!isReachable) {
+    throw new Error(`Sync server not reachable at ${url}/status (HTTP ${statusCode})`);
   }
 }
 
-async function enterMockServerUrl(): Promise<void> {
+async function enterSyncServerUrl(): Promise<void> {
   // Open the manual JSON configuration panel if it is not already open.
   try {
     await waitFor(element(by.id('toggle-manual-config-button'))).toExist().withTimeout(2_000);
@@ -73,13 +89,31 @@ async function enterMockServerUrl(): Promise<void> {
   }
 
   await waitForElement(by.id('manual-json-input'), UI_TIMEOUT, 'manual-json-input');
-  const url = getMockServerUrl();
-  const qrPayload = JSON.stringify({
-    baseUrl: url,
-    workspaceId: 'standalone',
-    workspaceName: 'E2E Mock Wiki',
-    useStandardGitProtocol: false,
-  });
+  const url = realDesktopUrl ?? getMockServerUrl();
+  const qrPayload = realDesktopUrl === undefined
+    ? JSON.stringify({
+      baseUrl: url,
+      workspaceId: 'standalone',
+      workspaceName: 'E2E Mock Wiki',
+      useStandardGitProtocol: false,
+    })
+    : realDesktopQrJson ?? await new Promise<string>((resolve, reject) => {
+      const request = getUrl(`${url}/tw-mobile-sync/git/mobile-sync-info`, response => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          if (response.statusCode !== 200) {
+            reject(new Error(`Failed to fetch mobile sync info from ${url} (HTTP ${response.statusCode ?? 0})`));
+            return;
+          }
+          resolve(Buffer.concat(chunks).toString('utf8'));
+        });
+      });
+      request.setTimeout(10_000, () => {
+        request.destroy(new Error(`Timed out fetching mobile sync info from ${url}`));
+      });
+      request.on('error', reject);
+    });
   await element(by.id('manual-json-input')).clearText();
   await element(by.id('manual-json-input')).typeText(qrPayload);
 
@@ -94,10 +128,26 @@ async function enterMockServerUrl(): Promise<void> {
 
 async function tapImportWikiConfirmButton(): Promise<void> {
   await waitForElement(by.id('import-wiki-confirm-button'), UI_TIMEOUT, 'import-wiki-confirm-button');
+  let isVisible = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await waitFor(element(by.id('import-wiki-confirm-button'))).toBeVisible().withTimeout(1_000);
+      isVisible = true;
+      break;
+    } catch {
+      // A real Desktop payload can include multiple sub-workspaces, pushing
+      // the button below the physical device viewport. Detox scrollToEdge
+      // repeatedly injects gestures on some JOYUI devices and can disconnect
+      // UiAutomation, so use a bounded number of ordinary swipes instead.
+      await element(by.id('importer-screen')).swipe('up', 'fast', 0.6);
+      await delay(500);
+    }
+  }
+  if (!isVisible) throw new Error('Import wiki confirm button did not become visible after scrolling');
   await element(by.id('import-wiki-confirm-button')).tap();
 }
 
-async function waitForImportSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
+async function waitForImportSuccess(maxWaitMs = IMPORT_TIMEOUT): Promise<void> {
   const start = Date.now();
   const pollInterval = 1_500;
 
@@ -137,16 +187,17 @@ async function waitForImportedWikiInWorkspaceList(): Promise<void> {
   await navigateBackToMainMenuScreen();
   await delay(3_000);
 
-  // The sync button has a per-workspace testID; locate the imported wiki first.
+  // Assert the workspace card itself. The sync button testID depends on
+  // whether this workspace has already recorded a successful sync.
   const wikiId = getImportedWikiWorkspaceId();
   if (!wikiId) throw new Error('No imported wiki found in device storage.');
-  await waitForElement(by.id(`sync-icon-button-${wikiId}`), 20_000, `sync-icon-button-${wikiId}`);
+  await waitForElement(by.id(`workspace-item-${wikiId}`), 20_000, `workspace-item-${wikiId}`);
 }
 
 async function importFreshMockServerWiki(): Promise<void> {
   await navigateToImporterScreen();
-  await assertMockServerReachable();
-  await enterMockServerUrl();
+  await assertSyncServerReachable();
+  await enterSyncServerUrl();
   await tapImportWikiConfirmButton();
   await waitForImportSuccess();
   await waitForImportedWikiInWorkspaceList();
@@ -162,18 +213,18 @@ Then('I should see the importer screen', async () => {
 });
 
 Then('the mock server is reachable', { timeout: 30_000 }, async () => {
-  await assertMockServerReachable();
+  await assertSyncServerReachable();
 });
 
 When('I enter the mock server URL', async () => {
-  await enterMockServerUrl();
+  await enterSyncServerUrl();
 });
 
 When('I tap the import wiki confirm button', async () => {
   await tapImportWikiConfirmButton();
 });
 
-Then('the import should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {
+Then('the import should complete successfully', { timeout: IMPORT_TIMEOUT + 30_000 }, async () => {
   await waitForImportSuccess();
 });
 
@@ -214,56 +265,57 @@ async function createTiddlerViaWikiWebView(title: string): Promise<void> {
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
+interface IPersistedWikiWorkspace {
+  id?: string;
+  isSubWiki?: boolean;
+  mainWikiID?: string | null;
+  name?: string;
+  syncedServers?: Array<{ serverID?: string }>;
+  type?: string;
+  wikiFolderLocation?: string;
+}
+
+function readPersistedWikiWorkspaces(): IPersistedWikiWorkspace[] {
+  const storagePath = `/data/data/${APP_PACKAGE}/files/persistStorage/wiki-storage`;
+  const raw = execSync(`adb shell run-as ${APP_PACKAGE} cat ${storagePath}`, {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'ignore'],
+  });
+  const parsed = JSON.parse(raw) as { state?: { workspaces?: IPersistedWikiWorkspace[] } };
+  return parsed.state?.workspaces?.filter(workspace => workspace.type === 'wiki') ?? [];
+}
+
+function selectImportedWikiWorkspace(): IPersistedWikiWorkspace | undefined {
+  const wikiList = readPersistedWikiWorkspaces();
+  const hasSyncServer = (workspace: IPersistedWikiWorkspace): boolean =>
+    workspace.syncedServers?.some(server => typeof server.serverID === 'string' && server.serverID.length > 0) === true;
+  return wikiList.find(workspace => workspace.isSubWiki !== true && hasSyncServer(workspace)) ??
+    wikiList.find(workspace => workspace.id === 'standalone') ??
+    wikiList.find(hasSyncServer) ??
+    wikiList[0];
+}
+
+function listWikiDirectoryIds(): string[] {
+  const wikiRoot = `/data/data/${APP_PACKAGE}/files/wikis`;
+  const raw = execSync(`adb shell run-as ${APP_PACKAGE} ls ${wikiRoot}`, {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'ignore'],
+  }).trim();
+  return raw.split(/\r?\n/).map(value => value.trim()).filter(value => value.length > 0);
+}
+
 function getImportedWikiWorkspaceId(): string | undefined {
   try {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    });
-    const parsed = JSON.parse(raw) as {
-      state?: {
-        workspaces?: Array<{
-          id?: string;
-          type?: string;
-          syncedServers?: Array<{ serverID?: string }>;
-        }>;
-      };
-    };
-    const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki') ?? [];
-    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
-    if (standaloneWiki?.id) return standaloneWiki.id;
-    const importedWiki = wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0));
-    if (importedWiki?.id) return importedWiki.id;
-    return wikiList[0]?.id;
+    return selectImportedWikiWorkspace()?.id;
   } catch {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    }).trim();
-    const ids = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
+    const ids = listWikiDirectoryIds();
     return ids.find(id => id === 'standalone') ?? ids[0];
   }
 }
 
 function getImportedWikiWorkspacePath(): string {
   try {
-    const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test cat /data/data/ren.onetwo.tidgi.mobile.test/files/persistStorage/wiki-storage', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    });
-    const parsed = JSON.parse(raw) as {
-      state?: {
-        workspaces?: Array<{
-          id?: string;
-          type?: string;
-          wikiFolderLocation?: string;
-          syncedServers?: Array<{ serverID?: string }>;
-        }>;
-      };
-    };
-    const wikiList = parsed.state?.workspaces?.filter(w => w.type === 'wiki' && typeof w.wikiFolderLocation === 'string') ?? [];
-    const standaloneWiki = wikiList.find(w => w.id === 'standalone');
-    const importedWiki = standaloneWiki ?? wikiList.find(w => Array.isArray(w.syncedServers) && w.syncedServers.some(server => typeof server.serverID === 'string' && server.serverID.length > 0)) ?? wikiList[0];
+    const importedWiki = selectImportedWikiWorkspace();
     if (typeof importedWiki?.wikiFolderLocation === 'string') {
       return importedWiki.wikiFolderLocation.replace(/^file:\/\//, '').replace(/\/$/, '');
     }
@@ -271,15 +323,11 @@ function getImportedWikiWorkspacePath(): string {
     // Fall back to the first wiki directory below.
   }
 
-  const raw = execSync('adb shell run-as ren.onetwo.tidgi.mobile.test ls /data/data/ren.onetwo.tidgi.mobile.test/files/wikis', {
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'ignore'],
-  }).trim();
-  const fallbackId = raw.split(/\r?\n/).map(value => value.trim()).find(value => value.length > 0);
+  const fallbackId = listWikiDirectoryIds()[0];
   if (!fallbackId) {
     throw new Error('No imported wiki workspace path found on device.');
   }
-  return `/data/data/ren.onetwo.tidgi.mobile.test/files/wikis/${fallbackId}`;
+  return `/data/data/${APP_PACKAGE}/files/wikis/${fallbackId}`;
 }
 
 function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, content: string): void {
@@ -290,7 +338,7 @@ function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, con
   writeFileSync(hostTemporary, content, 'utf8');
   execSync(`adb push "${hostTemporary}" "${deviceTemporary}"`, { stdio: 'ignore', timeout: 15_000 });
   execSync(
-    `adb shell "run-as ren.onetwo.tidgi.mobile.test sh -c 'mkdir -p \"${wikiPath}/tiddlers\" && cp \"${deviceTemporary}\" \"${devicePath}\"'"`,
+    `adb shell "run-as ${APP_PACKAGE} sh -c 'mkdir -p \"${wikiPath}/tiddlers\" && cp \"${deviceTemporary}\" \"${devicePath}\"'"`,
     { stdio: 'ignore', timeout: 15_000 },
   );
 }
@@ -384,22 +432,72 @@ async function waitForSyncSuccess(maxWaitMs = NETWORK_TIMEOUT): Promise<void> {
   throw diagnosticError(successId, maxWaitMs);
 }
 
-Then('the unsynced count should be zero after sync', async () => {
-  await assertUnsyncedCountIsZero();
+Then('the workspace should have zero unsynced changes', { timeout: 10 * 60_000 }, async () => {
+  await assertImportedWorkspacesHaveNoUnsyncedChanges();
 });
 
-async function assertUnsyncedCountIsZero(): Promise<void> {
-  const wikiId = getImportedWikiWorkspaceId();
-  if (!wikiId) throw new Error('No wiki workspace found.');
-  await element(by.id(`workspace-settings-icon-${wikiId}`)).tap();
+async function assertCurrentWorkspaceHasNoUnsyncedChanges(workspace: IPersistedWikiWorkspace): Promise<void> {
   await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
-  await waitForElement(by.id('workspace-unsynced-count'), 30_000, 'workspace-unsynced-count');
+  await waitForElement(by.id('workspace-unsynced-count'), 120_000, 'workspace-unsynced-count');
+  const attributes = await element(by.id('workspace-unsynced-count')).getAttributes();
+  const countText = Array.isArray(attributes) ? undefined : (attributes as { text?: unknown }).text;
+  if (typeof countText !== 'string' || !/^0(?:\s|$)/.test(countText)) {
+    throw new Error(`Expected zero unsynced changes for ${workspace.name ?? workspace.id}, received ${JSON.stringify(countText)}`);
+  }
+}
+
+async function pressBackAndWait(): Promise<void> {
   try {
     await device.pressBack();
   } catch {
     adbKeyEvent(4);
   }
   await delay();
+}
+
+async function openSubWikiManager(): Promise<void> {
+  let isVisible = false;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      await waitFor(element(by.id('workspace-subwiki-manager-button'))).toBeVisible().withTimeout(1_000);
+      isVisible = true;
+      break;
+    } catch {
+      await element(by.id('workspace-detail-screen')).swipe('up', 'fast', 0.5);
+      await delay(500);
+    }
+  }
+  if (!isVisible) throw new Error('Sub-wiki manager button did not become visible after scrolling');
+  await element(by.id('workspace-subwiki-manager-button')).tap();
+  await waitForElement(by.id('workspace-subwiki-manager-screen'), 30_000, 'workspace-subwiki-manager-screen');
+}
+
+async function assertImportedWorkspacesHaveNoUnsyncedChanges(): Promise<void> {
+  const mainWiki = selectImportedWikiWorkspace();
+  if (typeof mainWiki?.id !== 'string') throw new Error('No main wiki workspace found.');
+
+  await element(by.id(`workspace-settings-icon-${mainWiki.id}`)).tap();
+  await assertCurrentWorkspaceHasNoUnsyncedChanges(mainWiki);
+
+  const subWikis = readPersistedWikiWorkspaces().filter(
+    workspace => workspace.isSubWiki === true && workspace.mainWikiID === mainWiki.id && typeof workspace.id === 'string',
+  );
+  if (subWikis.length > 0) {
+    await openSubWikiManager();
+    for (const subWiki of subWikis) {
+      const settingsIcon = element(by.id(`workspace-settings-icon-${subWiki.id}`));
+      await waitFor(settingsIcon)
+        .toBeVisible()
+        .whileElement(by.id('workspace-list'))
+        .scroll(200, 'down');
+      await settingsIcon.tap();
+      await assertCurrentWorkspaceHasNoUnsyncedChanges(subWiki);
+      await pressBackAndWait();
+      await waitForElement(by.id('workspace-subwiki-manager-screen'), 30_000, 'workspace-subwiki-manager-screen');
+    }
+    await pressBackAndWait();
+  }
+  await pressBackAndWait();
 }
 
 Then('the mock server git working tree contains {string}', { timeout: 10_000 }, (expectedName: string) => {
@@ -454,6 +552,6 @@ Given('the imported mock server wiki has a synced tiddler {string} in shared his
   await delay(5_000);
   await tapSyncButtonForImportedWiki();
   await waitForSyncSuccess();
-  await assertUnsyncedCountIsZero();
+  await assertImportedWorkspacesHaveNoUnsyncedChanges();
   assertMockServerGitWorkingTreeContains(title);
 });

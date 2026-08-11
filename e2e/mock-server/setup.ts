@@ -187,6 +187,11 @@ export function writeBaselineWikiFiles(): void {
     ),
     'utf8',
   );
+  // Regression fixture for Windows repositories. Archive imports must
+  // preserve this committed CRLF blob instead of immediately reporting it as
+  // a dirty working-tree file.
+  writeFileSync(join(TEST_WIKI_DIR, '.gitattributes'), 'windows-crlf.md -text\n', 'utf8');
+  writeFileSync(join(TEST_WIKI_DIR, 'windows-crlf.md'), 'first line\r\nsecond line\r\n', 'utf8');
 
   putTid('$__StoryList.tid', ['title: $:/StoryList', 'list:', '']);
   putTid('HelloThere.tid', ['title: HelloThere', 'type: text/vnd.tiddlywiki', '', 'E2E mock wiki.']);

@@ -22,6 +22,7 @@ Feature: Desktop Sync - Import, create changes, and sync wiki through the local 
     And I tap the import wiki confirm button
     Then the import should complete successfully
     And I should see the imported wiki in the workspace list
+    And the workspace should have zero unsynced changes
 
   # ── Open ──────────────────────────────────────────────────────────────────────
 
@@ -56,4 +57,4 @@ Feature: Desktop Sync - Import, create changes, and sync wiki through the local 
     And a test tiddler is written to the first wiki via adb
     When I tap the sync button for the first wiki workspace
     Then the sync should complete successfully
-    And the unsynced count should be zero after sync
+    And the workspace should have zero unsynced changes
