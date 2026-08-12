@@ -2,6 +2,16 @@ packages:
   - .
   - plugins
 
+allowBuilds:
+  '@parcel/watcher': true
+  detox: true
+  dprint: true
+  dtrace-provider: true
+  esbuild: true
+  less: true
+  svelte-preprocess: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - detox

@@ -111,6 +111,7 @@
     "cross-env": "^7.0.3",
     "detox": "20.47.0",
     "drizzle-kit": "^0.30.5",
+    "eslint": "9.39.2",
     "eslint-config-tidgi": "^2.2.0",
     "eslint-plugin-react-native": "^5.0.0",
     "expo-dev-client": "^6.0.20",
