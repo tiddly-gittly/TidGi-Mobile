@@ -165,7 +165,15 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       const workspaces = useWorkspaceStore.getState().workspaces;
       for (const workspace of workspaces) {
         if (workspace.type !== undefined && workspace.type !== 'wiki' && workspace.type !== 'html') continue;
-        if ((workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki === true) continue;
+        const isAttachedSubWiki = (workspace.type === undefined || workspace.type === 'wiki') &&
+          workspace.isSubWiki === true &&
+          typeof workspace.mainWikiID === 'string' &&
+          workspaces.some(candidate =>
+            (candidate.type === undefined || candidate.type === 'wiki') &&
+            candidate.id === workspace.mainWikiID &&
+            candidate.isSubWiki !== true
+          );
+        if (isAttachedSubWiki) continue;
         if (!workspace.syncedServers.some(item => item.serverID === server.id)) continue;
         const isTargetWorkspace = pendingAuth.workspaceId === undefined ||
           workspace.id === pendingAuth.workspaceId;

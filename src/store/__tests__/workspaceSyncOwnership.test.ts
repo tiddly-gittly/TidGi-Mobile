@@ -97,11 +97,17 @@ describe('sub-wiki synchronization ownership', () => {
 
     useWorkspaceStore.getState().addServer('child', 'desktop', { token: 'secret' });
     useWorkspaceStore.getState().setServerActive('child', 'existing', false);
+    useWorkspaceStore.getState().update('child', {
+      syncedServers: [
+        { lastSync: 2, serverID: 'existing', syncActive: false },
+        { lastSync: 2, serverID: 'desktop', syncActive: false, token: 'secret' },
+      ],
+    });
 
     const child = useWorkspaceStore.getState().workspaces[0] as IWikiWorkspace;
     expect(child.syncedServers).toEqual([
-      expect.objectContaining({ serverID: 'existing', syncActive: false }),
-      expect.objectContaining({ serverID: 'desktop', token: 'secret' }),
+      expect.objectContaining({ lastSync: 2, serverID: 'existing', syncActive: false }),
+      expect.objectContaining({ lastSync: 2, serverID: 'desktop', token: 'secret' }),
     ]);
   });
 });

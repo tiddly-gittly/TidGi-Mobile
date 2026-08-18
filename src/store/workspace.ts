@@ -263,7 +263,15 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             if (oldWikiIndex >= 0) {
               const oldWiki = state.workspaces[oldWikiIndex];
-              const normalizedUpdate = (oldWiki.type === undefined || oldWiki.type === 'wiki') && oldWiki.isSubWiki === true
+              const isAttachedSubWiki = (oldWiki.type === undefined || oldWiki.type === 'wiki') &&
+                oldWiki.isSubWiki === true &&
+                typeof oldWiki.mainWikiID === 'string' &&
+                state.workspaces.some(workspace =>
+                  (workspace.type === undefined || workspace.type === 'wiki') &&
+                  workspace.id === oldWiki.mainWikiID &&
+                  workspace.isSubWiki !== true
+                );
+              const normalizedUpdate = isAttachedSubWiki
                 ? { ...newWikiWorkspace, syncedServers: [] }
                 : newWikiWorkspace;
               state.workspaces[oldWikiIndex] = { ...oldWiki, ...normalizedUpdate } as typeof oldWiki;
