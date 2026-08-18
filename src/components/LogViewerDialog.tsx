@@ -8,7 +8,7 @@
  * - Three-dot menu with: Open File, Share, Clear Logs
  */
 import { shareAsync } from 'expo-sharing';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, ScrollView } from 'react-native';
 import { Button, Dialog, IconButton, Menu, Portal, Text } from 'react-native-paper';
@@ -65,19 +65,23 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [fileMenuVisible, setFileMenuVisible] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
+  const contentRequestID = useRef(0);
   const logPages = useMemo(() => paginateLogContent(logContent), [logContent]);
   const visiblePageIndex = Math.min(pageIndex, logPages.length - 1);
 
   const loadLogFiles = useCallback(async () => {
+    const requestID = ++contentRequestID.current;
     const files = scope === 'app'
       ? await listAppLogFiles()
       : await listWorkspaceLogFiles(scope);
+    if (requestID !== contentRequestID.current) return;
     setLogFileNames(files);
     // Select the latest file by default
     if (files.length > 0) {
       const latest = files[files.length - 1];
       setSelectedLogFile(latest);
       const content = await readLogFile(latest);
+      if (requestID !== contentRequestID.current) return;
       setLogContent(content ?? t('WorkspaceSettings.LogEmpty'));
       setPageIndex(0);
     } else {
@@ -90,11 +94,16 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
     if (visible) {
       void loadLogFiles();
     }
+    return () => {
+      contentRequestID.current++;
+    };
   }, [visible, loadLogFiles]);
 
   const selectLogFile = useCallback(async (fileName: string) => {
+    const requestID = ++contentRequestID.current;
     setSelectedLogFile(fileName);
     const content = await readLogFile(fileName);
+    if (requestID !== contentRequestID.current) return;
     setLogContent(content ?? t('WorkspaceSettings.LogEmpty'));
     setPageIndex(0);
   }, [t]);
@@ -134,22 +143,16 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
 
   const handleClearLogs = useCallback(async () => {
     setActionsMenuVisible(false);
-    if (scope === 'app') {
-      // Clear only app logs
-      for (const fileName of logFileNames) {
-        await deleteLogFile(fileName);
-      }
-    } else {
-      // Clear only this workspace's logs
-      for (const fileName of logFileNames) {
-        await deleteLogFile(fileName);
-      }
+    contentRequestID.current++;
+    // `logFileNames` is already scoped to either app logs or this workspace.
+    for (const fileName of logFileNames) {
+      await deleteLogFile(fileName);
     }
     setLogContent(t('WorkspaceSettings.LogEmpty'));
     setLogFileNames([]);
     setSelectedLogFile(undefined);
     setPageIndex(0);
-  }, [scope, logFileNames, t]);
+  }, [logFileNames, t]);
 
   const title = scope === 'app' ? t('Preference.ViewAppLog') : t('WorkspaceSettings.ViewLog');
 
