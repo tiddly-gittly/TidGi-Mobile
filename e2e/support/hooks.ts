@@ -118,6 +118,7 @@ const METRO_URL = process.env.METRO_URL ?? `${HOST_BASE_URL}:8081`;
 
 // Default mock-server URL the device reaches directly on the LAN.
 const DEFAULT_DESKTOP_URL = process.env.TIDGI_DESKTOP_URL ?? `${HOST_BASE_URL}:5212`;
+const USE_EXTERNAL_DESKTOP = typeof process.env.TIDGI_DESKTOP_URL === 'string' && process.env.TIDGI_DESKTOP_URL.trim().length > 0;
 
 // Expo dev-client deep-link that auto-connects to Metro without manual interaction.
 // Format: exp+<slug>://expo-development-client/?url=<encoded-metro-url>
@@ -386,13 +387,17 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
   keepDeviceAwake();
   ensureDeviceUnlocked();
 
-  // Start the local mock TiddlyWiki server. It uses the tw-mobile-sync plugin
-  // built from the local source tree, so @mobilesync tests no longer require a
-  // running TidGi-Desktop instance.
-  console.log('[BeforeAll] Preparing mock server...');
-  ensureWikiReady();
-  resetMockWikiRepositoryToBaseline();
-  await startServer();
+  if (USE_EXTERNAL_DESKTOP) {
+    console.log(`[BeforeAll] Using external Desktop sync server at ${DEFAULT_DESKTOP_URL}; mock server remains stopped.`);
+  } else {
+    // Start the local mock TiddlyWiki server. It uses the tw-mobile-sync plugin
+    // built from the local source tree, so @mobilesync tests no longer require a
+    // running TidGi-Desktop instance.
+    console.log('[BeforeAll] Preparing mock server...');
+    ensureWikiReady();
+    resetMockWikiRepositoryToBaseline();
+    await startServer();
+  }
 
   // Mock server binds to 0.0.0.0 and normally uses LAN IP. Keep adb reverse as
   // a compatibility path when TIDGI_DESKTOP_URL is overridden to localhost.
@@ -477,7 +482,7 @@ BeforeAll({ timeout: 6 * 60 * 1000 }, async () => {
 });
 
 AfterAll(async () => {
-  stopServer();
+  if (!USE_EXTERNAL_DESKTOP) stopServer();
   allowDeviceSleepNormally();
   await detox.cleanup();
 });
@@ -495,7 +500,7 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
   });
 
   resetDeviceE2EState();
-  resetMockWikiRepositoryToBaseline();
+  if (!USE_EXTERNAL_DESKTOP) resetMockWikiRepositoryToBaseline();
 
   const expoError = detectExpoErrorState();
   if (expoError.isError) {
@@ -534,7 +539,7 @@ After(async (message: ITestCaseHookParameter) => {
   // next scenario's device.launchApp() stuck waiting for the instrumentation
   // ready message. Per-scenario cleanup (force-stop + wipe storage) is done in
   // the Before hook instead, right before launching a clean instance.
-  resetMockWikiRepositoryToBaseline();
+  if (!USE_EXTERNAL_DESKTOP) resetMockWikiRepositoryToBaseline();
 });
 
 /**
