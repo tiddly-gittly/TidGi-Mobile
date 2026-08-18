@@ -624,7 +624,7 @@ export class GitBackgroundSyncService {
     const update = this.#workspaceStore.getState().update;
     const workspace = this.#workspaceStore.getState().workspaces.find(w => w.id === workspaceId);
 
-    if (workspace?.type === 'wiki') {
+    if (workspace !== undefined && (workspace.type === undefined || workspace.type === 'wiki')) {
       const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
       const newSyncedServers = syncConfigurationWorkspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
       update(syncConfigurationWorkspace.id, { syncedServers: newSyncedServers });
