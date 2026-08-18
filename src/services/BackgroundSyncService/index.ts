@@ -359,13 +359,18 @@ export class GitBackgroundSyncService {
     const workspaceLogger = logFor(workspace.id);
     const remote = this.getRemoteConfig(workspace, server);
     if (remote === undefined) {
+      const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+      const configuredServerIDs = syncConfigurationWorkspace.syncedServers.map(item => item.serverID);
       console.warn(`No remote config found for workspace ${workspace.name}`, {
         workspaceId: workspace.id,
         serverId: server.id,
-        syncedServers: workspace.syncedServers,
+        syncConfigurationWorkspaceId: syncConfigurationWorkspace.id,
+        configuredServerIDs,
       });
       workspaceLogger.warn('Remote config missing', {
+        configuredServerIDs,
         serverId: server.id,
+        syncConfigurationWorkspaceId: syncConfigurationWorkspace.id,
         workspaceId: workspace.id,
       });
       return FAILED_WIKI_SYNC_RESULT;

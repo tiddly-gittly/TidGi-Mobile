@@ -195,7 +195,21 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       })();
     };
 
-    const timeout = setTimeout(run, 100);
+    const idleTask = globalThis.requestIdleCallback;
+    if (typeof idleTask === 'function') {
+      const idleHandle = idleTask(run);
+      return () => {
+        cancellationState.cancelled = true;
+        if (typeof globalThis.cancelIdleCallback === 'function') {
+          globalThis.cancelIdleCallback(idleHandle);
+        }
+      };
+    }
+
+    // Keep initial navigation responsive on runtimes without requestIdleCallback.
+    // Git filesystem calls can otherwise occupy the RN bridge before Detox has
+    // a chance to disable synchronization.
+    const timeout = setTimeout(run, 5_000);
     return () => {
       cancellationState.cancelled = true;
       clearTimeout(timeout);
