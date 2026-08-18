@@ -45,7 +45,8 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
   const { t } = useTranslation();
   const theme = useTheme();
   const title = item.name === HELP_WORKSPACE_NAME ? t('Menu.TidGiHelpManual') : item.name;
-  const pendingChangesText = item.type === 'wiki'
+  const isWiki = item.type === undefined || item.type === 'wiki';
+  const pendingChangesText = isWiki
     ? (() => {
       const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
       const unpushed = pendingChangesCount.unpushed;
@@ -74,7 +75,7 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         right={(props) => (
           <CardTitleRight>
             <RightButtonsContainer>
-              {(item.type === 'html' || (item.type === 'wiki' && item.isSubWiki !== true)) && <SyncIconButton workspaceID={item.id} />}
+              {(item.type === 'html' || (isWiki && item.isSubWiki !== true)) && <SyncIconButton workspaceID={item.id} />}
               <ItemRightButton
                 testID={`workspace-settings-icon-${item.id}`}
                 accessibilityLabel='workspace-settings-icon'
@@ -131,7 +132,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
   const workspaceIDSet = useMemo(() => new Set(allWorkspacesList.map(workspace => workspace.id)), [allWorkspacesList]);
   const workspacesList = useMemo(() =>
     (workspaces ?? allWorkspacesList).filter((workspace) => {
-      if (workspace.type !== 'wiki') return true;
+      if (workspace.type !== undefined && workspace.type !== 'wiki') return true;
       if (includeSubWikis) return true;
       if (workspace.isSubWiki !== true) return true;
       const { mainWikiID } = workspace;
@@ -153,7 +154,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
 
         await Promise.all(workspacesList.map(async workspace => {
           if (isCancelled()) return;
-          if (workspace.type !== 'wiki') {
+          if (workspace.type !== undefined && workspace.type !== 'wiki') {
             nextMap[workspace.id] = { main: 0, subWikis: 0, unpushed: 0 };
             return;
           }

@@ -263,7 +263,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             if (oldWikiIndex >= 0) {
               const oldWiki = state.workspaces[oldWikiIndex];
-              const normalizedUpdate = oldWiki.type === 'wiki' && oldWiki.isSubWiki === true
+              const normalizedUpdate = (oldWiki.type === undefined || oldWiki.type === 'wiki') && oldWiki.isSubWiki === true
                 ? { ...newWikiWorkspace, syncedServers: [] }
                 : newWikiWorkspace;
               state.workspaces[oldWikiIndex] = { ...oldWiki, ...normalizedUpdate } as typeof oldWiki;
@@ -288,6 +288,9 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 if (mainWikiIndex < 0) return;
                 oldWikiIndex = mainWikiIndex;
                 oldWiki = state.workspaces[mainWikiIndex];
+              }
+              if (!oldWiki.type) {
+                oldWiki.type = 'wiki';
               }
               if (oldWiki.type !== 'wiki' && oldWiki.type !== 'html') return;
               // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
@@ -337,6 +340,9 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 oldWikiIndex = mainWikiIndex;
                 oldWiki = state.workspaces[mainWikiIndex];
               }
+              if (!oldWiki.type) {
+                oldWiki.type = 'wiki';
+              }
               if (oldWiki.type !== 'wiki' && oldWiki.type !== 'html') return;
               const serverToChange = oldWiki.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
               if (serverToChange) {
@@ -358,7 +364,10 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
         removeSyncedServersFromWorkspace(serverIDToRemove) {
           set((state) => {
             state.workspaces.forEach(workspace => {
-              if ((workspace.type === 'wiki' || workspace.type === 'html') && workspace.syncedServers.some(item => item.serverID === serverIDToRemove)) {
+              if (
+                (workspace.type === undefined || workspace.type === 'wiki' || workspace.type === 'html') &&
+                workspace.syncedServers.some(item => item.serverID === serverIDToRemove)
+              ) {
                 workspace.syncedServers = workspace.syncedServers.filter(item => item.serverID !== serverIDToRemove);
                 // No need to call state.update() - immer already tracks mutations
               }
@@ -376,14 +385,14 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             }
 
             const targetWorkspace = state.workspaces.find(workspace => workspace.id === id);
-            if (!targetWorkspace || targetWorkspace.type !== 'wiki') {
+            if (!targetWorkspace || (targetWorkspace.type !== undefined && targetWorkspace.type !== 'wiki')) {
               return;
             }
 
             targetWorkspace.id = newID;
 
             state.workspaces.forEach((workspace) => {
-              if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
+              if ((workspace.type === undefined || workspace.type === 'wiki') && workspace.mainWikiID === id) {
                 workspace.mainWikiID = newID;
               }
             });
@@ -402,7 +411,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
           if (version === 0) {
             if (typeof state.defaultWorkspaceId === 'undefined') {
               const workspaces = state.workspaces as Array<{ type?: string; id?: string }> | undefined;
-              const firstWiki = workspaces?.find(workspace => workspace.type === 'wiki');
+              const firstWiki = workspaces?.find(workspace => workspace.type === undefined || workspace.type === 'wiki');
               state.defaultWorkspaceId = firstWiki?.id ?? null;
             }
           }

@@ -164,8 +164,8 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     if (pendingAuth !== undefined && (pendingAuth.token !== undefined || pendingAuth.tokenAuthHeaderName !== undefined || pendingAuth.tokenAuthHeaderValue !== undefined)) {
       const workspaces = useWorkspaceStore.getState().workspaces;
       for (const workspace of workspaces) {
-        if (workspace.type !== 'wiki' && workspace.type !== 'html') continue;
-        if (workspace.type === 'wiki' && workspace.isSubWiki === true) continue;
+        if (workspace.type !== undefined && workspace.type !== 'wiki' && workspace.type !== 'html') continue;
+        if ((workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki === true) continue;
         if (!workspace.syncedServers.some(item => item.serverID === server.id)) continue;
         const isTargetWorkspace = pendingAuth.workspaceId === undefined ||
           workspace.id === pendingAuth.workspaceId;

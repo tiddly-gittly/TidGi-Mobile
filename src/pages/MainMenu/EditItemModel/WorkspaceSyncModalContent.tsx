@@ -15,7 +15,8 @@ interface IWorkspaceSyncModalContentProps {
 export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton = true, onOpenChanges }: IWorkspaceSyncModalContentProps): React.JSX.Element {
   const { t } = useTranslation();
   const workspaces = useWorkspaceStore(state => state.workspaces);
-  const syncConfigurationWorkspace = workspace.type === 'wiki'
+  const isWiki = workspace.type === undefined || workspace.type === 'wiki';
+  const syncConfigurationWorkspace = isWiki
     ? getSyncConfigurationWorkspace(workspace, workspaces)
     : workspace;
 
@@ -32,7 +33,7 @@ export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton 
         {t('Sync.LastSync')}: {lastSyncTimestamp ? new Date(lastSyncTimestamp).toLocaleString() : '-'}
       </Text>
 
-      {workspace.type === 'wiki' && (
+      {isWiki && (
         <Button
           mode='outlined'
           onPress={() => {

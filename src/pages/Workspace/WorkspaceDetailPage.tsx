@@ -31,9 +31,9 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const [deleteSubWorkspacesTogether, setDeleteSubWorkspacesTogether] = useState(false);
   const [workspaceLogVisible, setWorkspaceLogVisible] = useState(false);
   const subWorkspaces = allWorkspaces.filter((workspace): workspace is IWikiWorkspace =>
-    workspace.type === 'wiki' && workspace.isSubWiki === true && workspace.mainWikiID === wiki?.id
+    (workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki === true && workspace.mainWikiID === wiki?.id
   );
-  const isFolderWiki = wiki?.type === 'wiki';
+  const isFolderWiki = wiki !== undefined && (wiki.type === undefined || wiki.type === 'wiki');
   const canDeleteSubWorkspacesTogether = isFolderWiki && wiki.isSubWiki !== true && subWorkspaces.length > 0;
   const wikiReference = useRef(wiki);
   wikiReference.current = wiki;
@@ -47,7 +47,11 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
     let cancelled = false;
     const timeout = setTimeout(() => {
       const currentWiki = wikiReference.current;
-      if (currentWiki?.type !== 'wiki' || currentWiki.id !== wikiId) return;
+      if (
+        currentWiki === undefined ||
+        (currentWiki.type !== undefined && currentWiki.type !== 'wiki') ||
+        currentWiki.id !== wikiId
+      ) return;
       const workspacesToScan = currentWiki.isSubWiki === true
         ? [currentWiki]
         : getRelatedWikiWorkspaces(currentWiki, useWorkspaceStore.getState().workspaces);

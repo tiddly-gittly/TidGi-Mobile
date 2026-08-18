@@ -69,4 +69,21 @@ describe('sub-wiki synchronization ownership', () => {
     const child = useWorkspaceStore.getState().workspaces[1] as IWikiWorkspace;
     expect(child.syncedServers).toEqual([]);
   });
+
+  it('preserves main-only ownership for legacy workspaces without an explicit type', () => {
+    const legacyMain = { ...mainWorkspace(), type: undefined };
+    const legacyChild = { ...subWorkspace(), type: undefined };
+    useWorkspaceStore.setState({ workspaces: [legacyMain, legacyChild] });
+
+    useWorkspaceStore.getState().update('child', {
+      syncedServers: [{ lastSync: 1, serverID: 'desktop', syncActive: true }],
+    });
+    useWorkspaceStore.getState().addServer('child', 'desktop', { token: 'secret' });
+
+    const [main, child] = useWorkspaceStore.getState().workspaces as IWikiWorkspace[];
+    expect(main.syncedServers).toEqual([
+      expect.objectContaining({ serverID: 'desktop', token: 'secret' }),
+    ]);
+    expect(child.syncedServers).toEqual([]);
+  });
 });
