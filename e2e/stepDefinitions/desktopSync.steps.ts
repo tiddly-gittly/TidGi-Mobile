@@ -355,10 +355,15 @@ function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, con
   const deviceTemporary = `/data/local/tmp/${tiddlerFilename}`;
 
   writeFileSync(hostTemporary, content, 'utf8');
-  execSync(`adb push "${hostTemporary}" "${deviceTemporary}"`, { stdio: 'ignore', timeout: 15_000 });
+  execFileSync('adb', ['push', hostTemporary, deviceTemporary], { stdio: 'ignore', timeout: 15_000 });
   execFileSync(
     'adb',
-    ['shell', 'run-as', APP_PACKAGE, 'sh', '-c', `mkdir -p "${wikiPath}/tiddlers" && cp "${deviceTemporary}" "${devicePath}"`],
+    ['shell', 'run-as', APP_PACKAGE, 'mkdir', '-p', `${wikiPath}/tiddlers`],
+    { stdio: 'ignore', timeout: 15_000 },
+  );
+  execFileSync(
+    'adb',
+    ['shell', 'run-as', APP_PACKAGE, 'cp', deviceTemporary, devicePath],
     { stdio: 'ignore', timeout: 15_000 },
   );
 }
