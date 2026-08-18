@@ -71,7 +71,15 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         title={title}
         subtitle={pendingChangesText === undefined
           ? undefined
-          : <PendingChangesText testID={`workspace-pending-count-${item.id}`}>{pendingChangesText}</PendingChangesText>}
+          : (
+            <PendingChangesContainer
+              testID={`workspace-pending-count-${item.id}`}
+              accessible
+              accessibilityLabel={pendingChangesText}
+            >
+              <PendingChangesText>{pendingChangesText}</PendingChangesText>
+            </PendingChangesContainer>
+          )}
         right={(props) => (
           <CardTitleRight>
             <RightButtonsContainer>
@@ -269,6 +277,9 @@ const WorkspaceCardTitle = styled(Card.Title)`
 `;
 const PendingChangesText = styled(Text)`
   color: ${({ theme }) => theme.colors.onSecondaryContainer};
+`;
+const PendingChangesContainer = styled.View`
+  align-self: flex-start;
 `;
 const CardTitleRight = styled.View`
   align-self: stretch;

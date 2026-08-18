@@ -420,7 +420,9 @@ async function assertWorkspacePendingCount(workspaceID: string): Promise<void> {
   const countElement = element(by.id(`workspace-pending-count-${workspaceID}`));
   await waitFor(countElement).toBeVisible().withTimeout(120_000);
   const attributes = await countElement.getAttributes();
-  const text = Array.isArray(attributes) ? undefined : (attributes as { text?: unknown }).text;
+  const text = Array.isArray(attributes)
+    ? undefined
+    : (attributes as { label?: unknown; text?: unknown }).text ?? (attributes as { label?: unknown }).label;
   if (typeof text !== 'string' || !/[1-9]\d*↑/.test(text)) {
     throw new Error(`Expected workspace ${workspaceID} to show pending changes, received ${JSON.stringify(text)}.`);
   }
