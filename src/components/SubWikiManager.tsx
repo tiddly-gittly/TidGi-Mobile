@@ -14,12 +14,13 @@ import { IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspac
 import { WorkspaceList } from './WorkspaceList';
 
 export interface ISubWikiManagerProps {
+  isFocused?: boolean;
   onPressSettings?: (workspace: IWorkspace) => void;
   onPressWorkspace?: (workspace: IWorkspace) => void;
   workspace: IWikiWorkspace;
 }
 
-export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, onPressWorkspace, onPressSettings }) => {
+export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, isFocused = true, onPressWorkspace, onPressSettings }) => {
   const { t } = useTranslation();
   const allWorkspaces = useWorkspaceStore(state => state.workspaces);
 
@@ -40,7 +41,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, onPressWor
     <WorkspaceList
       workspaces={attachedSubWikiWorkspaces}
       includeSubWikis={true}
-      isFocused={true}
+      isFocused={isFocused}
       reorderable={false}
       onPress={onPressWorkspace}
       onPressSettings={onPressSettings}

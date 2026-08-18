@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Checkbox, Text } from 'react-native-paper';
+import { Button, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { getSyncConfigurationWorkspace } from '../../../utils/workspaceRelations';
 
 interface IWorkspaceSyncModalContentProps {
   onOpenChanges?: () => void;
@@ -13,13 +14,16 @@ interface IWorkspaceSyncModalContentProps {
 
 export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton = true, onOpenChanges }: IWorkspaceSyncModalContentProps): React.JSX.Element {
   const { t } = useTranslation();
-  const update = useWorkspaceStore(state => state.update);
+  const workspaces = useWorkspaceStore(state => state.workspaces);
+  const syncConfigurationWorkspace = workspace.type === 'wiki'
+    ? getSyncConfigurationWorkspace(workspace, workspaces)
+    : workspace;
 
   const lastSyncTimestamp = useMemo(() => {
-    const syncedServers = workspace.syncedServers;
+    const syncedServers = syncConfigurationWorkspace.syncedServers;
     if (syncedServers.length === 0) return undefined;
     return Math.max(...syncedServers.map(item => item.lastSync));
-  }, [workspace.syncedServers]);
+  }, [syncConfigurationWorkspace.syncedServers]);
 
   return (
     <Container>
@@ -27,16 +31,6 @@ export function WorkspaceSyncModalContent({ workspace, onClose, showCloseButton 
       <Text variant='bodyMedium' testID='last-sync-label'>
         {t('Sync.LastSync')}: {lastSyncTimestamp ? new Date(lastSyncTimestamp).toLocaleString() : '-'}
       </Text>
-
-      {workspace.type === 'wiki' && !workspace.isSubWiki && (
-        <Checkbox.Item
-          label={t('Sync.IncludeSubWikis')}
-          status={workspace.syncIncludeSubWikis !== false ? 'checked' : 'unchecked'}
-          onPress={() => {
-            update(workspace.id, { syncIncludeSubWikis: workspace.syncIncludeSubWikis === false });
-          }}
-        />
-      )}
 
       {workspace.type === 'wiki' && (
         <Button

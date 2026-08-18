@@ -159,15 +159,16 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       useStandardGitProtocol: editedUseStandardGitProtocol,
     });
 
-    // Refresh auth on the QR's workspace (and its sub-wikis) when this server is linked.
+    // Credentials live only on top-level workspaces. Attached sub-wikis resolve
+    // their synchronization configuration from the main workspace at runtime.
     if (pendingAuth !== undefined && (pendingAuth.token !== undefined || pendingAuth.tokenAuthHeaderName !== undefined || pendingAuth.tokenAuthHeaderValue !== undefined)) {
       const workspaces = useWorkspaceStore.getState().workspaces;
       for (const workspace of workspaces) {
         if (workspace.type !== 'wiki' && workspace.type !== 'html') continue;
+        if (workspace.type === 'wiki' && workspace.isSubWiki === true) continue;
         if (!workspace.syncedServers.some(item => item.serverID === server.id)) continue;
         const isTargetWorkspace = pendingAuth.workspaceId === undefined ||
-          workspace.id === pendingAuth.workspaceId ||
-          (workspace.type === 'wiki' && workspace.mainWikiID === pendingAuth.workspaceId);
+          workspace.id === pendingAuth.workspaceId;
         if (!isTargetWorkspace) continue;
         updateWorkspace(workspace.id, {
           syncedServers: workspace.syncedServers.map(item =>

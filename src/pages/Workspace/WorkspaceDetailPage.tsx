@@ -9,6 +9,7 @@ import type { RootStackParameterList } from '../../App';
 import { LogViewerDialog } from '../../components/LogViewerDialog';
 import { gitGetUnsyncedCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { getRelatedWikiWorkspaces } from '../../utils/workspaceRelations';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
 import { FooterRow } from './workspaceStyles';
@@ -47,8 +48,14 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
     const timeout = setTimeout(() => {
       const currentWiki = wikiReference.current;
       if (currentWiki?.type !== 'wiki' || currentWiki.id !== wikiId) return;
-      void gitGetUnsyncedCommitCount(currentWiki, { ignoreDeferredScan: true, throwOnError: true })
-        .then((count) => {
+      const workspacesToScan = currentWiki.isSubWiki === true
+        ? [currentWiki]
+        : getRelatedWikiWorkspaces(currentWiki, useWorkspaceStore.getState().workspaces);
+      void Promise.all(
+        workspacesToScan.map(async workspace => await gitGetUnsyncedCommitCount(workspace, { ignoreDeferredScan: true, throwOnError: true })),
+      )
+        .then((counts) => {
+          const count = counts.reduce((total, workspaceCount) => total + workspaceCount, 0);
           if (!cancelled) setPendingChangeCount(count);
         })
         .catch((error: unknown) => {

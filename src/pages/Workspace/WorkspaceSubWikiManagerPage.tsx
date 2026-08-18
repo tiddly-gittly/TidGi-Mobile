@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +9,7 @@ import { PageContainer, SubWikiPageContainer, useWikiWorkspace, useWorkspaceTitl
 
 export function WorkspaceSubWikiManagerPage({ route, navigation }: StackScreenProps<RootStackParameterList, 'WorkspaceSubWikiManager'>): JSX.Element {
   const { t } = useTranslation();
+  const isFocused = useIsFocused();
   const wiki = useWikiWorkspace(route.params.id);
   useWorkspaceTitle({ route, navigation } as StackScreenProps<RootStackParameterList, keyof RootStackParameterList>, wiki, t('SubWiki.ManageSubKnowledgeBases'));
 
@@ -23,6 +25,7 @@ export function WorkspaceSubWikiManagerPage({ route, navigation }: StackScreenPr
     <SubWikiPageContainer testID='workspace-subwiki-manager-screen'>
       <SubWikiManager
         workspace={wiki}
+        isFocused={isFocused}
         onPressWorkspace={(subWorkspace) => {
           navigation.navigate('WorkspaceDetail', { id: subWorkspace.id });
         }}

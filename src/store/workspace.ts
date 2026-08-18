@@ -40,9 +40,14 @@ export interface IWikiWorkspace {
    */
   mainWikiID?: string | null;
   /**
-   * Whether manual sync should include all sub-wikis attached to this main wiki.
+   * @deprecated Main workspace synchronization always includes attached sub-wikis.
+   * Kept only so persisted v1 data can be migrated safely.
    */
   syncIncludeSubWikis?: boolean;
+  /**
+   * Synchronization configuration is stored only on a top-level workspace.
+   * Attached sub-wikis must keep this empty and resolve their main workspace.
+   */
   syncedServers: IWikiServerSync[];
   type?: 'wiki';
   /**
@@ -189,6 +194,7 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   ? requestedID
                   : (sameNameWorkspace ? `${newWorkspace.name}_${String(Math.random()).substring(2, 7)}` : newWorkspace.name);
                 const wikiFolderLocation = `${wikiFolderBasePath}${id}`;
+                const isSubWiki = (newWorkspace as IWikiWorkspace).isSubWiki === true;
                 const newWikiWorkspaceWithID = {
                   ...(newWorkspace as IWikiWorkspace),
                   id,
@@ -196,7 +202,9 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   useExternalStorage: useExternal,
                   allowReadFileAttachment: true,
                   enableQuickLoad: false,
-                  syncIncludeSubWikis: true,
+                  isSubWiki,
+                  syncedServers: isSubWiki ? [] : (newWorkspace as IWikiWorkspace).syncedServers,
+                  syncIncludeSubWikis: undefined,
                 } satisfies IWikiWorkspace;
                 state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];
                 result = cloneDeep(newWikiWorkspaceWithID);
@@ -255,17 +263,31 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
             const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             if (oldWikiIndex >= 0) {
               const oldWiki = state.workspaces[oldWikiIndex];
-              state.workspaces[oldWikiIndex] = { ...oldWiki, ...newWikiWorkspace } as typeof oldWiki;
+              const normalizedUpdate = oldWiki.type === 'wiki' && oldWiki.isSubWiki === true
+                ? { ...newWikiWorkspace, syncedServers: [] }
+                : newWikiWorkspace;
+              state.workspaces[oldWikiIndex] = { ...oldWiki, ...normalizedUpdate } as typeof oldWiki;
             }
           });
         },
         addServer(id, newServerID, auth) {
           set((state) => {
-            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
+            let oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             if (oldWikiIndex >= 0) {
-              const oldWiki = state.workspaces[oldWikiIndex];
+              let oldWiki = state.workspaces[oldWikiIndex];
               if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
+              }
+              if ('isSubWiki' in oldWiki && oldWiki.isSubWiki === true && typeof oldWiki.mainWikiID === 'string') {
+                const mainWikiID = oldWiki.mainWikiID;
+                const mainWikiIndex = state.workspaces.findIndex(workspace =>
+                  (workspace.type === undefined || workspace.type === 'wiki') &&
+                  workspace.id === mainWikiID &&
+                  workspace.isSubWiki !== true
+                );
+                if (mainWikiIndex < 0) return;
+                oldWikiIndex = mainWikiIndex;
+                oldWiki = state.workspaces[mainWikiIndex];
               }
               if (oldWiki.type !== 'wiki' && oldWiki.type !== 'html') return;
               // get latest existing server last sync, if haven't sync to any server before, use LAST_SYNC_TO_SYNC_ALL
@@ -293,44 +315,27 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 }];
                 state.workspaces[oldWikiIndex] = { ...oldWiki, syncedServers: uniqBy(updatedServers, 'serverID') };
               }
-
-              // Propagate the new server to all sub-wikis attached to this main wiki.
-              state.workspaces.forEach((workspace) => {
-                if (workspace.type === 'wiki' && workspace.mainWikiID === id) {
-                  const subExistingIndex = workspace.syncedServers.findIndex(item => item.serverID === newServerID);
-                  if (subExistingIndex >= 0) {
-                    const existing = workspace.syncedServers[subExistingIndex];
-                    workspace.syncedServers[subExistingIndex] = {
-                      ...existing,
-                      ...(auth?.token !== undefined ? { token: auth.token } : {}),
-                      ...(auth?.tokenAuthHeaderName !== undefined ? { tokenAuthHeaderName: auth.tokenAuthHeaderName } : {}),
-                      ...(auth?.tokenAuthHeaderValue !== undefined ? { tokenAuthHeaderValue: auth.tokenAuthHeaderValue } : {}),
-                    };
-                    return;
-                  }
-                  const subLastSync = workspace.syncedServers.reduce<number>(
-                    (max, server) => (server.lastSync > max ? server.lastSync : max),
-                    LAST_SYNC_TO_SYNC_ALL,
-                  );
-                  const subUpdatedServers = [...workspace.syncedServers, {
-                    serverID: newServerID,
-                    lastSync: subLastSync,
-                    syncActive: true,
-                    ...auth,
-                  }];
-                  workspace.syncedServers = uniqBy(subUpdatedServers, 'serverID');
-                }
-              });
             }
           });
         },
         setServerActive(id, serverIDToActive, isActive = true) {
           set((state) => {
-            const oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
+            let oldWikiIndex = state.workspaces.findIndex((workspace) => workspace.id === id);
             if (oldWikiIndex >= 0) {
-              const oldWiki = state.workspaces[oldWikiIndex];
+              let oldWiki = state.workspaces[oldWikiIndex];
               if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
+              }
+              if ('isSubWiki' in oldWiki && oldWiki.isSubWiki === true && typeof oldWiki.mainWikiID === 'string') {
+                const mainWikiID = oldWiki.mainWikiID;
+                const mainWikiIndex = state.workspaces.findIndex(workspace =>
+                  (workspace.type === undefined || workspace.type === 'wiki') &&
+                  workspace.id === mainWikiID &&
+                  workspace.isSubWiki !== true
+                );
+                if (mainWikiIndex < 0) return;
+                oldWikiIndex = mainWikiIndex;
+                oldWiki = state.workspaces[mainWikiIndex];
               }
               if (oldWiki.type !== 'wiki' && oldWiki.type !== 'html') return;
               const serverToChange = oldWiki.syncedServers.find(oldServers => oldServers.serverID === serverIDToActive);
@@ -391,14 +396,35 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
       {
         name: 'wiki-storage',
         storage: expoFileSystemStorage,
-        version: 1,
+        version: 2,
         migrate: (persistedState: unknown, version: number) => {
+          const state = persistedState as Record<string, unknown>;
           if (version === 0) {
-            const state = persistedState as Record<string, unknown>;
             if (typeof state.defaultWorkspaceId === 'undefined') {
               const workspaces = state.workspaces as Array<{ type?: string; id?: string }> | undefined;
               const firstWiki = workspaces?.find(workspace => workspace.type === 'wiki');
               state.defaultWorkspaceId = firstWiki?.id ?? null;
+            }
+          }
+          if (version < 2) {
+            const workspaces = state.workspaces as IWorkspace[] | undefined;
+            if (Array.isArray(workspaces)) {
+              const topLevelWikiIDs = new Set(
+                workspaces
+                  .filter((workspace): workspace is IWikiWorkspace => (workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki !== true)
+                  .map(workspace => workspace.id),
+              );
+              for (const workspace of workspaces) {
+                if (
+                  (workspace.type === undefined || workspace.type === 'wiki') &&
+                  workspace.isSubWiki === true &&
+                  typeof workspace.mainWikiID === 'string' &&
+                  topLevelWikiIDs.has(workspace.mainWikiID)
+                ) {
+                  workspace.syncedServers = [];
+                  delete (workspace as { syncIncludeSubWikis?: boolean }).syncIncludeSubWikis;
+                }
+              }
             }
           }
           return persistedState as WikiState & WikiActions;

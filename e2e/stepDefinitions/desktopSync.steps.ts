@@ -6,7 +6,7 @@
  *   - Device connected via USB and on the same Wi-Fi/LAN as the host (no adb reverse needed).
  */
 import { Given, Then, When } from '@cucumber/cucumber';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { by, device, element, waitFor } from 'detox';
 import { readFileSync, writeFileSync } from 'fs';
 import { ClientRequest, get as httpGet, IncomingMessage } from 'node:http';
@@ -23,8 +23,9 @@ const nonEmptyEnvironmentValue = (value: string | undefined): string | undefined
   const trimmedValue = value?.trim();
   return trimmedValue === undefined || trimmedValue.length === 0 ? undefined : trimmedValue;
 };
-const realDesktopUrl = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_URL);
-const realDesktopQrJson = nonEmptyEnvironmentValue(process.env.TIDGI_DESKTOP_QR_JSON);
+const environment = process.env as Record<string, string | undefined>;
+const realDesktopUrl = nonEmptyEnvironmentValue(environment.TIDGI_DESKTOP_URL);
+const realDesktopQrJson = nonEmptyEnvironmentValue(environment.TIDGI_DESKTOP_QR_JSON);
 // A multi-gigabyte workspace can spend more than ten minutes rebuilding its
 // JGit index on a physical device after the archive has been extracted.
 const IMPORT_TIMEOUT = realDesktopUrl === undefined ? NETWORK_TIMEOUT : 30 * 60_000;
@@ -330,6 +331,24 @@ function getImportedWikiWorkspacePath(): string {
   return `/data/data/${APP_PACKAGE}/files/wikis/${fallbackId}`;
 }
 
+function getFirstImportedChildWorkspace(): IPersistedWikiWorkspace {
+  const mainWorkspace = selectImportedWikiWorkspace();
+  if (typeof mainWorkspace?.id !== 'string') {
+    throw new Error('No imported main workspace found.');
+  }
+  const childWorkspace = readPersistedWikiWorkspaces().find(
+    workspace =>
+      workspace.isSubWiki === true &&
+      workspace.mainWikiID === mainWorkspace.id &&
+      typeof workspace.id === 'string' &&
+      typeof workspace.wikiFolderLocation === 'string',
+  );
+  if (childWorkspace === undefined) {
+    throw new Error(`No child workspace attached to ${mainWorkspace.id}.`);
+  }
+  return childWorkspace;
+}
+
 function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, content: string): void {
   const devicePath = `${wikiPath}/tiddlers/${tiddlerFilename}`;
   const hostTemporary = join(tmpdir(), tiddlerFilename);
@@ -337,13 +356,14 @@ function writeMobileTiddlerViaAdb(wikiPath: string, tiddlerFilename: string, con
 
   writeFileSync(hostTemporary, content, 'utf8');
   execSync(`adb push "${hostTemporary}" "${deviceTemporary}"`, { stdio: 'ignore', timeout: 15_000 });
-  execSync(
-    `adb shell "run-as ${APP_PACKAGE} sh -c 'mkdir -p \"${wikiPath}/tiddlers\" && cp \"${deviceTemporary}\" \"${devicePath}\"'"`,
+  execFileSync(
+    'adb',
+    ['shell', 'run-as', APP_PACKAGE, 'sh', '-c', `mkdir -p "${wikiPath}/tiddlers" && cp "${deviceTemporary}" "${devicePath}"`],
     { stdio: 'ignore', timeout: 15_000 },
   );
 }
 
-Given('a test tiddler is written to the first wiki via adb', async () => {
+Given('a test tiddler is written to the first wiki via adb', () => {
   const wikiPath = getImportedWikiWorkspacePath();
   const title = `E2E Sync ${Date.now()}`;
   const modified = new Date().toISOString();
@@ -357,6 +377,81 @@ Given('a test tiddler is written to the first wiki via adb', async () => {
   ].join('\n');
 
   writeMobileTiddlerViaAdb(wikiPath, tiddlerFileName, content);
+});
+
+Given('only the main workspace stores sync server configuration', () => {
+  const mainWorkspace = selectImportedWikiWorkspace();
+  if (typeof mainWorkspace?.id !== 'string' || (mainWorkspace.syncedServers?.length ?? 0) === 0) {
+    throw new Error('The imported main workspace does not own sync server configuration.');
+  }
+  const configuredChildren = readPersistedWikiWorkspaces().filter(
+    workspace =>
+      workspace.isSubWiki === true &&
+      workspace.mainWikiID === mainWorkspace.id &&
+      (workspace.syncedServers?.length ?? 0) > 0,
+  );
+  if (configuredChildren.length > 0) {
+    throw new Error(`Child workspaces unexpectedly contain sync configuration: ${configuredChildren.map(workspace => workspace.id).join(', ')}`);
+  }
+});
+
+Given('a test tiddler is written to the first child workspace via adb', () => {
+  const childWorkspace = getFirstImportedChildWorkspace();
+  const wikiPath = childWorkspace.wikiFolderLocation!.replace(/^file:\/\//, '').replace(/\/$/, '');
+  const title = `E2E Child Sync ${Date.now()}`;
+  const modified = new Date().toISOString();
+  const tiddlerFileName = `${title.replace(/[^A-Za-z0-9]+/g, '_')}.tid`;
+  const content = [
+    `title: ${title}`,
+    'type: text/vnd.tiddlywiki',
+    `modified: ${modified}`,
+    '',
+    `Created in child workspace by Detox at ${new Date().toISOString()}.`,
+  ].join('\n');
+  writeMobileTiddlerViaAdb(wikiPath, tiddlerFileName, content);
+});
+
+async function assertWorkspacePendingCount(workspaceID: string): Promise<void> {
+  const countElement = element(by.id(`workspace-pending-count-${workspaceID}`));
+  await waitFor(countElement).toBeVisible().withTimeout(120_000);
+  const attributes = await countElement.getAttributes();
+  const text = Array.isArray(attributes) ? undefined : (attributes as { text?: unknown }).text;
+  if (typeof text !== 'string' || !/[1-9]\d*↑/.test(text)) {
+    throw new Error(`Expected workspace ${workspaceID} to show pending changes, received ${JSON.stringify(text)}.`);
+  }
+}
+
+Then('the main workspace should show the child pending change', { timeout: 150_000 }, async () => {
+  const mainWorkspace = selectImportedWikiWorkspace();
+  if (typeof mainWorkspace?.id !== 'string') throw new Error('No imported main workspace found.');
+
+  // Force the same focus transition that occurs after editing a wiki, without
+  // opening commit history (which previously caused the count as a side effect).
+  await element(by.id(`workspace-settings-icon-${mainWorkspace.id}`)).tap();
+  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
+  await pressBackAndWait();
+  await waitForElement(by.id('main-menu-screen'), 30_000, 'main-menu-screen');
+  await assertWorkspacePendingCount(mainWorkspace.id);
+});
+
+Then('the sub-workspace manager should immediately show the child pending change', { timeout: 150_000 }, async () => {
+  const mainWorkspace = selectImportedWikiWorkspace();
+  const childWorkspace = getFirstImportedChildWorkspace();
+  if (typeof mainWorkspace?.id !== 'string' || typeof childWorkspace.id !== 'string') {
+    throw new Error('Imported workspace relationship is incomplete.');
+  }
+  await element(by.id(`workspace-settings-icon-${mainWorkspace.id}`)).tap();
+  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
+  await openSubWikiManager();
+  await assertWorkspacePendingCount(childWorkspace.id);
+});
+
+When('I return to the main menu and sync the main workspace', async () => {
+  await pressBackAndWait();
+  await waitForElement(by.id('workspace-detail-screen'), 30_000, 'workspace-detail-screen');
+  await pressBackAndWait();
+  await waitForElement(by.id('main-menu-screen'), 30_000, 'main-menu-screen');
+  await tapSyncButtonForImportedWiki();
 });
 
 When('I tap the sync button for the first wiki workspace', async () => {

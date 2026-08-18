@@ -12,6 +12,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { getSyncConfigurationWorkspace } from '../../utils/workspaceRelations';
 import {
   ensureGitConfigForMobile,
   getCurrentBranch,
@@ -21,6 +22,7 @@ import {
   gitGetAheadCommitCount,
   gitHasChanges,
   gitPushToIncoming,
+  headersForRemote,
   headersToJson,
   IGitRemote,
   triggerDesktopMerge,
@@ -142,41 +144,22 @@ export class GitBackgroundSyncService {
       const dedupe = new Set<string>();
 
       for (const workspace of reconciledWorkspaces) {
-        if (workspace.isSubWiki === true) {
-          const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
-          let chain = Promise.resolve(false);
-          for (const server of onlineServers) {
-            const key = `${workspace.id}:${server.id}`;
-            if (dedupe.has(key)) continue;
-            dedupe.add(key);
-            chain = chain.then(async previousUpdated => {
-              const updated = await this.syncWorkspaceOnQueue(workspace.id, async () => await this.syncSingleWorkspaceWithServer(workspace, server));
-              return previousUpdated || updated;
-            });
-          }
-          syncTasks.push(chain);
-          continue;
-        }
-
+        if (workspace.isSubWiki === true) continue;
         const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
-        const workspacesToSync = workspace.syncIncludeSubWikis === false
-          ? [workspace]
-          : [workspace, ...this.getSubWikisForMainWorkspace(workspace)];
-
-        for (const workspaceToSync of workspacesToSync) {
-          let chain = Promise.resolve(false);
-          for (const server of onlineServers) {
-            const key = `${workspaceToSync.id}:${server.id}`;
-            if (dedupe.has(key)) continue;
-            dedupe.add(key);
-            chain = chain.then(async previousUpdated => {
-              const reconciledWorkspace = await this.reconcileWorkspaceID(workspaceToSync);
-              const updated = await this.syncWorkspaceOnQueue(reconciledWorkspace.id, async () => await this.syncSingleWorkspaceWithServer(reconciledWorkspace, server));
-              return previousUpdated || updated;
-            });
-          }
-          syncTasks.push(chain);
+        let chain = Promise.resolve(false);
+        for (const server of onlineServers) {
+          const key = `${workspace.id}:${server.id}`;
+          if (dedupe.has(key)) continue;
+          dedupe.add(key);
+          chain = chain.then(async previousUpdated => {
+            const succeeded = await this.syncWorkspaceOnQueue(
+              workspace.id,
+              async () => await this.syncWorkspaceWithServer(workspace, server, { includeSubWikis: true }),
+            );
+            return previousUpdated || succeeded;
+          });
         }
+        if (onlineServers.length > 0) syncTasks.push(chain);
       }
 
       const haveConnectedServer = syncTasks.length > 0;
@@ -229,6 +212,12 @@ export class GitBackgroundSyncService {
    */
   private async fetchServerStatus(server: IServerInfo): Promise<void> {
     const statusUrl = new URL('status', server.uri);
+    const syncConfigurationWorkspace = this.#workspaceStore.getState().workspaces.find((workspace): workspace is IWikiWorkspace =>
+      (workspace.type === undefined || workspace.type === 'wiki') &&
+      workspace.isSubWiki !== true &&
+      workspace.syncedServers.some(syncedServer => syncedServer.serverID === server.id)
+    );
+    const syncedServer = syncConfigurationWorkspace?.syncedServers.find(item => item.serverID === server.id);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
@@ -236,6 +225,7 @@ export class GitBackgroundSyncService {
 
     try {
       const response = await fetch(statusUrl.toString(), {
+        headers: syncedServer === undefined ? undefined : headersForRemote(syncedServer),
         method: 'GET',
         signal: controller.signal,
       });
@@ -260,9 +250,8 @@ export class GitBackgroundSyncService {
    * Sync workspace with specific server (public method for UI)
    */
   public async syncWikiWithServer(workspace: IWikiWorkspace, server: IServerInfo): Promise<boolean> {
-    return await this.syncWorkspaceWithServer(workspace, server, {
-      includeSubWikis: workspace.syncIncludeSubWikis !== false,
-    });
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+    return await this.syncWorkspaceWithServer(syncConfigurationWorkspace, server, { includeSubWikis: true });
   }
 
   /**
@@ -292,8 +281,9 @@ export class GitBackgroundSyncService {
    */
   private getOnlineServerForWorkspace(workspace: IWikiWorkspace): IServerInfo | undefined {
     const servers = this.#serverStore.getState().servers;
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
 
-    for (const syncedServer of workspace.syncedServers) {
+    for (const syncedServer of syncConfigurationWorkspace.syncedServers) {
       const server = servers[syncedServer.serverID] as IServerInfo | undefined;
       if (server !== undefined && server.status === ServerStatus.online) {
         return server;
@@ -310,8 +300,9 @@ export class GitBackgroundSyncService {
   private getAllOnlineServersForWorkspace(workspace: IWikiWorkspace): IServerInfo[] {
     const servers = this.#serverStore.getState().servers;
     const onlineServers: IServerInfo[] = [];
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
 
-    for (const syncedServer of workspace.syncedServers) {
+    for (const syncedServer of syncConfigurationWorkspace.syncedServers) {
       const server = servers[syncedServer.serverID] as IServerInfo | undefined;
       if (server !== undefined && server.status === ServerStatus.online) {
         onlineServers.push(server);
@@ -333,11 +324,12 @@ export class GitBackgroundSyncService {
     if (includeSubWikis) {
       const subWikis = this.getSubWikisForMainWorkspace(workspace);
       const workspacesToSync = [workspace, ...subWikis];
-      const updatedList = await Promise.all(workspacesToSync.map(async workspaceToSync => {
+      const succeededList: boolean[] = [];
+      for (const workspaceToSync of workspacesToSync) {
         const reconciled = await this.reconcileWorkspaceID(workspaceToSync);
-        return await this.syncSingleWorkspaceWithServer(reconciled, server);
-      }));
-      return updatedList.some(updated => updated);
+        succeededList.push(await this.syncSingleWorkspaceWithServer(reconciled, server));
+      }
+      return succeededList.every(Boolean);
     }
     return await this.syncSingleWorkspaceWithServer(workspace, server);
   }
@@ -562,12 +554,8 @@ export class GitBackgroundSyncService {
    * Get remote config for workspace and server
    */
   private getRemoteConfig(workspace: IWikiWorkspace, server: IServerInfo): IGitRemote | undefined {
-    const syncedServer = workspace.syncedServers.find(s => s.serverID === server.id);
-    const mainWorkspace = workspace.isSubWiki === true && workspace.mainWikiID
-      ? this.#workspaceStore.getState().workspaces.find((item): item is IWikiWorkspace => item.type === 'wiki' && item.id === workspace.mainWikiID)
-      : undefined;
-    const syncedServerFromMainWorkspace = mainWorkspace?.syncedServers.find(s => s.serverID === server.id);
-    const resolvedSyncedServer = syncedServer ?? syncedServerFromMainWorkspace;
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+    const resolvedSyncedServer = syncConfigurationWorkspace.syncedServers.find(s => s.serverID === server.id);
     if (resolvedSyncedServer === undefined) {
       return undefined;
     }
@@ -614,8 +602,9 @@ export class GitBackgroundSyncService {
     const workspace = this.#workspaceStore.getState().workspaces.find(w => w.id === workspaceId);
 
     if (workspace?.type === 'wiki') {
-      const newSyncedServers = workspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
-      update(workspaceId, { syncedServers: newSyncedServers });
+      const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+      const newSyncedServers = syncConfigurationWorkspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
+      update(syncConfigurationWorkspace.id, { syncedServers: newSyncedServers });
     }
   }
 

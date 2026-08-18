@@ -3,16 +3,18 @@
  * and WorkspaceDetailPage (workspace logs).
  *
  * Features:
- * - Date-based log file selector (dropdown cycling through same-type files)
+ * - Date-based log file selector
+ * - Character-budget pagination for large files
  * - Three-dot menu with: Open File, Share, Clear Logs
  */
 import { shareAsync } from 'expo-sharing';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, ScrollView } from 'react-native';
 import { Button, Dialog, IconButton, Menu, Portal, Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { deleteLogFile, getLogFilePath, listAppLogFiles, listWorkspaceLogFiles, readLogFile } from '../services/LoggerService';
+import { paginateLogContent } from './logPagination';
 
 const LogScrollView = styled(ScrollView)`
   max-height: 420px;
@@ -36,6 +38,18 @@ const LogFilePickerButton = styled(Button)`
   margin-right: 4px;
 `;
 
+const PaginationRow = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+`;
+
+const PageLabel = styled(Text)`
+  min-width: 80px;
+  text-align: center;
+`;
+
 export interface ILogViewerDialogProps {
   /** Scope: 'app' for developer tools, or a workspace ID string for per-wiki logs */
   scope: string;
@@ -48,7 +62,11 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
   const [logFileNames, setLogFileNames] = useState<string[]>([]);
   const [selectedLogFile, setSelectedLogFile] = useState<string | undefined>();
   const [logContent, setLogContent] = useState('');
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
+  const [fileMenuVisible, setFileMenuVisible] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
+  const logPages = useMemo(() => paginateLogContent(logContent), [logContent]);
+  const visiblePageIndex = Math.min(pageIndex, logPages.length - 1);
 
   const loadLogFiles = useCallback(async () => {
     const files = scope === 'app'
@@ -61,6 +79,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
       setSelectedLogFile(latest);
       const content = await readLogFile(latest);
       setLogContent(content ?? t('WorkspaceSettings.LogEmpty'));
+      setPageIndex(0);
     } else {
       setSelectedLogFile(undefined);
       setLogContent(t('WorkspaceSettings.LogEmpty'));
@@ -77,17 +96,11 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
     setSelectedLogFile(fileName);
     const content = await readLogFile(fileName);
     setLogContent(content ?? t('WorkspaceSettings.LogEmpty'));
+    setPageIndex(0);
   }, [t]);
 
-  const cycleToPreviousFile = useCallback(() => {
-    if (logFileNames.length <= 1) return;
-    const currentIndex = selectedLogFile ? logFileNames.indexOf(selectedLogFile) : logFileNames.length - 1;
-    const nextIndex = (currentIndex - 1 + logFileNames.length) % logFileNames.length;
-    void selectLogFile(logFileNames[nextIndex]);
-  }, [logFileNames, selectedLogFile, selectLogFile]);
-
   const handleShare = useCallback(async () => {
-    setMenuVisible(false);
+    setActionsMenuVisible(false);
     if (selectedLogFile === undefined) return;
     const filePath = getLogFilePath(selectedLogFile);
     try {
@@ -104,7 +117,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
   }, [selectedLogFile]);
 
   const handleOpenFile = useCallback(async () => {
-    setMenuVisible(false);
+    setActionsMenuVisible(false);
     if (selectedLogFile === undefined) return;
     const filePath = getLogFilePath(selectedLogFile);
     try {
@@ -120,7 +133,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
   }, [selectedLogFile]);
 
   const handleClearLogs = useCallback(async () => {
-    setMenuVisible(false);
+    setActionsMenuVisible(false);
     if (scope === 'app') {
       // Clear only app logs
       for (const fileName of logFileNames) {
@@ -135,6 +148,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
     setLogContent(t('WorkspaceSettings.LogEmpty'));
     setLogFileNames([]);
     setSelectedLogFile(undefined);
+    setPageIndex(0);
   }, [scope, logFileNames, t]);
 
   const title = scope === 'app' ? t('Preference.ViewAppLog') : t('WorkspaceSettings.ViewLog');
@@ -147,26 +161,50 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
           <HeaderRow>
             {logFileNames.length > 0
               ? (
-                <LogFilePickerButton
-                  mode='outlined'
-                  compact
-                  icon='calendar'
-                  onPress={cycleToPreviousFile}
+                <Menu
+                  visible={fileMenuVisible}
+                  onDismiss={() => {
+                    setFileMenuVisible(false);
+                  }}
+                  anchor={
+                    <LogFilePickerButton
+                      testID='log-file-selector'
+                      mode='outlined'
+                      compact
+                      icon='chevron-down'
+                      onPress={() => {
+                        setFileMenuVisible(true);
+                      }}
+                    >
+                      {selectedLogFile ?? ''}
+                    </LogFilePickerButton>
+                  }
                 >
-                  {selectedLogFile ?? ''}
-                </LogFilePickerButton>
+                  {logFileNames.map(fileName => (
+                    <Menu.Item
+                      key={fileName}
+                      testID={`log-file-option-${fileName}`}
+                      leadingIcon={fileName === selectedLogFile ? 'check' : 'file-document-outline'}
+                      title={fileName}
+                      onPress={() => {
+                        setFileMenuVisible(false);
+                        void selectLogFile(fileName);
+                      }}
+                    />
+                  ))}
+                </Menu>
               )
               : <Text>{t('WorkspaceSettings.LogEmpty')}</Text>}
             <Menu
-              visible={menuVisible}
+              visible={actionsMenuVisible}
               onDismiss={() => {
-                setMenuVisible(false);
+                setActionsMenuVisible(false);
               }}
               anchor={
                 <IconButton
                   icon='dots-vertical'
                   onPress={() => {
-                    setMenuVisible(true);
+                    setActionsMenuVisible(true);
                   }}
                 />
               }
@@ -198,10 +236,33 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
           </HeaderRow>
         </Dialog.Content>
         <Dialog.ScrollArea>
-          <LogScrollView>
-            <LogText>{logContent}</LogText>
+          <LogScrollView key={`${selectedLogFile ?? 'empty'}-${visiblePageIndex}`} testID='log-content-page'>
+            <LogText>{logPages[visiblePageIndex]}</LogText>
           </LogScrollView>
         </Dialog.ScrollArea>
+        {logPages.length > 1 && (
+          <PaginationRow>
+            <IconButton
+              testID='log-page-previous'
+              icon='chevron-left'
+              disabled={visiblePageIndex === 0}
+              onPress={() => {
+                setPageIndex(previous => Math.max(0, previous - 1));
+              }}
+            />
+            <PageLabel testID='log-page-label'>
+              {visiblePageIndex + 1} / {logPages.length}
+            </PageLabel>
+            <IconButton
+              testID='log-page-next'
+              icon='chevron-right'
+              disabled={visiblePageIndex >= logPages.length - 1}
+              onPress={() => {
+                setPageIndex(previous => Math.min(logPages.length - 1, previous + 1));
+              }}
+            />
+          </PaginationRow>
+        )}
         <Dialog.Actions>
           <Button onPress={onDismiss}>{t('Close')}</Button>
         </Dialog.Actions>
