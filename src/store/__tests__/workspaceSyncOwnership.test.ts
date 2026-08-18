@@ -86,4 +86,22 @@ describe('sub-wiki synchronization ownership', () => {
     ]);
     expect(child.syncedServers).toEqual([]);
   });
+
+  it('allows an orphan child to retain and update its recoverable server configuration', () => {
+    const orphan = {
+      ...subWorkspace(),
+      mainWikiID: 'missing',
+      syncedServers: [{ lastSync: 1, serverID: 'existing', syncActive: true }],
+    };
+    useWorkspaceStore.setState({ workspaces: [orphan] });
+
+    useWorkspaceStore.getState().addServer('child', 'desktop', { token: 'secret' });
+    useWorkspaceStore.getState().setServerActive('child', 'existing', false);
+
+    const child = useWorkspaceStore.getState().workspaces[0] as IWikiWorkspace;
+    expect(child.syncedServers).toEqual([
+      expect.objectContaining({ serverID: 'existing', syncActive: false }),
+      expect.objectContaining({ serverID: 'desktop', token: 'secret' }),
+    ]);
+  });
 });

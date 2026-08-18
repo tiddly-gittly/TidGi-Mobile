@@ -11,7 +11,7 @@ import { AppState } from 'react-native';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { getSyncConfigurationWorkspace } from '../../utils/workspaceRelations';
 import {
   ensureGitConfigForMobile,
@@ -227,9 +227,11 @@ export class GitBackgroundSyncService {
    */
   private async fetchServerStatus(server: IServerInfo): Promise<void> {
     const statusUrl = new URL('status', server.uri);
-    const syncConfigurationWorkspace = this.#workspaceStore.getState().workspaces.find((workspace): workspace is IWikiWorkspace =>
-      (workspace.type === undefined || workspace.type === 'wiki') &&
-      workspace.isSubWiki !== true &&
+    const syncConfigurationWorkspace = this.#workspaceStore.getState().workspaces.find((workspace): workspace is IWikiWorkspace | IHtmlWorkspace =>
+      (
+        workspace.type === 'html' ||
+        ((workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki !== true)
+      ) &&
       workspace.syncedServers.some(syncedServer => syncedServer.serverID === server.id)
     );
     const syncedServer = syncConfigurationWorkspace?.syncedServers.find(item => item.serverID === server.id);

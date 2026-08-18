@@ -285,9 +285,10 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   workspace.id === mainWikiID &&
                   workspace.isSubWiki !== true
                 );
-                if (mainWikiIndex < 0) return;
-                oldWikiIndex = mainWikiIndex;
-                oldWiki = state.workspaces[mainWikiIndex];
+                if (mainWikiIndex >= 0) {
+                  oldWikiIndex = mainWikiIndex;
+                  oldWiki = state.workspaces[mainWikiIndex];
+                }
               }
               if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
@@ -336,9 +337,10 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   workspace.id === mainWikiID &&
                   workspace.isSubWiki !== true
                 );
-                if (mainWikiIndex < 0) return;
-                oldWikiIndex = mainWikiIndex;
-                oldWiki = state.workspaces[mainWikiIndex];
+                if (mainWikiIndex >= 0) {
+                  oldWikiIndex = mainWikiIndex;
+                  oldWiki = state.workspaces[mainWikiIndex];
+                }
               }
               if (!oldWiki.type) {
                 oldWiki.type = 'wiki';
