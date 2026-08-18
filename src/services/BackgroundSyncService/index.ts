@@ -247,7 +247,9 @@ export class GitBackgroundSyncService {
         signal: controller.signal,
       });
 
-      if (!response.ok) {
+      // Authentication failures still prove that the server is reachable.
+      // The subsequent sync request will surface the credential error itself.
+      if (!response.ok && response.status !== 401 && response.status !== 403) {
         throw new Error(`Server returned ${response.status}`);
       }
     } finally {

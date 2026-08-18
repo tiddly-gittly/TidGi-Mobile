@@ -93,6 +93,10 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
   useEffect(() => {
     if (visible) {
       void loadLogFiles();
+    } else {
+      setActionsMenuVisible(false);
+      setFileMenuVisible(false);
+      setPageIndex(0);
     }
     return () => {
       contentRequestID.current++;
