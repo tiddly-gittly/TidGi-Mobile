@@ -67,7 +67,7 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
               setIsConnected(false);
               return;
             }
-            setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(workspace, server));
+            setIsSyncSucceed((await gitBackgroundSyncService.syncWikiWithServer(workspace, server)).succeeded);
           }
         } catch {
           setIsSyncSucceed(false);
@@ -134,7 +134,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
             if (server === undefined) {
               throw new Error('No server available');
             }
-            setIsSyncSucceed(await gitBackgroundSyncService.syncWikiWithServer(workspace, server));
+            setIsSyncSucceed((await gitBackgroundSyncService.syncWikiWithServer(workspace, server)).succeeded);
           }
         } catch {
           setIsSyncSucceed(false);

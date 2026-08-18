@@ -83,9 +83,12 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
         return;
       }
 
-      const haveUpdate = await gitBackgroundSyncService.syncWikiWithServer(workspace, server);
+      const result = await gitBackgroundSyncService.syncWikiWithServer(workspace, server);
 
-      if (haveUpdate) {
+      if (!result.succeeded) {
+        setSnackbarMessage(t('Sync.SyncFailed'));
+        setSnackbarVisible(true);
+      } else if (result.haveUpdate) {
         setSnackbarMessage(t('Sync.UpdateReceived'));
         setSnackbarVisible(true);
       } else {

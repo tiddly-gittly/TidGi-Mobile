@@ -183,6 +183,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
           }
 
           const counts = { main: mainUncommitted, subWikis: subWikisUncommitted, unpushed: unpushedCommits };
+          if (isCancelled()) return;
           nextMap[workspace.id] = counts;
           setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: counts }));
         }));
