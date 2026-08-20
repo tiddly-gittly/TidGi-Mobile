@@ -8,10 +8,12 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { QRCodeScanner } from '../../../components/QRCodeScanner';
 import { useQRCodeScanner } from '../../../hooks/useQRCodeScanner';
+import { gitBackgroundSyncService } from '../../../services/BackgroundSyncService';
 import { logFor } from '../../../services/LoggerService';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
 import { useWorkspaceStore } from '../../../store/workspace';
 import { extractServerFieldsFromQR } from '../../../utils/importQRCode';
+import { getSyncConfigurationWorkspaceByID } from '../../../utils/workspaceRelations';
 
 interface ServerEditModalProps {
   id?: string;
@@ -193,8 +195,12 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
 
     // Credentials live only on top-level workspaces. Attached sub-wikis resolve
     // their synchronization configuration from the main workspace at runtime.
+    const workspaces = useWorkspaceStore.getState().workspaces;
+    const targetConfigurationWorkspaceID = pendingAuth?.workspaceId === undefined
+      ? undefined
+      : getSyncConfigurationWorkspaceByID(pendingAuth.workspaceId, workspaces)?.id;
+    let credentialTargetMatched = pendingAuth?.workspaceId === undefined;
     if (pendingAuth !== undefined && (pendingAuth.token !== undefined || pendingAuth.tokenAuthHeaderName !== undefined || pendingAuth.tokenAuthHeaderValue !== undefined)) {
-      const workspaces = useWorkspaceStore.getState().workspaces;
       for (const workspace of workspaces) {
         if (workspace.type !== undefined && workspace.type !== 'wiki' && workspace.type !== 'html') continue;
         const isAttachedSubWiki = (workspace.type === undefined || workspace.type === 'wiki') &&
@@ -208,8 +214,9 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
         if (isAttachedSubWiki) continue;
         if (!workspace.syncedServers.some(item => item.serverID === server.id)) continue;
         const isTargetWorkspace = pendingAuth.workspaceId === undefined ||
-          workspace.id === pendingAuth.workspaceId;
+          workspace.id === targetConfigurationWorkspaceID;
         if (!isTargetWorkspace) continue;
+        credentialTargetMatched = true;
         updateWorkspace(workspace.id, {
           syncedServers: workspace.syncedServers.map(item =>
             item.serverID === server.id
@@ -226,8 +233,16 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     }
     writeServerAuditLog('saved', {
       changedFields,
-      credentialTargetMatched: pendingAuth?.workspaceId === undefined ||
-        useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === pendingAuth.workspaceId),
+      credentialTargetMatched,
+    });
+    // Probe the saved endpoint immediately using the latest URI and credentials.
+    // Restrict this to the edited server so a save does not wait on unrelated
+    // unreachable servers.
+    void gitBackgroundSyncService.updateServerOnlineStatus([server.id]).then(() => {
+      const checkedServer = useServerStore.getState().servers[server.id];
+      writeServerAuditLog('connectivity-checked', {
+        status: checkedServer.status,
+      });
     });
     onClose();
   };

@@ -184,14 +184,14 @@ export function WikiChangesModelContent({ id, onClose: _onClose, onSelectWorkspa
             }}
             anchor={
               <WorkspaceSelectorButton
+                $borderColor={theme.colors.outline}
                 testID='workspace-changes-workspace-selector'
-                mode='outlined'
-                icon='chevron-down'
                 onPress={() => {
                   setWorkspaceMenuVisible(true);
                 }}
               >
-                {wiki.name}
+                <WorkspaceSelectorText numberOfLines={1}>{wiki.name}</WorkspaceSelectorText>
+                <Ionicons name='chevron-down' size={22} color={theme.colors.primary} />
               </WorkspaceSelectorButton>
             }
           >
@@ -348,7 +348,11 @@ export function WikiChangesModelContent({ id, onClose: _onClose, onSelectWorkspa
               setDetailsError(undefined);
             }}
           >
-            <DetailsCard testID='commit-details-card' onStartShouldSetResponder={() => true}>
+            <DetailsCard
+              $backgroundColor={theme.colors.elevation.level2}
+              testID='commit-details-card'
+              onStartShouldSetResponder={() => true}
+            >
               <Card.Title title={t('GitHistory.CommitDetails')} />
               <PaddedCardContent>
                 <DetailSegmentedButtons
@@ -458,7 +462,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose, onSelectWorkspa
               setSelectedUncommittedItem(undefined);
             }}
           />
-          <PreviewDetailsCard pointerEvents='box-none'>
+          <PreviewDetailsCard $backgroundColor={theme.colors.elevation.level2} pointerEvents='box-none'>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
@@ -543,21 +547,34 @@ const WorkspaceSelectorRow = styled.View`
   gap: 12px;
   margin-bottom: 8px;
 `;
-const WorkspaceSelectorButton = styled(Button)`
+const WorkspaceSelectorButton = styled(Pressable)<{ $borderColor: string }>`
+  width: 220px;
+  height: 48px;
+  padding-horizontal: 14px;
+  border-width: 1px;
+  border-color: ${({ $borderColor }) => $borderColor};
+  border-radius: 24px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+const WorkspaceSelectorText = styled(Text)`
   flex: 1;
+  margin-right: 8px;
+  text-align: center;
 `;
 const HistoryCard = styled(Card)`
   margin-top: 8px;
 `;
-const DetailsCard = styled(Card)`
+const DetailsCard = styled(Card)<{ $backgroundColor: string }>`
   max-height: 80%;
-  background-color: ${({ theme }) => theme.colors.elevation.level2};
+  background-color: ${({ $backgroundColor }) => $backgroundColor};
 `;
-const PreviewDetailsCard = styled(Card)`
+const PreviewDetailsCard = styled(Card)<{ $backgroundColor: string }>`
   max-height: 80%;
   align-self: center;
   width: 92%;
-  background-color: ${({ theme }) => theme.colors.elevation.level2};
+  background-color: ${({ $backgroundColor }) => $backgroundColor};
 `;
 const FullHeightModal = styled(Modal).attrs({
   contentContainerStyle: {

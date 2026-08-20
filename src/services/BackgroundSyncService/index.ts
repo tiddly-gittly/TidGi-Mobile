@@ -206,10 +206,11 @@ export class GitBackgroundSyncService {
   /**
    * Update server online status
    */
-  public async updateServerOnlineStatus(): Promise<void> {
+  public async updateServerOnlineStatus(serverIDs?: readonly string[]): Promise<void> {
     const statuses: Record<string, ServerStatus> = {};
+    const serverIDSet = serverIDs === undefined ? undefined : new Set(serverIDs);
     await Promise.all(
-      Object.values(this.#serverStore.getState().servers).map(async (server) => {
+      Object.values(this.#serverStore.getState().servers).filter(server => serverIDSet?.has(server.id) ?? true).map(async (server) => {
         try {
           await this.fetchServerStatus(server);
           statuses[server.id] = ServerStatus.online;
@@ -348,14 +349,27 @@ export class GitBackgroundSyncService {
     if (includeSubWikis) {
       const subWikis = this.getSubWikisForMainWorkspace(workspace);
       const workspacesToSync = [workspace, ...subWikis];
-      const results: IWikiSyncResult[] = [];
+      const results: Array<{ result: IWikiSyncResult; workspace: IWikiWorkspace }> = [];
       for (const workspaceToSync of workspacesToSync) {
         const reconciled = await this.reconcileWorkspaceID(workspaceToSync);
-        results.push(await this.syncSingleWorkspaceWithServer(reconciled, server));
+        results.push({
+          result: await this.syncSingleWorkspaceWithServer(reconciled, server),
+          workspace: reconciled,
+        });
+      }
+      const failedWorkspaces = results.filter(({ result }) => !result.succeeded).map(({ workspace: failedWorkspace }) => ({
+        workspaceId: failedWorkspace.id,
+        workspaceName: failedWorkspace.name,
+      }));
+      if (failedWorkspaces.length > 0) {
+        logFor(workspace.id).error('Related workspace sync failed', {
+          failedWorkspaces,
+          serverId: server.id,
+        });
       }
       return {
-        haveUpdate: results.some(result => result.haveUpdate),
-        succeeded: results.every(result => result.succeeded),
+        haveUpdate: results.some(({ result }) => result.haveUpdate),
+        succeeded: failedWorkspaces.length === 0,
       };
     }
     return await this.syncSingleWorkspaceWithServer(workspace, server);
@@ -407,19 +421,20 @@ export class GitBackgroundSyncService {
 
       return { haveUpdate, succeeded: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       workspaceLogger.error('Sync failed', {
-        error: (error as Error).message,
+        error: errorMessage,
         serverId: server.id,
         serverUri: server.uri,
       });
       console.error(`Sync failed for workspace ${workspace.name}:`, {
-        error,
+        error: errorMessage,
         workspaceId: workspace.id,
         serverId: server.id,
         serverUri: server.uri,
       });
       // Use safe notification instead of Alert.alert which crashes in background mode
-      this.#notifySyncError(workspace.name, (error as Error).message);
+      this.#notifySyncError(workspace.name, errorMessage);
       return FAILED_WIKI_SYNC_RESULT;
     } finally {
       this.setServerActive(workspace.id, server.id, false);
@@ -601,8 +616,8 @@ export class GitBackgroundSyncService {
     const tokenAuthHeaderValue = typeof resolvedSyncedServer.tokenAuthHeaderValue === 'string' && resolvedSyncedServer.tokenAuthHeaderValue.length > 0
       ? resolvedSyncedServer.tokenAuthHeaderValue
       : undefined;
-    if (token === undefined) {
-      console.log(`No token configured for workspace ${workspace.name} and server ${server.id}, use anonymous access`);
+    if (token === undefined && (tokenAuthHeaderName === undefined || tokenAuthHeaderValue === undefined)) {
+      console.log(`No authentication configured for workspace ${workspace.name} and server ${server.id}; using anonymous access`);
     }
 
     const legacyRemoteWorkspaceId = (resolvedSyncedServer as unknown as { remoteWorkspaceId?: string }).remoteWorkspaceId;

@@ -1,4 +1,4 @@
-import type { IWikiWorkspace, IWorkspace } from '../store/workspace';
+import type { IHtmlWorkspace, IWikiWorkspace, IWorkspace } from '../store/workspace';
 
 export function findMainWikiWorkspace(
   workspace: IWikiWorkspace,
@@ -33,4 +33,16 @@ export function getSyncConfigurationWorkspace(
   workspaces: readonly IWorkspace[],
 ): IWikiWorkspace {
   return findMainWikiWorkspace(workspace, workspaces);
+}
+
+export function getSyncConfigurationWorkspaceByID(
+  workspaceID: string,
+  workspaces: readonly IWorkspace[],
+): IHtmlWorkspace | IWikiWorkspace | undefined {
+  const workspace = workspaces.find(candidate => candidate.id === workspaceID);
+  if (workspace?.type === 'html') return workspace;
+  if (workspace !== undefined && (workspace.type === undefined || workspace.type === 'wiki')) {
+    return getSyncConfigurationWorkspace(workspace, workspaces);
+  }
+  return undefined;
 }

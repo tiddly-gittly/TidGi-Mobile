@@ -1,5 +1,5 @@
 import type { IWikiWorkspace } from '../../store/workspace';
-import { findMainWikiWorkspace, getRelatedWikiWorkspaces, getSyncConfigurationWorkspace } from '../workspaceRelations';
+import { findMainWikiWorkspace, getRelatedWikiWorkspaces, getSyncConfigurationWorkspace, getSyncConfigurationWorkspaceByID } from '../workspaceRelations';
 
 const main: IWikiWorkspace = {
   id: 'main',
@@ -35,6 +35,7 @@ describe('workspace relations', () => {
   it('resolves a child to its main workspace and shared sync configuration', () => {
     expect(findMainWikiWorkspace(child, workspaces)).toBe(main);
     expect(getSyncConfigurationWorkspace(child, workspaces)).toBe(main);
+    expect(getSyncConfigurationWorkspaceByID(child.id, workspaces)).toBe(main);
   });
 
   it('lists the main workspace followed by all attached children', () => {
@@ -45,5 +46,13 @@ describe('workspace relations', () => {
     const orphan = { ...child, id: 'orphan', mainWikiID: 'missing' };
     expect(findMainWikiWorkspace(orphan, workspaces)).toBe(orphan);
     expect(getRelatedWikiWorkspaces(orphan, workspaces)).toEqual([orphan]);
+    expect(getSyncConfigurationWorkspaceByID(orphan.id, [...workspaces, orphan])).toBe(orphan);
+  });
+
+  it('does not treat a webpage as a synchronization configuration owner', () => {
+    expect(getSyncConfigurationWorkspaceByID('page', [
+      ...workspaces,
+      { id: 'page', name: 'Page', type: 'webpage', uri: 'https://example.com' },
+    ])).toBeUndefined();
   });
 });
