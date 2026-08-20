@@ -240,6 +240,8 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     // unreachable servers.
     void gitBackgroundSyncService.updateServerOnlineStatus([server.id]).then(() => {
       const checkedServer = useServerStore.getState().servers[server.id];
+      // Server may have been deleted while the probe was in-flight.
+      if (checkedServer === undefined) return;
       writeServerAuditLog('connectivity-checked', {
         status: checkedServer.status,
       });
