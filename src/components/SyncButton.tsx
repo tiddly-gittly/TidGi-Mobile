@@ -1,5 +1,5 @@
 import { TFunction } from 'i18next';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
 import { useShallow } from 'zustand/react/shallow';
@@ -110,15 +110,25 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
   const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof gitBackgroundSyncService.getOnlineServerForWiki>>>();
+  // Keep a ref so the async callback always reads the latest workspace without
+  // `workspace` itself being an effect dependency (which would cause the effect
+  // to re-fire on every Zustand store mutation, not just config changes).
+  const workspaceRef = useRef(workspace);
   useEffect(() => {
-    if (!workspace || workspace.type === 'webpage') {
+    workspaceRef.current = workspace;
+  });
+  useEffect(() => {
+    let cancelled = false;
+    const currentWorkspace = workspaceRef.current;
+    if (!currentWorkspace || currentWorkspace.type === 'webpage') {
       setIsConnected(false);
-      return;
+      return () => { cancelled = true; };
     }
     void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
-      const server = workspace.type === undefined || workspace.type === 'wiki'
-        ? gitBackgroundSyncService.getOnlineServerForWiki(workspace)
-        : getOnlineServerForHtmlWorkspace(workspace, useServerStore.getState().servers);
+      if (cancelled) return;
+      const server = currentWorkspace.type === undefined || currentWorkspace.type === 'wiki'
+        ? gitBackgroundSyncService.getOnlineServerForWiki(currentWorkspace)
+        : getOnlineServerForHtmlWorkspace(currentWorkspace, useServerStore.getState().servers);
       if (server === undefined) {
         setIsConnected(false);
       } else {
@@ -126,7 +136,8 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       }
       setCurrentOnlineServerToSync(server);
     });
-  }, [serverConfigurationKey, workspace]);
+    return () => { cancelled = true; };
+  }, [serverConfigurationKey]);
 
   return (
     <Button
