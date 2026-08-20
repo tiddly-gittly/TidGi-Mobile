@@ -223,7 +223,13 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
 
         <LogViewerDialog
           scope={wiki.id}
+          workspaceName={wiki.name}
           visible={workspaceLogVisible}
+          onOpenChanges={isFolderWiki
+            ? () => {
+              navigation.navigate('WorkspaceChanges', { id: wiki.id });
+            }
+            : undefined}
           onDismiss={() => {
             setWorkspaceLogVisible(false);
           }}

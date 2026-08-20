@@ -7,11 +7,12 @@
  * - Character-budget pagination for large files
  * - Three-dot menu with: Open File, Share, Clear Logs
  */
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { shareAsync } from 'expo-sharing';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, ScrollView } from 'react-native';
-import { Button, Dialog, IconButton, Menu, Portal, Text } from 'react-native-paper';
+import { Modal, Platform, Pressable, ScrollView, TouchableOpacity } from 'react-native';
+import { Button, Dialog, IconButton, Menu, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { deleteLogFile, getLogFilePath, listAppLogFiles, listWorkspaceLogFiles, readLogFile } from '../services/LoggerService';
 import { paginateLogContent } from './logPagination';
@@ -33,9 +34,72 @@ const HeaderRow = styled.View`
   justify-content: space-between;
 `;
 
-const LogFilePickerButton = styled(Button)`
+const SelectorShell = styled.View`
+  width: 100%;
+  height: 48px;
+  min-width: 0;
+`;
+
+const FileSelectorShell = styled(SelectorShell)`
   flex: 1;
-  margin-right: 4px;
+`;
+
+const SelectorButton = styled(Button)`
+  width: 100%;
+  height: 48px;
+  justify-content: center;
+  border-radius: 8px;
+`;
+
+const SelectorChevron = styled(Ionicons)`
+  position: absolute;
+  right: 14px;
+  top: 15px;
+`;
+
+const SelectorColumn = styled.View`
+  gap: 8px;
+`;
+
+const SourceLabel = styled(Text)`
+  margin-bottom: 4px;
+`;
+
+const PickerBackdrop = styled(Pressable)`
+  flex: 1;
+  padding: 24px;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.42);
+`;
+
+const PickerCard = styled.View<{ $surfaceColor: string }>`
+  width: 100%;
+  max-height: 70%;
+  padding-vertical: 8px;
+  border-radius: 16px;
+  background-color: ${({ $surfaceColor }) => $surfaceColor};
+  elevation: 8;
+`;
+
+const PickerTitle = styled(Text)`
+  padding: 12px 20px;
+`;
+
+const PickerOptions = styled(ScrollView)`
+  flex-grow: 0;
+`;
+
+const PickerOption = styled(TouchableOpacity)`
+  min-height: 52px;
+  padding: 12px 20px;
+  flex-direction: row;
+  align-items: center;
+`;
+
+const PickerOptionText = styled(Text)`
+  flex: 1;
+  margin-left: 12px;
 `;
 
 const PaginationRow = styled.View`
@@ -52,18 +116,30 @@ const PageLabel = styled(Text)`
 
 export interface ILogViewerDialogProps {
   /** Scope: 'app' for developer tools, or a workspace ID string for per-wiki logs */
+  onOpenChanges?: () => void;
   scope: string;
   visible: boolean;
   onDismiss: () => void;
+  workspaceName?: string;
 }
 
-export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogProps): React.JSX.Element {
+type LogSource = 'app' | 'workspace';
+
+function getLogDate(fileName: string): string {
+  return fileName.match(/\d{4}-\d{2}-\d{2}(?=\.log$)/)?.[0] ?? fileName;
+}
+
+export function LogViewerDialog({ scope, visible, onDismiss, onOpenChanges, workspaceName }: ILogViewerDialogProps): React.JSX.Element {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isWorkspaceScope = scope !== 'app';
+  const [logSource, setLogSource] = useState<LogSource>(isWorkspaceScope ? 'workspace' : 'app');
   const [logFileNames, setLogFileNames] = useState<string[]>([]);
   const [selectedLogFile, setSelectedLogFile] = useState<string | undefined>();
   const [logContent, setLogContent] = useState('');
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [fileMenuVisible, setFileMenuVisible] = useState(false);
+  const [sourceMenuVisible, setSourceMenuVisible] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const contentRequestID = useRef(0);
   const logPages = useMemo(() => paginateLogContent(logContent), [logContent]);
@@ -71,7 +147,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
 
   const loadLogFiles = useCallback(async () => {
     const requestID = ++contentRequestID.current;
-    const files = scope === 'app'
+    const files = logSource === 'app'
       ? await listAppLogFiles()
       : await listWorkspaceLogFiles(scope);
     if (requestID !== contentRequestID.current) return;
@@ -88,7 +164,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
       setSelectedLogFile(undefined);
       setLogContent(t('WorkspaceSettings.LogEmpty'));
     }
-  }, [scope, t]);
+  }, [logSource, scope, t]);
 
   useEffect(() => {
     if (visible) {
@@ -96,6 +172,7 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
     } else {
       setActionsMenuVisible(false);
       setFileMenuVisible(false);
+      setSourceMenuVisible(false);
       setPageIndex(0);
     }
     return () => {
@@ -159,88 +236,97 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
   }, [logFileNames, t]);
 
   const title = scope === 'app' ? t('Preference.ViewAppLog') : t('WorkspaceSettings.ViewLog');
+  const sourceTitle = logSource === 'workspace'
+    ? t('WorkspaceSettings.GitSyncLog', 'Git 同步日志')
+    : t('WorkspaceSettings.AppAndServerLog', '应用与服务器日志');
+  const selectedFileTitle = selectedLogFile === undefined
+    ? t('WorkspaceSettings.LogEmpty')
+    : t('WorkspaceSettings.LogDate', { defaultValue: '{{date}}', date: getLogDate(selectedLogFile) });
 
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={onDismiss}>
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.Content>
-          <HeaderRow>
-            {logFileNames.length > 0
-              ? (
-                <Menu
-                  visible={fileMenuVisible}
-                  onDismiss={() => {
-                    setFileMenuVisible(false);
-                  }}
-                  anchor={
-                    <LogFilePickerButton
+          <SelectorColumn>
+            {isWorkspaceScope && (
+              <>
+                <SourceLabel variant='labelMedium'>
+                  {workspaceName ?? t('GitHistory.Workspace', '工作区')}
+                </SourceLabel>
+                <SelectorShell>
+                  <SelectorButton
+                    testID='log-source-selector'
+                    mode='outlined'
+                    compact
+                    onPress={() => {
+                      setSourceMenuVisible(true);
+                    }}
+                  >
+                    {sourceTitle}
+                  </SelectorButton>
+                  <SelectorChevron pointerEvents='none' name='chevron-down' size={18} color={theme.colors.onSurface} />
+                </SelectorShell>
+              </>
+            )}
+            <HeaderRow>
+              {logFileNames.length > 0
+                ? (
+                  <FileSelectorShell>
+                    <SelectorButton
                       testID='log-file-selector'
                       mode='outlined'
                       compact
-                      icon='chevron-down'
                       onPress={() => {
                         setFileMenuVisible(true);
                       }}
                     >
-                      {selectedLogFile ?? ''}
-                    </LogFilePickerButton>
-                  }
-                >
-                  {logFileNames.map(fileName => (
-                    <Menu.Item
-                      key={fileName}
-                      testID={`log-file-option-${fileName}`}
-                      leadingIcon={fileName === selectedLogFile ? 'check' : 'file-document-outline'}
-                      title={fileName}
-                      onPress={() => {
-                        setFileMenuVisible(false);
-                        void selectLogFile(fileName);
-                      }}
-                    />
-                  ))}
-                </Menu>
-              )
-              : <Text>{t('WorkspaceSettings.LogEmpty')}</Text>}
-            <Menu
-              visible={actionsMenuVisible}
-              onDismiss={() => {
-                setActionsMenuVisible(false);
-              }}
-              anchor={
-                <IconButton
-                  icon='dots-vertical'
-                  onPress={() => {
-                    setActionsMenuVisible(true);
-                  }}
-                />
-              }
-            >
-              {Platform.OS !== 'web' && (
+                      {selectedFileTitle}
+                    </SelectorButton>
+                    <SelectorChevron pointerEvents='none' name='chevron-down' size={18} color={theme.colors.onSurface} />
+                  </FileSelectorShell>
+                )
+                : <Text>{t('WorkspaceSettings.LogEmpty')}</Text>}
+              <Menu
+                visible={actionsMenuVisible}
+                onDismiss={() => {
+                  setActionsMenuVisible(false);
+                }}
+                anchor={
+                  <IconButton
+                    icon='dots-vertical'
+                    onPress={() => {
+                      setActionsMenuVisible(true);
+                    }}
+                  />
+                }
+              >
+                {Platform.OS !== 'web' && (
+                  <Menu.Item
+                    leadingIcon='share-variant'
+                    onPress={() => {
+                      void handleShare();
+                    }}
+                    title={t('WorkspaceSettings.ShareLog')}
+                  />
+                )}
                 <Menu.Item
-                  leadingIcon='share-variant'
+                  leadingIcon='file-document-outline'
                   onPress={() => {
-                    void handleShare();
+                    void handleOpenFile();
                   }}
-                  title={t('WorkspaceSettings.ShareLog')}
+                  title={t('WorkspaceSettings.OpenLogFile')}
                 />
-              )}
-              <Menu.Item
-                leadingIcon='file-document-outline'
-                onPress={() => {
-                  void handleOpenFile();
-                }}
-                title={t('WorkspaceSettings.OpenLogFile')}
-              />
-              <Menu.Item
-                leadingIcon='delete-outline'
-                onPress={() => {
-                  void handleClearLogs();
-                }}
-                title={t('WorkspaceSettings.ClearLogs')}
-              />
-            </Menu>
-          </HeaderRow>
+                <Menu.Item
+                  leadingIcon='delete-outline'
+                  onPress={() => {
+                    void handleClearLogs();
+                  }}
+                  title={t('WorkspaceSettings.ClearLogs')}
+                />
+              </Menu>
+            </HeaderRow>
+          </SelectorColumn>
         </Dialog.Content>
         <Dialog.ScrollArea>
           <LogScrollView key={`${selectedLogFile ?? 'empty'}-${visiblePageIndex}`} testID='log-content-page'>
@@ -271,9 +357,107 @@ export function LogViewerDialog({ scope, visible, onDismiss }: ILogViewerDialogP
           </PaginationRow>
         )}
         <Dialog.Actions>
+          {onOpenChanges !== undefined && (
+            <Button
+              testID='log-open-workspace-changes'
+              onPress={() => {
+                onDismiss();
+                onOpenChanges();
+              }}
+            >
+              {t('AddWorkspace.OpenChangeLogList')}
+            </Button>
+          )}
           <Button onPress={onDismiss}>{t('Close')}</Button>
         </Dialog.Actions>
       </Dialog>
+      <Modal
+        transparent
+        animationType='fade'
+        visible={visible && sourceMenuVisible}
+        onRequestClose={() => {
+          setSourceMenuVisible(false);
+        }}
+      >
+        <PickerBackdrop
+          testID='log-source-picker'
+          onPress={() => {
+            setSourceMenuVisible(false);
+          }}
+        >
+          <PickerCard $surfaceColor={theme.colors.elevation.level3}>
+            <PickerTitle variant='titleMedium'>
+              {t('WorkspaceSettings.LogSource', '日志类型')}
+            </PickerTitle>
+            <PickerOption
+              testID='log-source-workspace'
+              onPress={() => {
+                setSourceMenuVisible(false);
+                setFileMenuVisible(false);
+                setLogSource('workspace');
+              }}
+            >
+              <Ionicons name={logSource === 'workspace' ? 'checkmark' : 'git-branch-outline'} size={22} color={theme.colors.onSurface} />
+              <PickerOptionText numberOfLines={2}>
+                {t('WorkspaceSettings.GitSyncLog', 'Git 同步日志')}
+              </PickerOptionText>
+            </PickerOption>
+            <PickerOption
+              testID='log-source-app'
+              onPress={() => {
+                setSourceMenuVisible(false);
+                setFileMenuVisible(false);
+                setLogSource('app');
+              }}
+            >
+              <Ionicons name={logSource === 'app' ? 'checkmark' : 'settings-outline'} size={22} color={theme.colors.onSurface} />
+              <PickerOptionText numberOfLines={2}>
+                {t('WorkspaceSettings.AppAndServerLog', '应用与服务器日志')}
+              </PickerOptionText>
+            </PickerOption>
+          </PickerCard>
+        </PickerBackdrop>
+      </Modal>
+      <Modal
+        transparent
+        animationType='fade'
+        visible={visible && fileMenuVisible}
+        onRequestClose={() => {
+          setFileMenuVisible(false);
+        }}
+      >
+        <PickerBackdrop
+          testID='log-file-picker'
+          onPress={() => {
+            setFileMenuVisible(false);
+          }}
+        >
+          <PickerCard $surfaceColor={theme.colors.elevation.level3}>
+            <PickerTitle variant='titleMedium'>
+              {t('WorkspaceSettings.LogDateTitle', '日志日期')}
+            </PickerTitle>
+            <PickerOptions>
+              {logFileNames.map(fileName => (
+                <PickerOption
+                  key={fileName}
+                  testID={`log-file-option-${fileName}`}
+                  onPress={() => {
+                    setFileMenuVisible(false);
+                    void selectLogFile(fileName);
+                  }}
+                >
+                  <Ionicons
+                    name={fileName === selectedLogFile ? 'checkmark' : 'document-text-outline'}
+                    size={22}
+                    color={theme.colors.onSurface}
+                  />
+                  <PickerOptionText numberOfLines={1}>{getLogDate(fileName)}</PickerOptionText>
+                </PickerOption>
+              ))}
+            </PickerOptions>
+          </PickerCard>
+        </PickerBackdrop>
+      </Modal>
     </Portal>
   );
 }

@@ -8,6 +8,7 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { QRCodeScanner } from '../../../components/QRCodeScanner';
 import { useQRCodeScanner } from '../../../hooks/useQRCodeScanner';
+import { logFor } from '../../../services/LoggerService';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
 import { useWorkspaceStore } from '../../../store/workspace';
 import { extractServerFieldsFromQR } from '../../../utils/importQRCode';
@@ -120,9 +121,26 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     } | undefined
   >();
 
+  const writeServerAuditLog = useCallback((event: string, details: Record<string, unknown>) => {
+    if (server === undefined) return;
+    const workspaces = useWorkspaceStore.getState().workspaces;
+    const linkedWorkspaceIDs = workspaces
+      .filter(workspace =>
+        (workspace.type === undefined || workspace.type === 'wiki' || workspace.type === 'html') &&
+        workspace.syncedServers.some(item => item.serverID === server.id)
+      )
+      .map(workspace => workspace.id);
+    const entry = { event, serverID: server.id, ...details };
+    console.log('[ServerSettings]', entry);
+    for (const workspaceID of linkedWorkspaceIDs) {
+      logFor(workspaceID).log('Server settings', entry);
+    }
+  }, [server]);
+
   const handleRawQRScan = useCallback((data: string) => {
     const fields = extractServerFieldsFromQR(data);
     if (fields === undefined) {
+      writeServerAuditLog('qr-scan-rejected', { reason: 'invalid-format' });
       Alert.alert(t('Import.QRCodeParseError'), data);
       return;
     }
@@ -137,7 +155,13 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       tokenAuthHeaderValue: fields.tokenAuthHeaderValue,
       workspaceId: fields.workspaceId,
     });
-  }, [t]);
+    writeServerAuditLog('qr-scan-accepted', {
+      hasBasicToken: fields.token !== undefined,
+      hasCustomAuthHeader: fields.tokenAuthHeaderName !== undefined && fields.tokenAuthHeaderValue !== undefined,
+      hasWorkspaceTarget: fields.workspaceId !== undefined,
+      useStandardGitProtocol: fields.useStandardGitProtocol,
+    });
+  }, [t, writeServerAuditLog]);
 
   const { handleBarcodeScanned, qrScannerOpen, toggleScanner } = useQRCodeScanner({ onRawScan: handleRawQRScan });
 
@@ -150,6 +174,14 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   }
 
   const handleSave = () => {
+    const changedFields = [
+      server.name !== editedName ? 'name' : undefined,
+      server.uri !== editedUri ? 'uri' : undefined,
+      server.provider !== editedProvider ? 'provider' : undefined,
+      server.status !== editedStatus ? 'status' : undefined,
+      server.useStandardGitProtocol !== editedUseStandardGitProtocol ? 'protocol' : undefined,
+      pendingAuth !== undefined ? 'authentication' : undefined,
+    ].filter((field): field is string => field !== undefined);
     updateServer({
       id: server.id,
       name: editedName,
@@ -192,6 +224,11 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
         });
       }
     }
+    writeServerAuditLog('saved', {
+      changedFields,
+      credentialTargetMatched: pendingAuth?.workspaceId === undefined ||
+        useWorkspaceStore.getState().workspaces.some(workspace => workspace.id === pendingAuth.workspaceId),
+    });
     onClose();
   };
 

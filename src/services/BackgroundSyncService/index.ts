@@ -12,6 +12,7 @@ import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
 import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { mergeServerStatuses } from '../../utils/serverStatus';
 import { getSyncConfigurationWorkspace } from '../../utils/workspaceRelations';
 import {
   ensureGitConfigForMobile,
@@ -206,20 +207,24 @@ export class GitBackgroundSyncService {
    * Update server online status
    */
   public async updateServerOnlineStatus(): Promise<void> {
-    const newServers: Record<string, IServerInfo> = {};
-
+    const statuses: Record<string, ServerStatus> = {};
     await Promise.all(
       Object.values(this.#serverStore.getState().servers).map(async (server) => {
         try {
           await this.fetchServerStatus(server);
-          newServers[server.id] = { ...server, status: ServerStatus.online };
+          statuses[server.id] = ServerStatus.online;
         } catch {
-          newServers[server.id] = { ...server, status: ServerStatus.disconnected };
+          statuses[server.id] = ServerStatus.disconnected;
         }
       }),
     );
-
-    this.#serverStore.setState({ servers: newServers });
+    // A status request can finish after the user has edited this server.
+    // Merge into the latest state so a stale request cannot restore an old
+    // name, URI, provider, protocol setting, or deleted server.
+    this.#serverStore.setState(state => {
+      const servers = mergeServerStatuses(state.servers, statuses);
+      return servers === state.servers ? state : { servers };
+    });
   }
 
   /**

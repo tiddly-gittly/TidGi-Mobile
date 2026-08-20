@@ -89,6 +89,22 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
     [workspaces, workspaceID],
   );
   const servers = useServerStore(useShallow(state => state.servers));
+  const serverConfigurationKey = useMemo(
+    () => {
+      if (workspace === undefined || workspace.type === 'webpage') return '[]';
+      return JSON.stringify(
+        workspace.syncedServers
+          .map(({ serverID }) => {
+            const server = servers[serverID] as IServerInfo | undefined;
+            return server === undefined
+              ? [serverID]
+              : [server.id, server.name, server.provider, server.uri, server.useStandardGitProtocol];
+          })
+          .sort(([left], [right]) => String(left).localeCompare(String(right))),
+      );
+    },
+    [servers, workspace],
+  );
 
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
@@ -100,9 +116,9 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       return;
     }
     void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
-      const server = workspace.type === 'wiki'
+      const server = workspace.type === undefined || workspace.type === 'wiki'
         ? gitBackgroundSyncService.getOnlineServerForWiki(workspace)
-        : getOnlineServerForHtmlWorkspace(workspace, servers);
+        : getOnlineServerForHtmlWorkspace(workspace, useServerStore.getState().servers);
       if (server === undefined) {
         setIsConnected(false);
       } else {
@@ -110,7 +126,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       }
       setCurrentOnlineServerToSync(server);
     });
-  }, [servers, workspace]);
+  }, [serverConfigurationKey, workspace]);
 
   return (
     <Button
