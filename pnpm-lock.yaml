@@ -5,7 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  expo-tiddlywiki-filesystem-android-external-storage: caa73ca8cb34a478625feba7c3669391ccb2cd23e8d91900809a3570d24981e6
+  expo-tiddlywiki-filesystem-android-external-storage:
+    hash: caa73ca8cb34a478625feba7c3669391ccb2cd23e8d91900809a3570d24981e6
+    path: patches/expo-tiddlywiki-filesystem-android-external-storage.patch
 
 importers:
 
