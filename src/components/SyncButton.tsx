@@ -113,16 +113,18 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
   // Keep a ref so the async callback always reads the latest workspace without
   // `workspace` itself being an effect dependency (which would cause the effect
   // to re-fire on every Zustand store mutation, not just config changes).
-  const workspaceRef = useRef(workspace);
+  const workspaceReference = useRef(workspace);
   useEffect(() => {
-    workspaceRef.current = workspace;
-  });
+    workspaceReference.current = workspace;
+  }, [workspace]);
   useEffect(() => {
     let cancelled = false;
-    const currentWorkspace = workspaceRef.current;
+    const currentWorkspace = workspaceReference.current;
     if (!currentWorkspace || currentWorkspace.type === 'webpage') {
       setIsConnected(false);
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
     void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
       if (cancelled) return;
@@ -136,7 +138,9 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       }
       setCurrentOnlineServerToSync(server);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [serverConfigurationKey]);
 
   return (
