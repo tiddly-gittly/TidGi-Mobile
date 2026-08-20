@@ -239,9 +239,10 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     // Restrict this to the edited server so a save does not wait on unrelated
     // unreachable servers.
     void gitBackgroundSyncService.updateServerOnlineStatus([server.id]).then(() => {
-      const checkedServer = useServerStore.getState().servers[server.id];
+      const latestServers = useServerStore.getState().servers;
       // Server may have been deleted while the probe was in-flight.
-      if (checkedServer === undefined) return;
+      if (!(server.id in latestServers)) return;
+      const checkedServer = latestServers[server.id];
       writeServerAuditLog('connectivity-checked', {
         status: checkedServer.status,
       });
