@@ -13,7 +13,7 @@ import { ClientRequest, get as httpGet, IncomingMessage } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { getDesktopGitRunnerHitsPath, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
+import { getDesktopGitRunnerHitsPath, getMockServerAuthentication, getMockServerUrl, getTestWikiDirectory } from '../mock-server/setup';
 import { diagnosticError, dismissBlockingAlert, isAlertShowing, waitForElement } from '../support/diagnostics';
 
 const UI_TIMEOUT = 10_000;
@@ -61,13 +61,17 @@ async function navigateToImporterScreen(): Promise<void> {
 
 async function assertSyncServerReachable(): Promise<void> {
   const url = realDesktopUrl ?? getMockServerUrl();
-  // The mock server is started without TiddlyWeb Basic Auth so the mobile
-  // client can access Git endpoints anonymously. We just check /status is up.
+  const mockAuthentication = getMockServerAuthentication();
   const statusCode = await new Promise<number>((resolve, reject) => {
-    const request = getUrl(`${url}/status`, response => {
-      response.resume();
-      resolve(response.statusCode ?? 0);
-    });
+    const request = realDesktopUrl === undefined
+      ? httpGet(`${url}/status`, { headers: { [mockAuthentication.tokenAuthHeaderName]: mockAuthentication.tokenAuthHeaderValue } }, response => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      })
+      : getUrl(`${url}/status`, response => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      });
     request.setTimeout(5_000, () => {
       request.destroy(new Error(`Timed out reaching ${url}/status`));
     });
@@ -97,6 +101,7 @@ async function enterSyncServerUrl(): Promise<void> {
       workspaceId: 'standalone',
       workspaceName: 'E2E Mock Wiki',
       useStandardGitProtocol: false,
+      ...getMockServerAuthentication(),
     })
     : realDesktopQrJson ?? await new Promise<string>((resolve, reject) => {
       const request = getUrl(`${url}/tw-mobile-sync/git/mobile-sync-info`, response => {
