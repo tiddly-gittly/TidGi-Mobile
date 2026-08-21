@@ -4,12 +4,19 @@ export function findMainWikiWorkspace(
   workspace: IWikiWorkspace,
   workspaces: readonly IWorkspace[],
 ): IWikiWorkspace {
-  if (workspace.isSubWiki !== true || typeof workspace.mainWikiID !== 'string') return workspace;
+  // Callers often hold a render-time workspace snapshot. Always prefer the
+  // current store entry so recently saved sync credentials are visible when a
+  // sync starts without requiring the page to render again first.
+  const currentWorkspace = workspaces.find((candidate): candidate is IWikiWorkspace =>
+    (candidate.type === undefined || candidate.type === 'wiki') &&
+    candidate.id === workspace.id
+  ) ?? workspace;
+  if (currentWorkspace.isSubWiki !== true || typeof currentWorkspace.mainWikiID !== 'string') return currentWorkspace;
   return workspaces.find((candidate): candidate is IWikiWorkspace =>
     (candidate.type === undefined || candidate.type === 'wiki') &&
-    candidate.id === workspace.mainWikiID &&
+    candidate.id === currentWorkspace.mainWikiID &&
     candidate.isSubWiki !== true
-  ) ?? workspace;
+  ) ?? currentWorkspace;
 }
 
 export function getRelatedWikiWorkspaces(
