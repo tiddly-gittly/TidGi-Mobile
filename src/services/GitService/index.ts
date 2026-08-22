@@ -9,7 +9,8 @@ import { Buffer } from 'buffer';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import pTimeout from 'p-timeout';
-import { IWikiWorkspace } from '../../store/workspace';
+import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { getSyncConfigurationWorkspace } from '../../utils/workspaceRelations';
 import { removeLegacyMobileLfAttributesRule } from './mobileGitSetup';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -149,8 +150,12 @@ function normalizeHeaders(headers: Record<string, string | undefined>): Record<s
   return Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined)) as Record<string, string>;
 }
 
+export function headersForRemote(remote: Pick<IGitRemote, 'token' | 'tokenAuthHeaderName' | 'tokenAuthHeaderValue'>): Record<string, string> {
+  return normalizeHeaders(createAuthHeader(remote));
+}
+
 export function headersToJson(remote: IGitRemote): string | null {
-  const headers = normalizeHeaders(createAuthHeader(remote));
+  const headers = headersForRemote(remote);
   return Object.keys(headers).length > 0 ? JSON.stringify(headers) : null;
 }
 
@@ -1011,7 +1016,8 @@ export async function gitGetAheadCommitCount(
   options: IGitStatusScanOptions = {},
 ): Promise<number> {
   const directory = toPlainPath(workspace.wikiFolderLocation);
-  if (workspace.syncedServers.length === 0) return 0;
+  const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, useWorkspaceStore.getState().workspaces);
+  if (syncConfigurationWorkspace.syncedServers.length === 0) return 0;
   if (
     options.ignoreDeferredScan !== true &&
     typeof workspace.deferStatusScanUntil === 'number' &&

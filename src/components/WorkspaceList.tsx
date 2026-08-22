@@ -3,14 +3,15 @@ import * as Haptics from 'expo-haptics';
 import { compact } from 'lodash';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, StyleSheet } from 'react-native';
-import { Card, useTheme } from 'react-native-paper';
+import { FlatList, Pressable } from 'react-native';
+import { Card, Text, useTheme } from 'react-native-paper';
 import ReorderableList, { ReorderableListReorderEvent, reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 
 import { gitDiffChangedFiles, gitGetAheadCommitCount } from '../services/GitService';
-import { HELP_WORKSPACE_NAME, IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { HELP_WORKSPACE_NAME, IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { getRelatedWikiWorkspaces } from '../utils/workspaceRelations';
 import { SyncIconButton } from './SyncButton';
 
 interface WorkspaceListProps {
@@ -44,6 +45,17 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
   const { t } = useTranslation();
   const theme = useTheme();
   const title = item.name === HELP_WORKSPACE_NAME ? t('Menu.TidGiHelpManual') : item.name;
+  const isWiki = item.type === undefined || item.type === 'wiki';
+  const pendingChangesText = isWiki
+    ? (() => {
+      const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
+      const unpushed = pendingChangesCount.unpushed;
+      const parts: string[] = [];
+      if (uncommitted > 0) parts.push(`${uncommitted}↑`);
+      if (unpushed > 0) parts.push(`${unpushed}⇡`);
+      return parts.length > 0 ? parts.join(' ') : undefined;
+    })()
+    : undefined;
 
   return (
     <WorkspaceCard
@@ -55,41 +67,42 @@ const WorkspaceListItemBase: React.FC<WorkspaceListItemProps> = ({
         onLongPress?.(item);
       }}
     >
-      <Card.Title
-        rightStyle={styles.cardTitleRight}
-        style={styles.cardTitle}
+      <WorkspaceCardTitle
         title={title}
-        subtitle={item.type === 'wiki'
-          ? (() => {
-            const uncommitted = pendingChangesCount.main + pendingChangesCount.subWikis;
-            const unpushed = pendingChangesCount.unpushed;
-            const parts: string[] = [];
-            if (uncommitted > 0) parts.push(`${uncommitted}↑`);
-            if (unpushed > 0) parts.push(`${unpushed}⇡`);
-            return parts.length > 0 ? parts.join(' ') : undefined;
-          })()
-          : undefined}
-        right={(props) => (
-          <RightButtonsContainer>
-            {(item.type === 'wiki' || item.type === 'html') && <SyncIconButton workspaceID={item.id} />}
-            <ItemRightButton
-              testID={`workspace-settings-icon-${item.id}`}
-              accessibilityLabel='workspace-settings-icon'
-              onPress={() => {
-                onPressSettings?.(item);
-              }}
-              onLongPress={() => {
-                onReorderPress?.();
-              }}
+        subtitle={pendingChangesText === undefined
+          ? undefined
+          : (
+            <PendingChangesContainer
+              testID={`workspace-pending-count-${item.id}`}
+              accessible
+              accessibilityLabel={pendingChangesText}
             >
-              <Ionicons
-                {...props}
-                name='reorder-three-sharp'
-                size={24}
-                color={theme.colors.onSecondaryContainer}
-              />
-            </ItemRightButton>
-          </RightButtonsContainer>
+              <PendingChangesText>{pendingChangesText}</PendingChangesText>
+            </PendingChangesContainer>
+          )}
+        right={(props) => (
+          <CardTitleRight>
+            <RightButtonsContainer>
+              {(item.type === 'html' || (isWiki && item.isSubWiki !== true)) && <SyncIconButton workspaceID={item.id} />}
+              <ItemRightButton
+                testID={`workspace-settings-icon-${item.id}`}
+                accessibilityLabel='workspace-settings-icon'
+                onPress={() => {
+                  onPressSettings?.(item);
+                }}
+                onLongPress={() => {
+                  onReorderPress?.();
+                }}
+              >
+                <Ionicons
+                  {...props}
+                  name='reorder-three-sharp'
+                  size={24}
+                  color={theme.colors.onSecondaryContainer}
+                />
+              </ItemRightButton>
+            </RightButtonsContainer>
+          </CardTitleRight>
         )}
       />
     </WorkspaceCard>
@@ -127,7 +140,7 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
   const workspaceIDSet = useMemo(() => new Set(allWorkspacesList.map(workspace => workspace.id)), [allWorkspacesList]);
   const workspacesList = useMemo(() =>
     (workspaces ?? allWorkspacesList).filter((workspace) => {
-      if (workspace.type !== 'wiki') return true;
+      if (workspace.type !== undefined && workspace.type !== 'wiki') return true;
       if (includeSubWikis) return true;
       if (workspace.isSubWiki !== true) return true;
       const { mainWikiID } = workspace;
@@ -138,17 +151,6 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
     }), [allWorkspacesList, includeSubWikis, workspaceIDSet, workspaces]);
   const [pendingChangesCountMap, setPendingChangesCountMap] = useState<Record<string, { main: number; subWikis: number; unpushed: number }>>({});
 
-  const subWikisByMainWikiID = useMemo(() => {
-    const accumulator: Partial<Record<string, IWikiWorkspace[]>> = {};
-    for (const workspace of allWorkspacesList) {
-      if (workspace.type !== 'wiki' || workspace.isSubWiki !== true || typeof workspace.mainWikiID !== 'string') continue;
-      const list = accumulator[workspace.mainWikiID] ?? [];
-      list.push(workspace);
-      accumulator[workspace.mainWikiID] = list;
-    }
-    return accumulator;
-  }, [allWorkspacesList]);
-
   useEffect(() => {
     if (!isFocused) return;
     const cancellationState = { cancelled: false };
@@ -158,47 +160,42 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       void (async () => {
         const nextMap: Record<string, { main: number; subWikis: number; unpushed: number }> = {};
 
-        for (const workspace of workspacesList) {
+        await Promise.all(workspacesList.map(async workspace => {
           if (isCancelled()) return;
-          if (workspace.type !== 'wiki') {
+          if (workspace.type !== undefined && workspace.type !== 'wiki') {
             nextMap[workspace.id] = { main: 0, subWikis: 0, unpushed: 0 };
-            continue;
+            return;
           }
 
           let subWikisUncommitted = 0;
           let mainUncommitted = 0;
           let unpushedCommits = 0;
 
-          const subWikis = subWikisByMainWikiID[workspace.id] ?? [];
           try {
-            const allChanges = await gitDiffChangedFiles(workspace);
-
-            for (const change of allChanges) {
-              let isSubWikiChange = false;
-              for (const subWiki of subWikis) {
-                const parts = subWiki.wikiFolderLocation.split('/');
-                const subFolderName = parts[parts.length - 1];
-                if (subFolderName && change.path.startsWith(`tiddlers/${subFolderName}/`)) {
-                  subWikisUncommitted++;
-                  isSubWikiChange = true;
-                  break;
-                }
+            const workspacesToScan = workspace.isSubWiki === true
+              ? [workspace]
+              : getRelatedWikiWorkspaces(workspace, allWorkspacesList);
+            const scanResults = await Promise.all(workspacesToScan.map(async workspaceToScan => {
+              const [changes, aheadCount] = await Promise.all([gitDiffChangedFiles(workspaceToScan), gitGetAheadCommitCount(workspaceToScan)]);
+              return { aheadCount, changes, workspace: workspaceToScan };
+            }));
+            for (const { aheadCount, changes, workspace: workspaceToScan } of scanResults) {
+              if (workspaceToScan.isSubWiki === true) {
+                subWikisUncommitted += changes.length;
+              } else {
+                mainUncommitted += changes.length;
               }
-              if (!isSubWikiChange) {
-                mainUncommitted++;
-              }
+              unpushedCommits += aheadCount;
             }
-
-            unpushedCommits = await gitGetAheadCommitCount(workspace);
           } catch (error) {
             console.error('Failed to get uncommitted changes for workspace', workspace.id, error);
           }
 
           const counts = { main: mainUncommitted, subWikis: subWikisUncommitted, unpushed: unpushedCommits };
+          if (isCancelled()) return;
           nextMap[workspace.id] = counts;
           setPendingChangesCountMap(previous => ({ ...previous, [workspace.id]: counts }));
-          await new Promise<void>(resolve => setTimeout(resolve, 0));
-        }
+        }));
 
         if (!isCancelled()) {
           setPendingChangesCountMap(nextMap);
@@ -217,15 +214,15 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       };
     }
 
-    // Delay git I/O by 5 s after mount so that Detox can send disableSynchronization()
-    // before the isomorphic-git filesystem calls flood the RN bridge (which would
-    // keep Espresso in "not idle" state and prevent any Detox interaction).
+    // Keep initial navigation responsive on runtimes without requestIdleCallback.
+    // Git filesystem calls can otherwise occupy the RN bridge before Detox has
+    // a chance to disable synchronization.
     const timeout = setTimeout(run, 5_000);
     return () => {
       cancellationState.cancelled = true;
       clearTimeout(timeout);
     };
-  }, [isFocused, subWikisByMainWikiID, workspacesList]);
+  }, [allWorkspacesList, isFocused, workspacesList]);
 
   return (
     <ListContainer>
@@ -275,6 +272,19 @@ const WorkspaceCard = styled(Card)`
   background-color: ${({ theme }) => theme.colors.secondaryContainer};
   color: ${({ theme }) => theme.colors.onSecondaryContainer};
 `;
+const WorkspaceCardTitle = styled(Card.Title)`
+  min-height: 72px;
+`;
+const PendingChangesText = styled(Text)`
+  color: ${({ theme }) => theme.colors.onSecondaryContainer};
+`;
+const PendingChangesContainer = styled.View`
+  align-self: flex-start;
+`;
+const CardTitleRight = styled.View`
+  align-self: stretch;
+  justify-content: center;
+`;
 const ItemRightButton = styled(Pressable)`
   min-height: 48px;
   min-width: 48px;
@@ -293,14 +303,3 @@ const RightButtonsContainer = styled.View`
   justify-content: flex-end;
   align-items: center;
 `;
-
-const styles = StyleSheet.create({
-  cardTitle: {
-    minHeight: 72,
-  },
-  cardTitleRight: {
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-    marginRight: 0,
-  },
-});

@@ -104,11 +104,8 @@ export function useGitImport() {
     setStatus('cloning');
 
     try {
-      const mainWorkspace = qrData.mainWikiID !== undefined
-        ? useWorkspaceStore.getState().workspaces.find(w => w.type === 'wiki' && w.id === qrData.mainWikiID)
-        : undefined;
-      const syncedServers = (qrData.isSubWiki === true && mainWorkspace?.type === 'wiki')
-        ? mainWorkspace.syncedServers.map(s => ({ ...s, lastSync: Date.now(), syncActive: false }))
+      const syncedServers = qrData.isSubWiki === true
+        ? []
         : serverID.length > 0
         ? [{
           serverID,

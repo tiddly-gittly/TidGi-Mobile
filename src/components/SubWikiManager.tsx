@@ -11,20 +11,22 @@ import { useTranslation } from 'react-i18next';
 import { Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { isWikiWorkspace } from '../utils/workspaceRelations';
 import { WorkspaceList } from './WorkspaceList';
 
 export interface ISubWikiManagerProps {
+  isFocused?: boolean;
   onPressSettings?: (workspace: IWorkspace) => void;
   onPressWorkspace?: (workspace: IWorkspace) => void;
   workspace: IWikiWorkspace;
 }
 
-export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, onPressWorkspace, onPressSettings }) => {
+export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, isFocused = true, onPressWorkspace, onPressSettings }) => {
   const { t } = useTranslation();
   const allWorkspaces = useWorkspaceStore(state => state.workspaces);
 
   const attachedSubWikiWorkspaces = useMemo(
-    () => allWorkspaces.filter((item): item is IWikiWorkspace => item.type === 'wiki' && item.isSubWiki === true && item.mainWikiID === workspace.id),
+    () => allWorkspaces.filter((item): item is IWikiWorkspace => isWikiWorkspace(item) && item.isSubWiki === true && item.mainWikiID === workspace.id),
     [allWorkspaces, workspace.id],
   );
 
@@ -40,7 +42,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, onPressWor
     <WorkspaceList
       workspaces={attachedSubWikiWorkspaces}
       includeSubWikis={true}
-      isFocused={true}
+      isFocused={isFocused}
       reorderable={false}
       onPress={onPressWorkspace}
       onPressSettings={onPressSettings}

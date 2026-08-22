@@ -12,6 +12,9 @@ allowBuilds:
   svelte-preprocess: true
   unrs-resolver: true
 
+minimumReleaseAgeExclude:
+  - expo-tiddlywiki-filesystem-android-external-storage@2.12.3
+
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - detox

@@ -11,6 +11,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { IMigrationProgress, migrateWorkspaceStorage } from '../../services/WikiMigrationService';
 import { ITidgiConfig, readTidgiConfig, writeTidgiConfig } from '../../services/WikiStorageService/tidgiConfigManager';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { isWikiWorkspace } from '../../utils/workspaceRelations';
 import { useOpenDirectory } from '../Config/Developer/useOpenDirectory';
 
 const Container = styled(ScrollView)`
@@ -73,7 +74,7 @@ export const WorkspaceSettings: FC<IWorkspaceSettingsProps> = ({ workspace }) =>
   const subWikis = useMemo(() => {
     if (workspace.isSubWiki === true) return [];
     return useWorkspaceStore.getState().workspaces
-      .filter((item): item is IWikiWorkspace => item.type === 'wiki' && item.isSubWiki === true && item.mainWikiID === workspace.id);
+      .filter((item): item is IWikiWorkspace => isWikiWorkspace(item) && item.isSubWiki === true && item.mainWikiID === workspace.id);
   }, [workspace.id, workspace.isSubWiki]);
   const hasSubWikis = subWikis.length > 0;
   const [migrateSubWikis, setMigrateSubWikis] = useState(true);

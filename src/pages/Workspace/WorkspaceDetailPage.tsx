@@ -9,6 +9,7 @@ import type { RootStackParameterList } from '../../App';
 import { LogViewerDialog } from '../../components/LogViewerDialog';
 import { gitGetUnsyncedCommitCount } from '../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { getRelatedWikiWorkspaces } from '../../utils/workspaceRelations';
 import { deleteWikiFile } from '../Config/Developer/useClearAllWikiData';
 import { PageContainer, useSyncableWorkspace, useWorkspaceTitle } from './shared';
 import { FooterRow } from './workspaceStyles';
@@ -30,9 +31,9 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
   const [deleteSubWorkspacesTogether, setDeleteSubWorkspacesTogether] = useState(false);
   const [workspaceLogVisible, setWorkspaceLogVisible] = useState(false);
   const subWorkspaces = allWorkspaces.filter((workspace): workspace is IWikiWorkspace =>
-    workspace.type === 'wiki' && workspace.isSubWiki === true && workspace.mainWikiID === wiki?.id
+    (workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki === true && workspace.mainWikiID === wiki?.id
   );
-  const isFolderWiki = wiki?.type === 'wiki';
+  const isFolderWiki = wiki !== undefined && (wiki.type === undefined || wiki.type === 'wiki');
   const canDeleteSubWorkspacesTogether = isFolderWiki && wiki.isSubWiki !== true && subWorkspaces.length > 0;
   const wikiReference = useRef(wiki);
   wikiReference.current = wiki;
@@ -46,9 +47,19 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
     let cancelled = false;
     const timeout = setTimeout(() => {
       const currentWiki = wikiReference.current;
-      if (currentWiki?.type !== 'wiki' || currentWiki.id !== wikiId) return;
-      void gitGetUnsyncedCommitCount(currentWiki, { ignoreDeferredScan: true, throwOnError: true })
-        .then((count) => {
+      if (
+        currentWiki === undefined ||
+        (currentWiki.type !== undefined && currentWiki.type !== 'wiki') ||
+        currentWiki.id !== wikiId
+      ) return;
+      const workspacesToScan = currentWiki.isSubWiki === true
+        ? [currentWiki]
+        : getRelatedWikiWorkspaces(currentWiki, useWorkspaceStore.getState().workspaces);
+      void Promise.all(
+        workspacesToScan.map(async workspace => await gitGetUnsyncedCommitCount(workspace, { ignoreDeferredScan: true, throwOnError: true })),
+      )
+        .then((counts) => {
+          const count = counts.reduce((total, workspaceCount) => total + workspaceCount, 0);
           if (!cancelled) setPendingChangeCount(count);
         })
         .catch((error: unknown) => {
@@ -212,7 +223,13 @@ export function WorkspaceDetailPage({ route, navigation }: StackScreenProps<Root
 
         <LogViewerDialog
           scope={wiki.id}
+          workspaceName={wiki.name}
           visible={workspaceLogVisible}
+          onOpenChanges={isFolderWiki
+            ? () => {
+              navigation.navigate('WorkspaceChanges', { id: wiki.id });
+            }
+            : undefined}
           onDismiss={() => {
             setWorkspaceLogVisible(false);
           }}

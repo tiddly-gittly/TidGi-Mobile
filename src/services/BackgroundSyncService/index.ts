@@ -11,7 +11,15 @@ import { AppState } from 'react-native';
 import i18n from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { IServerInfo, ServerStatus, useServerStore } from '../../store/server';
-import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { IHtmlWorkspace, IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import {
+  getOnlineServerForSyncableWorkspace,
+  getServerReachabilityInputKey,
+  getSyncableWorkspaceConfiguration,
+  mergeServerStatusProbeResults,
+  SyncableWorkspace,
+} from '../../utils/serverStatus';
+import { getSyncConfigurationWorkspace } from '../../utils/workspaceRelations';
 import {
   ensureGitConfigForMobile,
   getCurrentBranch,
@@ -21,6 +29,7 @@ import {
   gitGetAheadCommitCount,
   gitHasChanges,
   gitPushToIncoming,
+  headersForRemote,
   headersToJson,
   IGitRemote,
   triggerDesktopMerge,
@@ -28,16 +37,26 @@ import {
 import { logFor } from '../LoggerService';
 import { readTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { type ITiddlerChange, TiddlersLogOperation } from '../WikiStorageService/types';
+import { ISyncResult } from './types';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'background-sync-task';
+
+export interface IWikiSyncResult {
+  haveUpdate: boolean;
+  succeeded: boolean;
+}
+
+const FAILED_WIKI_SYNC_RESULT: IWikiSyncResult = { haveUpdate: false, succeeded: false };
 
 // Define background task
 TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
   const now = Date.now();
   console.log(`Got background task call at date: ${new Date(now).toISOString()}`);
   try {
-    await gitBackgroundSyncService.sync();
-    return BackgroundTask.BackgroundTaskResult.Success;
+    const result = await gitBackgroundSyncService.sync();
+    return result.succeeded
+      ? BackgroundTask.BackgroundTaskResult.Success
+      : BackgroundTask.BackgroundTaskResult.Failed;
   } catch (error) {
     console.error('Background sync failed:', error);
     return BackgroundTask.BackgroundTaskResult.Failed;
@@ -61,14 +80,15 @@ export async function unregisterBackgroundSyncAsync() {
  * Service for syncing wikis using git
  */
 export class GitBackgroundSyncService {
-  readonly #workspaceSyncLocks = new Map<string, Promise<boolean>>();
+  readonly #workspaceSyncLocks = new Map<string, Promise<IWikiSyncResult>>();
+  readonly #serverStatusProbes = new Map<string, { key: string; promise: Promise<ServerStatus> }>();
 
   public getSubWikisForMainWorkspace(workspace: IWikiWorkspace): IWikiWorkspace[] {
     if (workspace.isSubWiki === true) {
       return [];
     }
     return this.#workspaceStore.getState().workspaces
-      .filter((item): item is IWikiWorkspace => item.type === 'wiki')
+      .filter((item): item is IWikiWorkspace => item.type === undefined || item.type === 'wiki')
       .filter(item => item.isSubWiki === true && item.mainWikiID === workspace.id);
   }
 
@@ -124,75 +144,65 @@ export class GitBackgroundSyncService {
    * Sync all workspaces with their configured servers
    * Syncs with ALL online servers for each workspace (not just the first one)
    */
-  public async sync(): Promise<{ haveUpdate: boolean; haveConnectedServer: boolean }> {
+  public async sync(): Promise<ISyncResult> {
     // Prevent concurrent syncs
     if (this.#isSyncing) {
       console.log('Sync already in progress, skipping...');
-      return { haveUpdate: false, haveConnectedServer: false };
+      return { haveUpdate: false, haveConnectedServer: false, succeeded: true };
     }
 
     this.#isSyncing = true;
     try {
-      const workspaces = this.#workspaceStore.getState().workspaces.filter((workspace): workspace is IWikiWorkspace => workspace.type === 'wiki');
+      const workspaces = this.#workspaceStore.getState().workspaces.filter(
+        (workspace): workspace is IWikiWorkspace => workspace.type === undefined || workspace.type === 'wiki',
+      );
 
       await this.updateServerOnlineStatus();
 
       const reconciledWorkspaces = await Promise.all(workspaces.map(async workspace => await this.reconcileWorkspaceID(workspace)));
-      const syncTasks: Array<Promise<boolean>> = [];
+      const syncTasks: Array<Promise<IWikiSyncResult>> = [];
       const dedupe = new Set<string>();
 
       for (const workspace of reconciledWorkspaces) {
-        if (workspace.isSubWiki === true) {
-          const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
-          let chain = Promise.resolve(false);
-          for (const server of onlineServers) {
-            const key = `${workspace.id}:${server.id}`;
-            if (dedupe.has(key)) continue;
-            dedupe.add(key);
-            chain = chain.then(async previousUpdated => {
-              const updated = await this.syncWorkspaceOnQueue(workspace.id, async () => await this.syncSingleWorkspaceWithServer(workspace, server));
-              return previousUpdated || updated;
-            });
-          }
-          syncTasks.push(chain);
-          continue;
-        }
-
+        if (workspace.isSubWiki === true) continue;
         const onlineServers = this.getAllOnlineServersForWorkspace(workspace);
-        const workspacesToSync = workspace.syncIncludeSubWikis === false
-          ? [workspace]
-          : [workspace, ...this.getSubWikisForMainWorkspace(workspace)];
-
-        for (const workspaceToSync of workspacesToSync) {
-          let chain = Promise.resolve(false);
-          for (const server of onlineServers) {
-            const key = `${workspaceToSync.id}:${server.id}`;
-            if (dedupe.has(key)) continue;
-            dedupe.add(key);
-            chain = chain.then(async previousUpdated => {
-              const reconciledWorkspace = await this.reconcileWorkspaceID(workspaceToSync);
-              const updated = await this.syncWorkspaceOnQueue(reconciledWorkspace.id, async () => await this.syncSingleWorkspaceWithServer(reconciledWorkspace, server));
-              return previousUpdated || updated;
-            });
-          }
-          syncTasks.push(chain);
+        let chain = Promise.resolve<IWikiSyncResult>({ haveUpdate: false, succeeded: true });
+        for (const server of onlineServers) {
+          const key = `${workspace.id}:${server.id}`;
+          if (dedupe.has(key)) continue;
+          dedupe.add(key);
+          chain = chain.then(async previousResult => {
+            const result = await this.syncWorkspaceOnQueue(
+              workspace.id,
+              async () => await this.syncWorkspaceWithServer(workspace, server, { includeSubWikis: true }),
+            );
+            return {
+              haveUpdate: previousResult.haveUpdate || result.haveUpdate,
+              succeeded: previousResult.succeeded && result.succeeded,
+            };
+          });
         }
+        if (onlineServers.length > 0) syncTasks.push(chain);
       }
 
       const haveConnectedServer = syncTasks.length > 0;
       const results = await Promise.allSettled(syncTasks);
-      const haveUpdate = results.some(result => result.status === 'fulfilled' && result.value);
+      const haveUpdate = results.some(result => result.status === 'fulfilled' && result.value.haveUpdate);
+      const succeeded = results.every(result => result.status === 'fulfilled' && result.value.succeeded);
 
-      return { haveUpdate, haveConnectedServer };
+      return { haveUpdate, haveConnectedServer, succeeded };
     } finally {
       this.#isSyncing = false;
     }
   }
 
-  private async syncWorkspaceOnQueue(workspaceId: string, task: () => Promise<boolean>): Promise<boolean> {
-    const previous = this.#workspaceSyncLocks.get(workspaceId) ?? Promise.resolve(false);
+  private async syncWorkspaceOnQueue(
+    workspaceId: string,
+    task: () => Promise<IWikiSyncResult>,
+  ): Promise<IWikiSyncResult> {
+    const previous = this.#workspaceSyncLocks.get(workspaceId) ?? Promise.resolve(FAILED_WIKI_SYNC_RESULT);
     const current = previous
-      .catch(() => false)
+      .catch(() => FAILED_WIKI_SYNC_RESULT)
       .then(async () => await task());
     this.#workspaceSyncLocks.set(workspaceId, current);
     try {
@@ -207,27 +217,95 @@ export class GitBackgroundSyncService {
   /**
    * Update server online status
    */
-  public async updateServerOnlineStatus(): Promise<void> {
-    const newServers: Record<string, IServerInfo> = {};
-
+  public async updateServerOnlineStatus(serverIDs?: readonly string[]): Promise<void> {
+    const results: Record<string, { inputKey: string; status: ServerStatus }> = {};
+    const serverIDSet = serverIDs === undefined ? undefined : new Set(serverIDs);
     await Promise.all(
-      Object.values(this.#serverStore.getState().servers).map(async (server) => {
-        try {
-          await this.fetchServerStatus(server);
-          newServers[server.id] = { ...server, status: ServerStatus.online };
-        } catch {
-          newServers[server.id] = { ...server, status: ServerStatus.disconnected };
-        }
+      Object.values(this.#serverStore.getState().servers).filter(server => serverIDSet?.has(server.id) ?? true).map(async (server) => {
+        const syncedServer = this.getStatusProbeCredentials(server.id);
+        const key = getServerReachabilityInputKey(server, syncedServer);
+        const status = await this.getOrCreateServerStatusProbe(server, syncedServer, key);
+        results[server.id] = { inputKey: key, status };
       }),
     );
+    // A status request can finish after the user has edited this server.
+    // Merge into the latest state so a stale request cannot restore an old
+    // name, URI, provider, protocol setting, or deleted server.
+    this.#serverStore.setState(state => {
+      const servers = mergeServerStatusProbeResults(
+        state.servers,
+        results,
+        (serverID, server) => getServerReachabilityInputKey(server, this.getStatusProbeCredentials(serverID)),
+      );
+      return servers === state.servers ? state : { servers };
+    });
+  }
 
-    this.#serverStore.setState({ servers: newServers });
+  /**
+   * Refresh only the servers configured for one workspace and resolve the
+   * result from the latest stores. UI callers must not retain pre-probe
+   * workspace/server snapshots across the await.
+   */
+  public async refreshOnlineServerForWorkspace(
+    workspaceID: string,
+  ): Promise<{ server: IServerInfo | undefined; workspace: SyncableWorkspace } | undefined> {
+    const beforeWorkspaces = this.#workspaceStore.getState().workspaces;
+    const beforeWorkspace = beforeWorkspaces.find((candidate): candidate is SyncableWorkspace =>
+      candidate.id === workspaceID &&
+      (candidate.type === undefined || candidate.type === 'wiki' || candidate.type === 'html')
+    );
+    if (beforeWorkspace === undefined) return undefined;
+    const configurationWorkspace = getSyncableWorkspaceConfiguration(beforeWorkspace, beforeWorkspaces);
+    await this.updateServerOnlineStatus(configurationWorkspace.syncedServers.map(item => item.serverID));
+
+    const workspaces = this.#workspaceStore.getState().workspaces;
+    const workspace = workspaces.find((candidate): candidate is SyncableWorkspace =>
+      candidate.id === workspaceID &&
+      (candidate.type === undefined || candidate.type === 'wiki' || candidate.type === 'html')
+    );
+    if (workspace === undefined) return undefined;
+    return {
+      server: getOnlineServerForSyncableWorkspace(workspace, workspaces, this.#serverStore.getState().servers),
+      workspace,
+    };
+  }
+
+  private getStatusProbeCredentials(serverID: string): IWikiServerSync | undefined {
+    const configurationWorkspace = this.#workspaceStore.getState().workspaces.find((workspace): workspace is IWikiWorkspace | IHtmlWorkspace =>
+      (
+        workspace.type === 'html' ||
+        ((workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki !== true)
+      ) &&
+      workspace.syncedServers.some(syncedServer => syncedServer.serverID === serverID)
+    );
+    return configurationWorkspace?.syncedServers.find(item => item.serverID === serverID);
+  }
+
+  private async getOrCreateServerStatusProbe(
+    server: IServerInfo,
+    syncedServer: IWikiServerSync | undefined,
+    key: string,
+  ): Promise<ServerStatus> {
+    const existing = this.#serverStatusProbes.get(server.id);
+    if (existing?.key === key) return await existing.promise;
+
+    const promise = this.fetchServerStatus(server, syncedServer)
+      .then(() => ServerStatus.online)
+      .catch(() => ServerStatus.disconnected);
+    this.#serverStatusProbes.set(server.id, { key, promise });
+    try {
+      return await promise;
+    } finally {
+      if (this.#serverStatusProbes.get(server.id)?.promise === promise) {
+        this.#serverStatusProbes.delete(server.id);
+      }
+    }
   }
 
   /**
    * Fetch server status
    */
-  private async fetchServerStatus(server: IServerInfo): Promise<void> {
+  private async fetchServerStatus(server: IServerInfo, syncedServer: IWikiServerSync | undefined): Promise<void> {
     const statusUrl = new URL('status', server.uri);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -236,11 +314,14 @@ export class GitBackgroundSyncService {
 
     try {
       const response = await fetch(statusUrl.toString(), {
+        headers: syncedServer === undefined ? undefined : headersForRemote(syncedServer),
         method: 'GET',
         signal: controller.signal,
       });
 
-      if (!response.ok) {
+      // Authentication failures still prove that the server is reachable.
+      // The subsequent sync request will surface the credential error itself.
+      if (!response.ok && response.status !== 401 && response.status !== 403) {
         throw new Error(`Server returned ${response.status}`);
       }
     } finally {
@@ -259,10 +340,15 @@ export class GitBackgroundSyncService {
   /**
    * Sync workspace with specific server (public method for UI)
    */
-  public async syncWikiWithServer(workspace: IWikiWorkspace, server: IServerInfo): Promise<boolean> {
-    return await this.syncWorkspaceWithServer(workspace, server, {
-      includeSubWikis: workspace.syncIncludeSubWikis !== false,
-    });
+  public async syncWikiWithServer(workspace: IWikiWorkspace, server: IServerInfo): Promise<IWikiSyncResult> {
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+    return await this.syncWorkspaceOnQueue(
+      syncConfigurationWorkspace.id,
+      async () => {
+        const latestServer = this.#serverStore.getState().servers[server.id] as IServerInfo | undefined;
+        return await this.syncWorkspaceWithServer(syncConfigurationWorkspace, latestServer ?? server, { includeSubWikis: true });
+      },
+    );
   }
 
   /**
@@ -292,8 +378,9 @@ export class GitBackgroundSyncService {
    */
   private getOnlineServerForWorkspace(workspace: IWikiWorkspace): IServerInfo | undefined {
     const servers = this.#serverStore.getState().servers;
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
 
-    for (const syncedServer of workspace.syncedServers) {
+    for (const syncedServer of syncConfigurationWorkspace.syncedServers) {
       const server = servers[syncedServer.serverID] as IServerInfo | undefined;
       if (server !== undefined && server.status === ServerStatus.online) {
         return server;
@@ -310,8 +397,9 @@ export class GitBackgroundSyncService {
   private getAllOnlineServersForWorkspace(workspace: IWikiWorkspace): IServerInfo[] {
     const servers = this.#serverStore.getState().servers;
     const onlineServers: IServerInfo[] = [];
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
 
-    for (const syncedServer of workspace.syncedServers) {
+    for (const syncedServer of syncConfigurationWorkspace.syncedServers) {
       const server = servers[syncedServer.serverID] as IServerInfo | undefined;
       if (server !== undefined && server.status === ServerStatus.online) {
         onlineServers.push(server);
@@ -328,16 +416,33 @@ export class GitBackgroundSyncService {
     workspace: IWikiWorkspace,
     server: IServerInfo,
     options?: { includeSubWikis?: boolean },
-  ): Promise<boolean> {
+  ): Promise<IWikiSyncResult> {
     const includeSubWikis = options?.includeSubWikis === true && workspace.isSubWiki !== true;
     if (includeSubWikis) {
       const subWikis = this.getSubWikisForMainWorkspace(workspace);
       const workspacesToSync = [workspace, ...subWikis];
-      const updatedList = await Promise.all(workspacesToSync.map(async workspaceToSync => {
+      const results: Array<{ result: IWikiSyncResult; workspace: IWikiWorkspace }> = [];
+      for (const workspaceToSync of workspacesToSync) {
         const reconciled = await this.reconcileWorkspaceID(workspaceToSync);
-        return await this.syncSingleWorkspaceWithServer(reconciled, server);
+        results.push({
+          result: await this.syncSingleWorkspaceWithServer(reconciled, server),
+          workspace: reconciled,
+        });
+      }
+      const failedWorkspaces = results.filter(({ result }) => !result.succeeded).map(({ workspace: failedWorkspace }) => ({
+        workspaceId: failedWorkspace.id,
+        workspaceName: failedWorkspace.name,
       }));
-      return updatedList.some(updated => updated);
+      if (failedWorkspaces.length > 0) {
+        logFor(workspace.id).error('Related workspace sync failed', {
+          failedWorkspaces,
+          serverId: server.id,
+        });
+      }
+      return {
+        haveUpdate: results.some(({ result }) => result.haveUpdate),
+        succeeded: failedWorkspaces.length === 0,
+      };
     }
     return await this.syncSingleWorkspaceWithServer(workspace, server);
   }
@@ -345,20 +450,25 @@ export class GitBackgroundSyncService {
   private async syncSingleWorkspaceWithServer(
     workspace: IWikiWorkspace,
     server: IServerInfo,
-  ): Promise<boolean> {
+  ): Promise<IWikiSyncResult> {
     const workspaceLogger = logFor(workspace.id);
     const remote = this.getRemoteConfig(workspace, server);
     if (remote === undefined) {
+      const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+      const configuredServerIDs = syncConfigurationWorkspace.syncedServers.map(item => item.serverID);
       console.warn(`No remote config found for workspace ${workspace.name}`, {
         workspaceId: workspace.id,
         serverId: server.id,
-        syncedServers: workspace.syncedServers,
+        syncConfigurationWorkspaceId: syncConfigurationWorkspace.id,
+        configuredServerIDs,
       });
       workspaceLogger.warn('Remote config missing', {
+        configuredServerIDs,
         serverId: server.id,
+        syncConfigurationWorkspaceId: syncConfigurationWorkspace.id,
         workspaceId: workspace.id,
       });
-      return false;
+      return FAILED_WIKI_SYNC_RESULT;
     }
 
     let haveUpdate = false;
@@ -381,22 +491,23 @@ export class GitBackgroundSyncService {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      return true;
+      return { haveUpdate, succeeded: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       workspaceLogger.error('Sync failed', {
-        error: (error as Error).message,
+        error: errorMessage,
         serverId: server.id,
         serverUri: server.uri,
       });
       console.error(`Sync failed for workspace ${workspace.name}:`, {
-        error,
+        error: errorMessage,
         workspaceId: workspace.id,
         serverId: server.id,
         serverUri: server.uri,
       });
       // Use safe notification instead of Alert.alert which crashes in background mode
-      this.#notifySyncError(workspace.name, (error as Error).message);
-      return false;
+      this.#notifySyncError(workspace.name, errorMessage);
+      return FAILED_WIKI_SYNC_RESULT;
     } finally {
       this.setServerActive(workspace.id, server.id, false);
     }
@@ -562,12 +673,8 @@ export class GitBackgroundSyncService {
    * Get remote config for workspace and server
    */
   private getRemoteConfig(workspace: IWikiWorkspace, server: IServerInfo): IGitRemote | undefined {
-    const syncedServer = workspace.syncedServers.find(s => s.serverID === server.id);
-    const mainWorkspace = workspace.isSubWiki === true && workspace.mainWikiID
-      ? this.#workspaceStore.getState().workspaces.find((item): item is IWikiWorkspace => item.type === 'wiki' && item.id === workspace.mainWikiID)
-      : undefined;
-    const syncedServerFromMainWorkspace = mainWorkspace?.syncedServers.find(s => s.serverID === server.id);
-    const resolvedSyncedServer = syncedServer ?? syncedServerFromMainWorkspace;
+    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+    const resolvedSyncedServer = syncConfigurationWorkspace.syncedServers.find(s => s.serverID === server.id);
     if (resolvedSyncedServer === undefined) {
       return undefined;
     }
@@ -581,8 +688,8 @@ export class GitBackgroundSyncService {
     const tokenAuthHeaderValue = typeof resolvedSyncedServer.tokenAuthHeaderValue === 'string' && resolvedSyncedServer.tokenAuthHeaderValue.length > 0
       ? resolvedSyncedServer.tokenAuthHeaderValue
       : undefined;
-    if (token === undefined) {
-      console.log(`No token configured for workspace ${workspace.name} and server ${server.id}, use anonymous access`);
+    if (token === undefined && (tokenAuthHeaderName === undefined || tokenAuthHeaderValue === undefined)) {
+      console.log(`No authentication configured for workspace ${workspace.name} and server ${server.id}; using anonymous access`);
     }
 
     const legacyRemoteWorkspaceId = (resolvedSyncedServer as unknown as { remoteWorkspaceId?: string }).remoteWorkspaceId;
@@ -613,9 +720,10 @@ export class GitBackgroundSyncService {
     const update = this.#workspaceStore.getState().update;
     const workspace = this.#workspaceStore.getState().workspaces.find(w => w.id === workspaceId);
 
-    if (workspace?.type === 'wiki') {
-      const newSyncedServers = workspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
-      update(workspaceId, { syncedServers: newSyncedServers });
+    if (workspace !== undefined && (workspace.type === undefined || workspace.type === 'wiki')) {
+      const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
+      const newSyncedServers = syncConfigurationWorkspace.syncedServers.map(s => s.serverID === serverId ? { ...s, lastSync: Date.now() } : s);
+      update(syncConfigurationWorkspace.id, { syncedServers: newSyncedServers });
     }
   }
 

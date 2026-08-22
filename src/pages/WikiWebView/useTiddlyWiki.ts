@@ -11,6 +11,7 @@ import { WikiHookService } from '../../services/WikiHookService';
 import { FileSystemWikiStorageService } from '../../services/WikiStorageService/FileSystemWikiStorageService';
 import { readTidgiConfig } from '../../services/WikiStorageService/tidgiConfigManager';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
+import { isWikiWorkspace } from '../../utils/workspaceRelations';
 import { useStreamChunksToWebView } from './useStreamChunksToWebView';
 import { FileSystemTiddlersReadStream } from './useStreamChunksToWebView/FileSystemTiddlersReadStream';
 
@@ -61,7 +62,7 @@ export function useTiddlyWiki(
 
         // The HTML already contains $:/core + themes in its store area (rendered by $:/core/save/empty).
         // We only stream syncadaptor plugins and user tiddlers from the filesystem.
-        const allWikiWorkspaces = useWorkspaceStore.getState().workspaces.filter((item): item is IWikiWorkspace => item.type === 'wiki');
+        const allWikiWorkspaces = useWorkspaceStore.getState().workspaces.filter(isWikiWorkspace);
         const relatedSubWikis = allWikiWorkspaces.filter(item => item.isSubWiki === true && item.mainWikiID === workspace.id);
         const mainConfig = await readTidgiConfig(workspace);
         const subWikisFromConfig = Array.isArray(mainConfig.subWikis) ? mainConfig.subWikis : [];

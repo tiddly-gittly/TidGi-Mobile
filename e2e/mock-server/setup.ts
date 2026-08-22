@@ -24,6 +24,8 @@ import { join, resolve } from 'node:path';
 const REPO_ROOT = process.cwd();
 const TEST_WIKI_DIR = join(REPO_ROOT, 'e2e', 'test-wiki');
 const PORT = 5212;
+const AUTH_HEADER_NAME = 'x-tidgi-auth-token-e2e-secret';
+const AUTH_HEADER_VALUE = 'E2E Mobile User';
 const PLUGIN_JSON = '$__plugins_linonetwo_tw-mobile-sync.json';
 // tw-mobile-sync is a sibling of TidGi-Mobile under the same parent (e.g. github/).
 // From REPO_ROOT (TidGi-Mobile), go up one level then into tw-mobile-sync.
@@ -272,6 +274,12 @@ const LAN_IP = getLanIp();
 export function getMockServerUrl() {
   return `http://${LAN_IP}:${PORT}`;
 }
+export function getMockServerAuthentication() {
+  return {
+    tokenAuthHeaderName: AUTH_HEADER_NAME,
+    tokenAuthHeaderValue: AUTH_HEADER_VALUE,
+  };
+}
 export function getTestWikiDirectory() {
   return TEST_WIKI_DIR;
 }
@@ -308,14 +316,20 @@ export async function startServer(): Promise<void> {
   const twMain = join(REPO_ROOT, 'node_modules', 'tiddlywiki', 'tiddlywiki.js');
   console.log(`[mock-server] Starting on :${PORT}...`);
 
-  // NOTE: We intentionally do NOT set username/password here. The mock server
-  // is a short-lived local test fixture; adding TiddlyWeb Basic Auth would
-  // require the mobile client to send matching credentials for every Git
-  // endpoint request (full-archive, info/refs, etc.). In standalone mode the
-  // tw-mobile-sync plugin's own authorizeWorkspaceToken() already allows
-  // anonymous access when no workspace token is configured, so no additional
-  // auth layer is needed for E2E.
-  server = spawn(process.execPath, [twMain, TEST_WIKI_DIR, '--listen', `port=${PORT}`, 'host=0.0.0.0'], {
+  // Match TidGi Desktop's credential-auth mode: the header name contains the
+  // secret and its value identifies the authenticated wiki user. Keeping this
+  // enabled for every sync E2E ensures archive, Smart HTTP, merge, and status
+  // requests cannot silently regress to anonymous access.
+  server = spawn(process.execPath, [
+    twMain,
+    TEST_WIKI_DIR,
+    '--listen',
+    `port=${PORT}`,
+    'host=0.0.0.0',
+    `authenticated-user-header=${AUTH_HEADER_NAME}`,
+    `readers=${AUTH_HEADER_VALUE}`,
+    `writers=${AUTH_HEADER_VALUE}`,
+  ], {
     cwd: REPO_ROOT,
     stdio: 'pipe',
   });
@@ -343,13 +357,13 @@ export async function startServer(): Promise<void> {
   });
 
   // Health-check via node:http (avoids global fetch which may be unavailable
-  // in ts-node/esm worker context). The mock server has no auth layer, so no
-  // Authorization header is needed.
+  // in ts-node/esm worker context).
   for (let index = 0; index < 30; index++) {
     await new Promise(r => setTimeout(r, 1000));
     try {
       const ok = await new Promise<boolean>((resolve) => {
         const request = httpGet(`${getMockServerUrl()}/status`, {
+          headers: { [AUTH_HEADER_NAME]: AUTH_HEADER_VALUE },
           timeout: 3000,
         }, (response) => {
           resolve(response.statusCode === 200);

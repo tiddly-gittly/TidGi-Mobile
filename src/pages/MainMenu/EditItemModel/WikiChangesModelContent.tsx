@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, Dialog, IconButton, List, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { FlatList, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Button, Card, Dialog, IconButton, List, Menu, Modal, Portal, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -19,10 +19,12 @@ import {
   IGitFileContent,
 } from '../../../services/GitService';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { getRelatedWikiWorkspaces } from '../../../utils/workspaceRelations';
 import { GitFilePreviewModal } from './GitFilePreviewModal';
 interface ModalProps {
   id: string | undefined;
   onClose: () => void;
+  onSelectWorkspace?: (workspaceID: string) => void;
 }
 
 interface IUncommittedChangeItem {
@@ -31,7 +33,7 @@ interface IUncommittedChangeItem {
   workspace: IWikiWorkspace;
 }
 
-export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): JSX.Element {
+export function WikiChangesModelContent({ id, onClose: _onClose, onSelectWorkspace }: ModalProps): JSX.Element {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -64,6 +66,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
   const [isDiscardingAll, setIsDiscardingAll] = useState(false);
   const [confirmDiscardAllVisible, setConfirmDiscardAllVisible] = useState(false);
   const [remoteOids, setRemoteOids] = useState<Set<string>>(new Set());
+  const [workspaceMenuVisible, setWorkspaceMenuVisible] = useState(false);
 
   const commitsData = useMemo(() => {
     if (uncommittedChanges.length === 0) return commits;
@@ -80,45 +83,18 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
     ];
   }, [commits, uncommittedChanges.length, t]);
 
-  const relatedWikisForUncommitted = useMemo(() => {
+  const relatedWorkspaces = useMemo(() => {
     if (wiki === undefined) return [] as IWikiWorkspace[];
-    if (wiki.isSubWiki === true || wiki.syncIncludeSubWikis === false) return [wiki];
-    return workspaces.filter((workspace): workspace is IWikiWorkspace =>
-      (workspace.type === undefined || workspace.type === 'wiki') &&
-      (workspace.id === wiki.id || workspace.mainWikiID === wiki.id)
-    );
+    return getRelatedWikiWorkspaces(wiki, workspaces);
   }, [wiki, workspaces]);
 
   const refreshUncommitted = async () => {
     if (wiki === undefined) return;
     const uncommittedStartAt = Date.now();
     setLoadingUncommitted(true);
-    console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id} across ${relatedWikisForUncommitted.map(item => item.id).join(',')}`);
-
-    // All sub-wikis share the same git repo as the main wiki.
-    // We must call gitDiffChangedFiles on the MAIN wiki (which is the git root),
-    // not on sub-wikis (which are subdirectories without their own .git/).
-    // Find the main wiki: it's the one that is NOT a sub-wiki.
-    const mainWiki = relatedWikisForUncommitted.find(w => w.isSubWiki !== true) ?? wiki;
-    console.log(`${new Date().toISOString()} [WikiChanges] using mainWiki=${mainWiki.id} (isSubWiki=${mainWiki.isSubWiki ?? false}) path=${mainWiki.wikiFolderLocation}`);
-    const allChanges = await gitDiffChangedFiles(mainWiki);
-
-    // Classify each changed path into the most specific workspace it belongs to.
-    const uncommitted: IUncommittedChangeItem[] = [];
-    for (const change of allChanges) {
-      let bestMatch = mainWiki;
-      for (const workspace of relatedWikisForUncommitted) {
-        if (workspace.id === mainWiki.id) continue;
-        // Sub-wiki tiddlers are under tiddlers/<subwiki-folder>/
-        // The change.path is relative to the git root (= main wiki dir)
-        const subFolderName = workspace.wikiFolderLocation.split('/').pop();
-        if (subFolderName && change.path.startsWith(`tiddlers/${subFolderName}/`)) {
-          bestMatch = workspace;
-          break;
-        }
-      }
-      uncommitted.push({ ...change, workspace: bestMatch });
-    }
+    console.log(`${new Date().toISOString()} [WikiChanges] loading uncommitted changes for ${wiki.id}`);
+    const allChanges = await gitDiffChangedFiles(wiki);
+    const uncommitted = allChanges.map(change => ({ ...change, workspace: wiki }));
 
     setUncommittedChanges(uncommitted);
     setLoadingUncommitted(false);
@@ -147,6 +123,11 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
 
   useEffect(() => {
     if (wiki === undefined) return;
+    setSelectedCommit(undefined);
+    setSelectedFilePath(undefined);
+    setFilePreviewVisible(false);
+    setChangedFiles([]);
+    setWorkspaceMenuVisible(false);
     void refreshUncommitted();
   }, [wiki?.id]);
 
@@ -193,6 +174,42 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
 
   return (
     <ModalContainer>
+      {relatedWorkspaces.length > 1 && (
+        <WorkspaceSelectorRow>
+          <Text variant='labelLarge'>{t('GitHistory.Workspace', '工作区')}</Text>
+          <Menu
+            visible={workspaceMenuVisible}
+            onDismiss={() => {
+              setWorkspaceMenuVisible(false);
+            }}
+            anchor={
+              <WorkspaceSelectorButton
+                $borderColor={theme.colors.outline}
+                testID='workspace-changes-workspace-selector'
+                onPress={() => {
+                  setWorkspaceMenuVisible(true);
+                }}
+              >
+                <WorkspaceSelectorText numberOfLines={1}>{wiki.name}</WorkspaceSelectorText>
+                <Ionicons name='chevron-down' size={22} color={theme.colors.primary} />
+              </WorkspaceSelectorButton>
+            }
+          >
+            {relatedWorkspaces.map(relatedWorkspace => (
+              <Menu.Item
+                key={relatedWorkspace.id}
+                testID={`workspace-changes-workspace-${relatedWorkspace.id}`}
+                leadingIcon={relatedWorkspace.isSubWiki === true ? 'file-tree-outline' : 'home-outline'}
+                title={relatedWorkspace.name}
+                onPress={() => {
+                  setWorkspaceMenuVisible(false);
+                  if (relatedWorkspace.id !== wiki.id) onSelectWorkspace?.(relatedWorkspace.id);
+                }}
+              />
+            ))}
+          </Menu>
+        </WorkspaceSelectorRow>
+      )}
       <UncommittedHeader>
         <Text variant='titleMedium'>
           {t('GitHistory.Uncommitted')}
@@ -215,7 +232,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
         keyExtractor={(item) => `uncommitted-${item.workspace.id}-${item.type}-${item.path}`}
         renderItem={({ item }) => (
           <List.Item
-            title={relatedWikisForUncommitted.length > 1 ? `[${item.workspace.name}] ${item.path}` : item.path}
+            title={item.path}
             description={`${item.type.toUpperCase()} · ${item.workspace.name}`}
             left={(props) => <List.Icon {...props} icon='source-commit-local' />}
             right={(props) => <List.Icon {...props} icon='chevron-right' />}
@@ -314,8 +331,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
         windowSize={5}
       />
       <Portal>
-        <Modal
-          contentContainerStyle={styles.modalContentFillContainer}
+        <FullHeightModal
           visible={selectedCommit !== undefined}
           onDismiss={() => {
             setSelectedCommit(undefined);
@@ -324,8 +340,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
             setDetailsError(undefined);
           }}
         >
-          <Pressable
-            style={styles.modalDismissArea}
+          <ModalDismissArea
             onPress={() => {
               setSelectedCommit(undefined);
               setChangedFiles([]);
@@ -333,7 +348,11 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
               setDetailsError(undefined);
             }}
           >
-            <DetailsCard testID='commit-details-card' style={{ backgroundColor: theme.colors.elevation.level2 }} onStartShouldSetResponder={() => true}>
+            <DetailsCard
+              $backgroundColor={theme.colors.elevation.level2}
+              testID='commit-details-card'
+              onStartShouldSetResponder={() => true}
+            >
               <Card.Title title={t('GitHistory.CommitDetails')} />
               <PaddedCardContent>
                 <DetailSegmentedButtons
@@ -418,18 +437,17 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
                         </>
                       )
                       : (
-                        <Text variant='bodyMedium' style={{ color: theme.colors.outline }}>
+                        <MutedText variant='bodyMedium'>
                           {t('GitHistory.NoActionsForCommit', '此提交暂无可用操作')}
-                        </Text>
+                        </MutedText>
                       )}
                   </ActionsView>
                 )}
               </PaddedCardContent>
             </DetailsCard>
-          </Pressable>
-        </Modal>
-        <Modal
-          contentContainerStyle={styles.modalContentFillContainer}
+          </ModalDismissArea>
+        </FullHeightModal>
+        <FullHeightModal
           visible={filePreviewVisible}
           onDismiss={() => {
             setFilePreviewVisible(false);
@@ -437,15 +455,14 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
             setSelectedUncommittedItem(undefined);
           }}
         >
-          <Pressable
-            style={StyleSheet.absoluteFill}
+          <AbsoluteDismissArea
             onPress={() => {
               setFilePreviewVisible(false);
               setSelectedFilePath(undefined);
               setSelectedUncommittedItem(undefined);
             }}
           />
-          <PreviewDetailsCard style={{ backgroundColor: theme.colors.elevation.level2 }} pointerEvents='box-none'>
+          <PreviewDetailsCard $backgroundColor={theme.colors.elevation.level2} pointerEvents='box-none'>
             <Card.Title title={t('GitHistory.FilePreview')} />
             <Card.Content>
               {loadingFilePreview && <LoadingIndicator />}
@@ -467,7 +484,7 @@ export function WikiChangesModelContent({ id, onClose: _onClose }: ModalProps): 
               )}
             </Card.Content>
           </PreviewDetailsCard>
-        </Modal>
+        </FullHeightModal>
         <Dialog
           visible={confirmDiscardAllVisible}
           onDismiss={() => {
@@ -523,16 +540,59 @@ const UncommittedHeader = styled.View`
   margin-top: 8px;
   margin-bottom: 4px;
 `;
+const WorkspaceSelectorRow = styled.View`
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+`;
+const WorkspaceSelectorButton = styled(Pressable)<{ $borderColor: string }>`
+  width: 220px;
+  height: 48px;
+  padding-horizontal: 14px;
+  border-width: 1px;
+  border-color: ${({ $borderColor }) => $borderColor};
+  border-radius: 24px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+`;
+const WorkspaceSelectorText = styled(Text)`
+  flex: 1;
+  margin-right: 8px;
+  text-align: center;
+`;
 const HistoryCard = styled(Card)`
   margin-top: 8px;
 `;
-const DetailsCard = styled(Card)`
+const DetailsCard = styled(Card)<{ $backgroundColor: string }>`
   max-height: 80%;
+  background-color: ${({ $backgroundColor }) => $backgroundColor};
 `;
-const PreviewDetailsCard = styled(Card)`
+const PreviewDetailsCard = styled(Card)<{ $backgroundColor: string }>`
   max-height: 80%;
   align-self: center;
   width: 92%;
+  background-color: ${({ $backgroundColor }) => $backgroundColor};
+`;
+const FullHeightModal = styled(Modal).attrs({
+  contentContainerStyle: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+})``;
+const ModalDismissArea = styled(Pressable)`
+  flex: 1;
+  justify-content: center;
+  padding: 16px;
+`;
+const AbsoluteDismissArea = styled(Pressable)`
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
 `;
 const FilesList = styled(FlatList)`
   flex: 1;
@@ -582,15 +642,6 @@ const ActionsView = styled(View)`
 const MessageTextInput = styled(TextInput)`
   margin-bottom: 16px;
 `;
-
-const styles = StyleSheet.create({
-  modalContentFillContainer: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  modalDismissArea: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 16,
-  },
-});
+const MutedText = styled(Text)`
+  color: ${({ theme }) => theme.colors.outline};
+`;

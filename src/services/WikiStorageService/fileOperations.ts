@@ -7,8 +7,10 @@
  * external paths fail. Our ExternalStorage native module bypasses this.
  */
 
+import { Buffer } from 'buffer';
 import { Directory, File } from 'expo-file-system';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
+import { Platform } from 'react-native';
 
 function isExternalPath(filepath: string): boolean {
   const plain = toPlainPath(filepath);
@@ -107,6 +109,77 @@ export async function readTextFile(path: string): Promise<string> {
     }
   }
   return new File(path).text();
+}
+
+export interface IFileInfo {
+  exists: boolean;
+  isDirectory: boolean;
+  modificationTime: number;
+  size: number;
+}
+
+export async function getFileInfo(path: string): Promise<IFileInfo> {
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    return ExternalStorage.getInfo(toPlainPath(path));
+  }
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      return {
+        exists: true,
+        isDirectory: false,
+        modificationTime: file.modificationTime ?? 0,
+        size: file.size,
+      };
+    }
+  }
+  return { exists: false, isDirectory: false, modificationTime: 0, size: 0 };
+}
+
+/**
+ * Read only the requested byte range. Native platforms use
+ * RandomAccessFile/FileHandle, keeping I/O and memory independent of file size.
+ */
+export async function readFileChunk(path: string, offset: number, length: number): Promise<Uint8Array> {
+  if (length <= 0) return new Uint8Array();
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    const result = await ExternalStorage.readFileChunk(toPlainPath(path), offset, length);
+    return Uint8Array.from(Buffer.from(result.data, 'base64'));
+  }
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      const bytes = await file.bytes();
+      return bytes.slice(offset, offset + length);
+    }
+  }
+  throw new Error(`File does not exist: ${path}`);
+}
+
+/**
+ * Append UTF-8 text without reading and rewriting the existing file.
+ */
+export async function appendTextFile(path: string, content: string): Promise<void> {
+  if (content.length === 0) return;
+  const bytes = Buffer.from(content, 'utf8');
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    await ExternalStorage.appendFileBase64(toPlainPath(path), bytes.toString('base64'), false);
+    return;
+  }
+  for (const candidate of getInternalPathCandidates(path)) {
+    const file = new File(candidate);
+    if (!file.exists) continue;
+    const handle = file.open();
+    try {
+      handle.offset = file.size;
+      handle.writeBytes(bytes);
+    } finally {
+      handle.close();
+    }
+    return;
+  }
+  // Web fallback; native mobile paths never take this whole-file branch.
+  await writeTextFile(path, content);
 }
 
 export async function writeTextFile(path: string, content: string): Promise<void> {

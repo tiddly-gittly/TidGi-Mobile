@@ -8,9 +8,12 @@ import { styled } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { QRCodeScanner } from '../../../components/QRCodeScanner';
 import { useQRCodeScanner } from '../../../hooks/useQRCodeScanner';
+import { gitBackgroundSyncService } from '../../../services/BackgroundSyncService';
+import { logFor } from '../../../services/LoggerService';
 import { ServerProvider, ServerStatus, useServerStore } from '../../../store/server';
 import { useWorkspaceStore } from '../../../store/workspace';
 import { extractServerFieldsFromQR } from '../../../utils/importQRCode';
+import { getSyncConfigurationWorkspaceByID } from '../../../utils/workspaceRelations';
 
 interface ServerEditModalProps {
   id?: string;
@@ -120,9 +123,26 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
     } | undefined
   >();
 
+  const writeServerAuditLog = useCallback((event: string, details: Record<string, unknown>) => {
+    if (server === undefined) return;
+    const workspaces = useWorkspaceStore.getState().workspaces;
+    const linkedWorkspaceIDs = workspaces
+      .filter(workspace =>
+        (workspace.type === undefined || workspace.type === 'wiki' || workspace.type === 'html') &&
+        workspace.syncedServers.some(item => item.serverID === server.id)
+      )
+      .map(workspace => workspace.id);
+    const entry = { event, serverID: server.id, ...details };
+    console.log('[ServerSettings]', entry);
+    for (const workspaceID of linkedWorkspaceIDs) {
+      logFor(workspaceID).log('Server settings', entry);
+    }
+  }, [server]);
+
   const handleRawQRScan = useCallback((data: string) => {
     const fields = extractServerFieldsFromQR(data);
     if (fields === undefined) {
+      writeServerAuditLog('qr-scan-rejected', { reason: 'invalid-format' });
       Alert.alert(t('Import.QRCodeParseError'), data);
       return;
     }
@@ -137,7 +157,13 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       tokenAuthHeaderValue: fields.tokenAuthHeaderValue,
       workspaceId: fields.workspaceId,
     });
-  }, [t]);
+    writeServerAuditLog('qr-scan-accepted', {
+      hasBasicToken: fields.token !== undefined,
+      hasCustomAuthHeader: fields.tokenAuthHeaderName !== undefined && fields.tokenAuthHeaderValue !== undefined,
+      hasWorkspaceTarget: fields.workspaceId !== undefined,
+      useStandardGitProtocol: fields.useStandardGitProtocol,
+    });
+  }, [t, writeServerAuditLog]);
 
   const { handleBarcodeScanned, qrScannerOpen, toggleScanner } = useQRCodeScanner({ onRawScan: handleRawQRScan });
 
@@ -150,6 +176,14 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
   }
 
   const handleSave = () => {
+    const changedFields = [
+      server.name !== editedName ? 'name' : undefined,
+      server.uri !== editedUri ? 'uri' : undefined,
+      server.provider !== editedProvider ? 'provider' : undefined,
+      server.status !== editedStatus ? 'status' : undefined,
+      server.useStandardGitProtocol !== editedUseStandardGitProtocol ? 'protocol' : undefined,
+      pendingAuth !== undefined ? 'authentication' : undefined,
+    ].filter((field): field is string => field !== undefined);
     updateServer({
       id: server.id,
       name: editedName,
@@ -159,16 +193,30 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
       useStandardGitProtocol: editedUseStandardGitProtocol,
     });
 
-    // Refresh auth on the QR's workspace (and its sub-wikis) when this server is linked.
+    // Credentials live only on top-level workspaces. Attached sub-wikis resolve
+    // their synchronization configuration from the main workspace at runtime.
+    const workspaces = useWorkspaceStore.getState().workspaces;
+    const targetConfigurationWorkspaceID = pendingAuth?.workspaceId === undefined
+      ? undefined
+      : getSyncConfigurationWorkspaceByID(pendingAuth.workspaceId, workspaces)?.id;
+    let credentialTargetMatched = pendingAuth?.workspaceId === undefined;
     if (pendingAuth !== undefined && (pendingAuth.token !== undefined || pendingAuth.tokenAuthHeaderName !== undefined || pendingAuth.tokenAuthHeaderValue !== undefined)) {
-      const workspaces = useWorkspaceStore.getState().workspaces;
       for (const workspace of workspaces) {
-        if (workspace.type !== 'wiki' && workspace.type !== 'html') continue;
+        if (workspace.type !== undefined && workspace.type !== 'wiki' && workspace.type !== 'html') continue;
+        const isAttachedSubWiki = (workspace.type === undefined || workspace.type === 'wiki') &&
+          workspace.isSubWiki === true &&
+          typeof workspace.mainWikiID === 'string' &&
+          workspaces.some(candidate =>
+            (candidate.type === undefined || candidate.type === 'wiki') &&
+            candidate.id === workspace.mainWikiID &&
+            candidate.isSubWiki !== true
+          );
+        if (isAttachedSubWiki) continue;
         if (!workspace.syncedServers.some(item => item.serverID === server.id)) continue;
         const isTargetWorkspace = pendingAuth.workspaceId === undefined ||
-          workspace.id === pendingAuth.workspaceId ||
-          (workspace.type === 'wiki' && workspace.mainWikiID === pendingAuth.workspaceId);
+          workspace.id === targetConfigurationWorkspaceID;
         if (!isTargetWorkspace) continue;
+        credentialTargetMatched = true;
         updateWorkspace(workspace.id, {
           syncedServers: workspace.syncedServers.map(item =>
             item.serverID === server.id
@@ -183,6 +231,22 @@ export function ServerEditModalContent({ id, onClose }: ServerEditModalProps): J
         });
       }
     }
+    writeServerAuditLog('saved', {
+      changedFields,
+      credentialTargetMatched,
+    });
+    // Probe the saved endpoint immediately using the latest URI and credentials.
+    // Restrict this to the edited server so a save does not wait on unrelated
+    // unreachable servers.
+    void gitBackgroundSyncService.updateServerOnlineStatus([server.id]).then(() => {
+      const latestServers = useServerStore.getState().servers;
+      // Server may have been deleted while the probe was in-flight.
+      if (!(server.id in latestServers)) return;
+      const checkedServer = latestServers[server.id];
+      writeServerAuditLog('connectivity-checked', {
+        status: checkedServer.status,
+      });
+    });
     onClose();
   };
 
