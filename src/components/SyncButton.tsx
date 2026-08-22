@@ -45,13 +45,14 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
               setIsConnected(false);
               return;
             }
+            setIsConnected(true);
             setIsSyncSucceed(await syncHtmlWorkspaceWithServer(workspace, server));
           } else {
-            const server = gitBackgroundSyncService.getOnlineServerForWiki(workspace);
             if (server === undefined) {
               setIsConnected(false);
               return;
             }
+            setIsConnected(true);
             setIsSyncSucceed((await gitBackgroundSyncService.syncWikiWithServer(workspace, server)).succeeded);
           }
         } catch {
@@ -127,8 +128,10 @@ export function SyncAllTextButton() {
         try {
           const { haveConnectedServer, succeeded } = await gitBackgroundSyncService.sync();
           if (haveConnectedServer && succeeded) {
+            setIsConnected(true);
             setIsSyncSucceed(true);
           } else if (haveConnectedServer) {
+            setIsConnected(true);
             setIsSyncSucceed(false);
           } else {
             setIsConnected(false);
