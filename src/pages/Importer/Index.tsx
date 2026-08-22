@@ -18,6 +18,7 @@ import { importBundledWikiTemplate, normalizeGitCloneUrl } from '../../services/
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { GitQRData, ImportQRData, isHtmlQRData, isImportQRData, parseImportQRCode } from '../../utils/importQRCode';
+import { isWikiWorkspace } from '../../utils/workspaceRelations';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
 
 function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
@@ -801,7 +802,7 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
               ...(localTemplateCreatedWorkspace ? [localTemplateCreatedWorkspace] : []),
               ...(createdHtmlWorkspace ? [createdHtmlWorkspace] : []),
             ] satisfies Array<IWikiWorkspace | IHtmlWorkspace>)
-              .filter(ws => ws.type !== 'wiki' || ws.isSubWiki !== true)
+              .filter(ws => !isWikiWorkspace(ws) || ws.isSubWiki !== true)
               .map((ws) => (
                 <OpenWikiButton
                   key={ws.id}

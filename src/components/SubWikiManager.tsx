@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { IWikiWorkspace, IWorkspace, useWorkspaceStore } from '../store/workspace';
+import { isWikiWorkspace } from '../utils/workspaceRelations';
 import { WorkspaceList } from './WorkspaceList';
 
 export interface ISubWikiManagerProps {
@@ -25,7 +26,7 @@ export const SubWikiManager: FC<ISubWikiManagerProps> = ({ workspace, isFocused 
   const allWorkspaces = useWorkspaceStore(state => state.workspaces);
 
   const attachedSubWikiWorkspaces = useMemo(
-    () => allWorkspaces.filter((item): item is IWikiWorkspace => item.type === 'wiki' && item.isSubWiki === true && item.mainWikiID === workspace.id),
+    () => allWorkspaces.filter((item): item is IWikiWorkspace => isWikiWorkspace(item) && item.isSubWiki === true && item.mainWikiID === workspace.id),
     [allWorkspaces, workspace.id],
   );
 

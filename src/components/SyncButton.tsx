@@ -1,33 +1,17 @@
 import { TFunction } from 'i18next';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, IconButton, MD3Colors, Text } from 'react-native-paper';
-import { useShallow } from 'zustand/react/shallow';
 import { gitBackgroundSyncService } from '../services/BackgroundSyncService';
+import { useWorkspaceServerReachability } from '../services/BackgroundSyncService/hooks';
 import { syncHtmlWorkspaceWithServer } from '../services/HtmlWorkspaceService';
-import { type IServerInfo, ServerStatus, useServerStore } from '../store/server';
-import { type IHtmlWorkspace, useWorkspaceStore } from '../store/workspace';
 
 export interface ISyncIconButtonProps {
   workspaceID: string;
 }
 
-function getOnlineServerForHtmlWorkspace(workspace: Pick<IHtmlWorkspace, 'syncedServers'>, servers: Record<string, IServerInfo>): IServerInfo | undefined {
-  return workspace.syncedServers
-    .map(item => servers[item.serverID] as IServerInfo | undefined)
-    .find((serverInfo): serverInfo is IServerInfo => serverInfo !== undefined && serverInfo.status === ServerStatus.online);
-}
-
 export function SyncIconButton(props: ISyncIconButtonProps) {
   const { workspaceID } = props;
-  // Use useShallow + useMemo to avoid re-renders from .find() recreation
-  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  const workspace = useMemo(
-    () => workspaces.find(w => w.id === workspaceID && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
-    [workspaces, workspaceID],
-  );
-  const servers = useServerStore(useShallow(state => state.servers));
-
   const [inSyncing, setInSyncing] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
@@ -47,15 +31,16 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
       {...props}
       testID={buttonTestID}
       accessibilityLabel='sync-icon-button'
+      disabled={inSyncing}
       icon={iconName}
       iconColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.tertiary20 : MD3Colors.error80) : undefined}
       onPress={async () => {
-        if (workspace === undefined || workspace.type === 'webpage') return;
         setInSyncing(true);
         try {
-          await gitBackgroundSyncService.updateServerOnlineStatus();
+          const target = await gitBackgroundSyncService.refreshOnlineServerForWorkspace(workspaceID);
+          if (target === undefined) return;
+          const { server, workspace } = target;
           if (workspace.type === 'html') {
-            const server = getOnlineServerForHtmlWorkspace(workspace, servers);
             if (server === undefined) {
               setIsConnected(false);
               return;
@@ -82,66 +67,11 @@ export function SyncIconButton(props: ISyncIconButtonProps) {
 export function SyncTextButton(props: ISyncIconButtonProps) {
   const { t } = useTranslation();
   const { workspaceID } = props;
-  // Use useShallow + useMemo to avoid re-renders from .find() recreation
-  const workspaces = useWorkspaceStore(useShallow(state => state.workspaces));
-  const workspace = useMemo(
-    () => workspaces.find(w => w.id === workspaceID && (w.type === undefined || w.type === 'wiki' || w.type === 'html')),
-    [workspaces, workspaceID],
-  );
-  const servers = useServerStore(useShallow(state => state.servers));
-  const serverConfigurationKey = useMemo(
-    () => {
-      if (workspace === undefined || workspace.type === 'webpage') return '[]';
-      return JSON.stringify(
-        workspace.syncedServers
-          .map(({ serverID }) => {
-            const server = servers[serverID] as IServerInfo | undefined;
-            return server === undefined
-              ? [serverID]
-              : [server.id, server.name, server.provider, server.uri, server.useStandardGitProtocol];
-          })
-          .sort(([left], [right]) => String(left).localeCompare(String(right))),
-      );
-    },
-    [servers, workspace],
-  );
+  const { checking, onlineServer: currentOnlineServerToSync, workspace } = useWorkspaceServerReachability(workspaceID);
 
   const [inSyncing, setInSyncing] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
   const [isSyncSucceed, setIsSyncSucceed] = useState<boolean | undefined>(undefined);
-  const [currentOnlineServerToSync, setCurrentOnlineServerToSync] = useState<undefined | Awaited<ReturnType<typeof gitBackgroundSyncService.getOnlineServerForWiki>>>();
-  // Keep a ref so the async callback always reads the latest workspace without
-  // `workspace` itself being an effect dependency (which would cause the effect
-  // to re-fire on every Zustand store mutation, not just config changes).
-  const workspaceReference = useRef(workspace);
-  useEffect(() => {
-    workspaceReference.current = workspace;
-  }, [workspace]);
-  useEffect(() => {
-    let cancelled = false;
-    const currentWorkspace = workspaceReference.current;
-    if (!currentWorkspace || currentWorkspace.type === 'webpage') {
-      setIsConnected(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-    void gitBackgroundSyncService.updateServerOnlineStatus().then(() => {
-      if (cancelled) return;
-      const server = currentWorkspace.type === undefined || currentWorkspace.type === 'wiki'
-        ? gitBackgroundSyncService.getOnlineServerForWiki(currentWorkspace)
-        : getOnlineServerForHtmlWorkspace(currentWorkspace, useServerStore.getState().servers);
-      if (server === undefined) {
-        setIsConnected(false);
-      } else {
-        setIsConnected(true);
-      }
-      setCurrentOnlineServerToSync(server);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [serverConfigurationKey]);
+  const isConnected = currentOnlineServerToSync !== undefined;
 
   return (
     <Button
@@ -150,22 +80,22 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       loading={inSyncing}
       buttonColor={isSyncSucceed !== undefined ? (isSyncSucceed ? MD3Colors.secondary80 : MD3Colors.error80) : undefined}
       onPress={async () => {
-        if (workspace === undefined || workspace.type === 'webpage') return;
+        if (workspace === undefined) return;
         setInSyncing(true);
         try {
-          await gitBackgroundSyncService.updateServerOnlineStatus();
-          if (workspace.type === 'html') {
-            const server = getOnlineServerForHtmlWorkspace(workspace, servers);
+          const target = await gitBackgroundSyncService.refreshOnlineServerForWorkspace(workspaceID);
+          if (target === undefined) return;
+          const { server, workspace: latestWorkspace } = target;
+          if (latestWorkspace.type === 'html') {
             if (server === undefined) {
               throw new Error('No server available');
             }
-            setIsSyncSucceed(await syncHtmlWorkspaceWithServer(workspace, server));
+            setIsSyncSucceed(await syncHtmlWorkspaceWithServer(latestWorkspace, server));
           } else {
-            const server = gitBackgroundSyncService.getOnlineServerForWiki(workspace);
             if (server === undefined) {
               throw new Error('No server available');
             }
-            setIsSyncSucceed((await gitBackgroundSyncService.syncWikiWithServer(workspace, server)).succeeded);
+            setIsSyncSucceed((await gitBackgroundSyncService.syncWikiWithServer(latestWorkspace, server)).succeeded);
           }
         } catch {
           setIsSyncSucceed(false);
@@ -175,7 +105,7 @@ export function SyncTextButton(props: ISyncIconButtonProps) {
       }}
     >
       <Text>
-        {currentOnlineServerToSync?.name ?? 'x'} {getSyncLogText(t, isSyncSucceed, isConnected, inSyncing)}
+        {currentOnlineServerToSync?.name ?? 'x'} {getSyncLogText(t, isSyncSucceed, checking || isConnected, inSyncing)}
       </Text>
     </Button>
   );
@@ -195,9 +125,11 @@ export function SyncAllTextButton() {
       onPress={async () => {
         setInSyncing(true);
         try {
-          const { haveConnectedServer } = await gitBackgroundSyncService.sync();
-          if (haveConnectedServer) {
+          const { haveConnectedServer, succeeded } = await gitBackgroundSyncService.sync();
+          if (haveConnectedServer && succeeded) {
             setIsSyncSucceed(true);
+          } else if (haveConnectedServer) {
+            setIsSyncSucceed(false);
           } else {
             setIsConnected(false);
           }

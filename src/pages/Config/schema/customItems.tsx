@@ -13,6 +13,7 @@ import { defaultLanguage, detectedLanguage, supportedLanguages } from '../../../
 import { useConfigStore } from '../../../store/config';
 import { IServerInfo } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
+import { isWikiWorkspace } from '../../../utils/workspaceRelations';
 import { StorageLocationSettings } from '../Developer/StorageLocationSettings';
 import { ServerEditModalContent } from '../ServerAndSync/ServerEditModal';
 
@@ -47,7 +48,7 @@ function ServerListItem() {
 
   const activeIDs = useMemo(() => {
     return useWorkspaceStore.getState().workspaces
-      .filter((w): w is IWikiWorkspace => w.type === 'wiki')
+      .filter((w): w is IWikiWorkspace => isWikiWorkspace(w))
       .flatMap(wiki => wiki.syncedServers.filter(s => s.syncActive).map(s => s.serverID));
   }, []);
 

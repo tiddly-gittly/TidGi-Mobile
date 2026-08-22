@@ -1,6 +1,8 @@
+import { Buffer } from 'buffer';
 import { Paths } from 'expo-file-system';
 import { useWorkspaceStore } from '../../store/workspace';
-import { deleteFileOrDirectory, ensureDirectory, listDirectory, readTextFile, writeTextFile } from '../WikiStorageService/fileOperations';
+import { appendTextFile, deleteFileOrDirectory, ensureDirectory, getFileInfo, listDirectory, readFileChunk } from '../WikiStorageService/fileOperations';
+import { DEFAULT_LOG_PAGE_BYTE_LIMIT, getLogPageWindow, getUtf8PageBytes } from './logPagination';
 
 let initialized = false;
 
@@ -104,13 +106,7 @@ async function flushLogBuffer(): Promise<void> {
       await Promise.all(
         Object.entries(chunksByFileName).map(async ([fileName, lines]) => {
           const filePath = `${logDirectoryNormalized}${fileName}`;
-          let previousContent = '';
-          try {
-            previousContent = await readTextFile(filePath);
-          } catch {
-            // File doesn't exist yet — that's fine
-          }
-          await writeTextFile(filePath, `${previousContent}${lines.join('')}`);
+          await appendTextFile(filePath, lines.join(''));
         }),
       );
     } catch (error) {
@@ -247,16 +243,37 @@ export function getLogFilePath(fileName: string): string {
   return `${normalized}${fileName}`;
 }
 
+export interface ILogFilePage {
+  content: string;
+  fileSize: number;
+  pageCount: number;
+  pageIndex: number;
+}
+
 /**
- * Read contents of a specific log file by its filename.
+ * Read one fixed-size byte page from a log file.
+ *
+ * Page lookup is O(1): one metadata query plus one bounded native random-access
+ * read. The whole file is never copied into the JS heap.
  */
-export async function readLogFile(fileName: string): Promise<string | undefined> {
+export async function readLogFilePage(
+  fileName: string,
+  requestedPageIndex: number,
+  pageByteLimit = DEFAULT_LOG_PAGE_BYTE_LIMIT,
+): Promise<ILogFilePage | undefined> {
   await flushLogBuffer();
-  const directory = getLogDirectory();
-  const normalized = directory.endsWith('/') ? directory : `${directory}/`;
-  const filePath = `${normalized}${fileName}`;
+  const filePath = getLogFilePath(fileName);
   try {
-    return await readTextFile(filePath);
+    const info = await getFileInfo(filePath);
+    if (!info.exists || info.isDirectory) return undefined;
+    const window = getLogPageWindow(info.size, requestedPageIndex, pageByteLimit);
+    const bytes = await readFileChunk(filePath, window.readOffset, window.readLength);
+    return {
+      content: Buffer.from(getUtf8PageBytes(bytes, window)).toString('utf8'),
+      fileSize: info.size,
+      pageCount: window.pageCount,
+      pageIndex: window.pageIndex,
+    };
   } catch {
     return undefined;
   }
@@ -278,22 +295,6 @@ export async function deleteLogFile(fileName: string): Promise<void> {
 export async function clearAllLogs(): Promise<void> {
   const files = await listLogFiles();
   await Promise.all(files.map(deleteLogFile));
-}
-
-async function readLatestLogByPrefix(prefix: string): Promise<string | undefined> {
-  const allFiles = await listLogFiles();
-  const matched = allFiles.filter(name => name.startsWith(prefix));
-  const latestName = matched[matched.length - 1];
-  if (!latestName) return undefined;
-  return readLogFile(latestName);
-}
-
-export async function readLatestAppLog(): Promise<string | undefined> {
-  return readLatestLogByPrefix(getAppLogFilePrefix());
-}
-
-export async function readLatestWorkspaceLog(workspaceID: string): Promise<string | undefined> {
-  return readLatestLogByPrefix(getWorkspaceLogFilePrefix(workspaceID));
 }
 
 export function getPendingLogBufferLength(): number {

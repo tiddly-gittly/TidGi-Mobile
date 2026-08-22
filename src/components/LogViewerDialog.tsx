@@ -4,18 +4,17 @@
  *
  * Features:
  * - Date-based log file selector
- * - Character-budget pagination for large files
+ * - Native random-access byte pagination for large files
  * - Three-dot menu with: Open File, Share, Clear Logs
  */
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { shareAsync } from 'expo-sharing';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Platform, Pressable, ScrollView, TouchableOpacity } from 'react-native';
 import { Button, Dialog, IconButton, Menu, Portal, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
-import { deleteLogFile, getLogFilePath, listAppLogFiles, listWorkspaceLogFiles, readLogFile } from '../services/LoggerService';
-import { paginateLogContent } from './logPagination';
+import { deleteLogFile, getLogFilePath, listAppLogFiles, listWorkspaceLogFiles, readLogFilePage } from '../services/LoggerService';
 
 const LogScrollView = styled(ScrollView)`
   max-height: 420px;
@@ -137,13 +136,21 @@ export function LogViewerDialog({ scope, visible, onDismiss, onOpenChanges, work
   const [logFileNames, setLogFileNames] = useState<string[]>([]);
   const [selectedLogFile, setSelectedLogFile] = useState<string | undefined>();
   const [logContent, setLogContent] = useState('');
+  const [pageCount, setPageCount] = useState(1);
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [fileMenuVisible, setFileMenuVisible] = useState(false);
   const [sourceMenuVisible, setSourceMenuVisible] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const contentRequestID = useRef(0);
-  const logPages = useMemo(() => paginateLogContent(logContent), [logContent]);
-  const visiblePageIndex = Math.min(pageIndex, logPages.length - 1);
+  const visiblePageIndex = Math.min(pageIndex, pageCount - 1);
+
+  const loadLogPage = useCallback(async (fileName: string, requestedPageIndex: number, requestID: number) => {
+    const page = await readLogFilePage(fileName, requestedPageIndex);
+    if (requestID !== contentRequestID.current) return;
+    setLogContent(page?.content ?? t('WorkspaceSettings.LogEmpty'));
+    setPageIndex(page?.pageIndex ?? 0);
+    setPageCount(page?.pageCount ?? 1);
+  }, [t]);
 
   const loadLogFiles = useCallback(async () => {
     const requestID = ++contentRequestID.current;
@@ -156,15 +163,13 @@ export function LogViewerDialog({ scope, visible, onDismiss, onOpenChanges, work
     if (files.length > 0) {
       const latest = files[files.length - 1];
       setSelectedLogFile(latest);
-      const content = await readLogFile(latest);
-      if (requestID !== contentRequestID.current) return;
-      setLogContent(content ?? t('WorkspaceSettings.LogEmpty'));
-      setPageIndex(0);
+      await loadLogPage(latest, 0, requestID);
     } else {
       setSelectedLogFile(undefined);
       setLogContent(t('WorkspaceSettings.LogEmpty'));
+      setPageCount(1);
     }
-  }, [logSource, scope, t]);
+  }, [loadLogPage, logSource, scope, t]);
 
   useEffect(() => {
     if (visible) {
@@ -183,11 +188,14 @@ export function LogViewerDialog({ scope, visible, onDismiss, onOpenChanges, work
   const selectLogFile = useCallback(async (fileName: string) => {
     const requestID = ++contentRequestID.current;
     setSelectedLogFile(fileName);
-    const content = await readLogFile(fileName);
-    if (requestID !== contentRequestID.current) return;
-    setLogContent(content ?? t('WorkspaceSettings.LogEmpty'));
-    setPageIndex(0);
-  }, [t]);
+    await loadLogPage(fileName, 0, requestID);
+  }, [loadLogPage]);
+
+  const selectLogPage = useCallback((requestedPageIndex: number) => {
+    if (selectedLogFile === undefined) return;
+    const requestID = ++contentRequestID.current;
+    void loadLogPage(selectedLogFile, requestedPageIndex, requestID);
+  }, [loadLogPage, selectedLogFile]);
 
   const handleShare = useCallback(async () => {
     setActionsMenuVisible(false);
@@ -233,6 +241,7 @@ export function LogViewerDialog({ scope, visible, onDismiss, onOpenChanges, work
     setLogFileNames([]);
     setSelectedLogFile(undefined);
     setPageIndex(0);
+    setPageCount(1);
   }, [logFileNames, t]);
 
   const title = scope === 'app' ? t('Preference.ViewAppLog') : t('WorkspaceSettings.ViewLog');
@@ -330,28 +339,28 @@ export function LogViewerDialog({ scope, visible, onDismiss, onOpenChanges, work
         </Dialog.Content>
         <Dialog.ScrollArea>
           <LogScrollView key={`${selectedLogFile ?? 'empty'}-${visiblePageIndex}`} testID='log-content-page'>
-            <LogText>{logPages[visiblePageIndex]}</LogText>
+            <LogText>{logContent}</LogText>
           </LogScrollView>
         </Dialog.ScrollArea>
-        {logPages.length > 1 && (
+        {pageCount > 1 && (
           <PaginationRow>
             <IconButton
               testID='log-page-previous'
               icon='chevron-left'
               disabled={visiblePageIndex === 0}
               onPress={() => {
-                setPageIndex(previous => Math.max(0, previous - 1));
+                selectLogPage(Math.max(0, visiblePageIndex - 1));
               }}
             />
             <PageLabel testID='log-page-label'>
-              {visiblePageIndex + 1} / {logPages.length}
+              {visiblePageIndex + 1} / {pageCount}
             </PageLabel>
             <IconButton
               testID='log-page-next'
               icon='chevron-right'
-              disabled={visiblePageIndex >= logPages.length - 1}
+              disabled={visiblePageIndex >= pageCount - 1}
               onPress={() => {
-                setPageIndex(previous => Math.min(logPages.length - 1, previous + 1));
+                selectLogPage(Math.min(pageCount - 1, visiblePageIndex + 1));
               }}
             />
           </PaginationRow>

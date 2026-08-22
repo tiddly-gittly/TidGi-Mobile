@@ -7,6 +7,7 @@ import { CreateWorkspaceButton } from '../../components/NavigationButtons';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
+import { isWikiWorkspace } from '../../utils/workspaceRelations';
 
 const Container = styled.View`
   flex: 1;
@@ -42,7 +43,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         includeSubWikis={false}
         isFocused={isFocused}
         onPress={(wiki) => {
-          if (wiki.type === 'wiki' && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
+          if (isWikiWorkspace(wiki) && wiki.isSubWiki === true && typeof wiki.mainWikiID === 'string') {
             if (!workspaceIDSet.has(wiki.mainWikiID)) {
               navigation.navigate('WorkspaceDetail', { id: wiki.id });
               return;
@@ -53,9 +54,9 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
           navigation.navigate('WikiWebView', { id: wiki.id });
         }}
         onPressSettings={(wiki) => {
-          if (wiki.type === 'wiki' || wiki.type === 'html') {
+          if (isWikiWorkspace(wiki) || wiki.type === 'html') {
             navigation.navigate('WorkspaceDetail', { id: wiki.id });
-          } else if (wiki.type === 'webpage') {
+          } else {
             navigation.navigate('WebPageDetail', { id: wiki.id });
           }
         }}

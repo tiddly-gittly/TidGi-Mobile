@@ -5,4 +5,5 @@
 export interface ISyncResult {
   haveConnectedServer: boolean;
   haveUpdate: boolean;
+  succeeded: boolean;
 }

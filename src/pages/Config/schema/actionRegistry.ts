@@ -3,6 +3,7 @@ import i18n from 'i18next';
 import { Alert } from 'react-native';
 import { useServerStore } from '../../../store/server';
 import { useWorkspaceStore } from '../../../store/workspace';
+import { isWikiWorkspace } from '../../../utils/workspaceRelations';
 import { deleteWikiFile } from '../Developer/useClearAllWikiData';
 
 const actionHandlers: Record<string, () => void | Promise<void>> = {
@@ -24,7 +25,7 @@ const actionHandlers: Record<string, () => void | Promise<void>> = {
     useServerStore.getState().clearAll();
     const state = useWorkspaceStore.getState();
     for (const workspace of state.workspaces) {
-      if (workspace.type === 'wiki') {
+      if (isWikiWorkspace(workspace)) {
         state.update(workspace.id, { ...workspace, syncedServers: [] });
       }
     }

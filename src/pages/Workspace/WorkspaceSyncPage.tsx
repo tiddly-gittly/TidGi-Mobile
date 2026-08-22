@@ -37,13 +37,14 @@ export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootSt
       </PageContainer>
     );
   }
+  const isWiki = wiki.type === undefined || wiki.type === 'wiki';
 
   return (
     <PageContainer testID='workspace-sync-page'>
       <WorkspaceSyncModalContent
         workspace={wiki}
         showCloseButton={false}
-        onOpenChanges={wiki.type === 'wiki'
+        onOpenChanges={isWiki
           ? () => {
             navigation.navigate('WorkspaceChanges', { id: wiki.id });
           }
@@ -57,7 +58,7 @@ export function WorkspaceSyncPage({ route, navigation }: StackScreenProps<RootSt
       <SyncTextButton workspaceID={wiki.id} />
 
       {/* ── Server list ─────────────────────────────────────────── */}
-      {(wiki.type !== 'wiki' || wiki.isSubWiki !== true) && (
+      {(!isWiki || wiki.isSubWiki !== true) && (
         <>
           <SectionTitle variant='titleSmall'>{t('AddWorkspace.ServerList')}</SectionTitle>
           <ServerList
