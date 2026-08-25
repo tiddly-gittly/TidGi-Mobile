@@ -10,6 +10,7 @@ import React, { useEffect } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
@@ -39,6 +40,9 @@ if (typeof global.Buffer === 'undefined') {
 
 const SettingsIcon = styled(Ionicons)`
   margin-right: 10px;
+`;
+const AppSafeArea = styled(SafeAreaView)`
+  flex: 1;
 `;
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
 import { initializeMobileLogger } from './services/LoggerService';
@@ -89,126 +93,130 @@ export const App: React.FC = () => {
     <I18nextProvider i18n={i18n}>
       <PaperProvider theme={theme}>
         <ThemeProvider theme={theme}>
-          <StatusBar translucent={translucentStatusBar} hidden={hideStatusBar} />
-          <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
-            <Stack.Navigator initialRouteName='MainMenu'>
-              <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
-              <Stack.Screen
-                name='Config'
-                component={Config}
-                options={({ navigation }: { navigation: RootStackNavigation<'Config'> }) => ({
-                  headerTitle: t('Preference.Title'),
-                  headerTitleStyle: { color: theme.colors.primary },
-                  headerLeft: () => (
-                    <HeaderBackButton
-                      label={t('Menu.Back')}
-                      onPress={() => {
-                        if (navigation.canGoBack()) {
-                          navigation.goBack();
-                          return;
-                        }
-                        navigation.navigate('MainMenu');
-                      }}
-                    />
-                  ),
-                })}
-              />
-              <Stack.Screen
-                name='MainMenu'
-                component={MainMenu}
-                options={({ navigation }: { navigation: RootStackNavigation<'MainMenu'> }) => ({
-                  headerTitle: t('Sidebar.Main'),
-                  headerTitleStyle: { color: theme.colors.primary },
-                  headerRight: () => (
-                    <SettingsIcon
-                      testID='settings-icon-button'
-                      name='settings'
-                      size={32}
-                      color={theme.colors.primary}
-                      onPress={() => {
-                        navigation.navigate('Config');
-                      }}
-                    />
-                  ),
-                })}
-              />
-              <Stack.Screen
-                name='Importer'
-                options={() => ({
-                  headerTitle: t('AddWorkspace.ImportWiki'),
-                  headerTitleStyle: { color: theme.colors.primary },
-                })}
-                component={Importer}
-              />
-              <Stack.Screen
-                name='CreateWorkspace'
-                options={() => ({
-                  headerTitle: t('AddWorkspace.AddWorkspace'),
-                  headerTitleStyle: { color: theme.colors.primary },
-                })}
-                component={CreateWorkspace}
-              />
-              <Stack.Screen
-                name='WorkspaceDetail'
-                component={WorkspaceDetailPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WebPageDetail'
-                component={WebPageDetailPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceSync'
-                component={WorkspaceSyncPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceChanges'
-                component={WorkspaceChangesPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceSettingsPage'
-                component={WorkspaceSettingsPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceSubWikiManager'
-                component={WorkspaceSubWikiManagerPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspacePerformance'
-                component={WorkspacePerformancePage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceRoutingConfig'
-                component={WorkspaceRoutingConfigPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceServerEdit'
-                component={WorkspaceServerEditPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='WorkspaceAddServer'
-                component={WorkspaceAddServerPage}
-                options={{ headerTitleStyle: { color: theme.colors.primary } }}
-              />
-              <Stack.Screen
-                name='PreviewWebView'
-                options={() => ({
-                  headerTitle: t('AddWorkspace.PreviewWebView'),
-                  headerTitleStyle: { color: theme.colors.primary },
-                })}
-                component={PreviewWebView}
-              />
-            </Stack.Navigator>
-            {importSuccessSnackBar}
-          </NavigationContainer>
+          <SafeAreaProvider>
+            <AppSafeArea edges={['bottom']}>
+              <StatusBar translucent={translucentStatusBar} hidden={hideStatusBar} />
+              <NavigationContainer ref={navigationReference} theme={theme.reactNavigation}>
+                <Stack.Navigator initialRouteName='MainMenu'>
+                  <Stack.Screen name='WikiWebView' component={WikiWebView} options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name='Config'
+                    component={Config}
+                    options={({ navigation }: { navigation: RootStackNavigation<'Config'> }) => ({
+                      headerTitle: t('Preference.Title'),
+                      headerTitleStyle: { color: theme.colors.primary },
+                      headerLeft: () => (
+                        <HeaderBackButton
+                          label={t('Menu.Back')}
+                          onPress={() => {
+                            if (navigation.canGoBack()) {
+                              navigation.goBack();
+                              return;
+                            }
+                            navigation.navigate('MainMenu');
+                          }}
+                        />
+                      ),
+                    })}
+                  />
+                  <Stack.Screen
+                    name='MainMenu'
+                    component={MainMenu}
+                    options={({ navigation }: { navigation: RootStackNavigation<'MainMenu'> }) => ({
+                      headerTitle: t('Sidebar.Main'),
+                      headerTitleStyle: { color: theme.colors.primary },
+                      headerRight: () => (
+                        <SettingsIcon
+                          testID='settings-icon-button'
+                          name='settings'
+                          size={32}
+                          color={theme.colors.primary}
+                          onPress={() => {
+                            navigation.navigate('Config');
+                          }}
+                        />
+                      ),
+                    })}
+                  />
+                  <Stack.Screen
+                    name='Importer'
+                    options={() => ({
+                      headerTitle: t('AddWorkspace.ImportWiki'),
+                      headerTitleStyle: { color: theme.colors.primary },
+                    })}
+                    component={Importer}
+                  />
+                  <Stack.Screen
+                    name='CreateWorkspace'
+                    options={() => ({
+                      headerTitle: t('AddWorkspace.AddWorkspace'),
+                      headerTitleStyle: { color: theme.colors.primary },
+                    })}
+                    component={CreateWorkspace}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceDetail'
+                    component={WorkspaceDetailPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WebPageDetail'
+                    component={WebPageDetailPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceSync'
+                    component={WorkspaceSyncPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceChanges'
+                    component={WorkspaceChangesPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceSettingsPage'
+                    component={WorkspaceSettingsPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceSubWikiManager'
+                    component={WorkspaceSubWikiManagerPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspacePerformance'
+                    component={WorkspacePerformancePage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceRoutingConfig'
+                    component={WorkspaceRoutingConfigPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceServerEdit'
+                    component={WorkspaceServerEditPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='WorkspaceAddServer'
+                    component={WorkspaceAddServerPage}
+                    options={{ headerTitleStyle: { color: theme.colors.primary } }}
+                  />
+                  <Stack.Screen
+                    name='PreviewWebView'
+                    options={() => ({
+                      headerTitle: t('AddWorkspace.PreviewWebView'),
+                      headerTitleStyle: { color: theme.colors.primary },
+                    })}
+                    component={PreviewWebView}
+                  />
+                </Stack.Navigator>
+                {importSuccessSnackBar}
+              </NavigationContainer>
+            </AppSafeArea>
+          </SafeAreaProvider>
         </ThemeProvider>
       </PaperProvider>
     </I18nextProvider>
