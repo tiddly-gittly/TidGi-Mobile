@@ -30,6 +30,8 @@ import { type AgentSqlDatabase, MobileAgentStorage } from '../../AgentStorageSer
 import { installMobileCrypto } from '../../MobileCryptoService';
 import { MobileAgentLoopService } from '..';
 
+const openTestDatabases = new Set<Database.Database>();
+
 function betterSqliteBindings(source: string, parameters: readonly unknown[]): unknown[] {
   const numbered = [...source.matchAll(/\?([1-9]\d*)/gu)].map(match => Number(match[1]));
   if (numbered.length === 0) return [...parameters];
@@ -43,6 +45,7 @@ function betterSqliteBindings(source: string, parameters: readonly unknown[]): u
 
 function testDatabase(): AgentSqlDatabase {
   const database = new Database(':memory:');
+  openTestDatabases.add(database);
   return {
     execAsync(source) {
       database.exec(source);
@@ -72,6 +75,13 @@ function testDatabase(): AgentSqlDatabase {
 }
 
 describe('Mobile real MemeLoop runtime without WebCrypto', () => {
+  afterEach(() => {
+    for (const connection of openTestDatabases) {
+      if (connection.open) connection.close();
+    }
+    openTestDatabases.clear();
+  });
+
   it('sends, executes a tool round and atomically retries with Expo crypto only', async () => {
     const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
     Object.defineProperty(globalThis, 'crypto', {

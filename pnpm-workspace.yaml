@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   '@ipshipyard/node-datachannel': true
   '@parcel/watcher': false
+  better-sqlite3: true
   detox: true
   dprint: false
   dtrace-provider: false
@@ -19,9 +20,9 @@ peerDependencyRules:
 
 minimumReleaseAgeExclude:
   - expo-tiddlywiki-filesystem-android-external-storage@2.12.3
-  - '@memeloop/libp2p@0.2.2'
-  - '@memeloop/react-ui@0.1.0 || 0.1.1 || 0.1.2'
-  - 'memeloop@0.2.2 || 0.2.4'
+  - '@memeloop/libp2p@0.2.4'
+  - '@memeloop/react-ui@0.1.4'
+  - 'memeloop@0.2.6'
 
 onlyBuiltDependencies:
   - '@parcel/watcher'

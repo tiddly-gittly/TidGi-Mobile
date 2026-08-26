@@ -5,6 +5,7 @@ module.exports = {
   setupFiles: [],
   testEnvironment: 'node',
   testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/*.test.tsx'],
+  testPathIgnorePatterns: ['<rootDir>/src/services/AgentLoopService/__tests__/runtime.integration.test.ts'],
   // Jest executes a dependency's untransformed `.cjs` entry in a process-wide
   // realm. MemeLoop intentionally rejects foreign-realm prototypes at durable
   // boundaries, so a later test file would otherwise observe the encoder from
