@@ -16,10 +16,10 @@ importers:
         version: 15.0.3(expo-font@14.0.11(expo@54.0.33(@babel/core@7.26.8)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       '@memeloop/libp2p':
         specifier: ^0.2.4
-        version: 0.2.4(memeloop@0.2.6(@ai-sdk/openai@4.0.20(zod@4.4.3)))
+        version: 0.2.4(memeloop@0.2.7(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
-        specifier: ^0.1.4
-        version: 0.1.4(f7f8547d7345ea77ab7016d9d8faff81)
+        specifier: ^0.1.5
+        version: 0.1.5(135f719d9032ba25a03dd2c88ba342c6)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -135,8 +135,8 @@ importers:
         specifier: ^4.17.21
         version: 4.17.21
       memeloop:
-        specifier: ^0.2.6
-        version: 0.2.6(@ai-sdk/openai@4.0.20(zod@4.4.3))
+        specifier: ^0.2.7
+        version: 0.2.7(@ai-sdk/openai@4.0.20(zod@4.4.3))
       p-timeout:
         specifier: ^6.1.4
         version: 6.1.4
@@ -2402,10 +2402,10 @@ packages:
     peerDependencies:
       memeloop: ^0.2.6
 
-  '@memeloop/react-ui@0.1.4':
-    resolution: {integrity: sha512-cpjlrV2rUawUDFTDk6g+lEYwZmc0qBIJRizDfggYk48aNzYYNKDDIX8BtYSBfDCZVI2NphGm2EJ6i/7c/P6d8A==}
+  '@memeloop/react-ui@0.1.5':
+    resolution: {integrity: sha512-IKAXooyG5GrZwApSaVlwoPR30+TZ6Bs3hj7XoLmBhip4J5cGIOmgHaeqhU1QLVvd3uwiDnF8QX3+qXVUlQYVkA==}
     peerDependencies:
-      '@assistant-ui/react': '>=0.14.0'
+      '@assistant-ui/react': ^0.15.16
       '@mui/icons-material': '>=6.0.0'
       '@mui/material': '>=6.0.0'
       '@rjsf/core': '>=6.0.0'
@@ -6326,8 +6326,8 @@ packages:
   mdn-data@2.0.14:
     resolution: {integrity: sha512-dn6wd0uw5GsdswPFfsgMp5NSB0/aDe6fK94YJV/AJDYXL6HVLWBsxeq7js7Ad+mU2K9LAlwpk6kN2D5mwCPVow==}
 
-  memeloop@0.2.6:
-    resolution: {integrity: sha512-GtVrLrWx1j2IoFV4VM2vRxogQVetL0jqDg/w2VQ1Nq5FhNQV9/dJ73KoNh3N6llXkGglmab/S2EXGroT8AurqQ==}
+  memeloop@0.2.7:
+    resolution: {integrity: sha512-0rnfbHVbFR0hoNhO0LUjdYYS6pAdkoDpiSlDT4+ZnDwKWxD0OlNSb3KpDRcCWl+3mfhUC+4gQsmB2ejfGFIFEw==}
     peerDependencies:
       '@ai-sdk/anthropic': ^4.0.19
       '@ai-sdk/azure': ^4.0.0
@@ -10473,7 +10473,7 @@ snapshots:
       resolve: 1.22.8
       resolve-from: 5.0.0
       resolve.exports: 2.0.3
-      semver: 7.7.3
+      semver: 7.8.5
       send: 0.19.1
       slugify: 1.6.6
       source-map-support: 0.5.21
@@ -10550,7 +10550,7 @@ snapshots:
       require-from-string: 2.0.2
       resolve-from: 5.0.0
       resolve-workspace-root: 2.0.0
-      semver: 7.7.3
+      semver: 7.8.5
       slugify: 1.6.6
       sucrase: 3.35.1
     transitivePeerDependencies:
@@ -10592,7 +10592,7 @@ snapshots:
       minimatch: 9.0.5
       p-limit: 3.1.0
       resolve-from: 5.0.0
-      semver: 7.7.3
+      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
 
@@ -10707,7 +10707,7 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
       expo: 54.0.33(@babel/core@7.26.8)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       resolve-from: 5.0.0
-      semver: 7.7.3
+      semver: 7.8.5
       xml2js: 0.6.0
     transitivePeerDependencies:
       - supports-color
@@ -11240,7 +11240,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/libp2p@0.2.4(memeloop@0.2.6(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
+  '@memeloop/libp2p@0.2.4(memeloop@0.2.7(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
       '@chainsafe/libp2p-yamux': 8.0.1
@@ -11257,15 +11257,15 @@ snapshots:
       '@libp2p/websockets': 10.1.19
       '@multiformats/multiaddr': 13.0.3
       libp2p: 3.3.8
-      memeloop: 0.2.6(@ai-sdk/openai@4.0.20(zod@4.4.3))
+      memeloop: 0.2.7(@ai-sdk/openai@4.0.20(zod@4.4.3))
       uint8arrays: 6.1.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.1.4(f7f8547d7345ea77ab7016d9d8faff81)':
+  '@memeloop/react-ui@0.1.5(135f719d9032ba25a03dd2c88ba342c6)':
     dependencies:
-      memeloop: 0.2.6(@ai-sdk/openai@4.0.20(zod@4.4.3))
+      memeloop: 0.2.7(@ai-sdk/openai@4.0.20(zod@4.4.3))
       react: 19.1.0
     optionalDependencies:
       react-dom: 18.2.0(react@19.1.0)
@@ -11520,7 +11520,7 @@ snapshots:
       metro: 0.83.3
       metro-config: 0.83.3
       metro-core: 0.83.3
-      semver: 7.7.3
+      semver: 7.8.5
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -11979,7 +11979,7 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
       globby: 11.1.0
       is-glob: 4.0.3
-      semver: 7.7.3
+      semver: 7.8.5
       tsutils: 3.21.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
@@ -11994,7 +11994,7 @@ snapshots:
       globby: 11.1.0
       is-glob: 4.0.3
       minimatch: 9.0.3
-      semver: 7.7.3
+      semver: 7.8.5
       ts-api-utils: 1.2.1(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
@@ -12009,7 +12009,7 @@ snapshots:
       fast-glob: 3.3.2
       is-glob: 4.0.3
       minimatch: 9.0.5
-      semver: 7.7.3
+      semver: 7.8.5
       ts-api-utils: 2.4.0(typescript@6.0.3)
       typescript: 6.0.3
     transitivePeerDependencies:
@@ -12023,7 +12023,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.53.1
       debug: 4.4.3(supports-color@8.1.1)
       minimatch: 9.0.5
-      semver: 7.7.3
+      semver: 7.8.5
       tinyglobby: 0.2.15
       ts-api-utils: 2.4.0(typescript@6.0.3)
       typescript: 6.0.3
@@ -12040,7 +12040,7 @@ snapshots:
       '@typescript-eslint/typescript-estree': 5.62.0(typescript@6.0.3)
       eslint: 9.39.2(jiti@1.21.7)
       eslint-scope: 5.1.1
-      semver: 7.7.3
+      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -13731,7 +13731,7 @@ snapshots:
   eslint-compat-utils@0.5.1(eslint@9.39.2(jiti@1.21.7)):
     dependencies:
       eslint: 9.39.2(jiti@1.21.7)
-      semver: 7.7.3
+      semver: 7.8.5
 
   eslint-config-standard-with-typescript@43.0.1(@typescript-eslint/eslint-plugin@8.28.0(@typescript-eslint/parser@8.28.0(eslint@9.39.2(jiti@1.21.7))(typescript@6.0.3))(eslint@9.39.2(jiti@1.21.7))(typescript@6.0.3))(eslint-plugin-import@2.31.0)(eslint-plugin-n@17.23.2(eslint@9.39.2(jiti@1.21.7))(typescript@6.0.3))(eslint-plugin-promise@7.2.1(eslint@9.39.2(jiti@1.21.7)))(eslint@9.39.2(jiti@1.21.7))(typescript@6.0.3):
     dependencies:
@@ -13919,7 +13919,7 @@ snapshots:
       globals: 15.15.0
       globrex: 0.1.2
       ignore: 5.3.2
-      semver: 7.7.3
+      semver: 7.8.5
       ts-declaration-location: 1.0.7(typescript@6.0.3)
     transitivePeerDependencies:
       - typescript
@@ -14007,7 +14007,7 @@ snapshots:
       read-package-up: 11.0.0
       regexp-tree: 0.1.27
       regjsparser: 0.12.0
-      semver: 7.7.3
+      semver: 7.8.5
       strip-indent: 4.1.1
 
   eslint-plugin-unused-imports@4.3.0(@typescript-eslint/eslint-plugin@8.28.0(@typescript-eslint/parser@8.28.0(eslint@9.39.2(jiti@1.21.7))(typescript@6.0.3))(eslint@9.39.2(jiti@1.21.7))(typescript@6.0.3))(eslint@9.39.2(jiti@1.21.7)):
@@ -15021,7 +15021,7 @@ snapshots:
 
   is-bun-module@2.0.0:
     dependencies:
-      semver: 7.7.3
+      semver: 7.8.5
 
   is-callable@1.2.7: {}
 
@@ -16013,7 +16013,7 @@ snapshots:
 
   make-dir@4.0.0:
     dependencies:
-      semver: 7.7.3
+      semver: 7.8.5
 
   make-error@1.3.6: {}
 
@@ -16027,7 +16027,7 @@ snapshots:
 
   mdn-data@2.0.14: {}
 
-  memeloop@0.2.6(@ai-sdk/openai@4.0.20(zod@4.4.3)):
+  memeloop@0.2.7(@ai-sdk/openai@4.0.20(zod@4.4.3)):
     dependencies:
       acorn: 8.17.0
       ai: 7.0.37(zod@4.4.3)
@@ -16390,7 +16390,7 @@ snapshots:
   normalize-package-data@6.0.2:
     dependencies:
       hosted-git-info: 7.0.2
-      semver: 7.7.3
+      semver: 7.8.5
       validate-npm-package-license: 3.0.4
 
   normalize-package-data@8.0.0:
@@ -16405,7 +16405,7 @@ snapshots:
     dependencies:
       hosted-git-info: 7.0.2
       proc-log: 4.2.0
-      semver: 7.7.3
+      semver: 7.8.5
       validate-npm-package-name: 5.0.1
 
   npm-run-path@4.0.1:

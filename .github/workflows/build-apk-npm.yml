@@ -71,6 +71,7 @@ jobs:
           pnpm run check
           pnpm run lint
           pnpm run test:unit
+          pnpm run test:bundle:android
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v5
