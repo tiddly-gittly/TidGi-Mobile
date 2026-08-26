@@ -1,6 +1,22 @@
 import type { MobileAgentStorage } from '../../../services/AgentStorageService';
 import { createMobileAgentSessionClients, startMobileAgentSession } from '../agentSessionClients';
 
+function createExecutor() {
+  return {
+    cancel: jest.fn(() => Promise.resolve()),
+    delete: jest.fn(),
+    retry: jest.fn(),
+    send: jest.fn(() => Promise.resolve()),
+    subscribeToTransientMessages: () => () => {},
+  };
+}
+
+function expectCanonicalAbsentCursors(value: unknown): void {
+  expect(Reflect.ownKeys(value as object)).not.toContain('previousCursor');
+  expect(Reflect.ownKeys(value as object)).not.toContain('nextCursor');
+  expect(JSON.parse(JSON.stringify(value))).toStrictEqual(value);
+}
+
 describe('mobile shared session boundary', () => {
   it('contains an unexpected controller start rejection instead of creating an unhandled promise', async () => {
     const failure = new Error('invalid session target');
@@ -48,5 +64,123 @@ describe('mobile shared session boundary', () => {
     );
 
     expect(send).toHaveBeenCalledWith('conversation', 'review attachment', source, wikiTiddlers, signal);
+  });
+
+  it('omits absent cursors from terminal message-page, window and turn-detail results', async () => {
+    const storage = {
+      getMessagePage: jest.fn().mockResolvedValue({
+        reset: false as const,
+        conversationId: 'conversation',
+        revision: 'revision-1',
+        items: [],
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      }),
+      getMessageWindowAround: jest.fn().mockResolvedValue({
+        reset: false as const,
+        conversationId: 'conversation',
+        revision: 'revision-1',
+        focus: { kind: 'turn' as const, turnId: 'turn-1', cursor: 'turn-cursor' },
+        items: [],
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      }),
+      getTurnMessagePage: jest.fn().mockResolvedValue({
+        items: [],
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      }),
+    } as unknown as MobileAgentStorage;
+    const clients = createMobileAgentSessionClients(storage, createExecutor());
+
+    const page = await clients.conversationClient.getMessagePage('conversation', {
+      direction: 'backward',
+      limit: 50,
+      maxBytes: 256 * 1024,
+      mode: 'on-demand',
+    });
+    const window = await clients.conversationClient.getMessageWindowAround({
+      conversationId: 'conversation',
+      expectedRevision: 'revision-1',
+      focus: { kind: 'turn', turnId: 'turn-1', cursor: 'turn-cursor' },
+      maxMessages: 50,
+      maxBytes: 256 * 1024,
+    });
+    const detail = await clients.conversationClient.getTurnDetail({
+      conversationId: 'conversation',
+      turnId: 'turn-1',
+      limit: 50,
+      maxBytes: 256 * 1024,
+    });
+
+    expectCanonicalAbsentCursors(page);
+    expectCanonicalAbsentCursors(window);
+    expectCanonicalAbsentCursors(detail);
+  });
+
+  it.each([
+    {
+      name: 'message page',
+      storage: {
+        getMessagePage: jest.fn().mockResolvedValue({
+          reset: false as const,
+          conversationId: 'conversation',
+          revision: 'revision-1',
+          items: [],
+          hasMoreBefore: true,
+          hasMoreAfter: false,
+        }),
+      },
+      invoke: (clients: ReturnType<typeof createMobileAgentSessionClients>) =>
+        clients.conversationClient.getMessagePage('conversation', {
+          direction: 'backward',
+          limit: 50,
+          maxBytes: 256 * 1024,
+          mode: 'on-demand',
+        }),
+    },
+    {
+      name: 'message window',
+      storage: {
+        getMessageWindowAround: jest.fn().mockResolvedValue({
+          reset: false as const,
+          conversationId: 'conversation',
+          revision: 'revision-1',
+          focus: { kind: 'turn' as const, turnId: 'turn-1', cursor: 'turn-cursor' },
+          items: [],
+          hasMoreBefore: false,
+          hasMoreAfter: true,
+        }),
+      },
+      invoke: (clients: ReturnType<typeof createMobileAgentSessionClients>) =>
+        clients.conversationClient.getMessageWindowAround({
+          conversationId: 'conversation',
+          expectedRevision: 'revision-1',
+          focus: { kind: 'turn', turnId: 'turn-1', cursor: 'turn-cursor' },
+          maxMessages: 50,
+          maxBytes: 256 * 1024,
+        }),
+    },
+    {
+      name: 'turn detail',
+      storage: {
+        getTurnMessagePage: jest.fn().mockResolvedValue({
+          items: [],
+          hasMoreBefore: true,
+          hasMoreAfter: false,
+        }),
+      },
+      invoke: (clients: ReturnType<typeof createMobileAgentSessionClients>) =>
+        clients.conversationClient.getTurnDetail({
+          conversationId: 'conversation',
+          turnId: 'turn-1',
+          limit: 50,
+          maxBytes: 256 * 1024,
+        }),
+    },
+  ])('fails closed when the $name host result omits a required boundary cursor', async ({ storage, invoke }) => {
+    const clients = createMobileAgentSessionClients(storage as unknown as MobileAgentStorage, createExecutor());
+
+    await expect(invoke(clients)).rejects.toThrow('Mobile conversation host omitted a required boundary cursor');
   });
 });

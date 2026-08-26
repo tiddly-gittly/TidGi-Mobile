@@ -1679,7 +1679,13 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       endCursor ? this.eventExistsBeyond(database, conversationId, endCursor, '>', options.ranges) : false,
     ]);
     options.signal?.throwIfAborted();
-    return { items, hasMoreBefore, hasMoreAfter, startCursor, endCursor };
+    return {
+      items,
+      hasMoreBefore,
+      hasMoreAfter,
+      ...(startCursor === undefined ? {} : { startCursor }),
+      ...(endCursor === undefined ? {} : { endCursor }),
+    };
   }
 
   public async getEventVersionFrontierPage(options: {

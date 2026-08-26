@@ -750,6 +750,12 @@ describe('MobileAgentStorage', () => {
 
   it('pages the raw event audit log by opaque causal cursor and requested ranges', async () => {
     const current = storage();
+    const emptyPage = await current.getConversationEventPage('conversation-1', { direction: 'forward', limit: 2 });
+    expect(emptyPage).toStrictEqual({ items: [], hasMoreBefore: false, hasMoreAfter: false });
+    expect(Reflect.ownKeys(emptyPage)).not.toContain('startCursor');
+    expect(Reflect.ownKeys(emptyPage)).not.toContain('endCursor');
+    expect(JSON.parse(JSON.stringify(emptyPage))).toStrictEqual(emptyPage);
+
     const events: ConversationEvent[] = Array.from({ length: 5 }, (_, index) => ({
       conversationId: 'conversation-1',
       eventId: `desktop-${index + 1}`,

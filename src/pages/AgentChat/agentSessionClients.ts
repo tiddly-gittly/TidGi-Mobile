@@ -71,6 +71,12 @@ function encodeCursor(cursor?: ConversationMessageCursor): string | undefined {
   return Buffer.from(JSON.stringify({ v: CURSOR_VERSION, cursor } satisfies CursorEnvelope), 'utf8').toString('base64url');
 }
 
+function requireEncodedCursor(cursor: ConversationMessageCursor | undefined): string {
+  const encoded = encodeCursor(cursor);
+  if (encoded === undefined) throw new Error('Mobile conversation host omitted a required boundary cursor');
+  return encoded;
+}
+
 function decodeCursor(value: string): ConversationMessageCursor {
   if (!/^[A-Za-z0-9_-]{1,4096}$/u.test(value)) throw new TypeError('invalid_mobile_conversation_cursor');
   let parsed: unknown;
@@ -163,8 +169,8 @@ export function createMobileAgentSessionClients(
         items: page.items.map(message => projectConversationMessageForList(message, Math.min(MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT, Math.max(1, options.maxBytes - 4_096)))),
         hasMoreBefore: page.hasMoreBefore,
         hasMoreAfter: page.hasMoreAfter,
-        ...(page.hasMoreBefore ? { previousCursor: encodeCursor(page.startCursor) } : {}),
-        ...(page.hasMoreAfter ? { nextCursor: encodeCursor(page.endCursor) } : {}),
+        ...(page.hasMoreBefore ? { previousCursor: requireEncodedCursor(page.startCursor) } : {}),
+        ...(page.hasMoreAfter ? { nextCursor: requireEncodedCursor(page.endCursor) } : {}),
       };
     },
 
@@ -188,8 +194,8 @@ export function createMobileAgentSessionClients(
         items: result.items.map(message => projectConversationMessageForList(message, Math.min(MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT, Math.max(1, request.maxBytes - 4_096)))),
         hasMoreBefore: result.hasMoreBefore,
         hasMoreAfter: result.hasMoreAfter,
-        ...(result.hasMoreBefore ? { previousCursor: encodeCursor(result.startCursor) } : {}),
-        ...(result.hasMoreAfter ? { nextCursor: encodeCursor(result.endCursor) } : {}),
+        ...(result.hasMoreBefore ? { previousCursor: requireEncodedCursor(result.startCursor) } : {}),
+        ...(result.hasMoreAfter ? { nextCursor: requireEncodedCursor(result.endCursor) } : {}),
       };
     },
 
@@ -209,8 +215,8 @@ export function createMobileAgentSessionClients(
         items: page.items,
         hasMoreBefore: page.hasMoreBefore,
         hasMoreAfter: page.hasMoreAfter,
-        ...(page.hasMoreBefore ? { previousCursor: encodeCursor(page.startCursor) } : {}),
-        ...(page.hasMoreAfter ? { nextCursor: encodeCursor(page.endCursor) } : {}),
+        ...(page.hasMoreBefore ? { previousCursor: requireEncodedCursor(page.startCursor) } : {}),
+        ...(page.hasMoreAfter ? { nextCursor: requireEncodedCursor(page.endCursor) } : {}),
       };
     },
 
