@@ -45,7 +45,7 @@ import { type DeviceNetworkCloudConfig, normalizeCloudConfig } from './cloudConf
 import { createMobileCloudConnectionCoordinator } from './cloudCoordinator';
 import { cloudTrustPeerIdsToRemove, locallyPairedRecord } from './cloudTrust';
 import { createMobilePairingInvite, parseMobilePairingInvite } from './pairingInvites';
-import { parseStoredIdentity, parseTrustedDeviceRecords, type StoredIdentity } from './storage';
+import { parseStoredIdentity, parseTrustedDeviceStoreEnvelope, type StoredIdentity, type StoredTrustedDeviceStoreEnvelope } from './storage';
 
 const IDENTITY_KEY = 'device_network_identity_v1';
 const TRUSTED_DEVICES_KEY = 'device_network_trusted_devices_v2';
@@ -75,12 +75,6 @@ function stringScope(value: unknown): DeviceConnectionGrantStringScope {
   return typeof value === 'string' && value.length > 0
     ? { mode: 'ids', ids: [value] }
     : { mode: 'none' };
-}
-
-interface TrustedDeviceStoreEnvelope {
-  epoch: string;
-  generation: number;
-  records: TrustedDeviceRecord[];
 }
 
 class SecureStoreDeviceTrustStore implements DeviceTrustStore {
@@ -161,23 +155,16 @@ class SecureStoreDeviceTrustStore implements DeviceTrustStore {
     });
   }
 
-  private async loadEnvelope(): Promise<TrustedDeviceStoreEnvelope> {
+  private async loadEnvelope(): Promise<StoredTrustedDeviceStoreEnvelope> {
     const storedJson = await SecureStore.getItemAsync(TRUSTED_DEVICES_KEY);
     if (!storedJson) return { epoch: this.epoch, generation: -1, records: [] };
-    const parsed = JSON.parse(storedJson) as Partial<TrustedDeviceStoreEnvelope>;
-    const generation = parsed.generation;
-    if (
-      typeof parsed.epoch !== 'string' || typeof generation !== 'number' || !Number.isSafeInteger(generation) ||
-      !Array.isArray(parsed.records)
-    ) throw new Error('invalid_trusted_device_store_envelope');
-    return {
-      epoch: parsed.epoch,
-      generation,
-      records: parseTrustedDeviceRecords(JSON.stringify(parsed.records)),
-    };
+    const parsed = parseTrustedDeviceStoreEnvelope(storedJson);
+    if (parsed) return parsed;
+    console.warn('[DeviceNetworkService] invalid trusted device store; starting with an empty trust set');
+    return { epoch: this.epoch, generation: -1, records: [] };
   }
 
-  private saveEnvelope(envelope: TrustedDeviceStoreEnvelope): Promise<void> {
+  private saveEnvelope(envelope: StoredTrustedDeviceStoreEnvelope): Promise<void> {
     return SecureStore.setItemAsync(TRUSTED_DEVICES_KEY, JSON.stringify(envelope));
   }
 

@@ -37,13 +37,13 @@ const mockRetryTurn = jest.fn((input: { conversationId: string; newTurnId: strin
 );
 
 jest.mock('ai', () => ({}), { virtual: true });
-jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
+jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }), { virtual: true });
 jest.mock('expo-file-system', () => ({
   Directory: jest.fn(),
   File: jest.fn(),
   Paths: { document: {} },
 }));
-jest.mock('expo-crypto', () => ({ randomUUID: () => 'secure-uuid' }));
+jest.mock('expo-crypto', () => ({ randomUUID: () => 'secure-uuid' }), { virtual: true });
 jest.mock('memeloop/mobile', () => ({
   agentRunErrorFromUnknown: (error: unknown) => ({
     code: 'UNKNOWN',

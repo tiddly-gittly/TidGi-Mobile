@@ -9,6 +9,12 @@ export interface StoredIdentity {
   createdAt: number;
 }
 
+export interface StoredTrustedDeviceStoreEnvelope {
+  epoch: string;
+  generation: number;
+  records: TrustedDeviceRecord[];
+}
+
 function parseJson(value: string): unknown {
   try {
     return JSON.parse(value) as unknown;
@@ -52,4 +58,25 @@ export function parseStoredIdentity(value: string): StoredIdentity | undefined {
 export function parseTrustedDeviceRecords(value: string): TrustedDeviceRecord[] {
   const parsed = parseJson(value);
   return Array.isArray(parsed) ? parsed.filter(isTrustedDeviceRecord) : [];
+}
+
+/**
+ * Treat SecureStore as an untrusted persistence boundary. Interrupted writes,
+ * old development builds and manual edits must not prevent device networking
+ * (and therefore the application) from starting.
+ */
+export function parseTrustedDeviceStoreEnvelope(value: string): StoredTrustedDeviceStoreEnvelope | undefined {
+  const parsed = parseJson(value) as Record<string, unknown> | undefined;
+  if (
+    !parsed ||
+    typeof parsed.epoch !== 'string' ||
+    typeof parsed.generation !== 'number' ||
+    !Number.isSafeInteger(parsed.generation) ||
+    !Array.isArray(parsed.records)
+  ) return undefined;
+  return {
+    epoch: parsed.epoch,
+    generation: parsed.generation,
+    records: parsed.records.filter(isTrustedDeviceRecord),
+  };
 }
