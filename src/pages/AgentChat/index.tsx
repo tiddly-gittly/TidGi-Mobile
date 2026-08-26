@@ -1,16 +1,60 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import type { MemeLoopChatAdapter } from '@memeloop/react-ui/chat';
-import { NativeAgentChatView } from '@memeloop/react-ui/native';
-import { type ChatMessage, createFetchLLMProvider, type Device } from 'memeloop/mobile';
-import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AgentSessionProvider,
+  ConversationTimelineWindowController,
+  createAgentRunLogDetailLoader,
+  NativeAgentChatView,
+  useAgentSession,
+  useAgentSessionCoreAdapter,
+} from '@memeloop/react-ui/native';
+import type { StackScreenProps } from '@react-navigation/stack';
+import {
+  type AgentDeviceRpcClient,
+  agentRunErrorFromUnknown,
+  AgentRunFailure,
+  AgentSessionController,
+  createAgentDeviceRpcClient,
+  createMissingProviderSettingAgentRunError,
+  type Device,
+} from 'memeloop/mobile';
+import { createFetchLLMProvider } from 'memeloop/mobile/providers';
+import { type FC, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from 'react-native-paper';
 
-import { MobileAgentLoopService } from '../../services/AgentLoopService';
+import type { RootStackParameterList } from '../../App';
+import { getMobileAgentLoopService, MobileAgentLoopService, observeActiveMobileAgentMessages } from '../../services/AgentLoopService';
 import { mobileAgentStorage } from '../../services/AgentStorageService';
 import { deviceNetworkService } from '../../services/DeviceNetworkService';
-import { cloudLlmConnection } from '../../services/DeviceNetworkService/cloudConfig';
+import { loadExternalAPIConfig } from '../../services/ExternalAPIService/config';
+import { createSecureDurableId } from '../../services/SecureIdService';
+import { navigationReference } from '../../utils/RootNavigation';
+import { createMobileAgentSessionClients, startMobileAgentSession } from './agentSessionClients';
+import { MobileConversationDirectoryController, mobileConversationDirectoryDirection } from './conversationDirectory';
+import { resolveMobileAgentErrorPresentation } from './errorPresentation';
+import { formatMobileTimelineTimestamp } from './localizedFormatting';
+import { exportStoredMessage } from './messageExport';
+import { mobileExecutionTarget, MobileRemoteExecutionAdapter } from './remoteExecutionAdapter';
 
 const LOCAL_EXECUTION_TARGET_ID = 'local';
 const REMOTE_EXECUTION_TARGET_PREFIX = 'peer:';
+const INITIAL_CONVERSATION_ID = 'memeloop:primary';
+const DEFAULT_AGENT_DEFINITION_ID = 'memeloop:general-assistant';
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  conversationButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  conversationRow: { alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
+  conversationRowRtl: { direction: 'rtl', flexDirection: 'row-reverse' },
+  conversationTitle: { maxWidth: 180 },
+  directoryButton: { borderRadius: 8, minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 6 },
+  directoryButtonDisabled: { opacity: 0.5 },
+  directoryStatus: { paddingHorizontal: 4 },
+  newConversationButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  scheduleButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  initializationError: { padding: 16 },
+});
 
 interface AgentExecutionTarget {
   id: string;
@@ -20,316 +64,524 @@ interface AgentExecutionTarget {
   disabled?: boolean;
 }
 
-interface SetExecutionTargetOptions {
-  restartCurrentTurn?: boolean;
-}
-
 function remoteExecutionTargetId(peerId: string): string {
   return `${REMOTE_EXECUTION_TARGET_PREFIX}${peerId}`;
 }
 
-function peerIdFromExecutionTarget(targetId: string): string | undefined {
-  return targetId.startsWith(REMOTE_EXECUTION_TARGET_PREFIX) ? targetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length) : undefined;
+function createPortableRequestId(): string {
+  return createSecureDurableId('mobile-rpc-request');
 }
 
-function deleteTurnFromMessages(messages: readonly ChatMessage[], userMessageId: string): ChatMessage[] {
-  const startIndex = messages.findIndex(message => message.messageId === userMessageId);
-  if (startIndex < 0) return [...messages];
-
-  const nextUserIndex = messages.findIndex((message, index) => index > startIndex && message.role === 'user');
-  const endIndex = nextUserIndex >= 0 ? nextUserIndex : messages.length;
-  return [...messages.slice(0, startIndex), ...messages.slice(endIndex)];
+function safeAgentFailure(error: unknown): AgentRunFailure {
+  return error instanceof AgentRunFailure ? error : new AgentRunFailure(agentRunErrorFromUnknown(error));
 }
 
-export const AgentChat: FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const [activeExecutionTargetId, setActiveExecutionTargetId] = useState(LOCAL_EXECUTION_TARGET_ID);
-  const [localPeerId, setLocalPeerId] = useState<string | undefined>();
-  const [agentLoopDevices, setAgentLoopDevices] = useState<Device[]>([]);
-  const [error, setError] = useState<Error | null>(null);
-  const initialCloudStatus = deviceNetworkService.getCloudStatus();
-  const [cloudAvailable, setCloudAvailable] = useState(initialCloudStatus.state === 'online' || initialCloudStatus.state === 'degraded');
-
-  // Singleton Mobile Agent Loop Service — created once per component mount.
-  // LLM config comes only from persisted settings. An unconfigured install is
-  // explicitly unavailable instead of silently sending data to localhost with
-  // a test token.
-  const loopServiceReference = useRef<MobileAgentLoopService | null>(null);
-  const initializeLoopService = useCallback(() => {
-    if (loopServiceReference.current) return;
-    const cloudConfig = deviceNetworkService.getCloudConfig();
-    if (!cloudConfig) throw new Error('cloud_not_configured');
-    const connection = cloudLlmConnection(cloudConfig);
-    const openai = createOpenAI({
-      baseURL: connection.baseURL,
-      apiKey: connection.apiKey,
-      ...(connection.headers ? { headers: connection.headers } : {}),
-    });
+function useMobileLoopService() {
+  const activeServiceReference = useRef<MobileAgentLoopService | undefined>(undefined);
+  const getLoopService = useCallback(async (): Promise<MobileAgentLoopService> => {
+    const identity = await deviceNetworkService.getLocalIdentity();
+    const connection = await loadExternalAPIConfig();
+    if (!connection) {
+      throw new AgentRunFailure(createMissingProviderSettingAgentRunError({
+        providerId: 'selected',
+        field: 'apiKey',
+      }));
+    }
+    const openai = createOpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey });
     const provider = createFetchLLMProvider({
-      name: 'tidgi-mobile',
+      name: connection.providerId,
       modelId: connection.modelId,
-      createModel: requestedModelId => openai(requestedModelId ?? connection.modelId),
+      apiMode: connection.apiMode,
+      createModel: requestedModelId => {
+        const modelId = requestedModelId ?? connection.modelId;
+        return connection.apiMode === 'responses' ? openai.responses(modelId) : openai.chat(modelId);
+      },
     });
-    loopServiceReference.current = new MobileAgentLoopService(provider);
+    const configurationIdentity = JSON.stringify([
+      identity.peerId,
+      connection.providerId,
+      connection.modelId,
+      connection.apiMode,
+      connection.baseURL,
+      connection.apiKey,
+    ]);
+    const service = getMobileAgentLoopService(
+      configurationIdentity,
+      () =>
+        new MobileAgentLoopService(provider, identity.peerId, mobileAgentStorage, createSecureDurableId, {
+          apiMode: connection.apiMode,
+          modelId: connection.modelId,
+          providerId: connection.providerId,
+        }),
+    );
+    activeServiceReference.current = service;
+    return service;
   }, []);
+  return { activeServiceReference, getLoopService };
+}
 
-  const getLoopService = useCallback(() => {
-    initializeLoopService();
-    return Promise.resolve(loopServiceReference.current!);
-  }, [initializeLoopService]);
+interface AgentChatSessionProps {
+  activeExecutionTargetId: string;
+  agentLoopDevices: readonly Device[];
+  conversationId: string;
+  localPeerId: string;
+  setActiveExecutionTargetId: (value: string) => void;
+}
+
+function AgentChatSession({
+  activeExecutionTargetId,
+  agentLoopDevices,
+  conversationId,
+  localPeerId,
+  setActiveExecutionTargetId,
+}: AgentChatSessionProps) {
+  const [sessionStartError, setSessionStartError] = useState<Error>();
+  const { activeServiceReference, getLoopService } = useMobileLoopService();
+
+  const remoteClient = useCallback((peerId: string) =>
+    createAgentDeviceRpcClient({
+      peerId,
+      createRequestId: createPortableRequestId,
+      sendRpc: (targetPeerId, method, parameters, options) => deviceNetworkService.sendRpc(targetPeerId, method, parameters, options),
+    }), []);
+
+  const [executionAdapter] = useState(() => {
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: createPortableRequestId,
+      createRemoteClient: remoteClient,
+      defaultDefinitionId: DEFAULT_AGENT_DEFINITION_ID,
+      getActiveLocalLoopService: () => activeServiceReference.current,
+      getLocalLoopService: getLoopService,
+      localPeerId,
+      storage: mobileAgentStorage,
+      syncConversation: async (peerId, targetConversationId, signal) => {
+        await deviceNetworkService.syncWithDevice(peerId, { conversationIds: [targetConversationId], signal });
+      },
+    });
+    adapter.switchTarget(conversationId, mobileExecutionTarget(activeExecutionTargetId));
+    return adapter;
+  });
+
+  const clients = useMemo(() =>
+    createMobileAgentSessionClients(mobileAgentStorage, {
+      send: async (targetConversationId, content, attachment, wikiTiddlers, signal) => {
+        await executionAdapter.execute(targetConversationId, content, attachment, wikiTiddlers, signal);
+      },
+      cancel: (targetConversationId, signal) => executionAdapter.cancel(targetConversationId, signal),
+      delete: (request, signal) => executionAdapter.delete(request, signal),
+      retry: (request, signal) => executionAdapter.retry(request, signal),
+      subscribeToTransientMessages: observeActiveMobileAgentMessages,
+    }), [executionAdapter]);
+
+  const controller = useMemo(() =>
+    new AgentSessionController({
+      agentInstanceClient: clients.instanceClient,
+      conversationClient: clients.conversationClient,
+      maxResidentMessages: 50,
+      maxResidentBytes: 256 * 1024,
+    }), [clients]);
+  const timelineController = useMemo(
+    () => new ConversationTimelineWindowController(clients.timelineClient),
+    [clients.timelineClient],
+  );
+  const terminalCleanupGeneration = useRef(0);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    const unsubscribeCloudStatus = deviceNetworkService.observeCloudStatus(status => {
-      const available = status.state === 'online' || status.state === 'degraded';
-      setCloudAvailable(available);
-      if (!available) loopServiceReference.current = null;
+    executionAdapter.switchTarget(conversationId, mobileExecutionTarget(activeExecutionTargetId));
+  }, [activeExecutionTargetId, conversationId, executionAdapter]);
+
+  useEffect(() => {
+    let mounted = true;
+    setSessionStartError(undefined);
+    startMobileAgentSession(controller, { agentId: conversationId, conversationId }, error => {
+      if (mounted) setSessionStartError(safeAgentFailure(error));
     });
-
-    void (async () => {
-      try {
-        await deviceNetworkService.start();
-        const [identity, devices, storedMessages] = await Promise.all([
-          deviceNetworkService.getLocalIdentity(),
-          deviceNetworkService.listDevices(),
-          mobileAgentStorage.getMessages('mobile-agent-demo'),
-        ]);
-        if (storedMessages.length > 0) setMessages(storedMessages);
-        setLocalPeerId(identity.peerId);
-        setAgentLoopDevices(devices.filter(device => device.peerId !== identity.peerId && device.trusted && device.capabilities.agentLoop));
-        unsubscribe = deviceNetworkService.observeDevices(nextDevices => {
-          setAgentLoopDevices(nextDevices.filter(device => device.peerId !== identity.peerId && device.trusted && device.capabilities.agentLoop));
-        });
-      } catch (error_: unknown) {
-        setError(error_ instanceof Error ? error_ : new Error(String(error_)));
-      }
-    })();
-
     return () => {
-      unsubscribe?.();
-      unsubscribeCloudStatus();
+      mounted = false;
+      controller.stop();
     };
-  }, []);
+  }, [controller, conversationId]);
 
+  useEffect(() => {
+    terminalCleanupGeneration.current += 1;
+    return () => {
+      terminalCleanupGeneration.current += 1;
+      const cleanupGeneration = terminalCleanupGeneration.current;
+      queueMicrotask(() => {
+        // React strict effects immediately set up the same resource again.
+        // Only a genuine unmount leaves this cleanup generation current.
+        if (terminalCleanupGeneration.current !== cleanupGeneration) return;
+        timelineController.dispose();
+        void executionAdapter.dispose();
+      });
+    };
+  }, [executionAdapter, timelineController]);
+
+  return (
+    <AgentSessionProvider controller={controller}>
+      <AgentChatSessionView
+        activeExecutionTargetId={activeExecutionTargetId}
+        agentLoopDevices={agentLoopDevices}
+        conversationId={conversationId}
+        executionAdapter={executionAdapter}
+        localPeerId={localPeerId}
+        remoteClient={remoteClient}
+        sessionStartError={sessionStartError}
+        setActiveExecutionTargetId={setActiveExecutionTargetId}
+        timelineController={timelineController}
+      />
+    </AgentSessionProvider>
+  );
+}
+
+interface AgentChatSessionViewProps extends AgentChatSessionProps {
+  executionAdapter: MobileRemoteExecutionAdapter;
+  remoteClient: (peerId: string) => AgentDeviceRpcClient;
+  sessionStartError?: Error;
+  timelineController: ConversationTimelineWindowController;
+}
+
+function AgentChatSessionView({
+  activeExecutionTargetId,
+  agentLoopDevices,
+  conversationId,
+  executionAdapter,
+  localPeerId,
+  remoteClient,
+  sessionStartError,
+  setActiveExecutionTargetId,
+  timelineController,
+}: AgentChatSessionViewProps) {
+  const { i18n, t } = useTranslation();
+  const { controller } = useAgentSession();
+  const subscribeToExecution = useCallback((listener: () => void) => executionAdapter.subscribe(conversationId, listener), [conversationId, executionAdapter]);
+  const getExecutionSnapshot = useCallback(() => executionAdapter.getSnapshot(conversationId), [conversationId, executionAdapter]);
+  const executionSnapshot = useSyncExternalStore(subscribeToExecution, getExecutionSnapshot, getExecutionSnapshot);
+  const loadMessageDetail = useMemo(() =>
+    createAgentRunLogDetailLoader({
+      pull: async ({ cursor, limit, maxBytes, message, signal }) => {
+        const reference = message.detailRef;
+        const targetPeerId = reference?.nodeId;
+        if (reference?.type === 'agent-run' && reference.runId && targetPeerId && targetPeerId !== localPeerId) {
+          const result = await remoteClient(targetPeerId).pullAgentRunLog({
+            conversationId: reference.conversationId ?? message.conversationId,
+            runId: reference.runId,
+            limit,
+            maxBytes,
+            ...(cursor ? { cursor } : {}),
+          }, { signal });
+          return {
+            items: result.messages.map(entry => ({
+              content: entry.content,
+              label: t(`AgentChat.${entry.role === 'assistant' ? 'Agent' : entry.role[0].toUpperCase()}${entry.role.slice(1)}`),
+            })),
+            truncated: result.hasMoreAfter,
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+          };
+        }
+        const result = await controller.getTurnDetail(
+          { turnId: message.turnId, cursor, limit, maxBytes },
+          { signal },
+        );
+        return {
+          items: (result?.items ?? []).map(entry => ({
+            content: entry.content,
+            label: entry.role === 'user'
+              ? t('AgentChat.User')
+              : entry.role === 'tool'
+              ? t('AgentChat.Tool')
+              : t('AgentChat.Agent'),
+          })),
+          truncated: result?.hasMoreAfter ?? false,
+          ...(result?.nextCursor ? { nextCursor: result.nextCursor } : {}),
+        };
+      },
+    }), [controller, localPeerId, remoteClient, t]);
+  const exportMessage = useCallback((messageId: string, options: { signal: AbortSignal }) =>
+    exportStoredMessage({
+      conversationId,
+      dialogTitle: t('AgentChat.ExportMessageTitle'),
+      messageId,
+      reader: mobileAgentStorage,
+      signal: options.signal,
+    }), [conversationId, t]);
+  const baseAdapter = useAgentSessionCoreAdapter({
+    conversationId,
+    timelineController,
+    createId: createPortableRequestId,
+    exportMessage,
+    loadMessageDetail,
+  });
   const executionTargets = useMemo<AgentExecutionTarget[]>(() => [
     {
       id: LOCAL_EXECUTION_TARGET_ID,
-      label: 'This phone',
-      description: localPeerId ? `Run locally on ${localPeerId}` : 'Run locally on this phone',
+      label: t('AgentChat.ThisPhone'),
+      description: t('AgentChat.RunLocallyOnPeer', { peerId: localPeerId }),
       kind: 'local',
-      disabled: !cloudAvailable,
     },
     ...agentLoopDevices.map(device => ({
       id: remoteExecutionTargetId(device.peerId),
       label: device.displayName,
-      description: `${device.platform} · ${device.reachability.state}`,
+      description: t('AgentChat.RemoteTargetDescription', {
+        platform: device.platform,
+        reachability: t(`DeviceNetwork.Reachability.${device.reachability.state}`),
+      }),
       kind: 'remote' as const,
-      disabled: !device.trusted,
+      disabled: !device.trusted || device.reachability.state === 'offline',
     })),
-  ], [agentLoopDevices, cloudAvailable, localPeerId]);
-
-  const sendRemoteMessage = useCallback(async (peerId: string, text: string) => {
-    setIsRunning(true);
-    setError(null);
-    try {
-      await deviceNetworkService.sendRpc(peerId, 'memeloop.agent.runTurn', {
-        conversationId: 'mobile-agent-demo',
-        definitionId: 'mobile-agent-demo',
-        message: text,
-        resumeSession: messages,
-        conversation: {
-          conversationId: 'mobile-agent-demo',
-          title: 'Mobile Agent',
-          lastMessagePreview: text,
-          lastMessageTimestamp: Date.now(),
-          messageCount: messages.length,
-          originNodeId: localPeerId ?? 'tidgi-mobile',
-          originClock: messages.reduce((maximum, message) => Math.max(maximum, message.lamportClock), 0),
-          definitionId: 'mobile-agent-demo',
-          isUserInitiated: true,
-        },
-      });
-      await deviceNetworkService.syncWithDevice(peerId);
-      const syncedMessages = await mobileAgentStorage.getMessages('mobile-agent-demo');
-      if (syncedMessages.length > 0) {
-        setMessages(syncedMessages);
-      } else {
-        const fallbackMessage = await mobileAgentStorage.createMessage(
-          'mobile-agent-demo',
-          'assistant',
-          `Remote turn was sent to ${peerId}, but it did not publish conversation messages to sync.`,
-        );
-        await mobileAgentStorage.appendMessage(fallbackMessage);
-        setMessages(currentMessages => [...currentMessages, fallbackMessage]);
-      }
-    } catch (error_: unknown) {
-      const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
-      setError(nextError);
-      throw nextError;
-    } finally {
-      setIsRunning(false);
-    }
-  }, [localPeerId, messages]);
-
-  const setExecutionTarget = useCallback(async (targetId: string, options?: SetExecutionTargetOptions) => {
-    if (targetId === activeExecutionTargetId) return;
-    const lastUserMessage = [...messages].reverse().find(message => message.role === 'user');
-    if (options?.restartCurrentTurn) {
-      const currentPeerId = peerIdFromExecutionTarget(activeExecutionTargetId);
-      if (currentPeerId) {
-        await deviceNetworkService.sendRpc(currentPeerId, 'memeloop.agent.cancel', { conversationId: 'mobile-agent-demo' }).catch(() => undefined);
-      }
-      setIsRunning(false);
-    }
-    setActiveExecutionTargetId(targetId);
-    if (options?.restartCurrentTurn && lastUserMessage) {
-      const nextPeerId = peerIdFromExecutionTarget(targetId);
-      if (nextPeerId) {
-        await sendRemoteMessage(nextPeerId, lastUserMessage.content);
-      } else {
-        // Local restart: remove messages after the last user message, then re-run
-        setIsRunning(true);
-        const loopService = await getLoopService();
-        const truncated = deleteTurnFromMessages(messages, lastUserMessage.messageId);
-        setMessages(truncated);
-
-        const unsubscribe = loopService.onMessage('mobile-agent-demo', (message) => {
-          setMessages(currentMessages => [...currentMessages, message]);
-        });
-
-        loopService.sendMessage('mobile-agent-demo', lastUserMessage.content, truncated)
-          .then((result) => {
-            unsubscribe();
-            if (result.error) setError(result.error);
-          })
-          .catch((error_: unknown) => {
-            unsubscribe();
-            setError(error_ instanceof Error ? error_ : new Error(String(error_)));
-          })
-          .finally(() => {
-            setIsRunning(false);
-          });
-      }
-    }
-  }, [activeExecutionTargetId, messages, sendRemoteMessage, getLoopService]);
-
-  const loadMessageDetail = useCallback(async (message: ChatMessage) => {
-    if (!message.detailRef) return null;
-    const targetPeerId = message.detailRef.nodeId;
-    const targetConversationId = message.detailRef.conversationId ?? message.conversationId;
-    if (!targetPeerId || targetPeerId === localPeerId) return messages.filter(item => item.conversationId === targetConversationId);
-    const result = await deviceNetworkService.sendRpc<{ messages: ChatMessage[] }>(targetPeerId, 'memeloop.chat.pullAgentRunLog', {
-      conversationId: targetConversationId,
-      knownMessageIds: messages.map(item => item.messageId),
-    });
-    return result.messages;
-  }, [localPeerId, messages]);
-
-  const adapter = useMemo<MemeLoopChatAdapter>(() => ({
-    messages,
-    isRunning,
-    isLoading: false,
-    error,
+  ], [agentLoopDevices, localPeerId, t]);
+  const adapter = useMemo(() => ({
+    ...baseAdapter,
     executionTargets,
     activeExecutionTargetId,
-    setExecutionTarget,
-    loadMessageDetail,
-    sendMessage: async (input) => {
-      const text = input.text.trim();
-      if (!text) return;
-
-      const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
-      if (peerId) {
-        await sendRemoteMessage(peerId, text);
-        return;
-      }
-
-      // Local execution via MobileAgentLoopService
-      if (!cloudAvailable) throw new Error('Connect MemeLoop Cloud in Device Network settings before running the local agent.');
-      setIsRunning(true);
-      const loopService = await getLoopService();
-
-      const userMessage = await loopService.createMessage('mobile-agent-demo', 'user', text);
-      setMessages(currentMessages => [...currentMessages, userMessage]);
-
-      // Subscribe to streaming messages from the loop
-      const unsubscribe = loopService.onMessage('mobile-agent-demo', (message) => {
-        setMessages(currentMessages => [...currentMessages, message]);
-      });
-
-      try {
-        const result = await loopService.sendMessage('mobile-agent-demo', text, messages, userMessage);
-        unsubscribe();
-        if (result.error) {
-          setError(result.error);
-        }
-      } catch (error_: unknown) {
-        unsubscribe();
-        const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
-        setError(nextError);
-        throw nextError;
-      } finally {
-        setIsRunning(false);
-      }
+    setExecutionTarget: async (targetId: string, options?: { restartCurrentTurn?: boolean }) => {
+      executionAdapter.switchTarget(conversationId, mobileExecutionTarget(targetId));
+      setActiveExecutionTargetId(targetId);
+      if (!options?.restartCurrentTurn) return;
+      const latestTurnId = await mobileAgentStorage.getLatestVisibleTurnId(conversationId);
+      if (latestTurnId) await baseAdapter.retryTurn(latestTurnId);
     },
-    cancel: async () => {
-      const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
-      if (peerId) {
-        void deviceNetworkService.sendRpc(peerId, 'memeloop.agent.cancel', { conversationId: 'mobile-agent-demo' });
-      } else {
-        const loopService = await getLoopService();
-        loopService.cancel('mobile-agent-demo');
-      }
-      setIsRunning(false);
-    },
-    deleteTurn: (userMessageId) => {
-      setMessages(currentMessages => deleteTurnFromMessages(currentMessages, userMessageId));
-      return Promise.resolve();
-    },
-    retryTurn: async (userMessageId) => {
-      const userMessage = messages.find(message => message.messageId === userMessageId);
-      if (!userMessage) return;
-
-      const peerId = peerIdFromExecutionTarget(activeExecutionTargetId);
-      if (peerId) {
-        // Re-send the user message to the remote peer
-        await sendRemoteMessage(peerId, userMessage.content);
-        return;
-      }
-
-      // Local retry: remove messages after user message, then re-run
-      setIsRunning(true);
-      const loopService = await getLoopService();
-      const truncated = deleteTurnFromMessages(messages, userMessageId);
-      setMessages(truncated);
-
-      const unsubscribe = loopService.onMessage('mobile-agent-demo', (message) => {
-        setMessages(currentMessages => [...currentMessages, message]);
-      });
-
-      try {
-        const result = await loopService.sendMessage('mobile-agent-demo', userMessage.content, truncated);
-        unsubscribe();
-        if (result.error) setError(result.error);
-      } catch (error_: unknown) {
-        unsubscribe();
-        const nextError = error_ instanceof Error ? error_ : new Error(String(error_));
-        setError(nextError);
-        throw nextError;
-      } finally {
-        setIsRunning(false);
-      }
-    },
-  }), [activeExecutionTargetId, cloudAvailable, error, executionTargets, isRunning, loadMessageDetail, messages, sendRemoteMessage, setExecutionTarget, getLoopService]);
+    error: sessionStartError ?? executionSnapshot.error ?? baseAdapter.error,
+  }), [activeExecutionTargetId, baseAdapter, conversationId, executionAdapter, executionSnapshot.error, executionTargets, sessionStartError, setActiveExecutionTargetId]);
+  const nativeLabels = useMemo(() => ({
+    user: t('AgentChat.User'),
+    agent: t('AgentChat.Agent'),
+    waitingPlaceholder: t('AgentChat.Waiting'),
+    loadDetails: t('AgentChat.LoadDetails'),
+    reloadDetails: t('AgentChat.ReloadDetails'),
+    noDetails: t('AgentChat.NoDetails'),
+    detailTruncated: t('AgentChat.DetailTruncated'),
+    exportFullMessage: t('AgentChat.ExportFullMessage'),
+    close: t('AgentChat.Close'),
+    truncatedMessage: (characters: number) => t('AgentChat.TruncatedMessage', { characters }),
+    diagnosticId: (id: string) => t('AgentChat.DiagnosticId', { id }),
+    timelineTimestamp: (timestamp: number) => formatMobileTimelineTimestamp(timestamp, i18n.resolvedLanguage ?? i18n.language),
+  }), [i18n.language, i18n.resolvedLanguage, t]);
+  const timelineLabels = useMemo(() => ({
+    navigation: t('AgentChat.TimelineNavigation'),
+    turn: (index: number, total: number) => t('AgentChat.TimelineTurn', { index, total }),
+    compacted: (count: number) => t('AgentChat.TimelineCompacted', { count }),
+    loadEarlier: t('AgentChat.LoadEarlier'),
+    loadLater: t('AgentChat.LoadLater'),
+    seek: t('AgentChat.TimelineSeek'),
+    close: t('AgentChat.TimelineClose'),
+    newMessages: (count: number) => t('AgentChat.NewMessages', { count }),
+    moreResponses: (count: number) => t('AgentChat.TimelineMoreResponses', { count }),
+  }), [t]);
 
   return (
     <NativeAgentChatView
       adapter={adapter}
-      title='Agent'
-      placeholder='Message the mobile agent'
-      emptyMessage='Start a mobile agent conversation'
-      loadingMessage='Loading agent conversation'
+      title={t('AgentChat.Title')}
+      placeholder={t('AgentChat.Placeholder')}
+      emptyMessage={t('AgentChat.Empty')}
+      loadingMessage={t('AgentChat.Loading')}
+      labels={nativeLabels}
+      timelineLabels={timelineLabels}
+      genericErrorPresentation={{ title: t('AgentChat.GenericErrorTitle'), message: t('AgentChat.GenericErrorMessage') }}
+      resolveErrorPresentation={error =>
+        resolveMobileAgentErrorPresentation(error, {
+          localize: (messageKey, parameters) => ({ title: t('AgentChat.AgentRunErrorTitle'), message: t(messageKey, { ...parameters }) }),
+          settingActionLabel: () => t('AgentChat.ConfigureExternalAPI'),
+        })}
+      onErrorAction={presentation => {
+        if (!navigationReference.isReady() || presentation.actionId !== 'agent-run-setting' || !presentation.settingTarget) {
+          return Promise.resolve();
+        }
+        const target = presentation.settingTarget;
+        if (target.kind === 'provider') {
+          navigationReference.navigate('Config', {
+            focusItem: 'external-api',
+            focusField: target.field === 'apiKey' ? 'api-key' : target.field === 'baseUrl' ? 'base-url' : target.field === 'apiMode' ? 'api-mode' : 'model',
+          });
+        } else if (target.kind === 'model') navigationReference.navigate('Config', { focusItem: 'external-api', focusField: 'model' });
+        else if (target.section === 'network') {
+          navigationReference.navigate('Config', { focusItem: 'device-network', focusField: 'cloud-url' });
+        }
+        return Promise.resolve();
+      }}
     />
+  );
+}
+
+export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>> = ({ navigation }) => {
+  const { i18n, t } = useTranslation();
+  const theme = useTheme();
+  const [conversationId, setConversationId] = useState(INITIAL_CONVERSATION_ID);
+  const [localPeerId, setLocalPeerId] = useState<string>();
+  const [agentLoopDevices, setAgentLoopDevices] = useState<Device[]>([]);
+  const [activeExecutionTargetId, setActiveExecutionTargetId] = useState(LOCAL_EXECUTION_TARGET_ID);
+  const [initializationError, setInitializationError] = useState<Error>();
+  const directoryController = useMemo(() => new MobileConversationDirectoryController(mobileAgentStorage), []);
+  const directory = useSyncExternalStore(
+    directoryController.subscribe,
+    directoryController.getSnapshot,
+    directoryController.getSnapshot,
+  );
+  const direction = mobileConversationDirectoryDirection(i18n.dir());
+  const colors = useMemo(() => ({
+    activeButton: { backgroundColor: theme.colors.primary },
+    activeTitle: { color: theme.colors.onPrimary },
+    button: { backgroundColor: theme.colors.surfaceVariant },
+    title: { color: theme.colors.onSurfaceVariant },
+    newButton: { backgroundColor: theme.colors.secondaryContainer },
+    newTitle: { color: theme.colors.onSecondaryContainer },
+  }), [theme]);
+
+  useEffect(() => () => {
+    directoryController.dispose();
+  }, [directoryController]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let unsubscribe: (() => void) | undefined;
+    void (async () => {
+      try {
+        await deviceNetworkService.start();
+        const identity = await deviceNetworkService.getLocalIdentity();
+        await directoryController.start();
+        const initialDirectoryError = directoryController.getSnapshot().error;
+        if (initialDirectoryError) throw initialDirectoryError;
+        let items = directoryController.getSnapshot().items;
+        if (items.length === 0) {
+          await mobileAgentStorage.appendLocalEvent({
+            conversationId: INITIAL_CONVERSATION_ID,
+            eventId: createSecureDurableId('mobile-metadata'),
+            kind: 'metadataPatch',
+            originNodeId: identity.peerId,
+            patch: { definitionId: DEFAULT_AGENT_DEFINITION_ID, isUserInitiated: true, title: t('AgentChat.NewConversationTitle') },
+            timestamp: Date.now(),
+          });
+          await directoryController.refresh();
+          const refreshedDirectoryError = directoryController.getSnapshot().error;
+          if (refreshedDirectoryError) throw refreshedDirectoryError;
+          items = directoryController.getSnapshot().items;
+        }
+        controller.signal.throwIfAborted();
+        setConversationId(current => items.some(item => item.conversationId === current) ? current : items[0].conversationId);
+        setLocalPeerId(identity.peerId);
+        const devices = await deviceNetworkService.listDevices();
+        const selectDevices = (values: readonly Device[]) => values.filter(device => device.peerId !== identity.peerId && device.trusted && device.capabilities.agentLoop);
+        setAgentLoopDevices(selectDevices(devices));
+        unsubscribe = deviceNetworkService.observeDevices(values => {
+          setAgentLoopDevices(selectDevices(values));
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) setInitializationError(safeAgentFailure(error));
+      }
+    })();
+    return () => {
+      controller.abort(new Error('mobile_agent_chat_unmounted'));
+      unsubscribe?.();
+    };
+  }, [directoryController, t]);
+
+  const createConversation = useCallback(async () => {
+    if (!localPeerId) return;
+    const nextConversationId = createSecureDurableId('mobile-conversation');
+    await mobileAgentStorage.appendLocalEvent({
+      conversationId: nextConversationId,
+      eventId: createSecureDurableId('mobile-metadata'),
+      kind: 'metadataPatch',
+      originNodeId: localPeerId,
+      patch: { definitionId: DEFAULT_AGENT_DEFINITION_ID, isUserInitiated: true, title: t('AgentChat.NewConversationTitle') },
+      timestamp: Date.now(),
+    });
+    await directoryController.refresh();
+    const directoryError = directoryController.getSnapshot().error;
+    if (directoryError) throw directoryError;
+    setConversationId(nextConversationId);
+  }, [directoryController, localPeerId, t]);
+
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        horizontal
+        contentContainerStyle={[styles.conversationRow, direction === 'rtl' && styles.conversationRowRtl]}
+      >
+        {directory.hasMoreNewer && (
+          <Pressable
+            accessibilityRole='button'
+            accessibilityLabel={t('AgentChat.LoadNewerConversations')}
+            disabled={directory.loadingNewer || directory.loadingOlder}
+            onPress={() => {
+              void directoryController.loadNewer();
+            }}
+            style={[styles.directoryButton, colors.button, (directory.loadingNewer || directory.loadingOlder) && styles.directoryButtonDisabled]}
+          >
+            <Text style={colors.title}>{directory.loadingNewer ? t('AgentChat.LoadingConversations') : t('AgentChat.LoadNewerConversations')}</Text>
+          </Pressable>
+        )}
+        {directory.items.map(conversation => (
+          <Pressable
+            key={conversation.conversationId}
+            accessibilityRole='button'
+            accessibilityLabel={t('AgentChat.OpenConversation', { title: conversation.title })}
+            onPress={() => {
+              setConversationId(conversation.conversationId);
+            }}
+            style={[styles.conversationButton, colors.button, conversation.conversationId === conversationId && colors.activeButton]}
+          >
+            <Text numberOfLines={1} style={[styles.conversationTitle, colors.title, conversation.conversationId === conversationId && colors.activeTitle]}>
+              {conversation.title}
+            </Text>
+          </Pressable>
+        ))}
+        {directory.hasMoreOlder && (
+          <Pressable
+            accessibilityRole='button'
+            accessibilityLabel={t('AgentChat.LoadOlderConversations')}
+            disabled={directory.loadingNewer || directory.loadingOlder}
+            onPress={() => {
+              void directoryController.loadOlder();
+            }}
+            style={[styles.directoryButton, colors.button, (directory.loadingNewer || directory.loadingOlder) && styles.directoryButtonDisabled]}
+          >
+            <Text style={colors.title}>{directory.loadingOlder ? t('AgentChat.LoadingConversations') : t('AgentChat.LoadOlderConversations')}</Text>
+          </Pressable>
+        )}
+        <Text accessibilityRole='summary' style={[styles.directoryStatus, colors.title]}>
+          {directory.loadingInitial
+            ? t('AgentChat.LoadingConversations')
+            : t('AgentChat.ConversationDirectoryStatus', { resident: directory.items.length, total: directory.total })}
+        </Text>
+        {directory.error && <Text accessibilityRole='alert' style={styles.directoryStatus}>{directory.error.message}</Text>}
+        <Pressable
+          accessibilityRole='button'
+          accessibilityLabel={t('AgentChat.NewConversation')}
+          onPress={() =>
+            void createConversation().catch((error: unknown) => {
+              setInitializationError(safeAgentFailure(error));
+            })}
+          style={[styles.newConversationButton, colors.newButton]}
+        >
+          <Text style={colors.newTitle}>{t('AgentChat.NewConversation')}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole='button'
+          accessibilityLabel={t('ScheduledTask.Open')}
+          onPress={() => {
+            navigation.navigate('AgentSchedule', { conversationId });
+          }}
+          style={[styles.scheduleButton, colors.newButton]}
+        >
+          <Text style={colors.newTitle}>{t('ScheduledTask.Open')}</Text>
+        </Pressable>
+      </ScrollView>
+      {localPeerId
+        ? (
+          <AgentChatSession
+            key={conversationId}
+            activeExecutionTargetId={activeExecutionTargetId}
+            agentLoopDevices={agentLoopDevices}
+            conversationId={conversationId}
+            localPeerId={localPeerId}
+            setActiveExecutionTargetId={setActiveExecutionTargetId}
+          />
+        )
+        : initializationError || directory.error
+        ? <Text style={styles.initializationError}>{(initializationError ?? directory.error)?.message}</Text>
+        : null}
+    </View>
   );
 };

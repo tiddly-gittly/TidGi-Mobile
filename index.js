@@ -1,3 +1,4 @@
+import './src/services/MobileCryptoService';
 import { registerRootComponent } from 'expo';
 import App from './App';
 

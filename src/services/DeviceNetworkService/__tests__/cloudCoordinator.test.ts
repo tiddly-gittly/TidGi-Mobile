@@ -56,8 +56,11 @@ describe('mobile Cloud connection coordinator', () => {
           });
         }
         return {
-          commit: () => {
-            commits.push(configuration.id);
+          commit: (fence) => {
+            fence.throwIfStale();
+            fence.commitSynchronous(() => {
+              commits.push(configuration.id);
+            });
             return Promise.resolve();
           },
         };

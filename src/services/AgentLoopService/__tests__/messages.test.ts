@@ -5,8 +5,10 @@ import { selectNewLoopMessages } from '../messages';
 function message(messageId: string, role: ChatMessage['role']): ChatMessage {
   return {
     messageId,
+    turnId: messageId,
     conversationId: 'conversation',
     originNodeId: 'phone',
+    originSequence: 1,
     timestamp: 1,
     lamportClock: 1,
     role,

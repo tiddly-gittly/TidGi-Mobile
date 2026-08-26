@@ -15,6 +15,7 @@ import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
 import { AgentChat } from './pages/AgentChat';
+import { AgentSchedule } from './pages/AgentSchedule';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
@@ -54,7 +55,8 @@ import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
   AgentChat: undefined;
-  Config: undefined;
+  AgentSchedule: { conversationId: string };
+  Config: { focusField?: 'access-token' | 'api-key' | 'api-mode' | 'base-url' | 'cloud-url' | 'model'; focusItem?: string } | undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
   MainMenu: MainMenuProps | undefined;
@@ -160,6 +162,14 @@ export const App: React.FC = () => {
                     component={AgentChat}
                     options={() => ({
                       headerTitle: 'Agent',
+                      headerTitleStyle: { color: theme.colors.primary },
+                    })}
+                  />
+                  <Stack.Screen
+                    name='AgentSchedule'
+                    component={AgentSchedule}
+                    options={() => ({
+                      headerTitle: t('ScheduledTask.Title'),
                       headerTitleStyle: { color: theme.colors.primary },
                     })}
                   />

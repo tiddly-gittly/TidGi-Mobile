@@ -11,15 +11,6 @@ function isLoopbackHostname(hostname: string): boolean {
 export interface DeviceNetworkCloudConfig {
   accessToken: string;
   cloudUrl: string;
-  model?: string;
-  provider?: string;
-}
-
-export interface CloudLlmConnection {
-  apiKey: string;
-  baseURL: string;
-  headers?: Record<string, string>;
-  modelId: string;
 }
 
 export function normalizeCloudConfig(value: DeviceNetworkCloudConfig): DeviceNetworkCloudConfig {
@@ -44,18 +35,6 @@ export function normalizeCloudConfig(value: DeviceNetworkCloudConfig): DeviceNet
   return {
     cloudUrl: parsedUrl.origin,
     accessToken,
-    ...(value.provider?.trim() ? { provider: value.provider.trim() } : {}),
-    ...(value.model?.trim() ? { model: value.model.trim() } : {}),
-  };
-}
-
-export function cloudLlmConnection(config: DeviceNetworkCloudConfig): CloudLlmConnection {
-  const normalized = normalizeCloudConfig(config);
-  return {
-    apiKey: normalized.accessToken,
-    baseURL: `${normalized.cloudUrl}/api/llm/v1`,
-    modelId: normalized.model ?? 'gpt-4o-mini',
-    ...(normalized.provider ? { headers: { 'x-agent-type': normalized.provider } } : {}),
   };
 }
 
@@ -67,8 +46,6 @@ export function parseCloudConfig(value: string | null): DeviceNetworkCloudConfig
     return normalizeCloudConfig({
       cloudUrl: parsed.cloudUrl,
       accessToken: parsed.accessToken,
-      ...(typeof parsed.provider === 'string' ? { provider: parsed.provider } : {}),
-      ...(typeof parsed.model === 'string' ? { model: parsed.model } : {}),
     });
   } catch {
     return undefined;

@@ -9,7 +9,7 @@ jest.mock('expo-secure-store', () => ({
   },
 }));
 
-import { applyAndSaveCloudConfig, clearCloudConfig, cloudLlmConnection, loadCloudConfig, normalizeCloudConfig, saveCloudConfig } from '../cloudConfig';
+import { applyAndSaveCloudConfig, clearCloudConfig, loadCloudConfig, normalizeCloudConfig, saveCloudConfig } from '../cloudConfig';
 
 describe('device network cloud configuration', () => {
   beforeEach(() => {
@@ -20,14 +20,10 @@ describe('device network cloud configuration', () => {
     await saveCloudConfig({
       cloudUrl: ' https://cloud.example.test/ ',
       accessToken: ' secret-token ',
-      provider: ' openai ',
-      model: ' model-1 ',
     });
     await expect(loadCloudConfig()).resolves.toEqual({
       cloudUrl: 'https://cloud.example.test',
       accessToken: 'secret-token',
-      provider: 'openai',
-      model: 'model-1',
     });
     await clearCloudConfig();
     await expect(loadCloudConfig()).resolves.toBeUndefined();
@@ -42,20 +38,6 @@ describe('device network cloud configuration', () => {
     expect(() => normalizeCloudConfig({ cloudUrl: 'https://cloud.example.test/subpath', accessToken: 'token' })).toThrow('cloud_config_invalid_url');
     expect(() => normalizeCloudConfig({ cloudUrl: 'https://cloud.example.test?token=leak', accessToken: 'token' })).toThrow('cloud_config_invalid_url');
     expect(normalizeCloudConfig({ cloudUrl: 'http://localhost:3000/', accessToken: 'token' }).cloudUrl).toBe('http://localhost:3000');
-  });
-
-  it('targets the authenticated MemeLoop Cloud LLM proxy without development fallbacks', () => {
-    expect(cloudLlmConnection({
-      cloudUrl: 'https://cloud.example.test/',
-      accessToken: 'jwt',
-      provider: 'planner',
-      model: 'model-1',
-    })).toEqual({
-      apiKey: 'jwt',
-      baseURL: 'https://cloud.example.test/api/llm/v1',
-      headers: { 'x-agent-type': 'planner' },
-      modelId: 'model-1',
-    });
   });
 
   it('does not persist manually entered credentials until verification and apply succeed', async () => {

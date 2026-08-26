@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import type { Device, PairingSession } from 'memeloop';
+import type { ModelCatalog } from 'memeloop/model-catalog';
 import React, { ComponentType, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, StyleSheet, View } from 'react-native';
@@ -17,11 +18,14 @@ import { defaultLanguage, detectedLanguage, supportedLanguages } from '../../../
 import { deviceNetworkService } from '../../../services/DeviceNetworkService';
 import { applyAndSaveCloudConfig, clearCloudConfig, loadCloudConfig } from '../../../services/DeviceNetworkService/cloudConfig';
 import { useDeviceNetwork } from '../../../services/DeviceNetworkService/useDeviceNetwork';
+import { clearExternalAPIConfig, loadExternalAPIConfig, saveExternalAPIConfig } from '../../../services/ExternalAPIService/config';
+import { loadCachedModelCatalog, refreshModelCatalog } from '../../../services/ModelCatalogService';
 import { useConfigStore } from '../../../store/config';
 import { IServerInfo } from '../../../store/server';
 import { IWikiWorkspace, useWorkspaceStore } from '../../../store/workspace';
 import { isWikiWorkspace } from '../../../utils/workspaceRelations';
 import { StorageLocationSettings } from '../Developer/StorageLocationSettings';
+import { useConfigFocus } from '../focus';
 import { ServerEditModalContent } from '../ServerAndSync/ServerEditModal';
 
 // --- SyncActionsItem ----------------------------------------------------------
@@ -177,16 +181,205 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function externalAPIErrorKey(error: unknown): string {
+  const code = error instanceof Error ? error.message : '';
+  switch (code) {
+    case 'external_api_config_incomplete':
+      return 'ExternalAPI.ErrorIncomplete';
+    case 'external_api_config_too_large':
+      return 'ExternalAPI.ErrorTooLarge';
+    case 'external_api_invalid_api_mode':
+      return 'ExternalAPI.ErrorInvalidAPIMode';
+    case 'external_api_invalid_identifier':
+      return 'ExternalAPI.ErrorInvalidIdentifier';
+    case 'external_api_invalid_url':
+      return 'ExternalAPI.ErrorInvalidURL';
+    default:
+      return 'ExternalAPI.ErrorStorage';
+  }
+}
+
+function ExternalAPIItem() {
+  const { t } = useTranslation();
+  const configFocus = useConfigFocus();
+  const [baseURL, setBaseURL] = useState('');
+  const [apiKey, setAPIKey] = useState('');
+  const [provider, setProvider] = useState('');
+  const [model, setModel] = useState('');
+  const [apiMode, setApiMode] = useState<'chat-completions' | 'responses' | ''>('');
+  const [modelCatalog, setModelCatalog] = useState<ModelCatalog>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    void loadExternalAPIConfig()
+      .then((config) => {
+        if (!config) return;
+        setBaseURL(config.baseURL);
+        setAPIKey(config.apiKey);
+        setProvider(config.providerId);
+        setModel(config.modelId);
+        setApiMode(config.apiMode);
+      })
+      .catch(() => {
+        setError(t('ExternalAPI.ErrorStorage'));
+      });
+    const controller = new AbortController();
+    void loadCachedModelCatalog().then(setModelCatalog).catch(() => undefined);
+    void refreshModelCatalog(controller.signal).then(setModelCatalog).catch(() => undefined);
+    return () => {
+      controller.abort();
+    };
+  }, [t]);
+
+  const providerSuggestions = useMemo(() => {
+    const query = provider.trim().toLocaleLowerCase();
+    return (modelCatalog?.providers ?? [])
+      .filter(item => !query || item.id.toLocaleLowerCase().includes(query) || item.name.toLocaleLowerCase().includes(query))
+      .slice(0, 8);
+  }, [modelCatalog, provider]);
+  const modelSuggestions = useMemo(() => {
+    const selectedProvider = modelCatalog?.providers.find(item => item.id === provider.trim());
+    const query = model.trim().toLocaleLowerCase();
+    return (selectedProvider?.models ?? [])
+      .filter(item => !query || item.id.toLocaleLowerCase().includes(query) || item.name.toLocaleLowerCase().includes(query))
+      .slice(0, 12);
+  }, [model, modelCatalog, provider]);
+
+  return (
+    <View testID='external-api-panel' style={styles.deviceNetworkPanel}>
+      <TextInput
+        autoFocus={configFocus.field === 'base-url'}
+        mode='outlined'
+        label={t('ExternalAPI.BaseURL')}
+        autoCapitalize='none'
+        autoCorrect={false}
+        value={baseURL}
+        onChangeText={setBaseURL}
+      />
+      <TextInput
+        autoFocus={configFocus.field === 'api-key'}
+        mode='outlined'
+        label={t('ExternalAPI.APIKey')}
+        autoCapitalize='none'
+        autoCorrect={false}
+        value={apiKey}
+        onChangeText={setAPIKey}
+      />
+      <TextInput mode='outlined' label={t('ExternalAPI.Provider')} value={provider} onChangeText={setProvider} autoCapitalize='none' />
+      {providerSuggestions.length > 0 && (
+        <View accessibilityLabel={t('ExternalAPI.OfficialProviders')} style={styles.deviceNetworkChips}>
+          {providerSuggestions.map(item => (
+            <Chip
+              key={item.id}
+              compact
+              selected={provider === item.id}
+              onPress={() => {
+                setProvider(item.id);
+              }}
+            >
+              {item.name}
+            </Chip>
+          ))}
+        </View>
+      )}
+      <TextInput
+        autoFocus={configFocus.field === 'model'}
+        mode='outlined'
+        label={t('ExternalAPI.Model')}
+        value={model}
+        onChangeText={setModel}
+        autoCapitalize='none'
+      />
+      {modelSuggestions.length > 0 && (
+        <View accessibilityLabel={t('ExternalAPI.OfficialModels')} style={styles.deviceNetworkChips}>
+          {modelSuggestions.map(item => (
+            <Chip
+              key={item.id}
+              compact
+              selected={model === item.id}
+              onPress={() => {
+                setModel(item.id);
+              }}
+            >
+              {item.name}
+            </Chip>
+          ))}
+        </View>
+      )}
+      <Text variant='labelLarge'>{t('ExternalAPI.ApiMode')}</Text>
+      <View
+        accessible
+        accessibilityLabel={t('ExternalAPI.ApiMode')}
+        accessibilityHint={configFocus.field === 'api-mode' ? t('ExternalAPI.ApiMode') : undefined}
+      >
+        <SegmentedButtons
+          value={apiMode}
+          onValueChange={value => {
+            setApiMode(value as 'chat-completions' | 'responses');
+          }}
+          buttons={[
+            { value: 'responses', label: t('ExternalAPI.ApiModeResponses') },
+            { value: 'chat-completions', label: t('ExternalAPI.ApiModeChatCompletions') },
+          ]}
+        />
+      </View>
+      <View style={styles.deviceNetworkToolbar}>
+        <Button
+          mode='contained'
+          disabled={!baseURL.trim() || !apiKey.trim() || !provider.trim() || !model.trim() || !apiMode}
+          onPress={() => {
+            void saveExternalAPIConfig({
+              apiKey,
+              apiMode: apiMode as 'chat-completions' | 'responses',
+              baseURL,
+              modelId: model,
+              providerId: provider,
+            }).then((saved) => {
+              setBaseURL(saved.baseURL);
+              setAPIKey(saved.apiKey);
+              setProvider(saved.providerId);
+              setModel(saved.modelId);
+              setApiMode(saved.apiMode);
+              setError(undefined);
+            }).catch((error_: unknown) => {
+              setError(t(externalAPIErrorKey(error_)));
+            });
+          }}
+        >
+          {t('Common.Save')}
+        </Button>
+        <Button
+          mode='outlined'
+          onPress={() => {
+            void clearExternalAPIConfig().then(() => {
+              setBaseURL('');
+              setAPIKey('');
+              setProvider('');
+              setModel('');
+              setApiMode('');
+              setError(undefined);
+            }).catch(() => {
+              setError(t('ExternalAPI.ErrorStorage'));
+            });
+          }}
+        >
+          {t('ExternalAPI.Clear')}
+        </Button>
+      </View>
+      {error && <Text variant='bodySmall'>{error}</Text>}
+    </View>
+  );
+}
+
 function DeviceNetworkItem() {
   const { t } = useTranslation();
   const theme = useTheme();
   const network = useDeviceNetwork();
+  const configFocus = useConfigFocus();
   const [busyAction, setBusyAction] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
   const [cloudUrl, setCloudUrl] = useState('');
   const [accessToken, setAccessToken] = useState('');
-  const [provider, setProvider] = useState('openai');
-  const [model, setModel] = useState('gpt-4o-mini');
   const [generatedPairingInvite, setGeneratedPairingInvite] = useState('');
   const [pairingInvite, setPairingInvite] = useState('');
 
@@ -195,8 +388,6 @@ function DeviceNetworkItem() {
       if (!config) return;
       setCloudUrl(config.cloudUrl);
       setAccessToken(config.accessToken);
-      setProvider(config.provider ?? 'openai');
-      setModel(config.model ?? 'gpt-4o-mini');
     });
   }, []);
 
@@ -353,6 +544,7 @@ function DeviceNetworkItem() {
         {t(`DeviceNetwork.CloudState.${network.cloudStatus.state}`)}
       </Text>
       <TextInput
+        autoFocus={configFocus.field === 'cloud-url'}
         mode='outlined'
         label={t('DeviceNetwork.CloudUrl')}
         autoCapitalize='none'
@@ -361,6 +553,7 @@ function DeviceNetworkItem() {
         onChangeText={setCloudUrl}
       />
       <TextInput
+        autoFocus={configFocus.field === 'access-token'}
         mode='outlined'
         label={t('DeviceNetwork.AccessToken')}
         autoCapitalize='none'
@@ -369,8 +562,6 @@ function DeviceNetworkItem() {
         value={accessToken}
         onChangeText={setAccessToken}
       />
-      <TextInput mode='outlined' label={t('DeviceNetwork.Provider')} value={provider} onChangeText={setProvider} autoCapitalize='none' />
-      <TextInput mode='outlined' label={t('DeviceNetwork.Model')} value={model} onChangeText={setModel} autoCapitalize='none' />
       <View style={styles.deviceNetworkToolbar}>
         <Button
           mode='contained'
@@ -378,7 +569,7 @@ function DeviceNetworkItem() {
           onPress={() => {
             void runAction('save-cloud', async () => {
               await applyAndSaveCloudConfig(
-                { cloudUrl, accessToken, provider, model },
+                { cloudUrl, accessToken },
                 config => deviceNetworkService.applyVerifiedCloudConfig(config),
               );
               await network.refresh();
@@ -522,6 +713,7 @@ function DeviceNetworkItem() {
 // --- Registry -----------------------------------------------------------------
 
 const customItemRegistry: Record<string, ComponentType> = {
+  'external-api': ExternalAPIItem,
   'device-network': DeviceNetworkItem,
   'sync-actions': SyncActionsItem,
   'storage-location': StorageLocationItem,

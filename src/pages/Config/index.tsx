@@ -1,11 +1,12 @@
 import { StackScreenProps } from '@react-navigation/stack';
-import React, { FC, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, SectionList } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import { RootStackParameterList } from '../../App';
 import { PreferenceItem } from './components/PreferenceItem';
+import { ConfigFocusContext } from './focus';
 import { preferenceSections } from './schema/sections';
 import { PreferenceItemSchema } from './schema/types';
 
@@ -26,9 +27,10 @@ const SearchBar = styled(TextInput)`
   margin-bottom: 0;
 `;
 
-export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = () => {
+export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ({ route }) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
+  const listReference = useRef<SectionList<PreferenceItemSchema>>(null);
 
   // Build sections with translated titles and platform-filtered items.
   const sections = useMemo(
@@ -59,33 +61,50 @@ export const Config: FC<StackScreenProps<RootStackParameterList, 'Config'>> = ()
       .filter(section => section.data.length > 0);
   }, [searchQuery, sections, t]);
 
+  useEffect(() => {
+    const focusItem = route.params?.focusItem;
+    if (!focusItem) return;
+    const sectionIndex = visibleSections.findIndex(section => section.data.some(item => item.key === focusItem));
+    if (sectionIndex < 0) return;
+    const itemIndex = visibleSections[sectionIndex].data.findIndex(item => item.key === focusItem);
+    const frame = requestAnimationFrame(() => {
+      listReference.current?.scrollToLocation({ animated: true, sectionIndex, itemIndex, viewOffset: 16 });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [route.params?.focusItem, visibleSections]);
+
   return (
-    <PreferencesList
-      testID='config-screen'
-      sections={visibleSections}
-      keyExtractor={(item) => (item as { key: string }).key}
-      ListHeaderComponent={
-        <SearchBar
-          mode='outlined'
-          dense
-          placeholder={t('Preference.SearchSettings')}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          left={<TextInput.Icon icon='magnify' />}
-          right={searchQuery
-            ? (
-              <TextInput.Icon
-                icon='close'
-                onPress={() => {
-                  setSearchQuery('');
-                }}
-              />
-            )
-            : null}
-        />
-      }
-      renderSectionHeader={({ section: { title } }) => <TitleText variant='headlineLarge'>{title}</TitleText>}
-      renderItem={({ item }: { item: PreferenceItemSchema }) => <PreferenceItem item={item} />}
-    />
+    <ConfigFocusContext.Provider value={{ item: route.params?.focusItem, field: route.params?.focusField }}>
+      <PreferencesList
+        ref={listReference}
+        testID='config-screen'
+        sections={visibleSections}
+        keyExtractor={(item) => (item as { key: string }).key}
+        ListHeaderComponent={
+          <SearchBar
+            mode='outlined'
+            dense
+            placeholder={t('Preference.SearchSettings')}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            left={<TextInput.Icon icon='magnify' />}
+            right={searchQuery
+              ? (
+                <TextInput.Icon
+                  icon='close'
+                  onPress={() => {
+                    setSearchQuery('');
+                  }}
+                />
+              )
+              : null}
+          />
+        }
+        renderSectionHeader={({ section: { title } }) => <TitleText variant='headlineLarge'>{title}</TitleText>}
+        renderItem={({ item }: { item: PreferenceItemSchema }) => <PreferenceItem item={item} />}
+      />
+    </ConfigFocusContext.Provider>
   );
 };
