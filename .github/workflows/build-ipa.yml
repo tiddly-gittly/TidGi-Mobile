@@ -2,6 +2,14 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/build-ipa.yml'
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'src/**'
   push:
     tags:
       - 'ipa-v*.*.*'
@@ -58,6 +66,23 @@ jobs:
       - name: Expo prebuild (iOS)
         run: pnpm exec expo prebuild -p ios --clean
 
+      - name: Verify generated iOS local-network policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLIST_PATH=$(grep -rl "NSLocalNetworkUsageDescription" ios --include='Info.plist' | head -1)
+          if [ -z "$PLIST_PATH" ]; then
+            echo "Generated application Info.plist was not found"
+            exit 1
+          fi
+          test "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -o - "$PLIST_PATH")" = "true"
+          DESCRIPTION=$(plutil -extract NSLocalNetworkUsageDescription raw -o - "$PLIST_PATH")
+          if [ -z "$DESCRIPTION" ]; then
+            echo "NSLocalNetworkUsageDescription must not be empty"
+            exit 1
+          fi
+          echo "Verified generated policy in $PLIST_PATH"
+
       - name: Install CocoaPods dependencies
         run: cd ios && pod install --repo-update
 
@@ -99,7 +124,16 @@ jobs:
             exit 1
           fi
 
+          BUILT_PLIST="$APP_PATH/Info.plist"
+          test "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -o - "$BUILT_PLIST")" = "true"
+          DESCRIPTION=$(plutil -extract NSLocalNetworkUsageDescription raw -o - "$BUILT_PLIST")
+          if [ -z "$DESCRIPTION" ]; then
+            echo "Built NSLocalNetworkUsageDescription must not be empty"
+            exit 1
+          fi
+
           mkdir -p /tmp/ios-artifacts
+          cp "$BUILT_PLIST" /tmp/ios-artifacts/TidGi-Info.plist
           STAGING_DIR="$RUNNER_TEMP/ipa-staging"
           rm -rf "$STAGING_DIR"
           mkdir -p "$STAGING_DIR/Payload"
@@ -112,6 +146,7 @@ jobs:
           name: ios-ipa-${{ github.run_number }}-${{ github.sha }}
           path: |
             /tmp/ios-artifacts/TidGi.ipa
+            /tmp/ios-artifacts/TidGi-Info.plist
           if-no-files-found: error
 
       - name: Create Release
