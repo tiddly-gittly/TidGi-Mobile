@@ -867,6 +867,7 @@
     "LoadDetails": "加载详情",
     "ReloadDetails": "重新加载详情",
     "NoDetails": "暂无可用详情。",
+    "Attachment": "附件：{{filename}}",
     "DetailTruncated": "这里只显示有界的详情片段。请导出对话以查看完整内容。",
     "ExportFullMessage": "导出完整消息",
     "Close": "关闭",

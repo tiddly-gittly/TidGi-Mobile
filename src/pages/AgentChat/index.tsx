@@ -350,6 +350,7 @@ function AgentChatSessionView({
     loadDetails: t('AgentChat.LoadDetails'),
     reloadDetails: t('AgentChat.ReloadDetails'),
     noDetails: t('AgentChat.NoDetails'),
+    attachment: (filename: string) => t('AgentChat.Attachment', { filename }),
     detailTruncated: t('AgentChat.DetailTruncated'),
     exportFullMessage: t('AgentChat.ExportFullMessage'),
     close: t('AgentChat.Close'),

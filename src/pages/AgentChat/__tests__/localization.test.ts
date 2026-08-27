@@ -1,3 +1,5 @@
+import { createInstance } from 'i18next';
+
 import en from '../../../i18n/localization/locales/en/translation.json';
 import ja from '../../../i18n/localization/locales/ja/translation.json';
 import zhCN from '../../../i18n/localization/locales/zh_CN/translation.json';
@@ -10,6 +12,7 @@ describe('AgentChat localization coverage', () => {
     'LoadDetails',
     'ReloadDetails',
     'NoDetails',
+    'Attachment',
     'DetailTruncated',
     'ExportFullMessage',
     'Close',
@@ -58,8 +61,34 @@ describe('AgentChat localization coverage', () => {
     }
     expect(translation.AgentChat.TruncatedMessage).toContain('{{characters}}');
     expect(translation.AgentChat.DiagnosticId).toContain('{{id}}');
+    expect(translation.AgentChat.Attachment).toContain('{{filename}}');
     expect(translation.AgentChat.ConversationDirectoryStatus).toContain('{{resident}}');
     expect(translation.AgentChat.ConversationDirectoryStatus).toContain('{{total}}');
+  });
+
+  it.each(
+    [
+      ['ja', ja],
+      ['zh_CN', zhCN],
+    ] as const,
+  )('%s keeps the AgentChat locale contract in parity with English', (_locale, translation) => {
+    expect(Object.keys(translation.AgentChat).sort()).toEqual(Object.keys(en.AgentChat).sort());
+  });
+
+  it.each(
+    [
+      ['en', en, 'Attachment: report.png'],
+      ['zh-Hans', zhCN, '附件：report.png'],
+    ] as const,
+  )('%s interpolates the native attachment filename', async (locale, translation, expected) => {
+    const instance = createInstance();
+    await instance.init({
+      fallbackLng: false,
+      lng: locale,
+      resources: { [locale]: { translation } },
+    });
+
+    expect(instance.t('AgentChat.Attachment', { filename: 'report.png' })).toBe(expected);
   });
 
   it('does not silently fall back to the English participant label', () => {

@@ -878,6 +878,7 @@
     "LoadDetails": "Load details",
     "ReloadDetails": "Reload details",
     "NoDetails": "No details available.",
+    "Attachment": "Attachment: {{filename}}",
     "DetailTruncated": "Only a bounded detail fragment is shown. Export the conversation for the complete content.",
     "ExportFullMessage": "Export full message",
     "Close": "Close",

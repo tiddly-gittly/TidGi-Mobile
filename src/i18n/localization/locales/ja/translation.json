@@ -703,6 +703,7 @@
     "LoadDetails": "詳細を読み込む",
     "ReloadDetails": "詳細を再読み込み",
     "NoDetails": "詳細はありません。",
+    "Attachment": "添付ファイル：{{filename}}",
     "DetailTruncated": "表示される詳細は上限付きの一部です。完全な内容は会話をエクスポートして確認してください。",
     "ExportFullMessage": "メッセージ全体をエクスポート",
     "Close": "閉じる",
