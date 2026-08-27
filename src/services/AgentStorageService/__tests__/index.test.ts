@@ -111,6 +111,10 @@ class InMemoryAttachmentFiles implements MobileAttachmentFileStore {
     return Promise.resolve(uri);
   }
 
+  public isPublishedObject(uri: string, contentHash: string): boolean {
+    return uri === `memory://objects/${contentHash.slice('sha256:'.length)}`;
+  }
+
   public read(uri: string, offset: number, maxBytes: number): Promise<Uint8Array> {
     const bytes = this.files.get(uri);
     if (!bytes) return Promise.reject(new Error('missing'));
@@ -435,6 +439,15 @@ describe('MobileAgentStorage', () => {
     await expect(current.readAttachmentRange(reference.contentHash, 256 * 1024, 64 * 1024)).resolves.toEqual(
       bytes.slice(256 * 1024, 320 * 1024),
     );
+    await expect(current.getVerifiedAttachmentFileUri(reference.contentHash)).resolves.toEqual({
+      reference,
+      uri: `memory://objects/${reference.contentHash.slice('sha256:'.length)}`,
+    });
+    const objectUri = `memory://objects/${reference.contentHash.slice('sha256:'.length)}`;
+    const corrupted = new Uint8Array(bytes);
+    corrupted[0] ^= 0xFF;
+    files.files.set(objectUri, corrupted);
+    await expect(current.getVerifiedAttachmentFileUri(reference.contentHash)).rejects.toThrow('mobile_attachment_hash_mismatch');
     expect(files.maximumRead).toBeLessThanOrEqual(512 * 1024);
     expect(files.maximumWrite).toBeLessThanOrEqual(512 * 1024);
   });

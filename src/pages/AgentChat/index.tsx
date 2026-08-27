@@ -4,6 +4,7 @@ import {
   ConversationTimelineWindowController,
   createAgentRunLogDetailLoader,
   NativeAgentChatView,
+  type NativeMemeLoopSendMessageInput,
   useAgentSession,
   useAgentSessionCoreAdapter,
 } from '@memeloop/react-ui/native';
@@ -31,6 +32,13 @@ import { loadExternalAPIConfig } from '../../services/ExternalAPIService/config'
 import { createSecureDurableId } from '../../services/SecureIdService';
 import { navigationReference } from '../../utils/RootNavigation';
 import { createMobileAgentSessionClients, startMobileAgentSession } from './agentSessionClients';
+import {
+  createMobileVisibleAttachmentLoader,
+  MOBILE_COMPOSER_ATTACHMENT_MAX_BYTES,
+  pickMobileAttachment,
+  prepareMobileSendMessage,
+  releaseMobilePickedAttachment,
+} from './attachmentAdapter';
 import { MobileConversationDirectoryController, mobileConversationDirectoryDirection } from './conversationDirectory';
 import { resolveMobileAgentErrorPresentation } from './errorPresentation';
 import { formatMobileTimelineTimestamp } from './localizedFormatting';
@@ -305,12 +313,14 @@ function AgentChatSessionView({
       reader: mobileAgentStorage,
       signal: options.signal,
     }), [conversationId, t]);
-  const baseAdapter = useAgentSessionCoreAdapter({
+  const loadVisibleAttachments = useMemo(() => createMobileVisibleAttachmentLoader(mobileAgentStorage), []);
+  const baseAdapter = useAgentSessionCoreAdapter<NativeMemeLoopSendMessageInput>({
     conversationId,
     timelineController,
     createId: createPortableRequestId,
     exportMessage,
     loadMessageDetail,
+    prepareSendMessage: prepareMobileSendMessage,
   });
   const executionTargets = useMemo<AgentExecutionTarget[]>(() => [
     {
@@ -341,8 +351,19 @@ function AgentChatSessionView({
       const latestTurnId = await mobileAgentStorage.getLatestVisibleTurnId(conversationId);
       if (latestTurnId) await baseAdapter.retryTurn(latestTurnId);
     },
+    loadVisibleAttachments,
     error: sessionStartError ?? executionSnapshot.error ?? baseAdapter.error,
-  }), [activeExecutionTargetId, baseAdapter, conversationId, executionAdapter, executionSnapshot.error, executionTargets, sessionStartError, setActiveExecutionTargetId]);
+  }), [
+    activeExecutionTargetId,
+    baseAdapter,
+    conversationId,
+    executionAdapter,
+    executionSnapshot.error,
+    executionTargets,
+    loadVisibleAttachments,
+    sessionStartError,
+    setActiveExecutionTargetId,
+  ]);
   const nativeLabels = useMemo(() => ({
     user: t('AgentChat.User'),
     agent: t('AgentChat.Agent'),
@@ -351,6 +372,10 @@ function AgentChatSessionView({
     reloadDetails: t('AgentChat.ReloadDetails'),
     noDetails: t('AgentChat.NoDetails'),
     attachment: (filename: string) => t('AgentChat.Attachment', { filename }),
+    addAttachment: t('AgentChat.AddAttachment'),
+    replaceAttachment: (filename: string) => t('AgentChat.ReplaceAttachment', { filename }),
+    removeAttachment: (filename: string) => t('AgentChat.RemoveAttachment', { filename }),
+    selectedAttachment: (filename: string) => t('AgentChat.SelectedAttachment', { filename }),
     detailTruncated: t('AgentChat.DetailTruncated'),
     exportFullMessage: t('AgentChat.ExportFullMessage'),
     close: t('AgentChat.Close'),
@@ -378,6 +403,9 @@ function AgentChatSessionView({
       emptyMessage={t('AgentChat.Empty')}
       loadingMessage={t('AgentChat.Loading')}
       labels={nativeLabels}
+      attachmentPolicy={{ allowedFileTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'], maxFileBytes: MOBILE_COMPOSER_ATTACHMENT_MAX_BYTES }}
+      pickAttachment={pickMobileAttachment}
+      releaseAttachment={releaseMobilePickedAttachment}
       timelineLabels={timelineLabels}
       genericErrorPresentation={{ title: t('AgentChat.GenericErrorTitle'), message: t('AgentChat.GenericErrorMessage') }}
       resolveErrorPresentation={error =>

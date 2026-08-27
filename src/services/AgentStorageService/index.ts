@@ -1261,11 +1261,17 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     return { found: true, offset, totalBytes: row.totalBytes, bytes };
   }
 
-  public async getConversationEventById(conversationId: string, eventId: string): Promise<ConversationEvent | undefined> {
+  public async getConversationEventById(
+    conversationId: string,
+    eventId: string,
+    options: ConversationReadCallOptions = {},
+  ): Promise<ConversationEvent | undefined> {
+    options.signal?.throwIfAborted();
     const row = await (await this.database()).getFirstAsync<EventRow>(
       'SELECT eventJson FROM conversation_events WHERE conversationId = ? AND eventId = ?',
       [conversationId, eventId],
     );
+    options.signal?.throwIfAborted();
     if (!row) return undefined;
     const event = parseJson(row.eventJson) as ConversationEvent;
     assertCanonicalConversationEvent(event);
@@ -2016,6 +2022,32 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     );
     options.signal?.throwIfAborted();
     return row ? parseJson(row.referenceJson) as AttachmentReference : null;
+  }
+
+  /** Return only a hash-verified, app-owned content-addressed object URI. */
+  public async getVerifiedAttachmentFileUri(
+    contentHash: string,
+    options: ConversationReadCallOptions = {},
+  ): Promise<{ reference: AttachmentReference; uri: string } | null> {
+    options.signal?.throwIfAborted();
+    assertAttachmentContentHash(contentHash);
+    const row = await (await this.database()).getFirstAsync<AttachmentFileObjectRow>(
+      'SELECT referenceJson, fileUri FROM attachment_file_objects WHERE contentHash = ?',
+      [contentHash],
+    );
+    options.signal?.throwIfAborted();
+    if (!row) return null;
+    const reference = parseJson(row.referenceJson) as AttachmentReference;
+    this.assertMobileAttachmentReference(reference);
+    if (
+      reference.contentHash !== contentHash ||
+      !this.attachmentFiles.isPublishedObject(row.fileUri, contentHash)
+    ) throw new Error('mobile_attachment_object_not_owned');
+    if (!await this.verifyAttachmentFile(row, contentHash, options.signal)) {
+      throw new Error('mobile_attachment_hash_mismatch');
+    }
+    options.signal?.throwIfAborted();
+    return { reference, uri: row.fileUri };
   }
 
   public async saveAttachment(reference: AttachmentReference, bytes: Uint8Array): Promise<void> {

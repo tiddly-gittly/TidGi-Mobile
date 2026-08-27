@@ -10,6 +10,7 @@ export interface MobileAttachmentFileStore {
   createTemporary(uploadId: string): Promise<string>;
   delete(uri: string): Promise<void>;
   publish(temporaryUri: string, contentHash: string, expectedSize: number): Promise<string>;
+  isPublishedObject(uri: string, contentHash: string): boolean;
   read(uri: string, offset: number, maxBytes: number): Promise<Uint8Array>;
   size(uri: string): Promise<number>;
   write(uri: string, offset: number, bytes: Uint8Array): Promise<void>;
@@ -69,6 +70,12 @@ export class ExpoMobileAttachmentFileStore implements MobileAttachmentFileStore 
     if (!temporary.exists || temporary.size !== expectedSize) throw new Error('mobile_attachment_staging_size_mismatch');
     temporary.move(destination);
     return destination.uri;
+  }
+
+  public isPublishedObject(uri: string, contentHash: string): boolean {
+    const digest = contentHash.startsWith('sha256:') ? contentHash.slice('sha256:'.length) : '';
+    if (!INTERNAL_NAME.test(digest)) return false;
+    return new File(this.objectsDirectory(), digest).uri === uri;
   }
 
   public read(uri: string, offset: number, maxBytes: number): Promise<Uint8Array> {
