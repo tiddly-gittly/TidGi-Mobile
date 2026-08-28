@@ -20,9 +20,9 @@ peerDependencyRules:
 
 minimumReleaseAgeExclude:
   - expo-tiddlywiki-filesystem-android-external-storage@2.12.3
-  - '@memeloop/libp2p@0.2.4'
-  - '@memeloop/react-ui@0.1.6'
-  - 'memeloop@0.2.8'
+  - '@memeloop/libp2p@0.2.5'
+  - '@memeloop/react-ui@0.1.7'
+  - 'memeloop@0.2.9'
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
