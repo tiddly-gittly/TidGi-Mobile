@@ -7,6 +7,22 @@ import type { FileSystemWikiStorageService } from '../../../services/WikiStorage
 import { IHtmlContent } from '../useTiddlyWiki';
 import { FileSystemTiddlersReadStream } from './FileSystemTiddlersReadStream';
 
+/**
+ * readable-stream's Writable declaration has overloads incompatible with the
+ * legacy NodeJS.WritableStream shape expected by another readable-stream copy.
+ * Forward chunks explicitly so both stream implementations remain typed and
+ * preserve backpressure without an unsafe type assertion bridge.
+ */
+function pipeTiddlerChunks(source: FileSystemTiddlersReadStream, destination: Writable): void {
+  source.on('data', (chunk: string | Uint8Array) => {
+    if (!destination.write(chunk)) source.pause();
+  });
+  destination.on('drain', () => source.resume());
+  source.once('end', () => destination.end());
+  source.once('error', error => destination.destroy(error));
+  destination.once('error', error => source.destroy(error));
+}
+
 export interface IUseStreamChunksToWebViewParameters {
   html: string;
   setLoadHtmlError: Dispatch<SetStateAction<string>>;
@@ -97,7 +113,7 @@ export function useStreamChunksToWebView(
             }
           },
         });
-        tiddlersStream.pipe(webviewSendDataWriteStream as unknown as NodeJS.WritableStream);
+        pipeTiddlerChunks(tiddlersStream, webviewSendDataWriteStream);
         await new Promise<void>((resolve, reject) => {
           // wait for stream to finish before exit the transaction
           let readEnded = false;

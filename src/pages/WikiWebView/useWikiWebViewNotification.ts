@@ -11,7 +11,6 @@ import {
   dismissNotificationAsync,
   getDevicePushTokenAsync,
   getPermissionsAsync,
-  PermissionStatus,
   requestPermissionsAsync,
   scheduleNotificationAsync,
   setNotificationChannelAsync,
@@ -89,20 +88,20 @@ async function registerForPushNotifications() {
   //   alert('Must use physical device for Push Notifications');
   //   return;
   // }
-  const { status: existingStatus } = await getPermissionsAsync();
+  const existingStatus = await getPermissionsAsync();
   let finalStatus = existingStatus;
-  if (existingStatus !== PermissionStatus.GRANTED) {
-    const { status } = await requestPermissionsAsync({
+  if (!existingStatus.granted) {
+    finalStatus = await requestPermissionsAsync({
       ios: {
         allowAlert: true,
         allowBadge: true,
         allowSound: true,
       },
     });
-    finalStatus = status;
   }
-  if (finalStatus !== PermissionStatus.GRANTED) {
+  if (!finalStatus.granted) {
     alert('Failed to get push token for push notification!');
+    return undefined;
   }
   const token = (await getDevicePushTokenAsync()).data as string;
 

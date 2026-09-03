@@ -3,17 +3,26 @@ packages:
   - plugins
 
 allowBuilds:
-  '@parcel/watcher': true
+  '@ipshipyard/node-datachannel': true
+  '@parcel/watcher': false
+  better-sqlite3: true
   detox: true
-  dprint: true
-  dtrace-provider: true
-  esbuild: true
-  less: true
+  dprint: false
+  dtrace-provider: false
+  esbuild: false
+  less: false
   svelte-preprocess: true
-  unrs-resolver: true
+  unrs-resolver: false
+
+peerDependencyRules:
+  allowedVersions:
+    memeloop: '>=0.3.0'
 
 minimumReleaseAgeExclude:
   - expo-tiddlywiki-filesystem-android-external-storage@2.12.3
+  - '@memeloop/libp2p@0.3.0'
+  - '@memeloop/react-ui@0.2.0'
+  - 'memeloop@0.3.0'
 
 onlyBuiltDependencies:
   - '@parcel/watcher'

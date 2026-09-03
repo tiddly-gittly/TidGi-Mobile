@@ -1,5 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dimensions, Image, LayoutChangeEvent, ScrollView, View } from 'react-native';
 import { Button, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import { styled } from 'styled-components/native';
@@ -50,6 +51,7 @@ export function GitFilePreviewModal({
   uncommittedWorkspace,
   onDiscardSuccess,
 }: IGitFilePreviewModalProps): React.JSX.Element {
+  const { t } = useTranslation();
   const theme = useTheme();
   const beforeText = beforeContent.kind === 'text' ? (beforeContent.text ?? '') : '';
   const afterText = afterContent.kind === 'text' ? (afterContent.text ?? '') : '';
@@ -127,9 +129,9 @@ export function GitFilePreviewModal({
             setPanelMode(value as 'diff' | 'full' | 'actions');
           }}
           buttons={[
-            { value: 'diff', label: 'Diff' },
-            { value: 'full', label: 'Full' },
-            { value: 'actions', label: '操作', disabled: !canAct },
+            { value: 'diff', label: t('GitFilePreview.Diff') },
+            { value: 'full', label: t('GitFilePreview.Full') },
+            { value: 'actions', label: t('GitFilePreview.Actions'), disabled: !canAct },
           ]}
         />
       </View>
@@ -145,7 +147,7 @@ export function GitFilePreviewModal({
               disabled={isDiscarding || isIgnoring}
               onPress={handleDiscard}
             >
-              撤销此文件变更
+              {t('GitFilePreview.RevertFile')}
             </Button>
             <Button
               mode='outlined'
@@ -154,7 +156,7 @@ export function GitFilePreviewModal({
               disabled={isDiscarding || isIgnoring}
               onPress={handleIgnoreFile}
             >
-              忽略此文件 (.gitignore)
+              {t('GitFilePreview.IgnoreFile')}
             </Button>
             {fileExtension && (
               <Button
@@ -164,11 +166,11 @@ export function GitFilePreviewModal({
                 disabled={isDiscarding || isIgnoring}
                 onPress={handleIgnoreExtension}
               >
-                忽略所有 .{fileExtension} 文件
+                {t('GitFilePreview.IgnoreExtension', { extension: fileExtension })}
               </Button>
             )}
             <Button mode='outlined' icon='content-copy' onPress={handleCopyPath}>
-              复制文件路径
+              {t('GitFilePreview.CopyPath')}
             </Button>
           </ActionsContainer>
         )
@@ -184,15 +186,15 @@ export function GitFilePreviewModal({
 
             {panelMode === 'diff' && (beforeContent.kind === 'image' || afterContent.kind === 'image') && (
               <>
-                <Text variant='labelLarge'>Before</Text>
-                {beforeContent.kind === 'image' && beforeContent.dataUri ? <PreviewImage source={{ uri: beforeContent.dataUri }} /> : <Text>(missing)</Text>}
-                <Text variant='labelLarge'>After</Text>
-                {afterContent.kind === 'image' && afterContent.dataUri ? <PreviewImage source={{ uri: afterContent.dataUri }} /> : <Text>(missing)</Text>}
+                <Text variant='labelLarge'>{t('GitFilePreview.Before')}</Text>
+                {beforeContent.kind === 'image' && beforeContent.dataUri ? <PreviewImage source={{ uri: beforeContent.dataUri }} /> : <Text>{t('GitFilePreview.Missing')}</Text>}
+                <Text variant='labelLarge'>{t('GitFilePreview.After')}</Text>
+                {afterContent.kind === 'image' && afterContent.dataUri ? <PreviewImage source={{ uri: afterContent.dataUri }} /> : <Text>{t('GitFilePreview.Missing')}</Text>}
               </>
             )}
 
-            {afterContent.kind === 'binary' && <Text>Binary content preview is not supported.</Text>}
-            {afterContent.kind === 'missing' && beforeContent.kind === 'missing' && <Text>File content is not available.</Text>}
+            {afterContent.kind === 'binary' && <Text>{t('GitFilePreview.BinaryUnsupported')}</Text>}
+            {afterContent.kind === 'missing' && beforeContent.kind === 'missing' && <Text>{t('GitFilePreview.ContentUnavailable')}</Text>}
           </ContentScrollView>
         )}
     </View>
