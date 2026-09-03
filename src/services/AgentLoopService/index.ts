@@ -1,4 +1,5 @@
 /** Mobile host assembly for the shared durable MemeLoop runtime. */
+import type { ProviderModelRoute } from 'memeloop';
 import type {
   AgentFrameworkContext,
   AgentInstanceModel,
@@ -43,11 +44,7 @@ export interface PreparedMobileAgentExecution {
   wikiTiddlers?: readonly WikiTiddlerAttachment[];
 }
 
-export interface MobileAgentModelRoute {
-  apiMode: 'chat-completions' | 'responses';
-  modelId: string;
-  providerId: string;
-}
+export type MobileAgentModelRoute = ProviderModelRoute & { providerId: string };
 
 const activeMessageObservers = new Map<string, Set<(message: ChatMessage) => void>>();
 
@@ -120,10 +117,23 @@ export class MobileAgentLoopService {
   private readonly localNodeId: string;
   private readonly idFactory: DurableIdFactory;
   private readonly runtime: MemeLoopRuntime;
-  private readonly activeRuns = new Map<string, { cancelPromise?: Promise<void>; controller: AbortController; runId: string }>();
+  private readonly activeRuns = new Map<string, {
+    cancelError?: unknown;
+    cancelPromise?: Promise<void>;
+    cancelRequested?: boolean;
+    cancelSettled?: boolean;
+    conversationId: string;
+    controller: AbortController;
+    executionSettled?: boolean;
+    runId: string;
+  }>();
   private readonly onMessageCallbacks = new Map<string, Set<(message: ChatMessage) => void>>();
   private readonly onProgressCallbacks = new Map<string, Set<(status: string) => void>>();
+  private readonly pendingStarts = new Set<Promise<MemeLoopRunHandle>>();
   private readonly progressSubscriptions = new Map<string, () => void>();
+  private shutdownRequested = false;
+  private shutdownPromise: Promise<void> | undefined;
+  private shutdownCompleted = false;
 
   public constructor(
     llmProvider: ILLMProvider,
@@ -133,6 +143,7 @@ export class MobileAgentLoopService {
     modelRoute: MobileAgentModelRoute = {
       apiMode: 'chat-completions',
       modelId: 'test-model',
+      wireModelId: 'test-model',
       providerId: llmProvider.name || 'test-provider',
     },
   ) {
@@ -141,8 +152,9 @@ export class MobileAgentLoopService {
     this.idFactory = idFactory;
     if (llmProvider.name && modelRoute.providerId !== llmProvider.name) throw new Error('mobile_agent_provider_route_mismatch');
     const providerConfig = {
+      providerId: modelRoute.providerId,
       name: modelRoute.providerId,
-      models: [{ modelId: modelRoute.modelId, wireModelId: modelRoute.modelId, apiMode: modelRoute.apiMode }],
+      models: [{ modelId: modelRoute.modelId, wireModelId: modelRoute.wireModelId, apiMode: modelRoute.apiMode }],
     } as const;
     const context: AgentFrameworkContext = {
       storage,
@@ -163,7 +175,7 @@ export class MobileAgentLoopService {
             provider: llmProvider,
             providerId,
             modelId,
-            wireModelId: modelId,
+            wireModelId: modelRoute.wireModelId,
             apiMode: modelRoute.apiMode,
           };
         },
@@ -262,15 +274,17 @@ export class MobileAgentLoopService {
   }
 
   /** Release host observers and abort every in-flight turn before replacing runtime configuration. */
-  public async shutdown(): Promise<void> {
-    const activeRuns = [...this.activeRuns.values()];
-    this.activeRuns.clear();
-    for (const active of activeRuns) active.controller.abort(new Error('agent_runtime_reconfigured'));
-    await Promise.all(activeRuns.map(active => this.runtime.cancelRun(active.runId).catch(() => false)));
-    for (const unsubscribe of this.progressSubscriptions.values()) unsubscribe();
-    this.progressSubscriptions.clear();
-    this.onMessageCallbacks.clear();
-    this.onProgressCallbacks.clear();
+  public shutdown(): Promise<void> {
+    if (this.shutdownCompleted) return Promise.resolve();
+    if (!this.shutdownPromise) {
+      this.shutdownRequested = true;
+      const attempt = this.performShutdown();
+      this.shutdownPromise = attempt.catch((error: unknown) => {
+        this.shutdownPromise = undefined;
+        throw error;
+      });
+    }
+    return this.shutdownPromise;
   }
 
   public createMessage(
@@ -281,6 +295,7 @@ export class MobileAgentLoopService {
     const messageId = this.idFactory('mobile-agent-message');
     return Promise.resolve({
       content,
+      parts: [{ type: 'text', text: content }],
       conversationId,
       lamportClock: 0,
       messageId,
@@ -316,12 +331,12 @@ export class MobileAgentLoopService {
     const userMessage: ChatMessage = {
       ...(input.attachment === undefined ? {} : {
         attachments: [input.attachment],
-        parts: [
-          ...(input.message === '' ? [] : [{ text: input.message, type: 'text' as const }]),
-          { attachment: input.attachment, type: 'attachment' as const },
-        ],
       }),
       content: input.message,
+      parts: [
+        ...(input.message === '' ? [] : [{ text: input.message, type: 'text' as const }]),
+        ...(input.attachment === undefined ? [] : [{ attachment: input.attachment, type: 'attachment' as const }]),
+      ],
       conversationId: input.conversationId,
       lamportClock: 0,
       messageId: input.turnId,
@@ -351,7 +366,7 @@ export class MobileAgentLoopService {
             ...(userMessage.metadata === undefined ? {} : { metadata: userMessage.metadata }),
             messageId: userMessage.messageId,
             originNodeId: userMessage.originNodeId,
-            ...(userMessage.parts === undefined ? {} : { parts: userMessage.parts }),
+            parts: userMessage.parts,
             timestamp: userMessage.timestamp,
             turnId: userMessage.turnId,
           },
@@ -414,7 +429,7 @@ export class MobileAgentLoopService {
             originNodeId: this.localNodeId,
             timestamp: userMessage.timestamp,
             turnId: userMessage.turnId,
-            ...(userMessage.parts === undefined ? {} : { parts: userMessage.parts }),
+            parts: userMessage.parts,
             ...(userMessage.toolCalls === undefined ? {} : { toolCalls: userMessage.toolCalls }),
             ...(userMessage.attachments === undefined ? {} : { attachments: userMessage.attachments }),
             ...(userMessage.detailRef === undefined ? {} : { detailRef: userMessage.detailRef }),
@@ -437,8 +452,10 @@ export class MobileAgentLoopService {
     signal?: AbortSignal,
   ): Promise<SendMessageResult> {
     signal?.throwIfAborted();
+    if (this.isShuttingDown()) throw new Error('mobile_agent_runtime_shutting_down');
     await this.cancel(conversationId);
     signal?.throwIfAborted();
+    if (this.isShuttingDown()) throw new Error('mobile_agent_runtime_shutting_down');
     const turnMessages: ChatMessage[] = [];
     const unsubscribe = this.onMessage(conversationId, message => {
       if (message.turnId === turnId) turnMessages.push(message);
@@ -448,16 +465,31 @@ export class MobileAgentLoopService {
       const reason = signal?.reason instanceof Error ? signal.reason : new Error('agent_run_cancelled');
       controller.abort(reason);
       const active = this.activeRuns.get(conversationId);
-      if (active?.controller === controller) void this.cancelActiveRun(active, reason);
+      if (active?.controller === controller) {
+        void this.cancelActiveRun(active, reason).catch((error: unknown) => {
+          console.warn('[MobileAgentLoop] Failed to cancel aborted run', { error, runId: active.runId });
+        });
+      }
     };
     signal?.addEventListener('abort', onAbort, { once: true });
     try {
-      const handle = await start();
-      if (controller.signal.aborted) {
-        await this.runtime.cancelRun(handle.runId).catch(() => false);
+      const startPromise = start();
+      this.pendingStarts.add(startPromise);
+      let handle: MemeLoopRunHandle;
+      try {
+        handle = await startPromise;
+      } finally {
+        this.pendingStarts.delete(startPromise);
+      }
+      const active = { conversationId, controller, runId: handle.runId };
+      this.activeRuns.set(conversationId, active);
+      if (controller.signal.aborted || this.isShuttingDown()) {
+        const reason = controller.signal.reason instanceof Error
+          ? controller.signal.reason
+          : new Error('agent_run_cancelled');
+        await this.cancelActiveRun(active, reason);
         controller.signal.throwIfAborted();
       }
-      this.activeRuns.set(conversationId, { controller, runId: handle.runId });
       for (;;) {
         const status = await this.runtime.getRunStatus(handle.runId);
         if (!status) throw new Error('mobile_agent_run_status_missing');
@@ -490,7 +522,13 @@ export class MobileAgentLoopService {
       signal?.removeEventListener('abort', onAbort);
       unsubscribe();
       const active = this.activeRuns.get(conversationId);
-      if (active?.controller === controller) this.activeRuns.delete(conversationId);
+      if (active?.controller === controller) {
+        active.executionSettled = true;
+        if (
+          !active.cancelRequested
+          || (active.cancelSettled === true && active.cancelError === undefined)
+        ) this.activeRuns.delete(conversationId);
+      }
     }
   }
 
@@ -504,12 +542,77 @@ export class MobileAgentLoopService {
   }
 
   private cancelActiveRun(
-    active: { cancelPromise?: Promise<void>; controller: AbortController; runId: string },
+    active: {
+      cancelError?: unknown;
+      cancelPromise?: Promise<void>;
+      cancelRequested?: boolean;
+      cancelSettled?: boolean;
+      conversationId: string;
+      controller: AbortController;
+      executionSettled?: boolean;
+      runId: string;
+    },
     reason: Error,
   ): Promise<void> {
     if (!active.controller.signal.aborted) active.controller.abort(reason);
-    active.cancelPromise ??= this.runtime.cancelRun(active.runId).then(() => undefined);
+    if (!active.cancelPromise) {
+      active.cancelRequested = true;
+      active.cancelSettled = false;
+      active.cancelPromise = Promise.resolve()
+        .then(() => this.runtime.cancelRun(active.runId))
+        .then(() => {
+          active.cancelError = undefined;
+          active.cancelSettled = true;
+          if (active.executionSettled && this.activeRuns.get(active.conversationId) === active) {
+            this.activeRuns.delete(active.conversationId);
+          }
+        })
+        .catch((error: unknown) => {
+          active.cancelError = error;
+          active.cancelSettled = true;
+          throw error;
+        })
+        .finally(() => {
+          active.cancelPromise = undefined;
+        });
+    }
     return active.cancelPromise;
+  }
+
+  private async performShutdown(): Promise<void> {
+    const reason = new Error('agent_runtime_reconfigured');
+    // A runtime start may not have returned its run handle yet. Wait for those
+    // starts before detaching subscriptions so a late handle cannot escape the
+    // generation being replaced. `shutdownRequested` prevents new starts while
+    // this bounded hand-off is in progress.
+    const pendingStarts = [...this.pendingStarts];
+    if (pendingStarts.length > 0) await Promise.allSettled(pendingStarts);
+    const activeRuns = [...this.activeRuns.entries()];
+    for (const [, active] of activeRuns) active.controller.abort(reason);
+
+    const cancellations = await Promise.allSettled(
+      activeRuns.map(([, active]) => this.cancelActiveRun(active, reason)),
+    );
+    const failures: unknown[] = [];
+    for (const [index, [conversationId, active]] of activeRuns.entries()) {
+      const result = cancellations[index];
+      if (result.status === 'fulfilled') {
+        if (this.activeRuns.get(conversationId) === active && active.cancelError === undefined) {
+          this.activeRuns.delete(conversationId);
+        }
+      } else {
+        failures.push(result.reason ?? new Error(`mobile_agent_shutdown_cancel_failed:${conversationId}`));
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'mobile_agent_shutdown_cancel_failed');
+    }
+
+    for (const unsubscribe of this.progressSubscriptions.values()) unsubscribe();
+    this.progressSubscriptions.clear();
+    this.onMessageCallbacks.clear();
+    this.onProgressCallbacks.clear();
+    this.shutdownCompleted = true;
   }
 
   private notifyIsolated<T>(callbacks: Set<(value: T) => void> | undefined, value: T, kind: string): void {
@@ -522,9 +625,14 @@ export class MobileAgentLoopService {
       }
     }
   }
+
+  private isShuttingDown(): boolean {
+    return this.shutdownRequested || this.shutdownCompleted;
+  }
 }
 
 let singleton: { configurationIdentity: string; service: MobileAgentLoopService } | undefined;
+let singletonTransition: Promise<void> = Promise.resolve();
 
 /**
  * One durable runtime per effective provider/device configuration for the
@@ -534,19 +642,31 @@ let singleton: { configurationIdentity: string; service: MobileAgentLoopService 
 export function getMobileAgentLoopService(
   configurationIdentity: string,
   create: () => MobileAgentLoopService,
-): MobileAgentLoopService {
+): Promise<MobileAgentLoopService> {
   if (configurationIdentity.trim() === '') throw new Error('mobile_agent_runtime_configuration_identity_required');
-  if (singleton?.configurationIdentity === configurationIdentity) return singleton.service;
-  const previous = singleton?.service;
-  const service = create();
-  singleton = { configurationIdentity, service };
-  if (previous) void previous.shutdown();
-  return service;
+  const transition = singletonTransition.then(async () => {
+    if (singleton?.configurationIdentity === configurationIdentity) return singleton.service;
+    const previous = singleton?.service;
+    if (previous) {
+      await previous.shutdown();
+      if (singleton?.service === previous) singleton = undefined;
+    }
+    const service = create();
+    singleton = { configurationIdentity, service };
+    return service;
+  });
+  singletonTransition = transition.then(() => undefined, () => undefined);
+  return transition;
 }
 
 /** Abort the active runtime before clearing its durable conversation store. */
 export async function shutdownMobileAgentLoopService(): Promise<void> {
-  const active = singleton?.service;
-  singleton = undefined;
-  await active?.shutdown();
+  const transition = singletonTransition.then(async () => {
+    const active = singleton?.service;
+    if (!active) return;
+    await active.shutdown();
+    if (singleton?.service === active) singleton = undefined;
+  });
+  singletonTransition = transition.then(() => undefined, () => undefined);
+  await transition;
 }

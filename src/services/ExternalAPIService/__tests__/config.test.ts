@@ -22,6 +22,7 @@ describe('Mobile External API configuration', () => {
       apiMode: 'responses',
       baseURL: 'https://cpa.k3s.onetwo.website',
       modelId: 'gpt-5.6-sol',
+      wireModelId: 'gpt-5.6-sol',
       providerId: 'cpa',
     });
     await expect(loadExternalAPIConfig()).resolves.toEqual({
@@ -29,6 +30,7 @@ describe('Mobile External API configuration', () => {
       apiMode: 'responses',
       baseURL: 'https://cpa.k3s.onetwo.website/v1',
       modelId: 'gpt-5.6-sol',
+      wireModelId: 'gpt-5.6-sol',
       providerId: 'cpa',
     });
     await clearExternalAPIConfig();
@@ -42,6 +44,7 @@ describe('Mobile External API configuration', () => {
         apiMode: 'chat-completions',
         baseURL: 'https://cpa.k3s.onetwo.website/v1',
         modelId: 'westlake/deepseek',
+        wireModelId: 'westlake/deepseek',
         providerId: 'cpa',
       }).apiMode,
     ).toBe('chat-completions');
@@ -51,9 +54,41 @@ describe('Mobile External API configuration', () => {
         apiMode: 'responses',
         baseURL: 'http://public.example.test',
         modelId: 'gpt-5.6-sol',
+        wireModelId: 'gpt-5.6-sol',
         providerId: 'cpa',
       })
     ).toThrow('external_api_invalid_url');
+  });
+
+  it('keeps logical and wire model identifiers as an explicit canonical route', async () => {
+    await saveExternalAPIConfig({
+      apiKey: 'secret',
+      apiMode: 'responses',
+      baseURL: 'https://cpa.k3s.onetwo.website',
+      modelId: 'reasoning',
+      wireModelId: 'vendor/reasoning-v7',
+      providerId: 'cpa',
+    });
+
+    await expect(loadExternalAPIConfig()).resolves.toMatchObject({
+      modelId: 'reasoning',
+      wireModelId: 'vendor/reasoning-v7',
+    });
+  });
+
+  it('fails closed for persisted configurations without a wire model route', async () => {
+    mockValues.set(
+      'memeloop_external_api_config_v1',
+      JSON.stringify({
+        apiKey: 'secret',
+        apiMode: 'responses',
+        baseURL: 'https://cpa.k3s.onetwo.website',
+        modelId: 'reasoning',
+        providerId: 'cpa',
+      }),
+    );
+
+    await expect(loadExternalAPIConfig()).resolves.toBeUndefined();
   });
 
   it('rejects invalid runtime API modes and bounded provider identifiers at the storage boundary', () => {
@@ -62,6 +97,7 @@ describe('Mobile External API configuration', () => {
       apiMode: 'responses' as const,
       baseURL: 'https://cpa.k3s.onetwo.website',
       modelId: 'gpt-5.6-sol',
+      wireModelId: 'gpt-5.6-sol',
       providerId: 'cpa',
     };
     expect(() => normalizeExternalAPIConfig({ ...valid, apiMode: 'inferred' } as never))

@@ -1,16 +1,18 @@
 import * as SecureStore from 'expo-secure-store';
 import {
   createScheduledTaskClientFromRpc,
+  createScheduledTaskAggregatePageController,
   type CreateScheduledTaskInput,
   createScheduledTaskRpcClient,
   type Device,
   type ListScheduledTasksOptions,
+  type ScheduledTaskAggregateCursorSource,
   previewScheduledTaskCron,
   type ScheduledTask,
   type ScheduledTaskClient,
   type ScheduledTaskPage,
   type ScheduledTaskPageSource,
-  type ScheduledTaskState,
+  normalizeScheduledTaskAggregateStates,
 } from 'memeloop/mobile';
 
 import { deviceNetworkService } from '../DeviceNetworkService';
@@ -36,21 +38,6 @@ interface CacheSource {
 interface CacheEnvelope {
   version: 1;
   sources: CacheSource[];
-}
-
-interface SourceCursor {
-  executionNodeId: string;
-  cursor?: string;
-  done: boolean;
-}
-
-interface AggregateCursor {
-  version: 1;
-  agentInstanceId: string;
-  directorySignature: string;
-  states: ScheduledTaskState[];
-  targetOffset: number;
-  sources: SourceCursor[];
 }
 
 export interface ScheduledTaskCache {
@@ -100,13 +87,6 @@ function validCacheSource(value: unknown): value is CacheSource {
     Array.isArray(source.tasks) && source.tasks.length <= MAX_CACHED_TASKS_PER_SOURCE;
 }
 
-function normalizedStates(states: ScheduledTaskState[] | undefined): ScheduledTaskState[] {
-  const defaults: ScheduledTaskState[] = ['active', 'paused'];
-  const result: ScheduledTaskState[] = [...new Set(states ?? defaults)].sort();
-  if (result.length === 0) throw new Error('scheduled_task_states_required');
-  return result;
-}
-
 function normalizedLimit(limit: number | undefined): number {
   const value = limit ?? DEFAULT_PAGE_SIZE;
   if (!Number.isSafeInteger(value) || value < 1 || value > MAX_PAGE_SIZE) throw new Error('invalid_scheduled_task_page_limit');
@@ -117,34 +97,6 @@ function normalizedMaxBytes(maxBytes: number | undefined): number {
   const value = maxBytes ?? DEFAULT_PAGE_BYTES;
   if (!Number.isSafeInteger(value) || value < 64 || value > MAX_PAGE_BYTES) throw new Error('invalid_scheduled_task_page_byte_budget');
   return value;
-}
-
-function encodeCursor(cursor: AggregateCursor): string {
-  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
-}
-
-function validSourceCursor(value: unknown): value is SourceCursor {
-  if (!value || typeof value !== 'object') return false;
-  const source = value as Partial<SourceCursor>;
-  return typeof source.executionNodeId === 'string' && typeof source.done === 'boolean' &&
-    (source.cursor === undefined || typeof source.cursor === 'string' && source.cursor.length <= 2_048);
-}
-
-function decodeCursor(serialized: string, expected: Omit<AggregateCursor, 'sources' | 'targetOffset' | 'version'>): AggregateCursor {
-  if (!serialized || serialized.length > 16 * 1024) throw new Error('invalid_scheduled_task_cursor');
-  let value: Partial<AggregateCursor>;
-  try {
-    value = JSON.parse(Buffer.from(serialized, 'base64url').toString('utf8')) as Partial<AggregateCursor>;
-  } catch {
-    throw new Error('invalid_scheduled_task_cursor');
-  }
-  if (
-    value.version !== 1 || value.agentInstanceId !== expected.agentInstanceId ||
-    value.directorySignature !== expected.directorySignature || JSON.stringify(value.states) !== JSON.stringify(expected.states) ||
-    !Number.isSafeInteger(value.targetOffset) || value.targetOffset! < 0 || !Array.isArray(value.sources) ||
-    value.sources.length > MAX_SOURCE_BATCH || value.sources.some(source => !validSourceCursor(source))
-  ) throw new Error('invalid_scheduled_task_cursor');
-  return value as AggregateCursor;
 }
 
 async function mapWithConcurrency<Input, Output>(
@@ -227,7 +179,7 @@ export function createMobileScheduledTaskClient(options: MobileScheduledTaskClie
   return {
     async listScheduledTasksForAgent(agentInstanceId, listOptions: ListScheduledTasksOptions = {}): Promise<ScheduledTaskPage> {
       listOptions.signal?.throwIfAborted();
-      const states = normalizedStates(listOptions.states);
+      const states = normalizeScheduledTaskAggregateStates(listOptions.states);
       const limit = normalizedLimit(listOptions.limit);
       const maxBytes = normalizedMaxBytes(listOptions.maxBytes);
       const [identity, devices, cacheEnvelope] = await Promise.all([
@@ -237,12 +189,20 @@ export function createMobileScheduledTaskClient(options: MobileScheduledTaskClie
       ]);
       listOptions.signal?.throwIfAborted();
       const targets = targetDevices(identity.peerId, devices, listOptions.executionNodeIds);
+      if (targets.length === 0) {
+        return { items: [], hasMoreAfter: false, partial: false, sources: [] };
+      }
       const directorySignature = targets.map(device => `${device.peerId}:${device.reachability.state}`).join('|');
-      const expected = { agentInstanceId, directorySignature, states };
-      const decoded = listOptions.cursor ? decodeCursor(listOptions.cursor, expected) : undefined;
-      const targetOffset = decoded?.targetOffset ?? 0;
+      const pageController = createScheduledTaskAggregatePageController({
+        agentInstanceId,
+        scope: directorySignature,
+        states,
+        sourceCount: targets.length,
+      });
+      const decoded = listOptions.cursor ? pageController.decode(listOptions.cursor) : undefined;
+      const targetOffset = decoded?.sourceIndex ?? 0;
       const batch = targets.slice(targetOffset, targetOffset + MAX_SOURCE_BATCH);
-      const sourceCursors: SourceCursor[] = decoded?.sources.length
+      const sourceCursors: ScheduledTaskAggregateCursorSource[] = decoded?.sources.length
         ? decoded.sources
         : batch.map(device => ({ executionNodeId: device.peerId, done: false }));
       if (
@@ -253,7 +213,8 @@ export function createMobileScheduledTaskClient(options: MobileScheduledTaskClie
       const sourceLimit = Math.max(1, Math.floor(limit / activeSources));
       const sourceMaxBytes = Math.max(64, Math.floor(maxBytes / activeSources));
       const reads = await mapWithConcurrency(sourceCursors, MAX_RPC_CONCURRENCY, async source => {
-        const device = batch.find(candidate => candidate.peerId === source.executionNodeId)!;
+        const device = batch.find(candidate => candidate.peerId === source.executionNodeId);
+        if (!device) throw new Error('invalid_scheduled_task_cursor_sources');
         if (source.done) {
           return { cursor: source, items: [] as ScheduledTask[], partial: false, source: provenance(device.peerId, 'online', false) };
         }
@@ -299,12 +260,8 @@ export function createMobileScheduledTaskClient(options: MobileScheduledTaskClie
       const nextOffset = batchDone ? targetOffset + batch.length : targetOffset;
       const hasMoreAfter = !batchDone || nextOffset < targets.length;
       const nextCursor = hasMoreAfter
-        ? encodeCursor({
-          version: 1,
-          agentInstanceId,
-          directorySignature,
-          states,
-          targetOffset: nextOffset,
+        ? pageController.encodePage({
+          sourceIndex: nextOffset,
           sources: batchDone ? [] : reads.map(read => read.cursor),
         })
         : undefined;

@@ -13,6 +13,7 @@ function message(messageId: string, role: ChatMessage['role']): ChatMessage {
     lamportClock: 1,
     role,
     content: messageId,
+    parts: [{ type: 'text', text: messageId }],
   };
 }
 

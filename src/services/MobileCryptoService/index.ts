@@ -44,7 +44,7 @@ function installMethod<K extends keyof MobileCryptoProvider>(
  * deliberately not fabricated.
  */
 export function installMobileCrypto(
-  host: MobileCryptoHost = globalThis as unknown as MobileCryptoHost,
+  host: MobileCryptoHost = globalThis,
   provider: MobileCryptoProvider = expoCryptoProvider,
 ): void {
   let target = host.crypto;

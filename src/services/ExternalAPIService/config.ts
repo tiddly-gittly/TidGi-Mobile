@@ -17,6 +17,7 @@ export interface ExternalAPIConfig {
   apiMode: 'chat-completions' | 'responses';
   baseURL: string;
   modelId: string;
+  wireModelId: string;
   providerId: string;
 }
 
@@ -28,17 +29,21 @@ export function normalizeExternalAPIConfig(value: ExternalAPIConfig): ExternalAP
   const apiKey = value.apiKey.trim();
   const providerId = value.providerId.trim();
   const modelId = value.modelId.trim();
+  const wireModelId = value.wireModelId.trim();
   const rawURL = value.baseURL.trim().replace(/\/+$/, '');
-  if (!apiKey || !providerId || !modelId || !rawURL) throw new Error('external_api_config_incomplete');
+  if (!apiKey || !providerId || !modelId || !wireModelId || !rawURL) throw new Error('external_api_config_incomplete');
   const apiMode: unknown = value.apiMode;
   if (apiMode !== 'chat-completions' && apiMode !== 'responses') throw new Error('external_api_invalid_api_mode');
   if (
     apiKey.length > MAXIMUM_API_KEY_LENGTH || rawURL.length > MAXIMUM_URL_LENGTH ||
-    providerId.length > MAXIMUM_IDENTIFIER_LENGTH || modelId.length > MAXIMUM_IDENTIFIER_LENGTH
+    providerId.length > MAXIMUM_IDENTIFIER_LENGTH || modelId.length > MAXIMUM_IDENTIFIER_LENGTH ||
+    wireModelId.length > MAXIMUM_IDENTIFIER_LENGTH
   ) {
     throw new Error('external_api_config_too_large');
   }
-  if (hasControlCharacter(providerId) || hasControlCharacter(modelId)) throw new Error('external_api_invalid_identifier');
+  if (hasControlCharacter(providerId) || hasControlCharacter(modelId) || hasControlCharacter(wireModelId)) {
+    throw new Error('external_api_invalid_identifier');
+  }
   let url: URL;
   try {
     url = new URL(rawURL);
@@ -55,6 +60,7 @@ export function normalizeExternalAPIConfig(value: ExternalAPIConfig): ExternalAP
     apiMode,
     baseURL: `${url.origin}${pathname}`,
     modelId,
+    wireModelId,
     providerId,
   };
 }
@@ -65,7 +71,8 @@ export function parseExternalAPIConfig(value: string | null): ExternalAPIConfig 
     const record = JSON.parse(value) as Partial<ExternalAPIConfig>;
     if (
       typeof record.apiKey !== 'string' || typeof record.baseURL !== 'string' ||
-      typeof record.modelId !== 'string' || typeof record.providerId !== 'string' ||
+      typeof record.modelId !== 'string' || typeof record.wireModelId !== 'string' ||
+      typeof record.providerId !== 'string' ||
       (record.apiMode !== 'chat-completions' && record.apiMode !== 'responses')
     ) return undefined;
     return normalizeExternalAPIConfig(record as ExternalAPIConfig);

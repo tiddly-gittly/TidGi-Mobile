@@ -136,7 +136,7 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
         'phone-peer',
         storage,
         namespace => `${namespace}:integration-${++sequence}`,
-        { apiMode: 'chat-completions', modelId: 'test-model', providerId: provider.name },
+        { apiMode: 'chat-completions', modelId: 'test-model', wireModelId: 'test-model', providerId: provider.name },
       );
 
       const sent = await service.sendMessage('real-runtime-conversation', 'run a tool');
