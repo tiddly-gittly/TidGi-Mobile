@@ -64,7 +64,7 @@ jobs:
           pnpm run build:wiki-template
 
       - name: Expo prebuild (iOS)
-        run: pnpm exec expo prebuild -p ios --clean
+        run: pnpm exec expo prebuild -p ios --clean --no-install
 
       - name: Verify generated iOS local-network policy
         shell: bash
@@ -83,16 +83,46 @@ jobs:
           fi
           echo "Verified generated policy in $PLIST_PATH"
 
+      - uses: actions/cache@v5
+        name: Restore CocoaPods cache
+        with:
+          # CocoaPods projects embed the resolved pnpm React Native path. Restore
+          # only a cache built from the same native and JavaScript dependency graph.
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile', 'ios/Podfile.properties.json', 'package.json', 'pnpm-lock.yaml') }}
+
       - name: Install CocoaPods dependencies
         run: cd ios && pod install --repo-update
 
-      - uses: actions/cache@v5
-        name: Cache CocoaPods
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
+      - name: Verify React Native pod script path
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          WORKSPACE=$(find . -maxdepth 1 -type d -name '*.xcworkspace' -print -quit)
+          if [ -z "$WORKSPACE" ]; then
+            echo "CocoaPods workspace was not generated"
+            exit 1
+          fi
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          BUILD_SETTINGS=$(xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -showBuildSettings)
+          REACT_NATIVE_PATH=$(printf '%s\n' "$BUILD_SETTINGS" | sed -n 's/^[[:space:]]*REACT_NATIVE_PATH = //p' | head -1)
+          if [ -z "$REACT_NATIVE_PATH" ]; then
+            echo "REACT_NATIVE_PATH was not present in generated Xcode build settings"
+            exit 1
+          fi
+          SCRIPT_PATH="$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh"
+          if [ ! -f "$SCRIPT_PATH" ]; then
+            echo "React Native pod scripts are stale or incomplete: $SCRIPT_PATH"
+            echo "The CocoaPods cache must be regenerated for the current pnpm lockfile."
+            exit 1
+          fi
+          echo "Verified React Native pod script: $SCRIPT_PATH"
 
       - name: Build unsigned iOS app
         run: |
