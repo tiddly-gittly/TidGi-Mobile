@@ -32,10 +32,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11.17.0
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.15.0
           cache: pnpm
       - name: Set Up JDK
         uses: actions/setup-java@v5
@@ -64,7 +64,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Type check, lint, and unit test
         run: |
