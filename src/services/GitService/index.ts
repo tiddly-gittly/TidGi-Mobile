@@ -11,7 +11,9 @@ import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android
 import pTimeout from 'p-timeout';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { getSyncConfigurationWorkspace } from '../../utils/workspaceRelations';
-import { removeLegacyMobileLfAttributesRule } from './mobileGitSetup';
+import { logFor } from '../LoggerService';
+
+const gitCleanupLogger = logFor('git');
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -277,13 +279,6 @@ function isImageFile(filePath: string): boolean {
   return IMAGE_FILE_EXTENSIONS.has(getFileExtension(filePath));
 }
 
-async function readUtf8File(path: string): Promise<string> {
-  if (isExternalPath(path)) {
-    return ExternalStorage.readFileUtf8(path);
-  }
-  return FileSystemLegacy.readAsStringAsync(toFileUri(path), { encoding: FileSystemLegacy.EncodingType.UTF8 });
-}
-
 async function writeUtf8File(path: string, content: string): Promise<void> {
   if (isExternalPath(path)) {
     await ExternalStorage.writeFileUtf8(path, content);
@@ -309,16 +304,7 @@ async function ensureDirectoryExists(path: string): Promise<void> {
 
 /** Tracks repositories where one-time mobile Git setup has run this session. */
 class MobileGitSetupCache {
-  readonly #legacyAttributesMigrated = new Set<string>();
   readonly #configApplied = new Set<string>();
-
-  hasMigratedLegacyAttributes(directory: string): boolean {
-    return this.#legacyAttributesMigrated.has(directory);
-  }
-
-  markLegacyAttributesMigrated(directory: string): void {
-    this.#legacyAttributesMigrated.add(directory);
-  }
 
   hasConfig(directory: string): boolean {
     return this.#configApplied.has(directory);
@@ -329,7 +315,6 @@ class MobileGitSetupCache {
   }
 
   clear(directory: string): void {
-    this.#legacyAttributesMigrated.delete(directory);
     this.#configApplied.delete(directory);
   }
 }
@@ -339,43 +324,10 @@ const clearMobileGitSetupCache = (directory: string) => {
   mobileGitSetupCache.clear(directory);
 };
 
-async function migrateLegacyMobileGitAttributes(
-  directory: string,
-  onProgress?: (phase: string, loaded: number, total: number) => void,
-): Promise<void> {
-  if (mobileGitSetupCache.hasMigratedLegacyAttributes(directory)) return;
-
-  onProgress?.('Migrating git attributes…', 0, 1);
-
-  const attributesPath = `${directory}/.git/info/attributes`;
-
-  let existing = '';
-  try {
-    existing = await readUtf8File(attributesPath);
-  } catch {
-    // Most repositories do not have local attributes. There is nothing to
-    // create now that mobile no longer owns an EOL policy.
-  }
-
-  // Older mobile versions injected a global LF rule here. Native checkout
-  // writes Git blobs byte-for-byte and does not run Git's smudge filters, so
-  // that rule makes historical CRLF blobs appear modified even when their
-  // visible contents are unchanged. Remove the legacy rule and preserve any
-  // user-authored local attributes.
-  const updated = removeLegacyMobileLfAttributesRule(existing);
-  if (updated !== existing) {
-    await writeUtf8File(attributesPath, updated);
-  }
-
-  mobileGitSetupCache.markLegacyAttributesMigrated(directory);
-  onProgress?.('Migrating git attributes…', 1, 1);
-}
-
 async function ensureMobileGitSetup(
   directory: string,
   onProgress?: (phase: string, loaded: number, total: number) => void,
 ): Promise<void> {
-  await migrateLegacyMobileGitAttributes(directory, onProgress);
   await ensureGitConfigForMobile(directory, onProgress);
 }
 
@@ -594,13 +546,17 @@ async function tryArchiveClone(
   if (downloadResult.statusCode === 404) {
     try {
       await ExternalStorage.deleteFile(tarPath);
-    } catch { /* ignore */ }
+    } catch (error) {
+      gitCleanupLogger.warn('Failed to remove unavailable archive after a 404 response', error);
+    }
     return false;
   }
   if (downloadResult.statusCode !== 200 && downloadResult.statusCode !== 206) {
     try {
       await ExternalStorage.deleteFile(tarPath);
-    } catch { /* ignore */ }
+    } catch (error) {
+      gitCleanupLogger.warn('Failed to remove failed archive download', error);
+    }
     return false;
   }
 
@@ -615,14 +571,18 @@ async function tryArchiveClone(
       await FileSystemLegacy.deleteAsync(toFileUri(directory), { idempotent: true });
       await FileSystemLegacy.makeDirectoryAsync(toFileUri(directory), { intermediates: true });
     }
-  } catch { /* directory might not exist yet */ }
+  } catch (error) {
+    gitCleanupLogger.log('Archive target directory was not present before extraction', error);
+  }
 
   const extractResult = await ExternalStorage.extractTar(tarPath, directory);
   console.log('[archiveClone] Extracted', extractResult.filesExtracted, 'files');
   onProgress?.('Extracted files', extractResult.filesExtracted, extractResult.filesExtracted);
   try {
     await ExternalStorage.deleteFile(tarPath);
-  } catch { /* ignore */ }
+  } catch (error) {
+    gitCleanupLogger.warn('Failed to remove archive after extraction', error);
+  }
 
   await configureGitRemote(directory, remote);
   await ensureMobileGitSetup(directory);
@@ -740,14 +700,23 @@ export async function ensureGitConfigForMobile(
     ['core', null, 'streamfilethreshold', String(5 * 1024 * 1024)], // 5MB
   ];
   onProgress?.('Applying git configuration…', 0, settings.length);
+  const failures: Error[] = [];
   for (let index = 0; index < settings.length; index++) {
     const [section, subsection, name, value] = settings[index];
     try {
       await ExternalStorage.gitSetConfig(directory, section, subsection, name, value);
     } catch (error) {
-      console.warn(`[ensureGitConfig] Failed to set ${section}.${name}=${value}:`, (error as Error).message);
+      // Do not mark a partially-applied configuration as complete. A later
+      // operation will retry the entire deterministic set, while callers get
+      // a stable aggregate error instead of silently running with unsafe
+      // defaults.
+      const key = subsection === null ? `${section}.${name}` : `${section}.${subsection}.${name}`;
+      failures.push(new Error(`mobile_git_config_apply_failed:${key}`, { cause: error }));
     }
     onProgress?.('Applying git configuration…', index + 1, settings.length);
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'mobile_git_config_apply_failed');
   }
   console.log('[ensureGitConfig] Applied mobile git config settings');
   mobileGitSetupCache.markConfigApplied(directory);
@@ -1264,7 +1233,9 @@ export async function gitAddToGitignore(workspace: IWikiWorkspace, pattern: stri
       } else {
         existing = await FileSystemLegacy.readAsStringAsync(toFileUri(gitignorePath), { encoding: FileSystemLegacy.EncodingType.UTF8 });
       }
-    } catch { /* file doesn't exist yet */ }
+    } catch (error) {
+      gitCleanupLogger.log('Gitignore file does not exist yet', error);
+    }
     const lines = existing.split('\n').map(l => l.trim());
     if (!lines.includes(pattern)) {
       const newContent = existing.endsWith('\n') || existing === ''

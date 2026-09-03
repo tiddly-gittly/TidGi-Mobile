@@ -40,11 +40,6 @@ export interface IWikiWorkspace {
    */
   mainWikiID?: string | null;
   /**
-   * @deprecated Main workspace synchronization always includes attached sub-wikis.
-   * Kept only so persisted v1 data can be migrated safely.
-   */
-  syncIncludeSubWikis?: boolean;
-  /**
    * Synchronization configuration is stored only on a top-level workspace.
    * Attached sub-wikis must keep this empty and resolve their main workspace.
    */
@@ -53,7 +48,8 @@ export interface IWikiWorkspace {
   /**
    * Whether this workspace stores files in external (device-visible) storage.
    * Requires the global MANAGE_EXTERNAL_STORAGE permission to be granted.
-   * When undefined, inherits from the global customWikiFolderPath setting at creation time.
+   * New workspace registrations must provide this explicitly; omitted values
+   * are treated as the canonical internal-storage mode.
    */
   useExternalStorage?: boolean;
   /**
@@ -169,15 +165,12 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
           set((state) => {
             switch (newWorkspace.type) {
               case 'wiki': {
-                // Determine base path based on per-workspace useExternalStorage flag.
-                // - If caller passes useExternalStorage=true AND customWikiFolderPath is set → external
-                // - If caller passes useExternalStorage=false explicitly → internal regardless of global setting
-                // - If caller doesn't pass it (undefined) → check global customWikiFolderPath (legacy behaviour)
+                // Determine base path from the explicit per-workspace storage
+                // mode. Missing mode is canonical internal storage; external
+                // paths require both the explicit flag and configured folder.
                 const customPath = state.customWikiFolderPath;
                 const requestedExternal = (newWorkspace as IWikiWorkspace).useExternalStorage;
-                const useExternal = requestedExternal === true
-                  ? customPath !== null
-                  : (requestedExternal === false ? false : customPath !== null);
+                const useExternal = requestedExternal === true && customPath !== null;
                 const wikiFolderBasePath = useExternal && customPath
                   ? `${customPath.endsWith('/') ? customPath : `${customPath}/`}wikis/`
                   : WIKI_FOLDER_PATH;
@@ -204,7 +197,6 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                   enableQuickLoad: false,
                   isSubWiki,
                   syncedServers: isSubWiki ? [] : (newWorkspace as IWikiWorkspace).syncedServers,
-                  syncIncludeSubWikis: undefined,
                 } satisfies IWikiWorkspace;
                 state.workspaces = [newWikiWorkspaceWithID, ...state.workspaces];
                 result = cloneDeep(newWikiWorkspaceWithID);
@@ -307,7 +299,6 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
                 (max, server) => (server.lastSync > max ? server.lastSync : max),
                 LAST_SYNC_TO_SYNC_ALL,
               );
-              console.log(`Add new server to wiki ${oldWiki.name} with last sync ${lastSync} to server ${newServerID}`);
               const existingIndex = oldWiki.syncedServers.findIndex(item => item.serverID === newServerID);
               if (existingIndex >= 0) {
                 // Same server re-linked (e.g. QR re-scan): refresh auth tokens.
@@ -415,39 +406,6 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
       {
         name: 'wiki-storage',
         storage: expoFileSystemStorage,
-        version: 2,
-        migrate: (persistedState: unknown, version: number) => {
-          const state = persistedState as Record<string, unknown>;
-          if (version === 0) {
-            if (typeof state.defaultWorkspaceId === 'undefined') {
-              const workspaces = state.workspaces as Array<{ type?: string; id?: string }> | undefined;
-              const firstWiki = workspaces?.find(workspace => workspace.type === undefined || workspace.type === 'wiki');
-              state.defaultWorkspaceId = firstWiki?.id ?? null;
-            }
-          }
-          if (version < 2) {
-            const workspaces = state.workspaces as IWorkspace[] | undefined;
-            if (Array.isArray(workspaces)) {
-              const topLevelWikiIDs = new Set(
-                workspaces
-                  .filter((workspace): workspace is IWikiWorkspace => (workspace.type === undefined || workspace.type === 'wiki') && workspace.isSubWiki !== true)
-                  .map(workspace => workspace.id),
-              );
-              for (const workspace of workspaces) {
-                if (
-                  (workspace.type === undefined || workspace.type === 'wiki') &&
-                  workspace.isSubWiki === true &&
-                  typeof workspace.mainWikiID === 'string' &&
-                  topLevelWikiIDs.has(workspace.mainWikiID)
-                ) {
-                  workspace.syncedServers = [];
-                  delete (workspace as { syncIncludeSubWikis?: boolean }).syncIncludeSubWikis;
-                }
-              }
-            }
-          }
-          return persistedState as WikiState & WikiActions;
-        },
       },
     ),
   )),

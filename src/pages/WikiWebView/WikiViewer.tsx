@@ -28,7 +28,14 @@ const E2E_CREATE_TIDDLER_PRELOAD_SCRIPT = ENABLE_E2E_WIKI_HOOKS
           title: title, text: 'E2E test at ' + now,
           type: 'text/vnd.tiddlywiki', created: now, modified: now, tags: 'E2ETest'
         }));
-        try { if ($tw.syncer) $tw.syncer.saveTiddler(title); } catch(e) {}
+        try {
+          if ($tw.syncer) $tw.syncer.saveTiddler(title);
+        } catch (e) {
+          // Saving is best-effort in this test hook; the tiddler has already
+          // been created through the normal $tw.wiki pipeline. Keep the
+          // failure observable without interrupting the creation path.
+          console.error('[E2E] syncer saveTiddler failed', e);
+        }
         return 'OK';
       };
     `
@@ -189,10 +196,7 @@ export function WikiViewer({ wikiWorkspace, webviewSideReceiver, quickLoad }: Wi
               style={styles.e2eCreateTiddlerButton}
               onPress={() => {
                 const title = endToEndTestTiddlerTitle || 'E2E Test';
-                // The webview reference is typed as WebView | null; the webview package
-                // provides injectJavaScript at runtime. Cast to a small interface to
-                // avoid unsafe `any` lint errors.
-                (webViewReference.current as { injectJavaScript: (script: string) => void } | null)?.injectJavaScript(
+                webViewReference.current?.injectJavaScript(
                   `window.__e2e_createTiddler(${JSON.stringify(title)})`,
                 );
               }}
