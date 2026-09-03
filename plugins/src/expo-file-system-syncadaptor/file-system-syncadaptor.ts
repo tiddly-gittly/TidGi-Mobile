@@ -1,3 +1,4 @@
+import type { Logger } from '$:/core/modules/utils/logger.js';
 import debounce from 'lodash/debounce';
 import type { IChangedTiddlers, ITiddlerFields, Syncer, Tiddler, Wiki } from 'tiddlywiki';
 import type { AppDataService } from '../../../src/services/AppDataService/index.js';
@@ -5,12 +6,6 @@ import type { GitBackgroundSyncService } from '../../../src/services/BackgroundS
 import type { NativeService } from '../../../src/services/NativeService/index.js';
 import type { WikiHookService } from '../../../src/services/WikiHookService/index.js';
 import type { FileSystemWikiStorageService as WikiStorageService } from '../../../src/services/WikiStorageService/FileSystemWikiStorageService.js';
-
-interface Logger {
-  alert: (message: string) => void;
-  log: (...arguments_: unknown[]) => void;
-  setSaveBuffer?: (logger: Logger) => void;
-}
 
 type ISyncAdaptorGetStatusCallback = (error: Error | null, isLoggedIn?: boolean, username?: string, isReadOnly?: boolean, isAnonymous?: boolean) => void;
 // type ISyncAdaptorGetTiddlersJSONCallback = (error: Error | null, tiddler?: Array<Omit<ITiddlerFields, 'text'>>) => void;
@@ -46,6 +41,28 @@ declare global {
   }
 }
 
+interface MobileSyncerCapabilities {
+  getSyncedTiddlers: (source?: unknown) => string[];
+  processTaskQueue: () => void;
+}
+
+/**
+ * Older TiddlyWiki builds can expose a partial syncer during boot. Keep the
+ * temporary monkey-patch behind an explicit capability check so a missing
+ * method cannot turn into an untyped property write or a broken boot.
+ */
+function getMobileSyncerCapabilities(syncer: Syncer): MobileSyncerCapabilities | undefined {
+  if (typeof syncer.getSyncedTiddlers !== 'function' || typeof syncer.processTaskQueue !== 'function') {
+    return undefined;
+  }
+  return {
+    getSyncedTiddlers: source => syncer.getSyncedTiddlers(source),
+    processTaskQueue: () => {
+      syncer.processTaskQueue();
+    },
+  };
+}
+
 class TidGiMobileFileSystemSyncAdaptor {
   name = 'tidgi-mobile-fs';
   supportsLazyLoading = true;
@@ -79,7 +96,7 @@ class TidGiMobileFileSystemSyncAdaptor {
     this.wiki = options.wiki;
     this.hasStatus = false;
     this.isAnonymous = false;
-    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor') as unknown as Logger;
+    this.logger = new $tw.utils.Logger('TidGiMobileFileSystemSyncAdaptor');
     this.isLoggedIn = false;
     this.isReadOnly = false;
     this.logoutIsAvailable = true;
@@ -185,16 +202,19 @@ class TidGiMobileFileSystemSyncAdaptor {
     // in, each firing a change event → O(n) * O(n) = O(n²) total.
     // We patch BOTH getSyncedTiddlers AND processTaskQueue to no-op during boot.
     if (!this._bootPhaseComplete) {
-      const originalProcessTaskQueue = syncer.processTaskQueue.bind(syncer);
-      // Runtime: getSyncedTiddlers(source) takes a source callback — the type
-      // definition omits it, so we cast to the actual signature.
-      const originalGetSyncedTiddlers = (syncer.getSyncedTiddlers as (source?: unknown) => string[]).bind(syncer);
+      const syncerCapabilities = getMobileSyncerCapabilities(syncer);
+      if (syncerCapabilities === undefined) {
+        this.logger.alert('configSyncer: required syncer capabilities are unavailable');
+        return;
+      }
+      const originalProcessTaskQueue = syncerCapabilities.processTaskQueue;
+      const originalGetSyncedTiddlers = syncerCapabilities.getSyncedTiddlers;
       syncer.processTaskQueue = () => {
         if (!this._bootPhaseComplete) return;
-        return originalProcessTaskQueue();
+        originalProcessTaskQueue();
       };
       // getSyncedTiddlers is the expensive O(n) call — skip it during boot
-      (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = (source: unknown) => {
+      syncer.getSyncedTiddlers = (source?: unknown) => {
         if (!this._bootPhaseComplete) return [];
         return originalGetSyncedTiddlers(source);
       };
@@ -205,7 +225,7 @@ class TidGiMobileFileSystemSyncAdaptor {
         this.logger.log('configSyncer: boot phase complete, syncer fully enabled');
         // Restore originals
         syncer.processTaskQueue = originalProcessTaskQueue;
-        (syncer as unknown as Record<string, unknown>).getSyncedTiddlers = originalGetSyncedTiddlers;
+        syncer.getSyncedTiddlers = originalGetSyncedTiddlers;
         // Re-read tiddler info now that all tiddlers are loaded, then process queue
         syncer.readTiddlerInfo();
         syncer.processTaskQueue();
