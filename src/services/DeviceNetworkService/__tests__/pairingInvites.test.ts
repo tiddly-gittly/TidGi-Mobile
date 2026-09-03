@@ -32,6 +32,14 @@ describe('Mobile signed pairing invites', () => {
     expect(mockCreateSignedInvite).not.toHaveBeenCalled();
   });
 
+  it('refuses to sign an invite that advertises public cleartext WebSocket transport', async () => {
+    const identity = { peerId: 'peer-a' } as LocalDeviceIdentity;
+
+    await expect(createMobilePairingInvite(identity, ['/ip4/203.0.113.9/tcp/9000/ws/p2p/peer-a'], dependencies))
+      .rejects.toThrow('pairing_invite_cleartext_requires_private_lan');
+    expect(mockCreateSignedInvite).not.toHaveBeenCalled();
+  });
+
   it('only returns invites accepted by the shared identity verifier and Mobile transport policy', async () => {
     const verifiedInvite = { peerId: 'peer-a', multiaddrs: [privateAddress], signature: 'verified' } as DevicePairingInvite;
     mockParseVerifiedInvite.mockResolvedValue(verifiedInvite);

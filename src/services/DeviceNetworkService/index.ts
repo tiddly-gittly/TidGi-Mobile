@@ -19,7 +19,6 @@ import {
   type DeviceCapabilities,
   type DeviceCloudCommitFence,
   type DeviceCloudConnectionSnapshot,
-  type DeviceCloudConnectionStatus,
   type DeviceConnectionGrant,
   type DeviceConnectionGrantStringScope,
   type DeviceStreamOptions,
@@ -51,30 +50,22 @@ const IDENTITY_KEY = 'device_network_identity_v1';
 const TRUSTED_DEVICES_KEY = 'device_network_trusted_devices_v2';
 const RELAY_RENEWAL_WINDOW_MS = 2 * 60_000;
 
-export interface DeviceNetworkCloudStatus {
-  configured: boolean;
-  components?: DeviceCloudConnectionSnapshot['components'];
-  error?: string;
-  generation?: number;
-  lastConnectedAt?: number;
-  state: DeviceCloudConnectionStatus;
-}
-
-function cloudErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (typeof error === 'symbol' || typeof error === 'function' || error === undefined) return 'unknown_cloud_error';
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return 'unknown_cloud_error';
-  }
-}
+export type DeviceNetworkCloudStatus = DeviceCloudConnectionSnapshot;
 
 function stringScope(value: unknown): DeviceConnectionGrantStringScope {
   return typeof value === 'string' && value.length > 0
     ? { mode: 'ids', ids: [value] }
     : { mode: 'none' };
+}
+
+/** Validate a persisted raw-seed identity with the shared libp2p signer. */
+export async function validateMobileIdentity(identity: RawSeedDeviceIdentity): Promise<boolean> {
+  try {
+    await signDeviceIdentityPayload({ identity, payload: new Uint8Array(0) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 class SecureStoreDeviceTrustStore implements DeviceTrustStore {
@@ -189,6 +180,7 @@ function createMobileCloudClient(configuration: DeviceNetworkCloudConfig): Cloud
 export class DeviceNetworkService {
   private core?: Libp2pDeviceNetworkService;
   private identity?: RawSeedDeviceIdentity;
+  private identityPromise?: Promise<void>;
   private started = false;
   private startPromise?: Promise<void>;
   private readonly trustStore = new SecureStoreDeviceTrustStore();
@@ -199,7 +191,17 @@ export class DeviceNetworkService {
   private cloudGrantCache = new Map<string, DeviceConnectionGrant>();
   private lastCloudDevices: CloudDeviceRecord[] = [];
   private standardCloudAdapter?: StandardDeviceCloudConnectionAdapter;
-  private cloudStatus: DeviceNetworkCloudStatus = { configured: false, state: 'not-configured' };
+  private cloudStatus: DeviceNetworkCloudStatus = {
+    status: 'not-configured',
+    generation: 0,
+    components: {
+      authorizer: 'not-run',
+      registration: 'not-run',
+      relay: 'not-run',
+      heartbeat: 'not-run',
+      directory: 'not-run',
+    },
+  };
   private readonly cloudStatusListeners = new Set<(status: DeviceNetworkCloudStatus) => void>();
   private readonly cloudCoordinator;
 
@@ -239,8 +241,9 @@ export class DeviceNetworkService {
     await this.ensureIdentity();
 
     const capabilities = this.buildCapabilities();
+    const identity = this.requireIdentity();
     this.core = new Libp2pDeviceNetworkService({
-      identity: this.identity!,
+      identity,
       capabilities,
       trustStore: this.trustStore,
       authorizer: this.authorizer,
@@ -293,7 +296,7 @@ export class DeviceNetworkService {
   public getCloudStatus(): DeviceNetworkCloudStatus {
     return {
       ...this.cloudStatus,
-      ...(this.cloudStatus.components ? { components: { ...this.cloudStatus.components } } : {}),
+      components: { ...this.cloudStatus.components },
     };
   }
 
@@ -430,31 +433,31 @@ export class DeviceNetworkService {
 
   public async getLocalIdentity(): Promise<LocalDeviceIdentity> {
     await this.ensureIdentity();
-    return this.identity!;
+    return this.requireIdentity();
   }
 
   public async getLocalDevice(): Promise<Device> {
-    return this.core!.getLocalDevice();
+    return this.requireCore().getLocalDevice();
   }
 
   public async listDevices(): Promise<Device[]> {
-    return this.core!.listDevices();
+    return this.requireCore().listDevices();
   }
 
   public observeDevices(listener: (devices: Device[]) => void): () => void {
-    return this.core!.observeDevices(listener);
+    return this.requireCore().observeDevices(listener);
   }
 
   public async listPairingSessions(): Promise<PairingSession[]> {
-    return this.core!.listPairingSessions();
+    return this.requireCore().listPairingSessions();
   }
 
   public observePairingSessions(listener: (sessions: PairingSession[]) => void): () => void {
-    return this.core!.observePairingSessions(listener);
+    return this.requireCore().observePairingSessions(listener);
   }
 
   public async requestLocalPairing(peerId: string, options?: LocalPairingRequestOptions): Promise<PairingSession> {
-    return this.core!.requestLocalPairing(peerId, options);
+    return this.requireCore().requestLocalPairing(peerId, options);
   }
 
   public async requestPairingInvite(serializedInvite: string): Promise<PairingSession> {
@@ -471,8 +474,9 @@ export class DeviceNetworkService {
   public async createPairingInvite(): Promise<string> {
     await this.start();
     await this.ensureIdentity();
-    if (!this.core || !this.identity) throw new Error('device_network_not_started');
-    return createMobilePairingInvite(this.identity, this.core.getMultiaddrs(), {
+    const core = this.requireCore();
+    const identity = this.requireIdentity();
+    return createMobilePairingInvite(identity, core.getMultiaddrs(), {
       createSignedInvite: createSignedDevicePairingInvite,
       encodeInvite: encodeDevicePairingInvite,
       parseVerifiedInvite: parseVerifiedDevicePairingInvite,
@@ -480,15 +484,15 @@ export class DeviceNetworkService {
   }
 
   public async acceptPairing(sessionId: string): Promise<void> {
-    return this.core!.acceptPairing(sessionId);
+    return this.requireCore().acceptPairing(sessionId);
   }
 
   public async rejectPairing(sessionId: string): Promise<void> {
-    return this.core!.rejectPairing(sessionId);
+    return this.requireCore().rejectPairing(sessionId);
   }
 
   public async removeTrustedDevice(peerId: string): Promise<void> {
-    return this.core!.removeTrustedDevice(peerId);
+    return this.requireCore().removeTrustedDevice(peerId);
   }
 
   public async openStream(
@@ -496,13 +500,14 @@ export class DeviceNetworkService {
     protocol: MemeLoopProtocol,
     options: DeviceStreamOptions = {},
   ): Promise<MemeLoopDuplexStream> {
+    const core = this.requireCore();
     const presentedGrant = options.presentedGrant ?? await this.resolveOutboundGrant(peerId, {
       conversationScope: { mode: 'none' },
       definitionScope: { mode: 'none' },
       protocols: [protocol],
       rpcMethodScope: { mode: 'none' },
     });
-    return this.core!.openStream(peerId, protocol, { ...options, presentedGrant });
+    return core.openStream(peerId, protocol, { ...options, presentedGrant });
   }
 
   public async sendRpc<T>(
@@ -511,6 +516,7 @@ export class DeviceNetworkService {
     parameters: unknown,
     options: DeviceStreamOptions = {},
   ): Promise<T> {
+    const core = this.requireCore();
     const parametersRecord = parameters !== null && typeof parameters === 'object' && !Array.isArray(parameters)
       ? parameters as Record<string, unknown>
       : undefined;
@@ -520,10 +526,11 @@ export class DeviceNetworkService {
       protocols: ['/memeloop/rpc/2.0.0'],
       rpcMethodScope: { mode: 'ids', ids: [method] },
     });
-    return this.core!.sendRpc(peerId, method, parameters, { ...options, presentedGrant });
+    return core.sendRpc(peerId, method, parameters, { ...options, presentedGrant });
   }
 
   public async syncWithDevice(peerId: string, options: DeviceSyncOptions = {}): Promise<SyncResult> {
+    const core = this.requireCore();
     const presentedGrant = options.presentedGrant ?? await this.resolveOutboundGrant(peerId, {
       conversationScope: options.conversationIds === undefined
         ? { mode: 'all' }
@@ -532,20 +539,22 @@ export class DeviceNetworkService {
       protocols: ['/memeloop/sync/2.0.0'],
       rpcMethodScope: { mode: 'none' },
     });
-    return this.core!.syncWithDevice(peerId, { ...options, presentedGrant });
+    return core.syncWithDevice(peerId, { ...options, presentedGrant });
   }
 
   private createStandardCloudAdapter(): StandardDeviceCloudConnectionAdapter {
-    if (!this.identity || !this.core) throw new Error('device_network_not_started');
+    const identity = this.identity;
+    const core = this.core;
+    if (!identity || !core) throw new Error('device_network_not_started');
     return new StandardDeviceCloudConnectionAdapter({
       capabilities: () => this.buildCapabilities(),
       configureConnectionGrantPublicKey: (publicKey, signal, fence) => {
         signal.throwIfAborted();
         fence.throwIfStale();
         const cloudAuthorizer = new CloudDeviceAuthorizer({
-          localPeerId: this.identity!.peerId,
+          localPeerId: identity.peerId,
           grantVerificationPublicKeyMultibase: publicKey.publicKeyMultibase,
-          getTrustedDevice: peerId => locallyPairedRecord(this.core?.getTrustedDevice(peerId)),
+          getTrustedDevice: peerId => locallyPairedRecord(core.getTrustedDevice(peerId)),
         });
         if (!this.authorizer.setDelegate(cloudAuthorizer, fence)) fence.throwIfStale();
         return Promise.resolve();
@@ -564,22 +573,21 @@ export class DeviceNetworkService {
       commitCloudDirectorySnapshot: async (input, fence) => {
         await this.applyCloudDirectory([...input.cloudDevices], fence.signal, fence);
       },
-      identity: this.identity,
-      liveDirectory: this.core,
+      identity,
+      liveDirectory: core,
       network: {
-        getMultiaddrs: () => this.core?.getMultiaddrs() ?? [],
+        getMultiaddrs: () => core.getMultiaddrs(),
         configureRelayReservation: async (token, signal, fence) => {
           if (signal !== fence.signal) throw new TypeError('relay_generation_signal_mismatch');
-          await this.core?.configureRelayReservation(token, signal, fence);
+          await core.configureRelayReservation(token, signal, fence);
           fence.throwIfStale();
         },
         clearRelayReservation: async (signal) => {
           signal.throwIfAborted();
-          await this.core?.clearRelayReservation(signal);
+          await core.clearRelayReservation(signal);
           signal.throwIfAborted();
         },
       },
-      relayRequiredForOnline: () => true,
       relayTokenSafetyMarginMs: RELAY_RENEWAL_WINDOW_MS,
       signDeviceBinding: async ({ accountId, identity, nonce, signal }) => {
         signal.throwIfAborted();
@@ -591,7 +599,7 @@ export class DeviceNetworkService {
         signal.throwIfAborted();
         const nonce = randomUUID();
         const signature = await signDeviceIdentityPayload({
-          identity: this.identity!,
+          identity,
           payload: buildDeviceHeartbeatMessage({ ...unsigned, nonce }),
         });
         signal.throwIfAborted();
@@ -605,6 +613,18 @@ export class DeviceNetworkService {
   private requireStandardCloudAdapter(): StandardDeviceCloudConnectionAdapter {
     if (!this.standardCloudAdapter) throw new Error('device_network_not_started');
     return this.standardCloudAdapter;
+  }
+
+  private requireCore(): Libp2pDeviceNetworkService {
+    const core = this.core;
+    if (!core || !this.started) throw new Error('device_network_not_started');
+    return core;
+  }
+
+  private requireIdentity(): RawSeedDeviceIdentity {
+    const identity = this.identity;
+    if (!identity) throw new Error('device_network_identity_unavailable');
+    return identity;
   }
 
   private clientFor(configuration: DeviceNetworkCloudConfig): CloudDeviceFetchClient {
@@ -638,18 +658,12 @@ export class DeviceNetworkService {
   }
 
   private applyCloudCoordinatorSnapshot(snapshot: DeviceCloudConnectionSnapshot): void {
-    const connected = snapshot.status === 'online' || snapshot.status === 'degraded';
     this.cloudStatus = {
-      configured: snapshot.status !== 'not-configured',
-      state: snapshot.status,
+      status: snapshot.status,
       generation: snapshot.generation,
       components: { ...snapshot.components },
-      ...(snapshot.lastError ? { error: cloudErrorMessage(snapshot.lastError) } : {}),
-      ...(connected
-        ? { lastConnectedAt: Date.now() }
-        : this.cloudStatus.lastConnectedAt
-        ? { lastConnectedAt: this.cloudStatus.lastConnectedAt }
-        : {}),
+      ...(snapshot.lastError ? { lastError: { ...snapshot.lastError } } : {}),
+      ...(snapshot.nextRetryAt === undefined ? {} : { nextRetryAt: snapshot.nextRetryAt }),
     };
     for (const listener of this.cloudStatusListeners) listener(this.getCloudStatus());
   }
@@ -691,11 +705,20 @@ export class DeviceNetworkService {
 
   private async ensureIdentity(): Promise<void> {
     if (this.identity) return;
+    const pending = this.identityPromise ?? (this.identityPromise = this.loadOrCreateIdentity());
+    try {
+      await pending;
+    } finally {
+      if (this.identityPromise === pending) this.identityPromise = undefined;
+    }
+  }
+
+  private async loadOrCreateIdentity(): Promise<void> {
     const storedJson = await SecureStore.getItemAsync(IDENTITY_KEY);
     if (storedJson) {
       const stored = parseStoredIdentity(storedJson);
       if (stored) {
-        this.identity = {
+        const identity: RawSeedDeviceIdentity = {
           peerId: stored.peerId,
           publicKeyMultibase: stored.publicKeyMultibase,
           privateKeyRef: 'secure-store-raw-seed',
@@ -704,13 +727,25 @@ export class DeviceNetworkService {
           deviceName: stored.deviceName,
           platform: 'mobile',
         };
-        return;
+        if (await this.validateIdentity(identity)) {
+          this.identity = identity;
+          return;
+        }
       }
       console.warn('[DeviceNetworkService] invalid stored identity; generating a replacement');
     }
     const identity = await this.createIdentity();
     await this.saveIdentity(identity);
     this.identity = identity;
+  }
+
+  /**
+   * The shared signer derives the raw seed and verifies both the pinned
+   * public key and PeerId before signing. An empty payload lets startup use
+   * that canonical validator without inventing a second identity format.
+   */
+  private async validateIdentity(identity: RawSeedDeviceIdentity): Promise<boolean> {
+    return validateMobileIdentity(identity);
   }
 
   private async createIdentity(): Promise<RawSeedDeviceIdentity> {

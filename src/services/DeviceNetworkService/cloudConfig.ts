@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import type { DeviceNetworkService as CoreDeviceNetworkService } from 'memeloop/device-network';
 
 const CLOUD_CONFIG_KEY = 'device_network_cloud_config_v1';
 const MAXIMUM_ACCESS_TOKEN_LENGTH = 16_384;
@@ -8,10 +9,8 @@ function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
-export interface DeviceNetworkCloudConfig {
-  accessToken: string;
-  cloudUrl: string;
-}
+type CoreCloudConfiguration = NonNullable<CoreDeviceNetworkService['configureCloud']>;
+export type DeviceNetworkCloudConfig = Parameters<CoreCloudConfiguration>[0];
 
 export function normalizeCloudConfig(value: DeviceNetworkCloudConfig): DeviceNetworkCloudConfig {
   const cloudUrl = value.cloudUrl.trim().replace(/\/+$/, '');
