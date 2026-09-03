@@ -1,5 +1,8 @@
 import { Directory, File } from 'expo-file-system';
+import { logFor } from '../../../services/LoggerService';
 import { IWorkspace } from '../../../store/workspace';
+
+const cleanupLogger = logFor('workspace-cleanup');
 
 /**
  * Recursively delete a directory by first deleting all files,
@@ -17,7 +20,9 @@ export function recursiveDeleteDirectory(directory: Directory): void {
     if (entry instanceof File) {
       try {
         entry.delete();
-      } catch { /* best effort */ }
+      } catch (error) {
+        cleanupLogger.warn('Failed to remove workspace file during cleanup', error);
+      }
     } else if (entry instanceof Directory) {
       recursiveDeleteDirectory(entry);
     }
@@ -25,7 +30,9 @@ export function recursiveDeleteDirectory(directory: Directory): void {
   // After emptying, delete the now-empty directory
   try {
     directory.delete();
-  } catch { /* best effort — may still fail on some Android versions */ }
+  } catch (error) {
+    cleanupLogger.warn('Failed to remove workspace directory during cleanup', error);
+  }
 }
 
 export const deleteWikiFile = (wikiWorkspace: IWorkspace): void => {

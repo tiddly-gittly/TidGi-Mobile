@@ -88,7 +88,8 @@
     "Wiki": "Wiki",
     "ExportWholeWikiHTML": "导出整个Wiki为HTML存入文件夹",
     "ScanQRToSync": "扫描二维码来同步",
-    "TidGiHelpManual": "太记帮助手册"
+    "TidGiHelpManual": "太记帮助手册",
+    "ZoomIn": "放大"
   },
   "AddWorkspace": {
     "AddWorkspace": "添加工作区",
@@ -188,7 +189,8 @@
     "Use": "使用",
     "SelectSource": "换源",
     "PreviewWebView": "预览网页",
-    "LoadingFromServer": "正在从服务器加载列表"
+    "LoadingFromServer": "正在从服务器加载列表",
+    "ImportCanonicalUriFiles": "导入外部文件"
   },
   "ServerList": {
     "LastSync": "最近同步",
@@ -662,7 +664,6 @@
     "ConflictBranch": "冲突分支",
     "ConflictInstructions": "请在桌面端处理冲突后再继续同步。",
     "ConflictMessage": "你的更改已推送到分支 {{branch}}。请在桌面端解决冲突后重新拉取。",
-    "IncludeSubWikis": "同步时包含所有子 Wiki",
     "SyncActive": "同步中",
     "SyncSuccess": "同步成功"
   },
@@ -770,7 +771,8 @@
     "Model": "模型 ID",
     "OfficialModels": "官方模型建议",
     "OfficialProviders": "官方提供方建议",
-    "Provider": "提供方 ID"
+    "Provider": "提供方 ID",
+    "WireModel": "实际模型 ID"
   },
   "DeviceNetwork": {
     "AcceptPairing": "接受",
@@ -905,7 +907,11 @@
     "LoadNewerConversations": "加载更新的对话",
     "LoadOlderConversations": "加载更早的对话",
     "LoadingConversations": "正在加载对话……",
-    "ConversationDirectoryStatus": "正在显示 {{total}} 个对话中的 {{resident}} 个"
+    "ConversationDirectoryStatus": "正在显示 {{total}} 个对话中的 {{resident}} 个",
+    "ConversationDirectoryError": "无法加载对话，请点击“重试”后再试。",
+    "ConversationDirectoryInvalidRequest": "对话请求无效，请点击“重试”后再试。",
+    "ConversationDirectoryTooLarge": "对话列表过大，无法显示，请点击“重试”后再试。",
+    "RetryConversations": "重试对话"
   },
   "ScheduledTask": {
     "Title": "智能体计划任务",
@@ -944,11 +950,52 @@
   "Common": {
     "OK": "确定",
     "Cancel": "取消",
-    "Save": "保存"
+    "Save": "保存",
+    "Confirm": "确认"
   },
   "Settings": {
     "Save": "保存",
     "SaveSuccess": "保存成功",
     "SaveFailed": "保存失败"
-  }
+  },
+  "GitFilePreview": {
+    "Diff": "差异",
+    "Full": "完整内容",
+    "Actions": "操作",
+    "RevertFile": "撤销此文件变更",
+    "IgnoreFile": "忽略此文件（.gitignore）",
+    "IgnoreExtension": "忽略所有 .{{extension}} 文件",
+    "CopyPath": "复制文件路径",
+    "Before": "之前",
+    "After": "之后",
+    "Missing": "（缺失）",
+    "BinaryUnsupported": "不支持预览二进制内容。",
+    "ContentUnavailable": "文件内容不可用。"
+  },
+  "WikiUpdate": {
+    "NoDetails": "没有可用的详细信息"
+  },
+  "WorkspaceSelector": {
+    "Add": "添加",
+    "Guide": "指南",
+    "OpenWorkspaceTagTiddler": "打开 {{tagName}}",
+    "DefaultTiddlers": "默认笔记",
+    "OpenWorkspaceMenuName": "打开工作区",
+    "EditWorkspace": "配置工作区",
+    "RemoveWorkspace": "移除工作区",
+    "AreYouSure": "确定要移除这个工作区吗？\n移除工作区会将其从应用中删除，但不会删除硬盘上的文件夹。\n如果同时选择删除 Wiki 文件夹，所有内容也会被删除。",
+    "RemoveWorkspaceAndDelete": "移除工作区并从磁盘删除 Wiki 文件夹",
+    "BadWorkspacePath": "工作区配置存在问题",
+    "EditCurrentWorkspace": "配置当前工作区",
+    "RemoveCurrentWorkspace": "移除当前工作区",
+    "HibernateWorkspace": "休眠工作区",
+    "WakeUpWorkspace": "唤醒工作区",
+    "OpenWorkspaceFolder": "打开文件夹",
+    "ReloadCurrentWorkspace": "重新加载当前工作区",
+    "OpenWorkspaceFolderInEditor": "在外部编辑器中打开文件夹",
+    "OpenWorkspaceFolderInGitGUI": "在 Git GUI 中打开",
+    "OpenInBrowser": "在浏览器中打开",
+    "OpenInBrowserDisabledHint": "（配置→启用 HTTP API 后可用）"
+  },
+  "OptionalActions": "可选操作"
 }

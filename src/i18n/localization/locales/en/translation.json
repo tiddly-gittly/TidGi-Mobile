@@ -59,7 +59,8 @@
     "SyncNow": "Sync To Cloud",
     "NoNetworkConnection": "No Network Connection",
     "OpenCommandPalette": "Open CommandPalette",
-    "BackupNow": "Git Backup Locally"
+    "BackupNow": "Git Backup Locally",
+    "PendingChangesCount": "{{count}} pending Git changes"
   },
   "Updater": {
     "CheckingFailed": "Checking Failed (Network Error)",
@@ -70,7 +71,9 @@
     "UpdateAvailable": "Update Available!",
     "UpdateCancelled": "Update Cancelled",
     "UpdateDownloaded": "Update Downloaded",
-    "UpdateNotAvailable": "You have latest version"
+    "UpdateNotAvailable": "You have latest version",
+    "Uncommitted": "Uncommitted Changes",
+    "Commits": "Commits"
   },
   "AddWorkspace": {
     "Use": "Use",
@@ -170,7 +173,8 @@
     "CreateWebpageShortcut": "Add Webpage Shortcut",
     "ScanFromWiki": "Scan",
     "Preview": "Preview",
-    "LoadingFromServer": "Loading List From Server"
+    "LoadingFromServer": "Loading List From Server",
+    "ImportCanonicalUriFiles": "Import external files"
   },
   "ServerList": {
     "LastSync": "Last sync",
@@ -248,7 +252,13 @@
     "NotFound": "Workspace Not Found",
     "AddNewServer": "Add New Server",
     "SyncNotActive": "Not Active",
-    "FillSelectedServer": "Fill with Selected Server"
+    "FillSelectedServer": "Fill with Selected Server",
+    "GitHistory": {
+      "Refresh": "Refresh Git History",
+      "CommitDetails": "Commit Details",
+      "Files": "Changed Files",
+      "NoFiles": "No changed files"
+    }
   },
   "Dialog": {
     "CantFindWorkspaceFolderRemoveWorkspace": "Cannot find the workspace folder that was still there before! \nThe folders that should have existed here may have been removed, or there is no wiki in this folder! \nDo you want to remove the workspace?",
@@ -546,7 +556,9 @@
     "Wiki": "Wiki",
     "ExportWholeWikiHTML": "Export Whole Wiki as HTML to folder",
     "ScanQRToSync": "Scan QR To Sync",
-    "TidGiHelpManual": "TidG iHelp Manual"
+    "TidGiHelpManual": "TidG iHelp Manual",
+    "Sync": "Sync and Backup",
+    "StorageLocation": "Storage Location"
   },
   "ErrorMessage": "Error message",
   "ClickForDetails": "Click For Details",
@@ -562,7 +574,8 @@
     "FastImport": "Fast Import",
     "FastImportDescription": "Import directly into the currently open wiki when available, otherwise into the default workspace, without waiting for the wiki UI. No confirmation dialog will be shown.",
     "SaveMediaAsAttachment": "Save Media as Attachment",
-    "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content."
+    "SaveMediaAsAttachmentDescription": "Save media and files as attachments to the filesystem using only _canonical_uri instead of embedding full content.",
+    "TagForSharedContentDescription": "Tag for shared content"
   },
   "Description": "Description",
   "Tags": "Tags",
@@ -686,7 +699,6 @@
     "ConflictBranch": "Conflict Branch",
     "ConflictInstructions": "Resolve the conflict on Desktop and sync again.",
     "ConflictMessage": "Your changes have been pushed to branch {{branch}}. Please resolve the conflict on the Desktop and then pull again.",
-    "IncludeSubWikis": "Include all sub-wikis when syncing",
     "SyncActive": "Sync Active",
     "SyncSuccess": "Sync Succeeded"
   },
@@ -781,7 +793,8 @@
     "Model": "Model ID",
     "OfficialModels": "Official model suggestions",
     "OfficialProviders": "Official provider suggestions",
-    "Provider": "Provider ID"
+    "Provider": "Provider ID",
+    "WireModel": "Wire model ID"
   },
   "DeviceNetwork": {
     "AcceptPairing": "Accept",
@@ -916,7 +929,11 @@
     "LoadNewerConversations": "Load newer conversations",
     "LoadOlderConversations": "Load older conversations",
     "LoadingConversations": "Loading conversations…",
-    "ConversationDirectoryStatus": "Showing {{resident}} of {{total}} conversations"
+    "ConversationDirectoryStatus": "Showing {{resident}} of {{total}} conversations",
+    "ConversationDirectoryError": "Unable to load conversations. Tap retry to try again.",
+    "ConversationDirectoryInvalidRequest": "The conversation request was invalid. Tap retry to try again.",
+    "ConversationDirectoryTooLarge": "The conversation list is too large to display. Tap retry to try again.",
+    "RetryConversations": "Retry conversations"
   },
   "ScheduledTask": {
     "Title": "Scheduled agent tasks",
@@ -962,5 +979,23 @@
     "Save": "Save",
     "SaveSuccess": "Saved successfully",
     "SaveFailed": "Save failed"
-  }
+  },
+  "GitFilePreview": {
+    "Diff": "Diff",
+    "Full": "Full",
+    "Actions": "Actions",
+    "RevertFile": "Revert changes to this file",
+    "IgnoreFile": "Ignore this file (.gitignore)",
+    "IgnoreExtension": "Ignore all .{{extension}} files",
+    "CopyPath": "Copy file path",
+    "Before": "Before",
+    "After": "After",
+    "Missing": "(missing)",
+    "BinaryUnsupported": "Binary content preview is not supported.",
+    "ContentUnavailable": "File content is not available."
+  },
+  "WikiUpdate": {
+    "NoDetails": "No details available"
+  },
+  "OptionalActions": "Optional actions"
 }

@@ -4,6 +4,7 @@ import {
   ConversationTimelineWindowController,
   createAgentRunLogDetailLoader,
   NativeAgentChatView,
+  type MemeLoopChatAdapter,
   type NativeMemeLoopSendMessageInput,
   useAgentSession,
   useAgentSessionCoreAdapter,
@@ -17,6 +18,7 @@ import {
   createAgentDeviceRpcClient,
   createMissingProviderSettingAgentRunError,
   type Device,
+  type RemoteAgentExecutionTarget,
 } from 'memeloop/mobile';
 import { createFetchLLMProvider } from 'memeloop/mobile/providers';
 import { type FC, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -39,7 +41,11 @@ import {
   prepareMobileSendMessage,
   releaseMobilePickedAttachment,
 } from './attachmentAdapter';
-import { MobileConversationDirectoryController, mobileConversationDirectoryDirection } from './conversationDirectory';
+import {
+  MobileConversationDirectoryController,
+  mobileConversationDirectoryDirection,
+  mobileConversationDirectoryErrorMessageKey,
+} from './conversationDirectory';
 import { resolveMobileAgentErrorPresentation } from './errorPresentation';
 import { formatMobileTimelineTimestamp } from './localizedFormatting';
 import { exportStoredMessage } from './messageExport';
@@ -64,13 +70,7 @@ const styles = StyleSheet.create({
   initializationError: { padding: 16 },
 });
 
-interface AgentExecutionTarget {
-  id: string;
-  label: string;
-  description?: string;
-  kind?: 'local' | 'remote';
-  disabled?: boolean;
-}
+type AgentExecutionTarget = NonNullable<MemeLoopChatAdapter['executionTargets']>[number];
 
 function remoteExecutionTargetId(peerId: string): string {
   return `${REMOTE_EXECUTION_TARGET_PREFIX}${peerId}`;
@@ -101,7 +101,7 @@ function useMobileLoopService() {
       modelId: connection.modelId,
       apiMode: connection.apiMode,
       createModel: requestedModelId => {
-        const modelId = requestedModelId ?? connection.modelId;
+        const modelId = requestedModelId ?? connection.wireModelId;
         return connection.apiMode === 'responses' ? openai.responses(modelId) : openai.chat(modelId);
       },
     });
@@ -109,16 +109,18 @@ function useMobileLoopService() {
       identity.peerId,
       connection.providerId,
       connection.modelId,
+      connection.wireModelId,
       connection.apiMode,
       connection.baseURL,
       connection.apiKey,
     ]);
-    const service = getMobileAgentLoopService(
+    const service = await getMobileAgentLoopService(
       configurationIdentity,
       () =>
         new MobileAgentLoopService(provider, identity.peerId, mobileAgentStorage, createSecureDurableId, {
           apiMode: connection.apiMode,
           modelId: connection.modelId,
+          wireModelId: connection.wireModelId,
           providerId: connection.providerId,
         }),
     );
@@ -324,29 +326,27 @@ function AgentChatSessionView({
   });
   const executionTargets = useMemo<AgentExecutionTarget[]>(() => [
     {
-      id: LOCAL_EXECUTION_TARGET_ID,
+      value: mobileExecutionTarget(LOCAL_EXECUTION_TARGET_ID),
       label: t('AgentChat.ThisPhone'),
       description: t('AgentChat.RunLocallyOnPeer', { peerId: localPeerId }),
-      kind: 'local',
     },
     ...agentLoopDevices.map(device => ({
-      id: remoteExecutionTargetId(device.peerId),
+      value: mobileExecutionTarget(remoteExecutionTargetId(device.peerId)),
       label: device.displayName,
       description: t('AgentChat.RemoteTargetDescription', {
         platform: device.platform,
         reachability: t(`DeviceNetwork.Reachability.${device.reachability.state}`),
       }),
-      kind: 'remote' as const,
       disabled: !device.trusted || device.reachability.state === 'offline',
     })),
   ], [agentLoopDevices, localPeerId, t]);
   const adapter = useMemo(() => ({
     ...baseAdapter,
     executionTargets,
-    activeExecutionTargetId,
-    setExecutionTarget: async (targetId: string, options?: { restartCurrentTurn?: boolean }) => {
-      executionAdapter.switchTarget(conversationId, mobileExecutionTarget(targetId));
-      setActiveExecutionTargetId(targetId);
+    activeExecutionTarget: mobileExecutionTarget(activeExecutionTargetId),
+    setExecutionTarget: async (target: RemoteAgentExecutionTarget, options?: { restartCurrentTurn?: boolean }) => {
+      executionAdapter.switchTarget(conversationId, target);
+      setActiveExecutionTargetId(target.kind === 'local' ? LOCAL_EXECUTION_TARGET_ID : remoteExecutionTargetId(target.peerId));
       if (!options?.restartCurrentTurn) return;
       const latestTurnId = await mobileAgentStorage.getLatestVisibleTurnId(conversationId);
       if (latestTurnId) await baseAdapter.retryTurn(latestTurnId);
@@ -448,6 +448,7 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
     directoryController.getSnapshot,
   );
   const direction = mobileConversationDirectoryDirection(i18n.dir());
+  const directoryErrorMessageKey = mobileConversationDirectoryErrorMessageKey(directory.error);
   const colors = useMemo(() => ({
     activeButton: { backgroundColor: theme.colors.primary },
     activeTitle: { color: theme.colors.onPrimary },
@@ -574,7 +575,22 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
             ? t('AgentChat.LoadingConversations')
             : t('AgentChat.ConversationDirectoryStatus', { resident: directory.items.length, total: directory.total })}
         </Text>
-        {directory.error && <Text accessibilityRole='alert' style={styles.directoryStatus}>{directory.error.message}</Text>}
+        {directory.error && (
+          <>
+            <Text accessibilityRole='alert' style={styles.directoryStatus}>{t(directoryErrorMessageKey)}</Text>
+            <Pressable
+              accessibilityRole='button'
+              accessibilityLabel={t('AgentChat.RetryConversations')}
+              disabled={directory.loadingInitial || directory.loadingNewer || directory.loadingOlder}
+              onPress={() => {
+                void directoryController.refresh();
+              }}
+              style={[styles.directoryButton, colors.button, (directory.loadingInitial || directory.loadingNewer || directory.loadingOlder) && styles.directoryButtonDisabled]}
+            >
+              <Text style={colors.title}>{t('AgentChat.RetryConversations')}</Text>
+            </Pressable>
+          </>
+        )}
         <Pressable
           accessibilityRole='button'
           accessibilityLabel={t('AgentChat.NewConversation')}
@@ -609,7 +625,9 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
           />
         )
         : initializationError || directory.error
-        ? <Text style={styles.initializationError}>{(initializationError ?? directory.error)?.message}</Text>
+        ? <Text style={styles.initializationError}>
+          {initializationError ? t('AgentChat.GenericErrorMessage') : t(directoryErrorMessageKey)}
+        </Text>
         : null}
     </View>
   );

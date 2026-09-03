@@ -206,6 +206,7 @@ function ExternalAPIItem() {
   const [apiKey, setAPIKey] = useState('');
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
+  const [wireModel, setWireModel] = useState('');
   const [apiMode, setApiMode] = useState<'chat-completions' | 'responses' | ''>('');
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>();
   const [error, setError] = useState<string>();
@@ -218,6 +219,7 @@ function ExternalAPIItem() {
         setAPIKey(config.apiKey);
         setProvider(config.providerId);
         setModel(config.modelId);
+        setWireModel(config.wireModelId);
         setApiMode(config.apiMode);
       })
       .catch(() => {
@@ -290,6 +292,14 @@ function ExternalAPIItem() {
         onChangeText={setModel}
         autoCapitalize='none'
       />
+      <TextInput
+        mode='outlined'
+        label={t('ExternalAPI.WireModel')}
+        value={wireModel}
+        onChangeText={setWireModel}
+        autoCapitalize='none'
+        autoCorrect={false}
+      />
       {modelSuggestions.length > 0 && (
         <View accessibilityLabel={t('ExternalAPI.OfficialModels')} style={styles.deviceNetworkChips}>
           {modelSuggestions.map(item => (
@@ -299,6 +309,7 @@ function ExternalAPIItem() {
               selected={model === item.id}
               onPress={() => {
                 setModel(item.id);
+                setWireModel(item.id);
               }}
             >
               {item.name}
@@ -326,19 +337,21 @@ function ExternalAPIItem() {
       <View style={styles.deviceNetworkToolbar}>
         <Button
           mode='contained'
-          disabled={!baseURL.trim() || !apiKey.trim() || !provider.trim() || !model.trim() || !apiMode}
+          disabled={!baseURL.trim() || !apiKey.trim() || !provider.trim() || !model.trim() || !wireModel.trim() || !apiMode}
           onPress={() => {
             void saveExternalAPIConfig({
               apiKey,
               apiMode: apiMode as 'chat-completions' | 'responses',
               baseURL,
               modelId: model,
+              wireModelId: wireModel,
               providerId: provider,
             }).then((saved) => {
               setBaseURL(saved.baseURL);
               setAPIKey(saved.apiKey);
               setProvider(saved.providerId);
               setModel(saved.modelId);
+              setWireModel(saved.wireModelId);
               setApiMode(saved.apiMode);
               setError(undefined);
             }).catch((error_: unknown) => {
@@ -356,6 +369,7 @@ function ExternalAPIItem() {
               setAPIKey('');
               setProvider('');
               setModel('');
+              setWireModel('');
               setApiMode('');
               setError(undefined);
             }).catch(() => {
@@ -393,7 +407,8 @@ function DeviceNetworkItem() {
 
   const pendingSessions = useMemo(() => network.pairingSessions.filter(session => session.status === 'pending'), [network.pairingSessions]);
   const pendingPeerIds = useMemo(() => new Set(pendingSessions.map(session => session.remotePeerId)), [pendingSessions]);
-  const visibleError = actionError ?? network.error?.message;
+  const cloudError = network.cloudStatus.lastError?.code;
+  const visibleError = actionError ?? network.error?.message ?? cloudError;
 
   const runAction = useCallback(async (actionKey: string, action: () => Promise<void>) => {
     setBusyAction(actionKey);
@@ -541,7 +556,7 @@ function DeviceNetworkItem() {
     <View testID='device-network-panel' style={styles.deviceNetworkPanel}>
       <Text variant='titleMedium'>{t('DeviceNetwork.CloudConfiguration')}</Text>
       <Text testID='device-network-cloud-status' variant='bodySmall' style={styles.deviceNetworkEmpty}>
-        {t(`DeviceNetwork.CloudState.${network.cloudStatus.state}`)}
+        {t(`DeviceNetwork.CloudState.${network.cloudStatus.status}`)}
       </Text>
       <TextInput
         autoFocus={configFocus.field === 'cloud-url'}
@@ -580,7 +595,7 @@ function DeviceNetworkItem() {
         </Button>
         <Button
           mode='outlined'
-          disabled={busyAction !== undefined || !network.cloudStatus.configured}
+          disabled={busyAction !== undefined || network.cloudStatus.status === 'not-configured'}
           onPress={() => {
             void runAction('clear-cloud', async () => {
               await clearCloudConfig();
@@ -593,7 +608,7 @@ function DeviceNetworkItem() {
           {t('DeviceNetwork.ClearCloudConfiguration')}
         </Button>
       </View>
-      {network.cloudStatus.error && <Text variant='bodySmall' style={[styles.deviceNetworkError, { color: theme.colors.error }]}>{network.cloudStatus.error}</Text>}
+      {network.cloudStatus.lastError && <Text variant='bodySmall' style={[styles.deviceNetworkError, { color: theme.colors.error }]}>{network.cloudStatus.lastError.code}</Text>}
       <Divider style={styles.deviceNetworkDivider} />
       <View style={styles.deviceNetworkHeader}>
         <View style={styles.deviceNetworkTextBlock}>
@@ -623,7 +638,7 @@ function DeviceNetworkItem() {
           compact
           mode='outlined'
           icon='cloud-sync-outline'
-          disabled={busyAction !== undefined || !network.cloudStatus.configured}
+          disabled={busyAction !== undefined || network.cloudStatus.status === 'not-configured'}
           onPress={() => {
             void runAction('cloud-sync', async () => {
               await network.syncCloudDevices();
