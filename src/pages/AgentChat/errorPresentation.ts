@@ -1,5 +1,5 @@
 import { type AgentRunErrorLocalizedText, type AgentRunErrorPresentation, resolveAgentRunErrorPresentation } from '@memeloop/react-ui/chat/core';
-import type { AgentRunErrorLocalizationParameters, AgentRunErrorMessageKey, AgentRunErrorSettingTarget, ChatMessage } from 'memeloop/mobile';
+import type { AgentRunErrorLocalizationParameters, AgentRunErrorMessageKey, AgentRunErrorSettingTarget, ChatMessage, ConversationMessageListProjection } from 'memeloop/mobile';
 
 export interface MobileAgentErrorPresentationOptions {
   localize: (
@@ -14,7 +14,7 @@ export interface MobileAgentErrorPresentationOptions {
  * messages, provider bodies and stacks are never inspected or rendered.
  */
 export function resolveMobileAgentErrorPresentation(
-  error: Error | ChatMessage,
+  error: Error | ChatMessage | ConversationMessageListProjection,
   options: MobileAgentErrorPresentationOptions,
 ): AgentRunErrorPresentation | null {
   return resolveAgentRunErrorPresentation(error, options);

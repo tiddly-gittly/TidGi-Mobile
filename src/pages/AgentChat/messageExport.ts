@@ -1,7 +1,9 @@
 import { File, Paths } from 'expo-file-system';
 import { shareAsync } from 'expo-sharing';
+import { logFor } from '../../services/LoggerService';
 
 const EXPORT_RANGE_BYTES = 256 * 1024;
+const exportLogger = logFor('agent-chat');
 
 export interface MessageDetailRangeReader {
   readMessageDetailRange(
@@ -105,8 +107,9 @@ export async function exportStoredMessage({
     if (!complete) {
       try {
         file.delete();
-      } catch {
+      } catch (error) {
         // Best-effort cleanup must not hide the original export failure.
+        exportLogger.warn('Failed to remove incomplete message export', error);
       }
     }
   }

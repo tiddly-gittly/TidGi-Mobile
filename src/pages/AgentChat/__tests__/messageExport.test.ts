@@ -1,7 +1,17 @@
 import { exportStoredMessage, type MessageDetailRangeReader } from '../messageExport';
 
-jest.mock('expo-file-system', () => ({ File: jest.fn(), Paths: { cache: {} } }));
+jest.mock('expo-file-system', () => ({
+  Directory: jest.fn(),
+  File: jest.fn(),
+  Paths: {
+    cache: { uri: 'file:///cache/' },
+    document: { uri: 'file:///document/' },
+  },
+}));
 jest.mock('expo-sharing', () => ({ shareAsync: jest.fn() }));
+jest.mock('../../../services/LoggerService', () => ({
+  logFor: jest.fn(() => ({ error: jest.fn(), log: jest.fn(), warn: jest.fn() })),
+}));
 
 function createTestFile() {
   const chunks: Uint8Array[] = [];

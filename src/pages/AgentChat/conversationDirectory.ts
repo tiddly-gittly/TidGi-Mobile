@@ -4,6 +4,35 @@ export const MOBILE_CONVERSATION_DIRECTORY_PAGE_SIZE = 20;
 export const MOBILE_CONVERSATION_DIRECTORY_MAX_BYTES = 256 * 1024;
 export const MOBILE_CONVERSATION_DIRECTORY_RESIDENT_LIMIT = 100;
 
+/** Stable UI categories for directory failures; provider/storage details stay
+ * out of the rendered surface and remain available only to diagnostics/logs. */
+export type MobileConversationDirectoryErrorCode = 'invalid-request' | 'too-large' | 'storage';
+
+export function mobileConversationDirectoryErrorCode(error: Error | null): MobileConversationDirectoryErrorCode {
+  const message = error?.message ?? '';
+  if (message === 'conversation_list_page_exceeds_byte_budget' || message === 'mobile_conversation_directory_page_exceeds_byte_budget') {
+    return 'too-large';
+  }
+  if (/^(?:invalid_|unexpected_mobile_conversation_directory_)/u.test(message) || message.includes('_cursor')) {
+    return 'invalid-request';
+  }
+  return 'storage';
+}
+
+export function mobileConversationDirectoryErrorMessageKey(error: Error | null):
+  | 'AgentChat.ConversationDirectoryError'
+  | 'AgentChat.ConversationDirectoryInvalidRequest'
+  | 'AgentChat.ConversationDirectoryTooLarge' {
+  switch (mobileConversationDirectoryErrorCode(error)) {
+    case 'invalid-request':
+      return 'AgentChat.ConversationDirectoryInvalidRequest';
+    case 'too-large':
+      return 'AgentChat.ConversationDirectoryTooLarge';
+    default:
+      return 'AgentChat.ConversationDirectoryError';
+  }
+}
+
 export interface MobileConversationDirectoryClient {
   listConversationsPage(
     options: GetConversationListPageOptions,

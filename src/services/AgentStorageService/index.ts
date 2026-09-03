@@ -4,6 +4,8 @@ import { Buffer } from 'buffer';
 import { openDatabaseAsync } from 'expo-sqlite';
 import {
   type AgentConversationUpdate,
+  type AgentConversationTurnDetailRequest,
+  type AgentConversationTurnDetailResponse,
   type AgentDefinition,
   type AgentInstanceMeta,
   type AgentRunRecord,
@@ -11,7 +13,13 @@ import {
   type AgentRunState,
   assertAtomicAgentRetryResult,
   assertAtomicAgentRetrySourceMessage,
+  assertCanonicalChatMessageProjection,
   assertCanonicalConversationEvent,
+  assertConversationFullContentMessagePage,
+  assertConversationMessageWindowResult,
+  assertConversationTimelinePage,
+  decodeConversationProjectionCursor,
+  encodeConversationProjectionCursor,
   type AtomicAgentRetryInput,
   type AtomicAgentRetryResult,
   type AtomicAgentRetryStore,
@@ -41,12 +49,12 @@ import {
   type ConversationReadCallOptions,
   type ConversationTombstoneEvent,
   createAtomicAgentRetryEventDrafts,
+  type FullAgentStorage,
   type GetCompactionCandidatePageOptions,
   type GetConversationEventPageOptions,
   type GetConversationListPageOptions,
   type GetConversationMessageWindowAroundOptions,
   type GetRetainedCompactionControlsOptions,
-  type IAgentStorage,
   type MessageVersionFrontier,
   type MessageVersionFrontierCursor,
   type MessageVersionFrontierPage,
@@ -60,34 +68,39 @@ import {
   type UploadAttachmentChunkResponse,
 } from 'memeloop';
 import {
+  assertConversationMessageProjection,
+  boundConversationTimelineMessageEntry,
   compareMessageCursor,
+  type ConversationFullContentMessagePage,
   type ConversationMessageCursor,
+  type ConversationMessageListProjection,
   type ConversationMessagePage,
+  type ConversationTimelineCompactionEntry,
   type ConversationTimelineEntry,
+  type ConversationTimelineMessageEntry,
   type ConversationTimelinePage,
   type ConversationTimelinePageCallOptions,
-  type ConversationTimelineParticipantPreview,
-  type ConversationTimelineTurnEntry,
   type GetConversationTimelinePageOptions,
+  type GetFullContentMessagePageOptions,
   type GetMessagePageOptions,
+  MAX_CONVERSATION_MESSAGE_WINDOW_BYTES,
+  MAX_CONVERSATION_MESSAGE_WINDOW_SIZE,
+  MAX_CONVERSATION_TIMELINE_PAGE_BYTES,
+  MAX_CONVERSATION_TIMELINE_PAGE_SIZE,
+  MAX_CONVERSATION_TIMELINE_PREVIEW_LENGTH,
+  MAX_MESSAGE_PAGE_SIZE,
   messageCursor,
+  type TurnDetailProjectionCursor,
 } from 'memeloop/mobile';
 import { createSecureDurableId, type DurableIdFactory } from '../SecureIdService';
 import { ExpoMobileAttachmentFileStore, type MobileAttachmentFileStore } from './attachmentFileStore';
+import { persistCausalClock, readCausalClockHighWatermarks, readContiguousOriginSequence, readMaxLamportClock } from './causalClock';
+import { type AgentSqlDatabase, type AgentSqlDatabaseFactory, type AgentSqlValue } from './storagePort';
 
-type SqlValue = string | number | null | Uint8Array;
+export type { AgentSqlDatabase, AgentSqlDatabaseFactory, AgentSqlValue } from './storagePort';
 
-export interface AgentSqlDatabase {
-  execAsync(source: string): Promise<void>;
-  runAsync(source: string, parameters?: SqlValue[]): Promise<{ changes: number }>;
-  getFirstAsync<T>(source: string, parameters?: SqlValue[]): Promise<T | null>;
-  getAllAsync<T>(source: string, parameters?: SqlValue[]): Promise<T[]>;
-  withTransactionAsync(task: () => Promise<void>): Promise<void>;
-}
-
-export type AgentSqlDatabaseFactory = () => Promise<AgentSqlDatabase>;
+type SqlValue = AgentSqlValue;
 type LocalChatMessageDraft = Omit<ChatMessage, 'lamportClock' | 'originSequence'>;
-
 interface MessageRow {
   messageJson: string;
 }
@@ -156,15 +169,16 @@ interface TimelineEntryRow {
   compactedTurnCount: number | null;
   cursor: string;
   entryId: string;
-  kind: 'compaction' | 'turn';
+  kind: 'compaction' | 'message';
   lamportClock: number;
   originNodeId: string;
-  participantPreviewsJson: string | null;
-  responseCount: number;
+  actorId: string | null;
+  actorLabel: string | null;
+  role: string | null;
+  preview: string | null;
   summaryPreview: string | null;
   timestamp: number;
   turnId: string;
-  userPreview: string | null;
 }
 
 interface TimelineStateRow {
@@ -187,22 +201,6 @@ interface TimelineCheckpointBatch {
   readonly dirtyConversationIds: Set<string>;
 }
 
-interface TimelineResponseRow {
-  content: string;
-  metadataJson: string | null;
-  originNodeId: string;
-  responseCount: number;
-  role: 'assistant' | 'agent';
-}
-
-export interface MobileTurnMessagePage {
-  items: ChatMessage[];
-  hasMoreBefore: boolean;
-  hasMoreAfter: boolean;
-  startCursor?: ConversationMessageCursor;
-  endCursor?: ConversationMessageCursor;
-}
-
 interface ConversationProjection {
   count: number;
   firstUserContent: string | null;
@@ -220,20 +218,9 @@ const CURSOR_ORDER_DESC = 'timestamp DESC, lamportClock DESC, originNodeId DESC,
 const EVENT_CURSOR_ORDER = 'originNodeId, originSequence, eventId';
 const EVENT_CURSOR_ORDER_DESC = 'originNodeId DESC, originSequence DESC, eventId DESC';
 const MESSAGE_COLUMNS = 'messageJson';
-const MESSAGE_PAGE_BYTE_LIMIT = 1024 * 1024;
-const FULL_CONTENT_PAGE_BYTE_LIMIT = 4 * 1024 * 1024;
-const MESSAGE_PAGE_LIMIT = 80;
+const CONVERSATION_LIST_PAGE_BYTE_LIMIT = 1024 * 1024;
 const MESSAGE_DISPLAY_ITEM_BYTE_LIMIT = 252 * 1024;
-const TIMELINE_PAGE_LIMIT = 64;
-const TIMELINE_PAGE_BYTE_LIMIT = 1024 * 1024;
-const TIMELINE_STORED_PREVIEW_LENGTH = 240;
 const TIMELINE_CHECKPOINT_STRIDE = 256;
-const TIMELINE_PARTICIPANT_LIMIT = 4;
-const TIMELINE_PARTICIPANT_PREVIEW_LENGTH = 160;
-const TIMELINE_PARTICIPANT_BYTES = 1024;
-const TIMELINE_TURN_ENTRY_BYTES = 1024;
-const MESSAGE_WINDOW_LIMIT = 80;
-const MESSAGE_WINDOW_BYTE_LIMIT = 4 * 1024 * 1024;
 const MAX_CONVERSATION_INVALIDATION_APPEND_COUNT = 1_000_000;
 const MOBILE_ATTACHMENT_CHUNK_BYTES = 512 * 1024;
 const MOBILE_ATTACHMENT_MAX_ACTIVE_UPLOADS_PER_OWNER = 8;
@@ -248,11 +235,29 @@ const STRICT_JSON_LIMITS = {
 } as const;
 
 function defaultDatabaseFactory(): Promise<AgentSqlDatabase> {
-  return openDatabaseAsync(MOBILE_AGENT_DATABASE_NAME) as unknown as Promise<AgentSqlDatabase>;
+  return openDatabaseAsync(MOBILE_AGENT_DATABASE_NAME).then(database => ({
+    execAsync: source => database.execAsync(source),
+    runAsync: (source, parameters = []) => database.runAsync(source, parameters).then(result => ({ changes: result.changes })),
+    getFirstAsync: <T>(source: string, parameters: SqlValue[] = []) => database.getFirstAsync<T>(source, parameters),
+    getAllAsync: <T>(source: string, parameters: SqlValue[] = []) => database.getAllAsync<T>(source, parameters),
+    withTransactionAsync: task => database.withTransactionAsync(task),
+  }));
 }
 
 function parseJson(value: string): unknown {
   return JSON.parse(value) as unknown;
+}
+
+function parseCanonicalMessage(value: string, conversationId?: string): ChatMessage {
+  const parsed = parseJson(value);
+  assertCanonicalChatMessageProjection(parsed, conversationId);
+  return parsed;
+}
+
+function parseMessageProjection(value: string, conversationId?: string): ConversationMessageListProjection {
+  const parsed = parseJson(value);
+  assertConversationMessageProjection(parsed, conversationId);
+  return parsed;
 }
 
 function strictJson(value: unknown): string {
@@ -328,7 +333,7 @@ function normalizeLocalEventDraft(draft: ConversationEventDraft): ConversationEv
     originSequence: 1,
   });
   const { lamportClock: _lamportClock, originSequence: _originSequence, ...normalizedDraft } = normalized;
-  return normalizedDraft as ConversationEventDraft;
+  return normalizedDraft;
 }
 
 function cursorPredicate(relation: '<' | '>', cursor: ConversationMessageCursor): { sql: string; parameters: SqlValue[] } {
@@ -374,65 +379,25 @@ function timelineMetadataText(metadata: Readonly<Record<string, unknown>> | unde
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
-function timelineParticipantPreview(message: ChatMessage): ConversationTimelineParticipantPreview {
-  if (message.role !== 'assistant' && message.role !== 'agent') {
-    throw new Error('invalid_conversation_timeline_participant_role');
-  }
-  const actorId = (
+function boundedTimelineActor(value: string, fallback: string): string {
+  const source = value.trim() || fallback.trim() || 'unknown';
+  return truncateUtf16(source, 160) || 'unknown';
+}
+
+function timelineActor(message: ChatMessage): { actorId: string; actorLabel: string } {
+  const actorId = boundedTimelineActor(
     timelineMetadataText(message.metadata, 'actorId') ??
-      timelineMetadataText(message.metadata, 'agentId') ??
-      message.originNodeId
-  ).trim() || 'unknown';
-  const actorLabel = (
+      timelineMetadataText(message.metadata, message.role === 'user' ? 'userId' : 'agentId') ??
+      message.originNodeId,
+    message.originNodeId,
+  );
+  const actorLabel = boundedTimelineActor(
     timelineMetadataText(message.metadata, 'actorLabel') ??
-      timelineMetadataText(message.metadata, 'agentName') ??
-      actorId
-  ).trim() || actorId;
-  return {
+      timelineMetadataText(message.metadata, message.role === 'user' ? 'userName' : 'agentName') ??
+      actorId,
     actorId,
-    actorLabel,
-    role: message.role,
-    preview: timelinePreview(message.content, TIMELINE_PARTICIPANT_PREVIEW_LENGTH),
-  };
-}
-
-function participantPreviewsFit(items: readonly ConversationTimelineParticipantPreview[]): boolean {
-  return Buffer.byteLength(strictJson(items), 'utf8') <= TIMELINE_PARTICIPANT_BYTES;
-}
-
-function boundedParticipantPreviews(
-  responses: readonly ConversationTimelineParticipantPreview[],
-): ConversationTimelineParticipantPreview[] {
-  let sample = responses.length <= TIMELINE_PARTICIPANT_LIMIT
-    ? [...responses]
-    : [...responses.slice(0, 2), ...responses.slice(-2)];
-  while (!participantPreviewsFit(sample) && sample.some(item => item.preview.length > 0)) {
-    sample = sample.map(item => ({
-      ...item,
-      preview: timelinePreview(item.preview, Math.floor(item.preview.length / 2)),
-    }));
-  }
-  if (!participantPreviewsFit(sample)) throw new Error('conversation_timeline_participant_previews_exceed_byte_budget');
-  return sample;
-}
-
-function boundedTimelineTurnEntry(entry: ConversationTimelineTurnEntry): ConversationTimelineTurnEntry {
-  let result = { ...entry, participantPreviews: [...entry.participantPreviews] };
-  const fits = () => Buffer.byteLength(strictJson(result), 'utf8') <= TIMELINE_TURN_ENTRY_BYTES;
-  while (!fits() && result.participantPreviews.some(item => item.preview.length > 0)) {
-    result = {
-      ...result,
-      participantPreviews: result.participantPreviews.map(item => ({
-        ...item,
-        preview: timelinePreview(item.preview, Math.floor(item.preview.length / 2)),
-      })),
-    };
-  }
-  while (!fits() && result.userPreview.length > 0) {
-    result = { ...result, userPreview: timelinePreview(result.userPreview, Math.floor(result.userPreview.length / 2)) };
-  }
-  if (!fits()) throw new Error('conversation_timeline_turn_entry_exceeds_byte_budget');
-  return result;
+  );
+  return { actorId, actorLabel };
 }
 
 function timelineCursorPredicate(
@@ -461,6 +426,10 @@ function timelineCursorPredicate(
   };
 }
 
+function timelineCursor(originNodeId: string, originSequence: number, eventId: string): string {
+  return `timeline-v2:${encodeURIComponent(originNodeId)}:${originSequence}:${encodeURIComponent(eventId)}`;
+}
+
 function requireOriginNodeId(...candidates: Array<string | null | undefined>): string {
   const value = candidates.find(candidate => typeof candidate === 'string' && candidate.trim() !== '');
   if (!value) throw new Error('conversation_projection_origin_node_id_missing');
@@ -475,7 +444,7 @@ function requireOriginNodeId(...candidates: Array<string | null | undefined>): s
  * has a new name and no migration path: current prerelease users start with a
  * clean append-only log, while old JSON data remains inert and non-blocking.
  */
-export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore, AttachmentUploadStore, TodoStateStore {
+export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetryStore, AttachmentUploadStore, TodoStateStore {
   private readonly attachmentFiles: MobileAttachmentFileStore;
   private readonly databaseFactory: AgentSqlDatabaseFactory;
   private readonly idFactory: DurableIdFactory;
@@ -516,7 +485,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100) {
       throw new Error('invalid_conversation_list_page_limit');
     }
-    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > TIMELINE_PAGE_BYTE_LIMIT) {
+    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > CONVERSATION_LIST_PAGE_BYTE_LIMIT) {
       throw new Error('invalid_conversation_list_page_byte_budget');
     }
     if (options.beforeCursor !== undefined && options.afterCursor !== undefined) {
@@ -634,7 +603,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     callOptions: ConversationReadCallOptions = {},
   ): Promise<ConversationMessagePage> {
     if (
-      !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MESSAGE_PAGE_LIMIT ||
+      !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_MESSAGE_PAGE_SIZE ||
       (options.before !== undefined && options.after !== undefined)
     ) {
       throw new Error('invalid_conversation_message_page_options');
@@ -645,9 +614,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     if (options.expectedRevision !== undefined && !this.isOpaqueTimelineValue(options.expectedRevision)) {
       throw new Error('invalid_conversation_message_page_revision');
     }
-    const fullContent = options.mode === 'full-content';
-    const maximumByteLimit = fullContent ? FULL_CONTENT_PAGE_BYTE_LIMIT : MESSAGE_PAGE_BYTE_LIMIT;
-    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > maximumByteLimit) {
+    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > MAX_CONVERSATION_MESSAGE_WINDOW_BYTES) {
       throw new Error('invalid_conversation_message_page_byte_budget');
     }
     callOptions.signal?.throwIfAborted();
@@ -705,7 +672,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       }
       const readingForward = options.direction === 'forward';
       const indexRows = await database.getAllAsync<DisplayMessageIndexRow>(
-        `SELECT messageId, ${fullContent ? 'length(CAST(messageJson AS BLOB))' : 'displayBytes'} AS displayBytes
+        `SELECT messageId, displayBytes
          FROM messages WHERE ${conditions.join(' AND ')}
          ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC} LIMIT ?`,
         [...parameters, options.limit],
@@ -726,25 +693,25 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
           conversationId,
           revision,
           items: [],
-          hasMoreBefore: false,
-          hasMoreAfter: false,
+          hasMoreBefore: options.after !== undefined,
+          hasMoreAfter: options.before !== undefined,
         };
         return;
       }
       const rows = await database.getAllAsync<MessageRow>(
-        `SELECT ${fullContent ? 'messageJson' : 'displayJson'} AS messageJson FROM messages
+        `SELECT displayJson AS messageJson FROM messages
          WHERE conversationId = ? AND visible = 1 AND messageId IN (${selectedIds.map(() => '?').join(', ')})
          ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC}`,
         [conversationId, ...selectedIds],
       );
-      let items = rows.map(row => parseJson(row.messageJson) as ChatMessage);
+      let items = rows.map(row => parseMessageProjection(row.messageJson, conversationId));
       if (!readingForward) items.reverse();
       const buildPage = async (): Promise<ConversationMessagePage> => {
         const startCursor = items[0] ? messageCursor(items[0]) : undefined;
         const endCursor = items.at(-1) ? messageCursor(items.at(-1)!) : undefined;
         const [hasMoreBefore, hasMoreAfter] = await Promise.all([
-          startCursor ? this.messageExistsBeyond(database, conversationId, startCursor, '<') : false,
-          endCursor ? this.messageExistsBeyond(database, conversationId, endCursor, '>') : false,
+          startCursor ? this.messageExistsBeyond(database, conversationId, startCursor, '<', options.afterCoveredVersion) : false,
+          endCursor ? this.messageExistsBeyond(database, conversationId, endCursor, '>', options.afterCoveredVersion) : false,
         ]);
         return {
           reset: false,
@@ -768,22 +735,155 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     return page!;
   }
 
+  public async getFullContentMessagePage(
+    conversationId: string,
+    options: GetFullContentMessagePageOptions,
+    callOptions: ConversationReadCallOptions = {},
+  ): Promise<ConversationFullContentMessagePage> {
+    if (
+      !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_MESSAGE_PAGE_SIZE ||
+      (options.before !== undefined && options.after !== undefined)
+    ) throw new Error('invalid_conversation_message_page_options');
+    if ((options.before !== undefined || options.after !== undefined) && options.expectedRevision === undefined) {
+      throw new Error('conversation_message_cursor_requires_revision');
+    }
+    if (options.expectedRevision !== undefined && !this.isOpaqueTimelineValue(options.expectedRevision)) {
+      throw new Error('invalid_conversation_message_page_revision');
+    }
+    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > MAX_CONVERSATION_MESSAGE_WINDOW_BYTES) {
+      throw new Error('invalid_conversation_message_page_byte_budget');
+    }
+    callOptions.signal?.throwIfAborted();
+    const database = await this.database();
+    let page: ConversationFullContentMessagePage | undefined;
+    await database.withTransactionAsync(async () => {
+      callOptions.signal?.throwIfAborted();
+      const state = await database.getFirstAsync<TimelineStateRow>(
+        'SELECT revision FROM conversation_timeline_v2_states WHERE conversationId = ?',
+        [conversationId],
+      );
+      const revision = String(state?.revision ?? 0);
+      if (options.expectedRevision !== undefined && options.expectedRevision !== revision) {
+        page = this.boundedFullContentMessagePageReset(conversationId, revision, options.maxBytes);
+        return;
+      }
+      const requestedCursor = options.before ?? options.after;
+      if (requestedCursor) {
+        const cursorRow = await database.getFirstAsync<{ messageId: string }>(
+          `SELECT messageId FROM messages WHERE conversationId = ? AND visible = 1
+           AND timestamp = ? AND lamportClock = ? AND originNodeId = ? AND messageId = ?`,
+          [conversationId, requestedCursor.timestamp, requestedCursor.lamportClock, requestedCursor.originNodeId, requestedCursor.messageId],
+        );
+        if (!cursorRow) {
+          page = this.boundedFullContentMessagePageReset(conversationId, revision, options.maxBytes);
+          return;
+        }
+      }
+      const conditions = ['conversationId = ?', 'visible = 1'];
+      const parameters: SqlValue[] = [conversationId];
+      if (options.before) {
+        const predicate = cursorPredicate('<', options.before);
+        conditions.push(predicate.sql);
+        parameters.push(...predicate.parameters);
+      }
+      if (options.after) {
+        const predicate = cursorPredicate('>', options.after);
+        conditions.push(predicate.sql);
+        parameters.push(...predicate.parameters);
+      }
+      if (options.afterCoveredVersion !== undefined) {
+        conditions.push(`NOT EXISTS (
+          SELECT 1 FROM json_each(?) AS covered
+          WHERE covered.key = messages.originNodeId
+            AND messages.originSequence <= CAST(covered.value AS INTEGER)
+        )`);
+        parameters.push(strictJson(options.afterCoveredVersion));
+      }
+      const readingForward = options.direction === 'forward';
+      const indexRows = await database.getAllAsync<{ messageId: string; displayBytes: number }>(
+        `SELECT messageId, length(CAST(messageJson AS BLOB)) AS displayBytes
+         FROM messages WHERE ${conditions.join(' AND ')}
+         ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC} LIMIT ?`,
+        [...parameters, options.limit],
+      );
+      const selectedIds: string[] = [];
+      let selectedBytes = 0;
+      for (const row of indexRows) {
+        if (row.displayBytes > options.maxBytes && selectedIds.length === 0) {
+          throw new Error('conversation_full_content_message_page_exceeds_byte_budget');
+        }
+        if (selectedBytes + row.displayBytes > options.maxBytes) break;
+        selectedIds.push(row.messageId);
+        selectedBytes += row.displayBytes;
+      }
+      if (selectedIds.length === 0) {
+        page = {
+          reset: false,
+          conversationId,
+          revision,
+          items: [],
+          hasMoreBefore: options.after !== undefined,
+          hasMoreAfter: options.before !== undefined,
+        };
+        return;
+      }
+      const rows = await database.getAllAsync<MessageRow>(
+        `SELECT messageJson FROM messages
+         WHERE conversationId = ? AND visible = 1 AND messageId IN (${selectedIds.map(() => '?').join(', ')})
+         ORDER BY ${CURSOR_ORDER}`,
+        [conversationId, ...selectedIds],
+      );
+      let items = rows.map(row => parseCanonicalMessage(row.messageJson, conversationId));
+      const buildPage = async (): Promise<ConversationFullContentMessagePage> => {
+        const startCursor = items[0] ? messageCursor(items[0]) : undefined;
+        const endCursor = items.at(-1) ? messageCursor(items.at(-1)!) : undefined;
+        const [hasMoreBefore, hasMoreAfter] = await Promise.all([
+          startCursor ? this.messageExistsBeyond(database, conversationId, startCursor, '<', options.afterCoveredVersion) : options.after !== undefined,
+          endCursor ? this.messageExistsBeyond(database, conversationId, endCursor, '>', options.afterCoveredVersion) : options.before !== undefined,
+        ]);
+        return {
+          reset: false,
+          conversationId,
+          revision,
+          items,
+          hasMoreBefore,
+          hasMoreAfter,
+          ...(startCursor ? { startCursor } : {}),
+          ...(endCursor ? { endCursor } : {}),
+        };
+      };
+      page = await buildPage();
+      while (Buffer.byteLength(strictJson(page), 'utf8') > options.maxBytes) {
+        if (items.length <= 1) throw new Error('conversation_full_content_message_page_exceeds_byte_budget');
+        items = options.after !== undefined ? items.slice(0, -1) : items.slice(1);
+        page = await buildPage();
+      }
+    });
+    callOptions.signal?.throwIfAborted();
+    if (!page) throw new Error('conversation_full_content_message_page_missing');
+    assertConversationFullContentMessagePage(page, conversationId, options);
+    return page;
+  }
+
   public async getMessageWindowAround(
     conversationId: string,
     options: GetConversationMessageWindowAroundOptions,
     callOptions: ConversationReadCallOptions = {},
   ): Promise<ConversationMessageWindowResult> {
-    if (!Number.isSafeInteger(options.maxMessages) || options.maxMessages < 1 || options.maxMessages > MESSAGE_WINDOW_LIMIT) {
+    if (!Number.isSafeInteger(options.maxMessages) || options.maxMessages < 1 || options.maxMessages > MAX_CONVERSATION_MESSAGE_WINDOW_SIZE) {
       throw new Error('invalid_conversation_message_window_limit');
     }
-    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > MESSAGE_WINDOW_BYTE_LIMIT) {
+    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > MAX_CONVERSATION_MESSAGE_WINDOW_BYTES) {
       throw new Error('invalid_conversation_message_window_byte_budget');
     }
     if (!this.isOpaqueTimelineValue(options.expectedRevision)) {
       throw new Error('invalid_conversation_message_window_revision');
     }
     if (
-      (options.focus.kind === 'turn' && (
+      (options.focus.kind === 'message' && (
+        typeof options.focus.messageId !== 'string' ||
+        options.focus.messageId.trim() === '' ||
+        options.focus.messageId.length > 2_048 ||
         typeof options.focus.turnId !== 'string' ||
         options.focus.turnId.trim() === '' ||
         options.focus.turnId.length > 2_048 ||
@@ -812,14 +912,14 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
         result = this.boundedMessageWindowReset(conversationId, revision, options.maxBytes);
         return;
       }
-      const focusRow = options.focus.kind === 'turn'
+      const focusRow = options.focus.kind === 'message'
         ? await database.getFirstAsync<TimelineEntryRow>(
           `SELECT * FROM conversation_timeline_v2_entries
-           WHERE conversationId = ? AND kind = 'turn' AND turnId = ?
+           WHERE conversationId = ? AND kind = 'message' AND entryId = ? AND turnId = ?
              ${options.focus.cursor === undefined ? '' : 'AND cursor = ?'} LIMIT 1`,
           options.focus.cursor === undefined
-            ? [conversationId, options.focus.turnId]
-            : [conversationId, options.focus.turnId, options.focus.cursor],
+            ? [conversationId, options.focus.messageId, options.focus.turnId]
+            : [conversationId, options.focus.messageId, options.focus.turnId, options.focus.cursor],
         )
         : await database.getFirstAsync<TimelineEntryRow>(
           `SELECT * FROM conversation_timeline_v2_entries
@@ -833,32 +933,38 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
 
       const focusEntryIndex = await this.timelineEntryRank(database, conversationId, focusRow);
       const focusTurnIndex = await this.timelineTurnRank(database, conversationId, focusRow);
-      let anchorTurnId: string | undefined;
+      let anchorMessageId: string | undefined;
       let resolvedFocus: ConversationMessageWindowResolvedFocus;
-      if (focusRow.kind === 'turn') {
-        anchorTurnId = focusRow.turnId;
+      let recenterAnchor: { messageId: string; turnId: string } | undefined;
+      if (focusRow.kind === 'message') {
+        anchorMessageId = focusRow.entryId;
+        recenterAnchor = { messageId: focusRow.entryId, turnId: focusRow.turnId };
         resolvedFocus = {
-          kind: 'turn',
+          kind: 'message',
+          messageId: focusRow.entryId,
           turnId: focusRow.turnId,
           ...(options.focus.kind === 'timeline-entry'
             ? { entryId: focusRow.entryId, cursor: focusRow.cursor }
             : options.focus.cursor === undefined
             ? {}
             : { cursor: focusRow.cursor }),
-        } as typeof resolvedFocus;
+        };
       } else {
-        const [beforeTurn, afterTurn] = await Promise.all([
-          this.nearestTimelineTurn(database, conversationId, focusRow, '<'),
-          this.nearestTimelineTurn(database, conversationId, focusRow, '>'),
+        const [beforeMessage, afterMessage] = await Promise.all([
+          this.nearestTimelineMessage(database, conversationId, focusRow, '<'),
+          this.nearestTimelineMessage(database, conversationId, focusRow, '>'),
         ]);
-        const nearest = beforeTurn === null
-          ? afterTurn === null ? null : { position: 'after' as const, row: afterTurn }
-          : afterTurn === null
-          ? { position: 'before' as const, row: beforeTurn }
-          : afterTurn.entryIndex - focusEntryIndex <= focusEntryIndex - beforeTurn.entryIndex
-          ? { position: 'after' as const, row: afterTurn }
-          : { position: 'before' as const, row: beforeTurn };
-        anchorTurnId = nearest?.row.turnId;
+        const nearest = beforeMessage === null
+          ? afterMessage === null ? null : { position: 'after' as const, row: afterMessage }
+          : afterMessage === null
+          ? { position: 'before' as const, row: beforeMessage }
+          : afterMessage.entryIndex - focusEntryIndex <= focusEntryIndex - beforeMessage.entryIndex
+          ? { position: 'after' as const, row: afterMessage }
+          : { position: 'before' as const, row: beforeMessage };
+        anchorMessageId = nearest?.row.entryId;
+        recenterAnchor = nearest
+          ? { messageId: nearest.row.entryId, turnId: nearest.row.turnId }
+          : undefined;
         resolvedFocus = {
           kind: 'compaction',
           entry: {
@@ -876,12 +982,16 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
             compactedTurnCount: focusRow.compactedTurnCount ?? 0,
           },
           ...(nearest
-            ? { nearestPosition: nearest.position, nearestTurnId: nearest.row.turnId }
+            ? {
+              nearestPosition: nearest.position,
+              nearestMessageId: nearest.row.entryId,
+              nearestTurnId: nearest.row.turnId,
+            }
             : { nearestPosition: 'none' as const }),
-        } as typeof resolvedFocus;
+        };
       }
 
-      if (anchorTurnId === undefined) {
+      if (anchorMessageId === undefined || recenterAnchor === undefined) {
         result = {
           reset: false,
           conversationId,
@@ -899,23 +1009,23 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
 
       const anchor = await database.getFirstAsync<CursorRow>(
         `SELECT timestamp, lamportClock, originNodeId, messageId FROM messages
-         WHERE conversationId = ? AND visible = 1 AND turnId = ?
+         WHERE conversationId = ? AND visible = 1 AND messageId = ?
          ORDER BY ${CURSOR_ORDER} LIMIT 1`,
-        [conversationId, anchorTurnId],
+        [conversationId, anchorMessageId],
       );
       if (!anchor) {
         result = this.boundedMessageWindowReset(conversationId, revision, options.maxBytes);
         return;
       }
       const beforeAnchor = cursorPredicate('<', anchor);
-      const readBefore = async (limit: number): Promise<ChatMessage[]> => {
+      const readBefore = async (limit: number): Promise<ConversationMessageListProjection[]> => {
         const rows = await database.getAllAsync<MessageRow>(
           `SELECT displayJson AS messageJson FROM messages
            WHERE conversationId = ? AND visible = 1 AND ${beforeAnchor.sql}
            ORDER BY ${CURSOR_ORDER_DESC} LIMIT ?`,
           [conversationId, ...beforeAnchor.parameters, limit],
         );
-        return rows.reverse().map(row => parseJson(row.messageJson) as ChatMessage);
+        return rows.reverse().map(row => parseMessageProjection(row.messageJson, conversationId));
       };
       let beforeItems = await readBefore(Math.floor(options.maxMessages / 2));
       const afterRows = await database.getAllAsync<MessageRow>(
@@ -924,12 +1034,12 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
          ORDER BY ${CURSOR_ORDER} LIMIT ?`,
         [conversationId, ...beforeAnchor.parameters, options.maxMessages - beforeItems.length],
       );
-      const afterItems = afterRows.map(row => parseJson(row.messageJson) as ChatMessage);
+      const afterItems = afterRows.map(row => parseMessageProjection(row.messageJson, conversationId));
       if (beforeItems.length + afterItems.length < options.maxMessages) {
         beforeItems = await readBefore(options.maxMessages - afterItems.length);
       }
       let items = [...beforeItems, ...afterItems];
-      let anchorIndex = items.findIndex(message => message.turnId === anchorTurnId);
+      let anchorIndex = items.findIndex(message => message.messageId === anchorMessageId);
       if (anchorIndex < 0) {
         result = this.boundedMessageWindowReset(conversationId, revision, options.maxBytes);
         return;
@@ -946,6 +1056,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
           conversationId,
           revision,
           focus: resolvedFocus,
+          recenterAnchor,
           items,
           hasMoreBefore,
           hasMoreAfter,
@@ -969,7 +1080,9 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       result = buildResult();
     });
     callOptions.signal?.throwIfAborted();
-    return result!;
+    if (!result) throw new Error('conversation_message_window_result_missing');
+    assertConversationMessageWindowResult(result, conversationId, options);
+    return result;
   }
 
   public async getConversationTimelinePage(
@@ -1063,30 +1176,29 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       if (rows[0]) {
         turnIndex = await this.timelineTurnRank(database, conversationId, rows[0]);
       }
-      const previewLength = Math.max(1, Math.min(options.previewLength ?? 96, TIMELINE_STORED_PREVIEW_LENGTH));
-      let items = rows.map((row, offset): ConversationTimelineEntry => {
+      const pageTurnIndices = new Map<string, number>();
+      let scannedTurnIndex = turnIndex;
+      for (const row of rows) {
+        if (row.kind === 'message' && row.role === 'user' && row.entryId === row.turnId) {
+          pageTurnIndices.set(row.turnId, scannedTurnIndex);
+          scannedTurnIndex += 1;
+        }
+      }
+      const previewLength = Math.max(1, Math.min(options.previewLength ?? 96, MAX_CONVERSATION_TIMELINE_PREVIEW_LENGTH));
+      let items: ConversationTimelineEntry[] = [];
+      for (const [offset, row] of rows.entries()) {
         const entryIndex = start + offset;
         const currentTurnIndex = turnIndex;
-        if (row.kind === 'turn') turnIndex += 1;
-        if (row.kind === 'turn') {
-          const rawParticipants = row.participantPreviewsJson === null
-            ? []
-            : parseJson(row.participantPreviewsJson);
-          if (!Array.isArray(rawParticipants)) throw new Error('conversation_timeline_participant_projection_invalid');
-          const participants = boundedParticipantPreviews(rawParticipants.map(item => {
-            if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-              throw new Error('conversation_timeline_participant_projection_invalid');
-            }
-            const participant = item as Partial<ConversationTimelineParticipantPreview>;
-            if (
-              typeof participant.actorId !== 'string' || typeof participant.actorLabel !== 'string' ||
-              (participant.role !== 'assistant' && participant.role !== 'agent') ||
-              typeof participant.preview !== 'string'
-            ) throw new Error('conversation_timeline_participant_projection_invalid');
-            return participant as ConversationTimelineParticipantPreview;
-          }));
-          return boundedTimelineTurnEntry({
-            kind: 'turn',
+        if (row.kind === 'message') {
+          const role = row.role;
+          if (role !== 'user' && role !== 'assistant' && role !== 'agent') {
+            throw new Error('invalid_stored_timeline_message_role');
+          }
+          const messageTurnIndex = pageTurnIndices.get(row.turnId) ?? (currentTurnIndex > 0 ? currentTurnIndex - 1 : undefined);
+          const actorId = boundedTimelineActor(row.actorId ?? row.originNodeId, row.originNodeId);
+          const actorLabel = boundedTimelineActor(row.actorLabel ?? actorId, actorId);
+          const entry: ConversationTimelineMessageEntry = {
+            kind: 'message',
             entryId: row.entryId,
             messageId: row.entryId,
             conversationId,
@@ -1095,17 +1207,18 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
             originNodeId: row.originNodeId,
             cursor: row.cursor,
             entryIndex,
-            turnIndex: currentTurnIndex,
+            ...(messageTurnIndex === undefined ? {} : { turnIndex: messageTurnIndex }),
             turnId: row.turnId,
-            userPreview: timelinePreview(row.userPreview ?? '', previewLength),
-            participantPreviews: participants.map(participant => ({
-              ...participant,
-              preview: timelinePreview(participant.preview, Math.min(previewLength, TIMELINE_PARTICIPANT_PREVIEW_LENGTH)),
-            })),
-            responseCount: row.responseCount,
-          });
+            role,
+            actorId,
+            actorLabel,
+            preview: timelinePreview(row.preview ?? '', previewLength),
+          };
+          items.push(boundConversationTimelineMessageEntry(entry));
+          if (role === 'user' && row.entryId === row.turnId) turnIndex += 1;
+          continue;
         }
-        return {
+        const entry: ConversationTimelineCompactionEntry = {
           kind: 'compaction',
           entryId: row.entryId,
           conversationId,
@@ -1119,7 +1232,8 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
           compactedMessageCount: row.compactedMessageCount ?? 0,
           compactedTurnCount: row.compactedTurnCount ?? 0,
         };
-      });
+        items.push(entry);
+      }
       const buildPage = () => {
         const first = items.at(0);
         const last = items.at(-1);
@@ -1148,7 +1262,8 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       page = buildPage();
     });
     callOptions.signal?.throwIfAborted();
-    return page!;
+    assertConversationTimelinePage(page, conversationId, options);
+    return page;
   }
 
   public async getMessageById(
@@ -1162,7 +1277,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       [conversationId, messageId],
     );
     callOptions.signal?.throwIfAborted();
-    return row ? parseJson(row.messageJson) as ChatMessage : null;
+    return row ? parseCanonicalMessage(row.messageJson, conversationId) : null;
   }
 
   /** Exact durable user-root payload for retry; never reconstructed from a resident/UI projection. */
@@ -1181,7 +1296,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     );
     callOptions.signal?.throwIfAborted();
     if (!row) return null;
-    const message = parseJson(row.messageJson) as ChatMessage;
+    const message = parseCanonicalMessage(row.messageJson, conversationId);
     if (
       message.conversationId !== conversationId ||
       message.turnId !== turnId ||
@@ -1273,91 +1388,162 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     );
     options.signal?.throwIfAborted();
     if (!row) return undefined;
-    const event = parseJson(row.eventJson) as ConversationEvent;
+    const event = parseJson(row.eventJson);
     assertCanonicalConversationEvent(event);
     return event;
   }
 
-  /** Bounded keyset page for one turn; heavy detail remains lazy. */
-  public async getTurnMessagePage(
-    conversationId: string,
-    turnId: string,
-    options: {
-      before?: ConversationMessageCursor;
-      after?: ConversationMessageCursor;
-      direction?: 'backward' | 'forward';
-      limit: number;
-      maxBytes: number;
-    },
+  /**
+   * Serve Core's exact bounded turn-detail contract from the indexed Mobile
+   * projection. Full message content remains available only through the
+   * explicit detail-range API.
+   */
+  public async getTurnDetail(
+    request: AgentConversationTurnDetailRequest,
     callOptions: ConversationReadCallOptions = {},
-  ): Promise<MobileTurnMessagePage> {
+  ): Promise<AgentConversationTurnDetailResponse> {
+    const limit = request.limit ?? 50;
+    const maxBytes = request.maxBytes ?? 256 * 1024;
     if (
-      !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 50 ||
-      !Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > 256 * 1024 ||
-      (options.before !== undefined && options.after !== undefined)
-    ) throw new Error('invalid_mobile_turn_message_page_options');
+      !request.conversationId || !request.turnId ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
+      !Number.isSafeInteger(maxBytes) || maxBytes < 64 * 1024 || maxBytes > 256 * 1024
+    ) throw new Error('invalid_mobile_turn_detail_request');
+
+    const decodeTurnCursor = (serialized: string | undefined): TurnDetailProjectionCursor | undefined => {
+      if (serialized === undefined) return undefined;
+      const decoded = decodeConversationProjectionCursor(serialized, {
+        kind: 'turn-detail',
+        conversationId: request.conversationId,
+        turnId: request.turnId,
+      });
+      if (decoded.kind !== 'turn-detail') throw new Error('invalid_mobile_turn_detail_cursor');
+      return decoded;
+    };
+    const cursor = decodeTurnCursor(request.cursor);
+    const seenCursor = decodeTurnCursor(request.seenCursor);
+    const readingForward = request.direction === 'forward';
     callOptions.signal?.throwIfAborted();
     const database = await this.database();
-    const conditions = ['conversationId = ?', 'turnId = ?', 'visible = 1'];
-    const parameters: SqlValue[] = [conversationId, turnId];
-    if (options.before) {
-      const predicate = cursorPredicate('<', options.before);
-      conditions.push(predicate.sql);
-      parameters.push(...predicate.parameters);
-    }
-    if (options.after) {
-      const predicate = cursorPredicate('>', options.after);
-      conditions.push(predicate.sql);
-      parameters.push(...predicate.parameters);
-    }
-    const readingForward = options.direction === 'forward';
-    const indexRows = await database.getAllAsync<DisplayMessageIndexRow>(
-      `SELECT messageId, displayBytes FROM messages WHERE ${conditions.join(' AND ')}
-       ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC} LIMIT ?`,
-      [...parameters, options.limit],
-    );
-    const selectedIds: string[] = [];
-    let selectedBytes = 0;
-    for (const row of indexRows) {
-      if (selectedBytes + row.displayBytes > options.maxBytes) {
-        if (selectedIds.length === 0) throw new Error('mobile_turn_message_entry_exceeds_byte_budget');
-        break;
+    let response: AgentConversationTurnDetailResponse | undefined;
+
+    await database.withTransactionAsync(async () => {
+      callOptions.signal?.throwIfAborted();
+      const cursorExists = async (value: TurnDetailProjectionCursor): Promise<boolean> =>
+        await database.getFirstAsync<{ messageId: string }>(
+          `SELECT messageId FROM messages
+           WHERE conversationId = ? AND turnId = ? AND visible = 1
+             AND timestamp = ? AND lamportClock = ? AND originNodeId = ? AND messageId = ?
+           LIMIT 1`,
+          [
+            request.conversationId,
+            request.turnId,
+            value.timestamp,
+            value.lamportClock,
+            value.originNodeId,
+            value.messageId,
+          ],
+        ) !== null;
+      if (cursor && !(await cursorExists(cursor))) throw new Error('mobile_turn_detail_cursor_not_retained');
+      const seenCursorFound = seenCursor === undefined ? undefined : await cursorExists(seenCursor);
+
+      const conditions = ['conversationId = ?', 'turnId = ?', 'visible = 1'];
+      const parameters: SqlValue[] = [request.conversationId, request.turnId];
+      if (cursor) {
+        const predicate = cursorPredicate(readingForward ? '>' : '<', cursor);
+        conditions.push(predicate.sql);
+        parameters.push(...predicate.parameters);
       }
-      selectedIds.push(row.messageId);
-      selectedBytes += row.displayBytes;
-    }
-    if (selectedIds.length === 0) return { items: [], hasMoreBefore: false, hasMoreAfter: false };
-    const rows = await database.getAllAsync<MessageRow>(
-      `SELECT displayJson AS messageJson FROM messages
-       WHERE conversationId = ? AND turnId = ? AND visible = 1
-         AND messageId IN (${selectedIds.map(() => '?').join(', ')})
-       ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC}`,
-      [conversationId, turnId, ...selectedIds],
-    );
-    const items = rows.map(row => parseJson(row.messageJson) as ChatMessage);
-    if (!readingForward) items.reverse();
-    const startCursor = items[0] ? messageCursor(items[0]) : undefined;
-    const endCursor = items.at(-1) ? messageCursor(items.at(-1)!) : undefined;
-    const exists = async (cursor: ConversationMessageCursor, relation: '<' | '>') => {
-      const predicate = cursorPredicate(relation, cursor);
-      return await database.getFirstAsync<{ messageId: string }>(
-        `SELECT messageId FROM messages WHERE conversationId = ? AND turnId = ? AND visible = 1
-         AND ${predicate.sql} LIMIT 1`,
-        [conversationId, turnId, ...predicate.parameters],
-      ) !== null;
-    };
-    const [hasMoreBefore, hasMoreAfter] = await Promise.all([
-      startCursor ? exists(startCursor, '<') : false,
-      endCursor ? exists(endCursor, '>') : false,
-    ]);
+      const indexRows = await database.getAllAsync<DisplayMessageIndexRow>(
+        `SELECT messageId, displayBytes FROM messages
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC}
+         LIMIT ?`,
+        [...parameters, limit],
+      );
+      const selectedIds: string[] = [];
+      let selectedBytes = 0;
+      for (const row of indexRows) {
+        if (selectedBytes + row.displayBytes > maxBytes) {
+          if (selectedIds.length === 0) throw new Error('mobile_turn_detail_entry_exceeds_byte_budget');
+          break;
+        }
+        selectedIds.push(row.messageId);
+        selectedBytes += row.displayBytes;
+      }
+
+      let items: ConversationMessageListProjection[] = [];
+      if (selectedIds.length > 0) {
+        const rows = await database.getAllAsync<MessageRow>(
+          `SELECT displayJson AS messageJson FROM messages
+           WHERE conversationId = ? AND turnId = ? AND visible = 1
+             AND messageId IN (${selectedIds.map(() => '?').join(', ')})
+           ORDER BY ${readingForward ? CURSOR_ORDER : CURSOR_ORDER_DESC}`,
+          [request.conversationId, request.turnId, ...selectedIds],
+        );
+        items = rows.map(row => parseMessageProjection(row.messageJson, request.conversationId));
+        if (!readingForward) items.reverse();
+        if (items.some(item => item.turnId !== request.turnId)) {
+          throw new Error('mobile_turn_detail_scope_mismatch');
+        }
+      }
+
+      const existsBeyond = async (
+        boundary: ConversationMessageCursor,
+        relation: '<' | '>',
+      ): Promise<boolean> => {
+        const predicate = cursorPredicate(relation, boundary);
+        return await database.getFirstAsync<{ messageId: string }>(
+          `SELECT messageId FROM messages
+           WHERE conversationId = ? AND turnId = ? AND visible = 1
+             AND ${predicate.sql} LIMIT 1`,
+          [request.conversationId, request.turnId, ...predicate.parameters],
+        ) !== null;
+      };
+      const encodeBoundary = (item: ConversationMessageListProjection): string =>
+        encodeConversationProjectionCursor({
+          version: 1,
+          kind: 'turn-detail',
+          conversationId: request.conversationId,
+          turnId: request.turnId,
+          timestamp: item.timestamp,
+          lamportClock: item.lamportClock,
+          originNodeId: item.originNodeId,
+          messageId: item.messageId,
+        });
+      const buildResponse = async (): Promise<AgentConversationTurnDetailResponse> => {
+        if (items.length === 0) {
+          return {
+            turnId: request.turnId,
+            items,
+            hasMoreBefore: cursor !== undefined && readingForward,
+            hasMoreAfter: cursor !== undefined && !readingForward,
+            ...(seenCursorFound === undefined ? {} : { seenCursorFound }),
+          };
+        }
+        const oldest = items[0];
+        const newest = items.at(-1)!;
+        const hasMoreBefore = await existsBeyond(messageCursor(oldest), '<');
+        const hasMoreAfter = await existsBeyond(messageCursor(newest), '>');
+        return {
+          turnId: request.turnId,
+          items,
+          hasMoreBefore,
+          hasMoreAfter,
+          ...(hasMoreBefore ? { previousCursor: encodeBoundary(oldest) } : {}),
+          ...(hasMoreAfter ? { nextCursor: encodeBoundary(newest) } : {}),
+          ...(seenCursorFound === undefined ? {} : { seenCursorFound }),
+        };
+      };
+      response = await buildResponse();
+      while (Buffer.byteLength(strictJson(response), 'utf8') > maxBytes) {
+        if (items.length <= 1) throw new Error('mobile_turn_detail_page_exceeds_byte_budget');
+        items = readingForward ? items.slice(0, -1) : items.slice(1);
+        response = await buildResponse();
+      }
+    });
     callOptions.signal?.throwIfAborted();
-    return {
-      items,
-      hasMoreBefore,
-      hasMoreAfter,
-      ...(startCursor ? { startCursor } : {}),
-      ...(endCursor ? { endCursor } : {}),
-    };
+    return response!;
   }
 
   public async deleteTurn(conversationId: string, turnId: string, originNodeId: string): Promise<ConversationTombstoneEvent> {
@@ -1600,18 +1786,12 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
             messages.push(projected);
             projectedByConversation.set(event.conversationId, messages);
           }
-          await Promise.all([
-            database.runAsync(
-              `INSERT INTO lamport_clocks (conversationId, clock) VALUES (?, ?)
-               ON CONFLICT(conversationId) DO UPDATE SET clock = MAX(clock, excluded.clock)`,
-              [event.conversationId, event.lamportClock],
-            ),
-            database.runAsync(
-              `INSERT INTO origin_sequences (conversationId, originNodeId, sequence) VALUES (?, ?, ?)
-               ON CONFLICT(conversationId, originNodeId) DO UPDATE SET sequence = MAX(sequence, excluded.sequence)`,
-              [event.conversationId, event.originNodeId, event.originSequence],
-            ),
-          ]);
+          await persistCausalClock(database, {
+            conversationId: event.conversationId,
+            lamportClock: event.lamportClock,
+            originNodeId: event.originNodeId,
+            originSequence: event.originSequence,
+          });
         }
         for (const [conversationId, inserted] of insertedByConversation) {
           if (!projectTimelineIncrementally) await this.rebuildTimelineProjection(database, conversationId);
@@ -1743,7 +1923,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     const items: MessageVersionFrontier[] = [];
     for (const key of unique) {
       options.signal?.throwIfAborted();
-      const frontier = await this.getContiguousOriginSequence(database, key.conversationId, key.originNodeId);
+      const frontier = await readContiguousOriginSequence(database, key.conversationId, key.originNodeId);
       if (frontier > 0) items.push({ ...key, maxContiguousOriginSequence: frontier });
     }
     options.signal?.throwIfAborted();
@@ -1753,11 +1933,13 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
   public async getCompactionCandidatePage(
     conversationId: string,
     options: GetCompactionCandidatePageOptions,
+    callOptions: ConversationReadCallOptions = {},
   ): Promise<CompactionCandidatePage> {
     if (
-      !Number.isSafeInteger(options.maxMessages) || options.maxMessages < 1 || options.maxMessages > 80 ||
+      !Number.isSafeInteger(options.maxMessages) || options.maxMessages < 1 || options.maxMessages > 50 ||
       !Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > 15 * 1024 * 1024
     ) throw new Error('invalid_compaction_candidate_page_bounds');
+    callOptions.signal?.throwIfAborted();
     for (const [originNodeId, sequence] of Object.entries(options.afterCoveredVersion)) {
       if (!originNodeId || !Number.isSafeInteger(sequence) || sequence <= 0) {
         throw new Error('invalid_compaction_candidate_frontier');
@@ -1823,6 +2005,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     let bytes = 0;
     let stopped = false;
     for (const row of rows.slice(0, maximumScannedEvents)) {
+      callOptions.signal?.throwIfAborted();
       const event = parseJson(row.eventJson);
       assertCanonicalConversationEvent(event);
       if (event.kind === 'message' && row.tombstoned === 0) {
@@ -1856,11 +2039,13 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
   public async getRetainedCompactionControls(
     conversationId: string,
     options: GetRetainedCompactionControlsOptions,
+    callOptions: ConversationReadCallOptions = {},
   ): Promise<RetainedCompactionControlPage> {
     if (
       !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 32 ||
       !Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > 15 * 1024 * 1024
     ) throw new Error('invalid_retained_compaction_control_bounds');
+    callOptions.signal?.throwIfAborted();
     const cursorPredicate = options.after
       ? 'AND (candidate.originNodeId, candidate.originSequence, candidate.eventId) > (?, ?, ?)'
       : '';
@@ -1925,6 +2110,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     let bytes = 0;
     let byteStopped = false;
     for (const row of rows.slice(0, options.limit)) {
+      callOptions.signal?.throwIfAborted();
       const eventBytes = Buffer.byteLength(row.eventJson, 'utf8');
       if (eventBytes > options.maxBytes && items.length === 0) {
         throw new Error('retained_compaction_control_exceeds_byte_budget');
@@ -1940,6 +2126,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       bytes += eventBytes;
     }
     const last = items.at(-1);
+    callOptions.signal?.throwIfAborted();
     return {
       items,
       invalidated: rows.some(row => row.invalidated === 1),
@@ -1949,14 +2136,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
   }
 
   public async getMaxLamportClockForConversation(conversationId: string): Promise<number> {
-    const row = await (await this.database()).getFirstAsync<MaximumRow>(
-      `SELECT MAX(maximum) AS maximum FROM (
-        SELECT MAX(lamportClock) AS maximum FROM conversation_events WHERE conversationId = ?
-        UNION ALL SELECT clock AS maximum FROM lamport_clocks WHERE conversationId = ?
-      )`,
-      [conversationId, conversationId],
-    );
-    return row?.maximum ?? 0;
+    return readMaxLamportClock(await this.database(), conversationId);
   }
 
   public async createMessage(
@@ -1976,6 +2156,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       timestamp,
       role,
       content,
+      parts: [{ type: 'text', text: content }],
     });
   }
 
@@ -1997,11 +2178,16 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     });
   }
 
-  public async getConversationMeta(conversationId: string): Promise<ConversationMeta | null> {
+  public async getConversationMeta(
+    conversationId: string,
+    callOptions: ConversationReadCallOptions = {},
+  ): Promise<ConversationMeta | null> {
+    callOptions.signal?.throwIfAborted();
     const row = await (await this.database()).getFirstAsync<{ metadataJson: string }>(
       'SELECT metadataJson FROM conversations WHERE conversationId = ?',
       [conversationId],
     );
+    callOptions.signal?.throwIfAborted();
     return row ? parseJson(row.metadataJson) as ConversationMeta : null;
   }
 
@@ -2648,7 +2834,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
         [candidate.conversationId, input.sourceTurnId],
       );
       if (!sourceRow) throw new Error('atomic_agent_retry_source_not_found');
-      const actualSource = parseJson(sourceRow.messageJson) as ChatMessage;
+      const actualSource = parseCanonicalMessage(sourceRow.messageJson, input.candidateRun.conversationId);
       if (
         actualSource.conversationId !== candidate.conversationId ||
         actualSource.messageId !== input.sourceTurnId ||
@@ -2909,7 +3095,8 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     const beforeCheckpoint = timelineCursorPredicate('<', checkpoint);
     const rank = await database.getFirstAsync<CountRow>(
       `SELECT COUNT(*) AS count FROM conversation_timeline_v2_entries
-       WHERE conversationId = ? AND kind = 'turn' AND ${beforeRow.sql} AND NOT (${beforeCheckpoint.sql})`,
+       WHERE conversationId = ? AND kind = 'message' AND role = 'user' AND entryId = turnId
+         AND ${beforeRow.sql} AND NOT (${beforeCheckpoint.sql})`,
       [conversationId, ...beforeRow.parameters, ...beforeCheckpoint.parameters],
     );
     return checkpoint.turnIndex + (rank?.count ?? 0);
@@ -2936,7 +3123,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     );
   }
 
-  private async nearestTimelineTurn(
+  private async nearestTimelineMessage(
     database: AgentSqlDatabase,
     conversationId: string,
     row: TimelineEntryRow,
@@ -2946,7 +3133,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     const direction = relation === '<' ? 'DESC' : 'ASC';
     const nearest = await database.getFirstAsync<TimelineEntryRow>(
       `SELECT * FROM conversation_timeline_v2_entries
-       WHERE conversationId = ? AND kind = 'turn' AND ${predicate.sql}
+       WHERE conversationId = ? AND kind = 'message' AND ${predicate.sql}
        ORDER BY timestamp ${direction}, lamportClock ${direction}, originNodeId ${direction}, entryId ${direction}
        LIMIT 1`,
       [conversationId, ...predicate.parameters],
@@ -2979,11 +3166,23 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     return reset;
   }
 
+  private boundedFullContentMessagePageReset(
+    conversationId: string,
+    revision: string,
+    maxBytes: number,
+  ): ConversationFullContentMessagePage {
+    const reset = { reset: true as const, conversationId, revision };
+    if (Buffer.byteLength(strictJson(reset), 'utf8') > maxBytes) {
+      throw new Error('conversation_full_content_message_page_exceeds_byte_budget');
+    }
+    return reset;
+  }
+
   private validateTimelinePageOptions(options: GetConversationTimelinePageOptions): void {
-    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > TIMELINE_PAGE_LIMIT) {
+    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_CONVERSATION_TIMELINE_PAGE_SIZE) {
       throw new Error('invalid_conversation_timeline_page_limit');
     }
-    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > TIMELINE_PAGE_BYTE_LIMIT) {
+    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1 || options.maxBytes > MAX_CONVERSATION_TIMELINE_PAGE_BYTES) {
       throw new Error('invalid_conversation_timeline_page_byte_budget');
     }
     if (
@@ -3146,8 +3345,12 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
             for (const listener of this.conversationListeners.get(update.conversationId) ?? []) {
               try {
                 listener(update);
-              } catch {
+              } catch (error) {
                 // Observer failures are host/UI failures, not storage failures.
+                // Keep the observer isolated while still surfacing the failure through
+                // the app's console logger (which is persisted by LoggerService once
+                // the mobile logger is initialized).
+                console.error('[AgentStorageService] Conversation observer failed', error);
               }
             }
           }
@@ -3214,9 +3417,10 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
           timestamp INTEGER NOT NULL,
           lamportClock INTEGER NOT NULL,
           originNodeId TEXT NOT NULL,
-          userPreview TEXT,
-          participantPreviewsJson TEXT,
-          responseCount INTEGER NOT NULL DEFAULT 0,
+          role TEXT,
+          actorId TEXT,
+          actorLabel TEXT,
+          preview TEXT,
           summaryPreview TEXT,
           compactedMessageCount INTEGER,
           compactedTurnCount INTEGER,
@@ -3513,71 +3717,32 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     });
   }
 
-  private async getContiguousOriginSequence(
-    database: AgentSqlDatabase,
-    conversationId: string,
-    originNodeId: string,
-  ): Promise<number> {
-    const row = await database.getFirstAsync<{ frontier: number | null }>(
-      `WITH ordered AS (
-         SELECT originSequence,
-           LAG(originSequence, 1, 0) OVER (ORDER BY originSequence) AS previousSequence
-         FROM conversation_events WHERE conversationId = ? AND originNodeId = ?
-       )
-       SELECT COALESCE(
-         MIN(CASE WHEN originSequence <> previousSequence + 1 THEN previousSequence END),
-         MAX(originSequence), 0
-       ) AS frontier FROM ordered`,
-      [conversationId, originNodeId],
-    );
-    return row?.frontier ?? 0;
-  }
-
   private async appendLocalEventInTransaction(
     database: AgentSqlDatabase,
     draft: ConversationEventDraft,
   ): Promise<ConversationEvent> {
-    const [lamportRow, sequenceRow] = await Promise.all([
-      database.getFirstAsync<MaximumRow>(
-        `SELECT MAX(maximum) AS maximum FROM (
-          SELECT MAX(lamportClock) AS maximum FROM conversation_events WHERE conversationId = ?
-          UNION ALL SELECT clock AS maximum FROM lamport_clocks WHERE conversationId = ?
-        )`,
-        [draft.conversationId, draft.conversationId],
-      ),
-      database.getFirstAsync<MaximumRow>(
-        `SELECT MAX(maximum) AS maximum FROM (
-          SELECT MAX(originSequence) AS maximum FROM conversation_events WHERE conversationId = ? AND originNodeId = ?
-          UNION ALL SELECT sequence AS maximum FROM origin_sequences WHERE conversationId = ? AND originNodeId = ?
-        )`,
-        [draft.conversationId, draft.originNodeId, draft.conversationId, draft.originNodeId],
-      ),
-    ]);
-    const maximumSequence = sequenceRow?.maximum ?? 0;
-    const contiguousSequence = await this.getContiguousOriginSequence(
+    const {
+      contiguousOriginSequence,
+      lamportClock: maximumLamportClock,
+      originSequence: maximumOriginSequence,
+    } = await readCausalClockHighWatermarks(
       database,
       draft.conversationId,
       draft.originNodeId,
     );
-    if (maximumSequence !== contiguousSequence) throw new Error('local_origin_sequence_gap');
-    const event = {
+    if (maximumOriginSequence !== contiguousOriginSequence) throw new Error('local_origin_sequence_gap');
+    const event = normalizeCanonicalConversationEvent({
       ...draft,
-      lamportClock: (lamportRow?.maximum ?? 0) + 1,
-      originSequence: maximumSequence + 1,
-    } as ConversationEvent;
+      lamportClock: maximumLamportClock + 1,
+      originSequence: maximumOriginSequence + 1,
+    });
     await this.insertRawEvent(database, event, false);
-    await Promise.all([
-      database.runAsync(
-        `INSERT INTO lamport_clocks (conversationId, clock) VALUES (?, ?)
-         ON CONFLICT(conversationId) DO UPDATE SET clock = excluded.clock`,
-        [event.conversationId, event.lamportClock],
-      ),
-      database.runAsync(
-        `INSERT INTO origin_sequences (conversationId, originNodeId, sequence) VALUES (?, ?, ?)
-         ON CONFLICT(conversationId, originNodeId) DO UPDATE SET sequence = excluded.sequence`,
-        [event.conversationId, event.originNodeId, event.originSequence],
-      ),
-    ]);
+    await persistCausalClock(database, {
+      conversationId: event.conversationId,
+      lamportClock: event.lamportClock,
+      originNodeId: event.originNodeId,
+      originSequence: event.originSequence,
+    });
     return event;
   }
 
@@ -3649,22 +3814,19 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       );
       return undefined;
     }
-    if (event.kind === 'compaction' && event.mode === 'coverage-only') return undefined;
-    const message: ChatMessage = event.kind === 'message'
-      ? eventToMessage(event)
-      : {
-        conversationId: event.conversationId,
-        content: event.summary.content,
-        lamportClock: event.lamportClock,
-        messageId: event.eventId,
-        metadata: { contextCompaction: event.boundary },
-        originNodeId: event.originNodeId,
-        originSequence: event.originSequence,
-        ...(event.summary.parts ? { parts: event.summary.parts } : {}),
-        role: 'assistant',
-        timestamp: event.timestamp,
-        turnId: event.summary.turnId,
-      };
+    if (event.kind === 'compaction') {
+      if (event.mode === 'summary' && projectTimeline) {
+        const tombstone = await database.getFirstAsync<{ eventId: string }>(
+          `SELECT eventId FROM conversation_events
+           WHERE conversationId = ? AND kind = 'tombstone' AND targetTurnId = ? LIMIT 1`,
+          [event.conversationId, event.summary.turnId],
+        );
+        if (!tombstone) await this.projectTimelineCompaction(database, event, checkpointBatch);
+      }
+      return undefined;
+    }
+    if (event.kind !== 'message') return undefined;
+    const message: ChatMessage = eventToMessage(event);
     const tombstone = await database.getFirstAsync<{ eventId: string }>(
       `SELECT eventId FROM conversation_events
        WHERE conversationId = ? AND kind = 'tombstone' AND targetTurnId = ? LIMIT 1`,
@@ -3705,10 +3867,10 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       if (!existing || existing.messageJson !== messageJson) throw new Error('conversation_message_projection_conflict');
       return undefined;
     }
-    if (visible && event.kind === 'message') {
+    if (visible) {
       const references = new Map<string, AttachmentReference>();
       for (const reference of event.message.attachments ?? []) references.set(reference.contentHash, reference);
-      for (const part of event.message.parts ?? []) {
+      for (const part of event.message.parts) {
         if (part.type === 'attachment') references.set(part.attachment.contentHash, part.attachment);
       }
       for (const reference of references.values()) {
@@ -3720,8 +3882,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       }
     }
     if (visible && projectTimeline) {
-      if (event.kind === 'message') await this.projectTimelineMessage(database, event, checkpointBatch);
-      else await this.projectTimelineCompaction(database, event, checkpointBatch);
+      await this.projectTimelineMessage(database, event, checkpointBatch);
     }
     return visible ? message : undefined;
   }
@@ -3811,11 +3972,21 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     conversationId: string,
     cursor: ConversationMessageCursor,
     relation: '<' | '>',
+    afterCoveredVersion?: Readonly<Record<string, number>>,
   ): Promise<boolean> {
     const predicate = cursorPredicate(relation, cursor);
+    const coverage = afterCoveredVersion === undefined
+      ? ''
+      : `AND NOT EXISTS (
+          SELECT 1 FROM json_each(?) AS covered
+          WHERE covered.key = messages.originNodeId
+            AND messages.originSequence <= CAST(covered.value AS INTEGER)
+        )`;
+    const parameters: SqlValue[] = [conversationId, ...predicate.parameters];
+    if (afterCoveredVersion !== undefined) parameters.push(strictJson(afterCoveredVersion));
     const row = await database.getFirstAsync<{ messageId: string }>(
-      `SELECT messageId FROM messages WHERE conversationId = ? AND visible = 1 AND ${predicate.sql} LIMIT 1`,
-      [conversationId, ...predicate.parameters],
+      `SELECT messageId FROM messages WHERE conversationId = ? AND visible = 1 AND ${predicate.sql} ${coverage} LIMIT 1`,
+      parameters,
     );
     return row !== null;
   }
@@ -3961,87 +4132,47 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     checkpointBatch?: TimelineCheckpointBatch,
   ): Promise<void> {
     const message = event.message;
-    let entryDelta = 0;
-    let turnDelta = 0;
-    if (message.role === 'user' && message.messageId === message.turnId) {
-      const responses = await this.timelineResponseProjection(database, event.conversationId, message.turnId);
-      const inserted = await database.runAsync(
-        `INSERT OR IGNORE INTO conversation_timeline_v2_entries (
-           conversationId, entryId, cursor, kind, turnId, timestamp, lamportClock, originNodeId,
-           userPreview, participantPreviewsJson, responseCount
-         ) VALUES (?, ?, ?, 'turn', ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          event.conversationId,
-          event.eventId,
-          event.eventId,
-          message.turnId,
-          event.timestamp,
-          event.lamportClock,
-          event.originNodeId,
-          timelinePreview(message.content, TIMELINE_STORED_PREVIEW_LENGTH),
-          strictJson(responses.participantPreviews),
-          responses.responseCount,
-        ],
-      );
-      entryDelta = inserted.changes;
-      turnDelta = inserted.changes;
-    } else if (message.role === 'assistant' || message.role === 'agent') {
-      const responses = await this.timelineResponseProjection(database, event.conversationId, message.turnId);
-      await database.runAsync(
-        `UPDATE conversation_timeline_v2_entries
-         SET participantPreviewsJson = ?, responseCount = ?
-         WHERE conversationId = ? AND turnId = ? AND kind = 'turn'`,
-        [
-          strictJson(responses.participantPreviews),
-          responses.responseCount,
-          event.conversationId,
-          message.turnId,
-        ],
-      );
+    if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'agent') {
+      await this.updateTimelineState(database, event.conversationId, { messages: 1 });
+      return;
     }
-    await this.updateTimelineState(database, event.conversationId, { entries: entryDelta, messages: 1, turns: turnDelta });
-    if (entryDelta > 0) {
+    const actor = timelineActor({
+      ...message,
+      conversationId: event.conversationId,
+      originNodeId: event.originNodeId,
+      originSequence: event.originSequence,
+      lamportClock: event.lamportClock,
+      timestamp: event.timestamp,
+    });
+    const cursor = timelineCursor(event.originNodeId, event.originSequence, event.eventId);
+    const inserted = await database.runAsync(
+      `INSERT OR IGNORE INTO conversation_timeline_v2_entries (
+         conversationId, entryId, cursor, kind, turnId, timestamp, lamportClock, originNodeId,
+         role, actorId, actorLabel, preview
+       ) VALUES (?, ?, ?, 'message', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        event.conversationId,
+        event.eventId,
+        cursor,
+        message.turnId,
+        event.timestamp,
+        event.lamportClock,
+        event.originNodeId,
+        message.role,
+        actor.actorId,
+        actor.actorLabel,
+        timelinePreview(message.content, MAX_CONVERSATION_TIMELINE_PREVIEW_LENGTH),
+      ],
+    );
+    const isTurnRoot = message.role === 'user' && message.messageId === message.turnId;
+    await this.updateTimelineState(database, event.conversationId, {
+      entries: inserted.changes,
+      messages: 1,
+      turns: isTurnRoot ? 1 : 0,
+    });
+    if (inserted.changes > 0) {
       await this.maintainTimelineCheckpointAfterInsertion(database, event.conversationId, event.eventId, checkpointBatch);
     }
-  }
-
-  /** Indexed first-two/last-two participant sample; response bodies are never scanned into JS. */
-  private async timelineResponseProjection(
-    database: AgentSqlDatabase,
-    conversationId: string,
-    turnId: string,
-  ): Promise<{ participantPreviews: ConversationTimelineParticipantPreview[]; responseCount: number }> {
-    const rows = await database.getAllAsync<TimelineResponseRow>(
-      `WITH responses AS (
-         SELECT message.content, message.metadataJson, message.originNodeId, message.role,
-           ROW_NUMBER() OVER (ORDER BY message.timestamp, message.lamportClock, message.originNodeId, message.messageId) AS firstRank,
-           ROW_NUMBER() OVER (ORDER BY message.timestamp DESC, message.lamportClock DESC, message.originNodeId DESC, message.messageId DESC) AS lastRank,
-           COUNT(*) OVER () AS responseCount
-         FROM messages AS message
-         JOIN conversation_events AS source
-           ON source.conversationId = message.conversationId AND source.eventId = message.messageId
-         WHERE message.conversationId = ? AND message.turnId = ? AND message.visible = 1
-           AND source.kind = 'message' AND message.role IN ('assistant', 'agent')
-       )
-       SELECT content, metadataJson, originNodeId, role, responseCount FROM responses
-       WHERE firstRank <= 2 OR lastRank <= 2 ORDER BY firstRank`,
-      [conversationId, turnId],
-    );
-    const participantPreviews = boundedParticipantPreviews(rows.map(row =>
-      timelineParticipantPreview({
-        messageId: '',
-        turnId,
-        conversationId,
-        originNodeId: row.originNodeId,
-        originSequence: 0,
-        timestamp: 0,
-        lamportClock: 0,
-        role: row.role,
-        content: row.content,
-        ...(row.metadataJson === null ? {} : { metadata: parseJson(row.metadataJson) as Record<string, unknown> }),
-      })
-    ));
-    return { participantPreviews, responseCount: rows[0]?.responseCount ?? 0 };
   }
 
   private async projectTimelineCompaction(
@@ -4049,7 +4180,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     event: Extract<ConversationEvent, { kind: 'compaction'; mode: 'summary' }>,
     checkpointBatch?: TimelineCheckpointBatch,
   ): Promise<void> {
-    const summaryPreview = timelinePreview(event.summary.content, TIMELINE_STORED_PREVIEW_LENGTH);
+    const summaryPreview = timelinePreview(event.summary.content, MAX_CONVERSATION_TIMELINE_PREVIEW_LENGTH);
     if (summaryPreview.length === 0) return;
     const inserted = await database.runAsync(
       `INSERT OR IGNORE INTO conversation_timeline_v2_entries (
@@ -4059,7 +4190,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
       [
         event.conversationId,
         event.eventId,
-        event.eventId,
+        timelineCursor(event.originNodeId, event.originSequence, event.eventId),
         event.summary.turnId,
         event.timestamp,
         event.lamportClock,
@@ -4094,7 +4225,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
         [conversationId, turnId],
       ),
       database.getFirstAsync<CountRow>(
-        "SELECT COUNT(*) AS count FROM conversation_timeline_v2_entries WHERE conversationId = ? AND turnId = ? AND kind = 'turn'",
+        "SELECT COUNT(*) AS count FROM conversation_timeline_v2_entries WHERE conversationId = ? AND turnId = ? AND kind = 'message' AND role = 'user' AND entryId = turnId",
         [conversationId, turnId],
       ),
     ]);
@@ -4117,84 +4248,64 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
   private async rebuildTimelineProjection(database: AgentSqlDatabase, conversationId: string): Promise<void> {
     await database.runAsync('DELETE FROM conversation_timeline_v2_entries WHERE conversationId = ?', [conversationId]);
     await database.runAsync(
-      `WITH ranked_responses AS (
-         SELECT assistant.turnId, assistant.content, assistant.metadataJson,
-           assistant.originNodeId, assistant.role,
-           ROW_NUMBER() OVER (
-             PARTITION BY assistant.turnId
-             ORDER BY assistant.timestamp, assistant.lamportClock, assistant.originNodeId, assistant.messageId
-           ) AS firstRank,
-           ROW_NUMBER() OVER (
-             PARTITION BY assistant.turnId
-             ORDER BY assistant.timestamp DESC, assistant.lamportClock DESC, assistant.originNodeId DESC, assistant.messageId DESC
-           ) AS lastRank,
-           COUNT(*) OVER (PARTITION BY assistant.turnId) AS responseCount
-         FROM messages AS assistant
-         JOIN conversation_events AS source
-           ON source.conversationId = assistant.conversationId AND source.eventId = assistant.messageId
-         WHERE assistant.conversationId = ? AND assistant.visible = 1 AND source.kind = 'message'
-           AND assistant.role IN ('assistant', 'agent')
-       ), sampled_responses AS (
-         SELECT * FROM ranked_responses WHERE firstRank <= 2 OR lastRank <= 2
-         ORDER BY turnId, firstRank
-       ), response_projection AS (
-         SELECT turnId, MAX(responseCount) AS responseCount,
-           json_group_array(json_object(
-             'actorId', substr(COALESCE(
-               json_extract(metadataJson, '$.actorId'), json_extract(metadataJson, '$.agentId'), originNodeId
-             ), 1, 64),
-             'actorLabel', substr(COALESCE(
-               json_extract(metadataJson, '$.actorLabel'), json_extract(metadataJson, '$.agentName'),
-               json_extract(metadataJson, '$.actorId'), json_extract(metadataJson, '$.agentId'), originNodeId
-             ), 1, 64),
-             'role', role,
-             'preview', substr(content, 1, ?)
-           )) AS participantPreviewsJson
-         FROM sampled_responses GROUP BY turnId
-       )
-       INSERT INTO conversation_timeline_v2_entries (
+      `INSERT INTO conversation_timeline_v2_entries (
          conversationId, entryId, cursor, kind, turnId, timestamp, lamportClock, originNodeId,
-         userPreview, participantPreviewsJson, responseCount
+         role, actorId, actorLabel, preview
        )
-       SELECT user.conversationId, user.messageId, user.messageId, 'turn', user.turnId,
-         user.timestamp, user.lamportClock, user.originNodeId,
-         substr(user.content, 1, ?), COALESCE(response.participantPreviewsJson, '[]'),
-         COALESCE(response.responseCount, 0)
-       FROM messages AS user
-       JOIN conversation_events AS source
-         ON source.conversationId = user.conversationId AND source.eventId = user.messageId
-       LEFT JOIN response_projection AS response ON response.turnId = user.turnId
-       WHERE user.conversationId = ? AND user.visible = 1 AND source.kind = 'message'
-         AND user.role = 'user' AND user.messageId = user.turnId`,
-      [conversationId, TIMELINE_PARTICIPANT_PREVIEW_LENGTH, TIMELINE_STORED_PREVIEW_LENGTH, conversationId],
+       SELECT message.conversationId, message.messageId,
+         'timeline-v2:' || replace(replace(message.originNodeId, '%', '%25'), ':', '%3A') || ':' ||
+           message.originSequence || ':' || replace(replace(message.messageId, '%', '%25'), ':', '%3A'),
+         'message', message.turnId, message.timestamp, message.lamportClock, message.originNodeId,
+         message.role,
+         substr(COALESCE(
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.actorId')) = 'text' THEN json_extract(message.metadataJson, '$.actorId') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.userId')) = 'text' THEN json_extract(message.metadataJson, '$.userId') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.agentId')) = 'text' THEN json_extract(message.metadataJson, '$.agentId') END,
+           message.originNodeId), 1, 160),
+         substr(COALESCE(
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.actorLabel')) = 'text' THEN json_extract(message.metadataJson, '$.actorLabel') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.userName')) = 'text' THEN json_extract(message.metadataJson, '$.userName') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.agentName')) = 'text' THEN json_extract(message.metadataJson, '$.agentName') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.actorId')) = 'text' THEN json_extract(message.metadataJson, '$.actorId') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.userId')) = 'text' THEN json_extract(message.metadataJson, '$.userId') END,
+           CASE WHEN typeof(json_extract(message.metadataJson, '$.agentId')) = 'text' THEN json_extract(message.metadataJson, '$.agentId') END,
+           message.originNodeId), 1, 160),
+         substr(message.content, 1, ? + 1)
+       FROM messages AS message
+       WHERE message.conversationId = ? AND message.visible = 1
+         AND message.role IN ('user', 'assistant', 'agent')`,
+      [MAX_CONVERSATION_TIMELINE_PREVIEW_LENGTH, conversationId],
     );
     await database.runAsync(
       `INSERT INTO conversation_timeline_v2_entries (
          conversationId, entryId, cursor, kind, turnId, timestamp, lamportClock, originNodeId,
          summaryPreview, compactedMessageCount, compactedTurnCount
        )
-       SELECT event.conversationId, event.eventId, event.eventId, 'compaction',
+       SELECT event.conversationId, event.eventId,
+         'timeline-v2:' || replace(replace(event.originNodeId, '%', '%25'), ':', '%3A') || ':' ||
+           event.originSequence || ':' || replace(replace(event.eventId, '%', '%25'), ':', '%3A'), 'compaction',
          json_extract(event.eventJson, '$.summary.turnId'), event.timestamp, event.lamportClock, event.originNodeId,
-         substr(json_extract(event.eventJson, '$.summary.content'), 1, ?),
+         substr(json_extract(event.eventJson, '$.summary.content'), 1, ? + 1),
          CAST(json_extract(event.eventJson, '$.boundary.droppedMessageCount') AS INTEGER),
          CAST(json_extract(event.eventJson, '$.boundary.droppedTurnCount') AS INTEGER)
        FROM conversation_events AS event
-       JOIN messages AS message
-         ON message.conversationId = event.conversationId AND message.messageId = event.eventId
-       WHERE event.conversationId = ? AND event.kind = 'compaction' AND message.visible = 1
+       WHERE event.conversationId = ? AND event.kind = 'compaction'
          AND json_extract(event.eventJson, '$.mode') = 'summary'
+         AND NOT EXISTS (
+           SELECT 1 FROM conversation_events AS tombstone
+           WHERE tombstone.conversationId = event.conversationId AND tombstone.kind = 'tombstone'
+             AND tombstone.targetTurnId = json_extract(event.eventJson, '$.summary.turnId')
+         )
          AND length(trim(replace(replace(json_extract(event.eventJson, '$.summary.content'), char(10), ' '), char(13), ' '))) > 0`,
-      [TIMELINE_STORED_PREVIEW_LENGTH, conversationId],
+      [MAX_CONVERSATION_TIMELINE_PREVIEW_LENGTH, conversationId],
     );
     await database.runAsync(
       `INSERT INTO conversation_timeline_v2_states (
          conversationId, revision, totalMessages, totalTurns, totalEntries
        ) SELECT ?, 1,
            (SELECT COUNT(*) FROM messages AS message
-            JOIN conversation_events AS source
-              ON source.conversationId = message.conversationId AND source.eventId = message.messageId
-            WHERE message.conversationId = ? AND message.visible = 1 AND source.kind = 'message'),
-           (SELECT COUNT(*) FROM conversation_timeline_v2_entries WHERE conversationId = ? AND kind = 'turn'),
+            WHERE message.conversationId = ? AND message.visible = 1),
+           (SELECT COUNT(*) FROM conversation_timeline_v2_entries WHERE conversationId = ? AND kind = 'message' AND role = 'user' AND entryId = turnId),
            (SELECT COUNT(*) FROM conversation_timeline_v2_entries WHERE conversationId = ?)
        ON CONFLICT(conversationId) DO UPDATE SET
          revision = conversation_timeline_v2_states.revision + 1,
@@ -4236,7 +4347,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
     if (!state || state.totalEntries < 1) return;
     const entryIndex = state.totalEntries - 1;
     if (entryIndex % TIMELINE_CHECKPOINT_STRIDE !== 0) return;
-    const turnIndex = state.totalTurns - (row.kind === 'turn' ? 1 : 0);
+    const turnIndex = state.totalTurns - (row.kind === 'message' && row.role === 'user' && row.entryId === row.turnId ? 1 : 0);
     await database.runAsync(
       `INSERT OR REPLACE INTO conversation_timeline_v2_checkpoints (
          conversationId, entryIndex, turnIndex, timestamp, lamportClock, originNodeId, entryId
@@ -4253,7 +4364,7 @@ export class MobileAgentStorage implements IAgentStorage, AtomicAgentRetryStore,
            ROW_NUMBER() OVER (
              ORDER BY timestamp, lamportClock, originNodeId, entryId
            ) - 1 AS entryIndex,
-           COALESCE(SUM(CASE WHEN kind = 'turn' THEN 1 ELSE 0 END) OVER (
+           COALESCE(SUM(CASE WHEN kind = 'message' AND role = 'user' AND entryId = turnId THEN 1 ELSE 0 END) OVER (
              ORDER BY timestamp, lamportClock, originNodeId, entryId
              ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
            ), 0) AS turnIndex

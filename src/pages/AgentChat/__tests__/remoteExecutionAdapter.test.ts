@@ -206,6 +206,126 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     await adapter.dispose();
   });
 
+  it('uploads committed local attachments only after ownership and hash verification', async () => {
+    const bytes = Uint8Array.from({ length: 8 }, (_, index) => index + 1);
+    const reference = {
+      contentHash: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      filename: 'saved.bin',
+      mimeType: 'application/octet-stream',
+      size: bytes.byteLength,
+    };
+    const beginAttachmentUpload = jest.fn(() => Promise.resolve({
+      ok: true as const,
+      conversationId: 'conversation',
+      maxChunkBytes: 4,
+      requestId: 'begin',
+      totalBytes: bytes.byteLength,
+      uploadId: 'remote-upload',
+    }));
+    const uploadAttachmentChunk = jest.fn((_request: { byteLength: number; offset: number }) => Promise.resolve({ ok: true as const }));
+    const commitAttachmentUpload = jest.fn(() => Promise.resolve({
+      ok: true as const,
+      attachment: reference,
+      conversationId: 'conversation',
+      requestId: 'commit',
+      uploadId: 'remote-upload',
+    }));
+    const client = {
+      beginAttachmentUpload,
+      cancel: jest.fn(),
+      commitAttachmentUpload,
+      deleteTurn: jest.fn(),
+      getRunStatus: jest.fn(() => Promise.resolve({ status: { state: 'completed' as const } })),
+      retryTurn: jest.fn(),
+      runTurn: jest.fn(() => Promise.resolve({ runId: 'remote-run' })),
+      uploadAttachmentChunk,
+    } as unknown as MobileAgentDeviceRpcClient;
+    const conversationReferencesAttachment = jest.fn<
+      ReturnType<MobileAgentStorage['conversationReferencesAttachment']>,
+      Parameters<MobileAgentStorage['conversationReferencesAttachment']>
+    >(() => Promise.resolve(true));
+    const verifyAttachment = jest.fn<
+      ReturnType<MobileAgentStorage['verifyAttachment']>,
+      Parameters<MobileAgentStorage['verifyAttachment']>
+    >(() => Promise.resolve(true));
+    const storage = {
+      conversationReferencesAttachment,
+      getAttachment: jest.fn(() => Promise.resolve(reference)),
+      readAttachmentRange: jest.fn((hash: string, offset: number, maxBytes: number) => {
+        expect(hash).toBe(reference.contentHash);
+        return Promise.resolve(bytes.slice(offset, offset + maxBytes));
+      }),
+      verifyAttachment,
+    } as unknown as MobileAgentStorage;
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient: () => client,
+      defaultDefinitionId: 'memeloop:general-assistant',
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage,
+      syncConversation: jest.fn(() => Promise.resolve()),
+    });
+    adapter.switchTarget('conversation', { kind: 'remote', peerId: 'desktop-peer' });
+
+    await adapter.execute('conversation', 'inspect remotely', { kind: 'committed', reference });
+
+    expect(conversationReferencesAttachment).toHaveBeenCalledWith(
+      'conversation',
+      reference.contentHash,
+      expect.anything(),
+    );
+    expect(verifyAttachment).toHaveBeenCalledWith(reference.contentHash, expect.anything());
+    const ownershipOptions = conversationReferencesAttachment.mock.calls[0]?.[2];
+    const verificationOptions = verifyAttachment.mock.calls[0]?.[1];
+    expect(ownershipOptions?.signal).toBeInstanceOf(AbortSignal);
+    expect(verificationOptions?.signal).toBeInstanceOf(AbortSignal);
+    expect(uploadAttachmentChunk.mock.calls.map(call => [call[0].offset, call[0].byteLength])).toEqual([
+      [0, 4],
+      [4, 4],
+    ]);
+    await adapter.dispose();
+  });
+
+  it('rejects a committed attachment that is not referenced by the active conversation', async () => {
+    const reference = {
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      filename: 'private.bin',
+      mimeType: 'application/octet-stream',
+      size: 1,
+    };
+    const beginAttachmentUpload = jest.fn();
+    const client = {
+      beginAttachmentUpload,
+      cancel: jest.fn(),
+      commitAttachmentUpload: jest.fn(),
+      deleteTurn: jest.fn(),
+      getRunStatus: jest.fn(),
+      retryTurn: jest.fn(),
+      runTurn: jest.fn(),
+      uploadAttachmentChunk: jest.fn(),
+    } as unknown as MobileAgentDeviceRpcClient;
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient: () => client,
+      defaultDefinitionId: 'memeloop:general-assistant',
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage: {
+        conversationReferencesAttachment: jest.fn(() => Promise.resolve(false)),
+      } as unknown as MobileAgentStorage,
+      syncConversation: jest.fn(() => Promise.resolve()),
+    });
+    adapter.switchTarget('conversation', { kind: 'remote', peerId: 'desktop-peer' });
+
+    await expect(adapter.execute('conversation', 'inspect remotely', { kind: 'committed', reference }))
+      .rejects.toThrow('remote_agent_execution_port_failure');
+    expect(beginAttachmentUpload).not.toHaveBeenCalled();
+    await adapter.dispose();
+  });
+
   it('removes local staging when a source range read fails before execution', async () => {
     const abortAttachmentUpload = jest.fn(() => Promise.resolve());
     const adapter = new MobileRemoteExecutionAdapter({

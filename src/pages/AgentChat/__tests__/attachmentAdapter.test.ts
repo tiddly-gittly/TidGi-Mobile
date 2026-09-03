@@ -74,6 +74,10 @@ function event(attachment: AttachmentReference): ConversationEvent {
       attachments: [attachment],
       content: 'map',
       messageId: 'message',
+      parts: [
+        { type: 'text', text: 'map' },
+        { type: 'attachment', attachment },
+      ],
       role: 'user',
       turnId: 'message',
     },
@@ -97,10 +101,20 @@ function hydrationRequest(attachment: AttachmentReference, signal = new AbortCon
     maxBytes: 16 * 1024 * 1024,
     maxCount: 8,
     message: {
-      attachments: [attachment],
       content: 'map',
       conversationId: 'conversation',
       lamportClock: 3,
+      metadata: {
+        displayTruncation: {
+          capability: 'detail',
+          contentTruncated: false,
+          omittedFields: ['attachments'] as const,
+          originalCharacterCount: 3,
+          originalEstimatedBytes: 3,
+          originalEstimatedRenderRows: 1,
+          truncated: true as const,
+        },
+      },
       messageId: 'message',
       originNodeId: 'phone',
       originSequence: 2,

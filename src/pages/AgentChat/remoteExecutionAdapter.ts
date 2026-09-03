@@ -67,6 +67,13 @@ function safeRemoteRunError(error: unknown): Error {
   return error instanceof Error ? error : new Error('mobile_remote_run_failed');
 }
 
+function sameAttachmentReference(left: AttachmentReference, right: AttachmentReference): boolean {
+  return left.contentHash === right.contentHash &&
+    left.filename === right.filename &&
+    left.mimeType === right.mimeType &&
+    left.size === right.size;
+}
+
 function attachmentOperationRequestId(executionRequestId: string, suffix: string): string {
   return `mobile-attachment:${bytesToHex(sha256(new TextEncoder().encode(executionRequestId)))}:${suffix}`;
 }
@@ -337,11 +344,14 @@ export class MobileRemoteExecutionAdapter {
   ): Promise<AttachmentReference | undefined> {
     if (!attachment) return undefined;
     if (attachment.kind === 'committed') {
-      const stored = await this.options.storage.getAttachment(attachment.reference.contentHash, { signal });
+      const contentHash = attachment.reference.contentHash;
+      if (!await this.options.storage.conversationReferencesAttachment(conversationId, contentHash, { signal })) {
+        throw new Error('mobile_committed_attachment_not_owned');
+      }
+      const stored = await this.options.storage.getAttachment(contentHash, { signal });
       if (
-        !stored || stored.contentHash !== attachment.reference.contentHash ||
-        stored.filename !== attachment.reference.filename || stored.mimeType !== attachment.reference.mimeType ||
-        stored.size !== attachment.reference.size
+        !stored || !sameAttachmentReference(stored, attachment.reference) ||
+        !await this.options.storage.verifyAttachment(contentHash, { signal })
       ) {
         throw new Error('mobile_committed_attachment_not_owned');
       }
@@ -398,16 +408,19 @@ export class MobileRemoteExecutionAdapter {
     client: MobileAgentDeviceRpcClient,
     signal: AbortSignal,
   ): Promise<AttachmentReference | undefined> {
-    if (!attachment || attachment.kind === 'committed') return attachment?.reference;
+    if (!attachment) return undefined;
+    const source = attachment.kind === 'committed'
+      ? await this.resolveCommittedAttachmentSource(conversationId, attachment, signal)
+      : attachment;
     const begin = await client.beginAttachmentUpload({
       conversationId,
-      filename: attachment.filename,
-      mimeType: attachment.mimeType,
+      filename: source.filename,
+      mimeType: source.mimeType,
       requestId: attachmentOperationRequestId(executionRequestId, 'begin'),
-      totalBytes: attachment.totalBytes,
+      totalBytes: source.totalBytes,
     }, { signal });
     const digest = await this.streamAttachmentSource(
-      attachment,
+      source,
       Math.min(begin.maxChunkBytes, ATTACHMENT_UPLOAD_LIMITS.chunkBytes, 512 * 1024),
       signal,
       async (offset, bytes, chunkIndex) => {
@@ -425,10 +438,40 @@ export class MobileRemoteExecutionAdapter {
       conversationId,
       requestId: attachmentOperationRequestId(executionRequestId, 'commit'),
       sha256: digest,
-      size: attachment.totalBytes,
+      size: source.totalBytes,
       uploadId: begin.uploadId,
     }, { signal });
     return response.attachment;
+  }
+
+  private async resolveCommittedAttachmentSource(
+    conversationId: string,
+    attachment: Extract<AgentAttachmentInput, { kind: 'committed' }>,
+    signal: AbortSignal,
+  ): Promise<AgentAttachmentUploadSource> {
+    const contentHash = attachment.reference.contentHash;
+    if (!await this.options.storage.conversationReferencesAttachment(conversationId, contentHash, { signal })) {
+      throw new Error('mobile_committed_attachment_not_owned');
+    }
+    const stored = await this.options.storage.getAttachment(contentHash, { signal });
+    if (
+      !stored || !sameAttachmentReference(stored, attachment.reference) ||
+      !await this.options.storage.verifyAttachment(contentHash, { signal })
+    ) {
+      throw new Error('mobile_committed_attachment_not_owned');
+    }
+    return {
+      kind: 'source',
+      filename: stored.filename,
+      mimeType: stored.mimeType,
+      totalBytes: stored.size,
+      readChunk: (offset, maxBytes, options = {}) => this.options.storage.readAttachmentRange(
+        contentHash,
+        offset,
+        maxBytes,
+        { signal: options.signal },
+      ),
+    };
   }
 
   private async streamAttachmentSource(

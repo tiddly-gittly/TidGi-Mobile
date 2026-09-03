@@ -1,6 +1,11 @@
 import type { ConversationTimelinePageClient } from '@memeloop/react-ui/native';
-import { Buffer } from 'buffer';
-import { projectConversationMessageForList } from 'memeloop/mobile';
+import {
+  agentConversationPageOptionsToStorage,
+  agentConversationWindowRequestToStorage,
+  projectTransientConversationMessageForList,
+  storagePageToAgentConversationPage,
+  storageWindowToAgentConversationWindow,
+} from 'memeloop/mobile';
 import type {
   AgentAttachmentInput,
   AgentConversationClient,
@@ -12,22 +17,15 @@ import type {
   AgentInstanceClient,
   AgentRuntimeView,
   ChatMessage,
-  ConversationMessageCursor,
   WikiTiddlerAttachment,
 } from 'memeloop/mobile';
 import { getBuiltinLoopProfiles } from 'memeloop/mobile';
 
 import type { MobileAgentStorage } from '../../services/AgentStorageService';
 
-const CURSOR_VERSION = 1;
 const MOBILE_RESIDENT_MESSAGE_LIMIT = 50;
 const MOBILE_RESIDENT_BYTE_LIMIT = 256 * 1024;
 const MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT = 124 * 1024;
-
-interface CursorEnvelope {
-  v: typeof CURSOR_VERSION;
-  cursor: ConversationMessageCursor;
-}
 
 export interface MobileAgentSessionExecutor {
   cancel(conversationId: string, signal?: AbortSignal): Promise<void>;
@@ -66,47 +64,6 @@ function throwIfAborted(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
 
-function encodeCursor(cursor?: ConversationMessageCursor): string | undefined {
-  if (!cursor) return undefined;
-  return Buffer.from(JSON.stringify({ v: CURSOR_VERSION, cursor } satisfies CursorEnvelope), 'utf8').toString('base64url');
-}
-
-function requireEncodedCursor(cursor: ConversationMessageCursor | undefined): string {
-  const encoded = encodeCursor(cursor);
-  if (encoded === undefined) throw new Error('Mobile conversation host omitted a required boundary cursor');
-  return encoded;
-}
-
-function decodeCursor(value: string): ConversationMessageCursor {
-  if (!/^[A-Za-z0-9_-]{1,4096}$/u.test(value)) throw new TypeError('invalid_mobile_conversation_cursor');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
-  } catch {
-    throw new TypeError('invalid_mobile_conversation_cursor');
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new TypeError('invalid_mobile_conversation_cursor');
-  }
-  const envelope = parsed as Record<string, unknown>;
-  if (Object.keys(envelope).length !== 2 || envelope.v !== CURSOR_VERSION) {
-    throw new TypeError('invalid_mobile_conversation_cursor');
-  }
-  const cursor = envelope.cursor;
-  if (cursor === null || typeof cursor !== 'object' || Array.isArray(cursor)) {
-    throw new TypeError('invalid_mobile_conversation_cursor');
-  }
-  const record = cursor as Record<string, unknown>;
-  if (
-    Object.keys(record).length !== 4 ||
-    !Number.isSafeInteger(record.timestamp) ||
-    !Number.isSafeInteger(record.lamportClock) ||
-    typeof record.originNodeId !== 'string' || record.originNodeId.length === 0 ||
-    typeof record.messageId !== 'string' || record.messageId.length === 0
-  ) throw new TypeError('invalid_mobile_conversation_cursor');
-  return record as unknown as ConversationMessageCursor;
-}
-
 function assertResidentBudget(limit: number, maxBytes: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MOBILE_RESIDENT_MESSAGE_LIMIT) {
     throw new RangeError('mobile_agent_message_page_limit_exceeded');
@@ -142,6 +99,10 @@ export function createMobileAgentSessionClients(
       name: profile.name,
       agentDefId: profile.id,
       status: statusByAgent.get(agentId) ?? { state: 'idle' },
+      created: new Date(metadata.lastMessageTimestamp),
+      closed: false,
+      volatile: false,
+      preview: false,
     };
   };
 
@@ -149,75 +110,39 @@ export function createMobileAgentSessionClients(
     async getMessagePage(conversationId, options, callOptions) {
       throwIfAborted(callOptions?.signal);
       assertResidentBudget(options.limit, options.maxBytes);
-      const cursor = options.cursor ? decodeCursor(options.cursor) : undefined;
-      const direction = options.direction ?? 'backward';
-      const page = await storage.getMessagePage(conversationId, {
-        limit: options.limit,
-        maxBytes: options.maxBytes,
-        mode: options.mode,
-        direction,
-        expectedRevision: options.expectedRevision,
-        ...(cursor === undefined ? {} : direction === 'forward' ? { after: cursor } : { before: cursor }),
-      }, callOptions);
+      const page = await storage.getMessagePage(
+        conversationId,
+        agentConversationPageOptionsToStorage(options),
+        callOptions,
+      );
       throwIfAborted(callOptions?.signal);
       if (page.reset) return page;
       revisionByConversation.set(conversationId, page.revision);
-      return {
-        reset: false,
-        conversationId,
-        revision: page.revision,
-        items: page.items.map(message => projectConversationMessageForList(message, Math.min(MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT, Math.max(1, options.maxBytes - 4_096)))),
-        hasMoreBefore: page.hasMoreBefore,
-        hasMoreAfter: page.hasMoreAfter,
-        ...(page.hasMoreBefore ? { previousCursor: requireEncodedCursor(page.startCursor) } : {}),
-        ...(page.hasMoreAfter ? { nextCursor: requireEncodedCursor(page.endCursor) } : {}),
-      };
+      return storagePageToAgentConversationPage(conversationId, page, options);
     },
 
     async getMessageWindowAround(request, callOptions) {
       throwIfAborted(callOptions?.signal);
       assertResidentBudget(request.maxMessages, request.maxBytes);
-      const result = await storage.getMessageWindowAround(request.conversationId, {
-        focus: request.focus,
-        expectedRevision: request.expectedRevision,
-        maxMessages: request.maxMessages,
-        maxBytes: request.maxBytes,
-      }, callOptions);
+      const result = await storage.getMessageWindowAround(
+        request.conversationId,
+        agentConversationWindowRequestToStorage(request),
+        callOptions,
+      );
       throwIfAborted(callOptions?.signal);
       if (result.reset) return result;
       revisionByConversation.set(request.conversationId, result.revision);
-      return {
-        reset: false,
-        conversationId: request.conversationId,
-        revision: result.revision,
-        focus: result.focus,
-        items: result.items.map(message => projectConversationMessageForList(message, Math.min(MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT, Math.max(1, request.maxBytes - 4_096)))),
-        hasMoreBefore: result.hasMoreBefore,
-        hasMoreAfter: result.hasMoreAfter,
-        ...(result.hasMoreBefore ? { previousCursor: requireEncodedCursor(result.startCursor) } : {}),
-        ...(result.hasMoreAfter ? { nextCursor: requireEncodedCursor(result.endCursor) } : {}),
-      };
+      return storageWindowToAgentConversationWindow(request, result);
     },
 
     async getTurnDetail(request, callOptions) {
       throwIfAborted(callOptions?.signal);
-      const direction = request.direction ?? 'backward';
-      const cursor = request.cursor ? decodeCursor(request.cursor) : undefined;
-      const page = await storage.getTurnMessagePage(request.conversationId, request.turnId, {
-        direction,
-        limit: Math.min(request.limit ?? MOBILE_RESIDENT_MESSAGE_LIMIT, MOBILE_RESIDENT_MESSAGE_LIMIT),
-        maxBytes: Math.min(request.maxBytes ?? MOBILE_RESIDENT_BYTE_LIMIT, MOBILE_RESIDENT_BYTE_LIMIT),
-        ...(cursor === undefined ? {} : direction === 'forward' ? { after: cursor } : { before: cursor }),
-      }, callOptions);
+      const limit = request.limit ?? MOBILE_RESIDENT_MESSAGE_LIMIT;
+      const maxBytes = request.maxBytes ?? MOBILE_RESIDENT_BYTE_LIMIT;
+      assertResidentBudget(limit, maxBytes);
+      const page = await storage.getTurnDetail({ ...request, limit, maxBytes }, callOptions);
       throwIfAborted(callOptions?.signal);
-      return {
-        turnId: request.turnId,
-        items: page.items,
-        hasMoreBefore: page.hasMoreBefore,
-        hasMoreAfter: page.hasMoreAfter,
-        ...(page.hasMoreBefore ? { previousCursor: requireEncodedCursor(page.startCursor) } : {}),
-        ...(page.hasMoreAfter ? { nextCursor: requireEncodedCursor(page.endCursor) } : {}),
-      };
+      return page;
     },
 
     async sendMessage(conversationId, content, attachment, wikiTiddlers, callOptions) {
@@ -245,7 +170,7 @@ export function createMobileAgentSessionClients(
           conversationId,
           revision,
           streaming: true,
-          message: projectConversationMessageForList(message, MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT),
+          message: projectTransientConversationMessageForList(message, MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT),
         };
         listener(update);
       });

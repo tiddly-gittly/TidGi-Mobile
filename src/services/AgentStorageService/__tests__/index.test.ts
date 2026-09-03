@@ -75,6 +75,7 @@ function message(messageId: string, lamportClock: number, content = messageId): 
     timestamp: lamportClock,
     lamportClock,
     role: lamportClock === 1 ? 'user' : 'assistant',
+    parts: [{ type: 'text', text: content }],
     content,
   };
 }
@@ -145,13 +146,12 @@ async function readAllMessagesForTest(current: MobileAgentStorage, conversationI
   let after: ConversationMessageCursor | undefined;
   let expectedRevision: string | undefined;
   for (;;) {
-    const page = await current.getMessagePage(conversationId, {
+    const page = await current.getFullContentMessagePage(conversationId, {
       ...(after ? { after } : {}),
       ...(expectedRevision ? { expectedRevision } : {}),
       direction: 'forward',
-      limit: 80,
-      maxBytes: 4 * 1024 * 1024,
-      mode: 'full-content',
+      limit: 50,
+      maxBytes: 256 * 1024,
     });
     if (page.reset) throw new Error('unexpected message-page reset');
     items.push(...page.items);
@@ -210,23 +210,26 @@ describe('MobileAgentStorage', () => {
       },
     ]);
 
-    const messages = await current.getMessagePage('conversation-1', { limit: 2, maxBytes: 1024 * 1024 });
+    const messages = await current.getMessagePage('conversation-1', { limit: 2, maxBytes: 256 * 1024 });
     if (messages.reset) throw new Error('unexpected Unicode message-page reset');
     const projected = messages.items.find(item => item.messageId === 'unicode-answer');
     expect(projected?.content.endsWith('\uD83D')).toBe(false);
-    expect(projected?.reasoning_content?.endsWith('\uD83D') ?? false).toBe(false);
+    expect(projected?.reasoning).toMatchObject({ text: '', hasMore: true });
 
     const timeline = await current.getConversationTimelinePage('conversation-1', {
-      limit: 1,
+      aroundEntryIndex: 0,
+      limit: 2,
       maxBytes: 128 * 1024,
       previewLength: 240,
     });
-    if (timeline.reset || timeline.items[0]?.kind !== 'turn') throw new Error('unexpected Unicode timeline reset');
-    expect(timeline.items[0].userPreview).toBe(`${'x'.repeat(238)}…`);
-    expect(timeline.items[0].userPreview.endsWith('\uD83D')).toBe(false);
+    if (timeline.reset) throw new Error('unexpected Unicode timeline reset');
+    const userEntry = timeline.items.find(entry => entry.kind === 'message' && entry.role === 'user');
+    if (!userEntry || userEntry.kind !== 'message') throw new Error('missing Unicode user timeline entry');
+    expect(userEntry.preview).toBe(`${'x'.repeat(238)}…`);
+    expect(userEntry.preview.endsWith('\uD83D')).toBe(false);
   });
 
-  it('projects first/last multi-agent participants with an exact response count', async () => {
+  it('projects each multi-agent message with bounded actor metadata', async () => {
     const current = storage();
     const user = { ...message('participant-turn', 1, 'coordinate agents'), messageId: 'participant-turn', turnId: 'participant-turn', role: 'user' as const };
     const responses: ChatMessage[] = Array.from({ length: 6 }, (_, index) => ({
@@ -240,20 +243,72 @@ describe('MobileAgentStorage', () => {
     await current.insertMessagesIfAbsent([user, ...responses]);
 
     const timeline = await current.getConversationTimelinePage('conversation-1', {
-      limit: 1,
+      aroundEntryIndex: 0,
+      limit: 7,
       maxBytes: 128 * 1024,
       previewLength: 160,
     });
-    if (timeline.reset || timeline.items[0]?.kind !== 'turn') throw new Error('unexpected participant timeline reset');
-    expect(timeline.items[0].responseCount).toBe(6);
-    expect(timeline.items[0].participantPreviews.map(item => item.actorId)).toEqual([
+    if (timeline.reset) throw new Error('unexpected participant timeline reset');
+    const responsesInTimeline = timeline.items.filter(entry => entry.kind === 'message' && entry.role !== 'user');
+    expect(responsesInTimeline.map(entry => entry.kind === 'message' ? entry.actorId : '')).toEqual([
       'actor-0',
       'actor-1',
+      'actor-2',
+      'actor-3',
       'actor-4',
       'actor-5',
     ]);
-    expect(Buffer.byteLength(JSON.stringify(timeline.items[0]), 'utf8')).toBeLessThanOrEqual(1024);
-    expect(timeline.items[0].participantPreviews.every(item => !item.preview.endsWith('\uD83D'))).toBe(true);
+    expect(timeline.items.every(item => Buffer.byteLength(JSON.stringify(item), 'utf8') <= 2 * 1024)).toBe(true);
+    expect(responsesInTimeline.every(entry => entry.kind === 'message' && !entry.preview.endsWith('\uD83D'))).toBe(true);
+  });
+
+  it('serves Core turn-detail projections with scoped keyset cursors', async () => {
+    const current = storage();
+    await current.insertMessagesIfAbsent([
+      { ...message('turn-1', 1, 'question'), turnId: 'turn-1' },
+      { ...message('turn-answer-1', 2, 'first answer'), turnId: 'turn-1' },
+      { ...message('turn-answer-2', 3, 'second answer'), turnId: 'turn-1' },
+      { ...message('other-turn', 4, 'unrelated'), turnId: 'turn-2' },
+    ]);
+
+    const recent = await current.getTurnDetail({
+      conversationId: 'conversation-1',
+      turnId: 'turn-1',
+      direction: 'backward',
+      limit: 2,
+      maxBytes: 64 * 1024,
+    });
+    expect(recent.items.map(item => item.messageId)).toEqual(['turn-answer-1', 'turn-answer-2']);
+    expect(recent).toMatchObject({ turnId: 'turn-1', hasMoreBefore: true, hasMoreAfter: false });
+    expect(recent.previousCursor).toEqual(expect.any(String));
+    expect(recent).not.toHaveProperty('nextCursor');
+
+    const older = await current.getTurnDetail({
+      conversationId: 'conversation-1',
+      turnId: 'turn-1',
+      cursor: recent.previousCursor,
+      seenCursor: recent.previousCursor,
+      direction: 'backward',
+      limit: 2,
+      maxBytes: 64 * 1024,
+    });
+    expect(older.items.map(item => item.messageId)).toEqual(['turn-1']);
+    expect(older).toMatchObject({
+      turnId: 'turn-1',
+      hasMoreBefore: false,
+      hasMoreAfter: true,
+      seenCursorFound: true,
+    });
+    expect(older.nextCursor).toEqual(expect.any(String));
+    expect(older).not.toHaveProperty('previousCursor');
+
+    await expect(current.getTurnDetail({
+      conversationId: 'conversation-1',
+      turnId: 'turn-2',
+      cursor: recent.previousCursor,
+      limit: 2,
+      maxBytes: 64 * 1024,
+    })).rejects.toThrow('conversation_projection_cursor_stale');
   });
 
   it('persists attachment bytes used by cross-device sync', async () => {
@@ -560,6 +615,7 @@ describe('MobileAgentStorage', () => {
       originNodeId: 'phone',
       timestamp: 42,
       role: 'user' as const,
+      parts: [{ type: 'text' as const, text: messageId }],
       content: messageId,
     });
     await expect(Promise.all([
@@ -575,6 +631,32 @@ describe('MobileAgentStorage', () => {
       lamportClock: 44,
       originNodeId: 'phone',
       originSequence: 4,
+    });
+  });
+
+  it('persists causal clocks for metadata and tombstone events, not only visible messages', async () => {
+    const current = storage();
+    const metadata: ConversationEvent = {
+      conversationId: 'conversation-1',
+      eventId: 'remote-metadata',
+      kind: 'metadataPatch',
+      lamportClock: 50,
+      originNodeId: 'desktop',
+      originSequence: 1,
+      patch: { title: 'Remote title' },
+      timestamp: 50,
+    };
+    await current.insertEventsIfAbsent([metadata]);
+    await expect(current.getMaxLamportClockForConversation('conversation-1')).resolves.toBe(50);
+
+    const tombstone = await current.deleteTurn('conversation-1', 'missing-turn', 'phone');
+    expect(tombstone).toMatchObject({ lamportClock: 51, originNodeId: 'phone', originSequence: 1 });
+
+    const reloaded = storage();
+    await expect(reloaded.createMessage('conversation-1', 'user', 'after control events', 'phone')).resolves.toMatchObject({
+      lamportClock: 52,
+      originNodeId: 'phone',
+      originSequence: 2,
     });
   });
 
@@ -594,6 +676,7 @@ describe('MobileAgentStorage', () => {
       originNodeId: 'phone',
       timestamp: 1,
       role: 'user' as const,
+      parts: [{ type: 'text' as const, text: 'first' }],
       content: 'first',
     };
     await expect(current.appendLocalMessage(draft)).resolves.toMatchObject({ lamportClock: 1, originSequence: 1 });
@@ -648,44 +731,48 @@ describe('MobileAgentStorage', () => {
         timestamp: index,
         lamportClock: index + 1,
         role: index % 2 === 0 ? 'user' : 'assistant',
+        parts: [{ type: 'text', text: `${index % 2 === 0 ? 'prompt' : 'answer'} ${index}` }],
         content: `${index % 2 === 0 ? 'prompt' : 'answer'} ${index}`,
       };
     });
     await current.insertMessagesIfAbsent(messages.reverse());
 
-    const tail = await current.getMessagePage('conversation-1', { limit: 80, maxBytes: 1024 * 1024 });
+    const tail = await current.getMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 });
     if (tail.reset) throw new Error('unexpected message-page reset');
-    expect(tail.items).toHaveLength(80);
-    expect(tail.items[0]?.content).toBe('prompt 99920');
+    expect(tail.items).toHaveLength(50);
+    expect(tail.items[0]?.content).toBe('prompt 99950');
     expect(tail.hasMoreBefore).toBe(true);
     expect(tail.hasMoreAfter).toBe(false);
 
-    const timeline = await current.getConversationTimelinePage('conversation-1', { limit: 64, maxBytes: 128 * 1024 });
-    expect(timeline).toMatchObject({ reset: false, totalMessages: 100_000, totalTurns: 50_000, totalEntries: 50_000 });
+    const timeline = await current.getConversationTimelinePage('conversation-1', { limit: 50, maxBytes: 128 * 1024 });
+    expect(timeline).toMatchObject({ reset: false, totalMessages: 100_000, totalTurns: 50_000, totalEntries: 100_000 });
     if (timeline.reset) throw new Error('unexpected timeline reset');
-    expect(timeline.items).toHaveLength(64);
+    expect(timeline.items).toHaveLength(50);
     expect(timeline.items.at(-1)?.turnIndex).toBe(49_999);
     const firstTimeline = await current.getConversationTimelinePage('conversation-1', {
       aroundEntryIndex: 0,
       expectedRevision: timeline.revision,
-      limit: 64,
+      limit: 50,
       maxBytes: 128 * 1024,
     });
     if (firstTimeline.reset) throw new Error('unexpected timeline reset');
     expect(firstTimeline.items[0]).toMatchObject({
       entryIndex: 0,
-      userPreview: 'prompt 0',
-      participantPreviews: [{ actorId: 'desktop', actorLabel: 'desktop', role: 'assistant', preview: 'answer 1' }],
-      responseCount: 1,
+      messageId: 'turn-000000',
+      turnId: 'turn-000000',
+      role: 'user',
+      actorId: 'phone',
+      actorLabel: 'phone',
+      preview: 'prompt 0',
     });
     const firstEntry = firstTimeline.items.at(0);
-    if (!firstEntry || firstEntry.kind !== 'turn') throw new Error('missing first turn');
+    if (!firstEntry || firstEntry.kind !== 'message') throw new Error('missing first message');
     const seekStartedAt = Date.now();
     const firstWindow = await current.getMessageWindowAround('conversation-1', {
       expectedRevision: firstTimeline.revision,
       focus: { kind: 'timeline-entry', entryId: firstEntry.entryId, cursor: firstEntry.cursor },
-      maxMessages: 80,
-      maxBytes: 1024 * 1024,
+      maxMessages: 50,
+      maxBytes: 256 * 1024,
     });
     if (firstWindow.reset) throw new Error('unexpected message-window reset');
     expect(firstWindow.items.slice(0, 2)).toEqual([
@@ -699,7 +786,7 @@ describe('MobileAgentStorage', () => {
       const randomPage = await current.getConversationTimelinePage('conversation-1', {
         aroundEntryIndex: target,
         expectedRevision: timeline.revision,
-        limit: 64,
+        limit: 50,
         maxBytes: 128 * 1024,
       });
       if (randomPage.reset) throw new Error('unexpected random timeline reset');
@@ -732,6 +819,7 @@ describe('MobileAgentStorage', () => {
           messageId: turnId,
           role: 'user',
           turnId,
+          parts: [{ type: 'text', text: `archive prompt ${index}` }],
         },
         originNodeId: 'archive',
         originSequence: index + 1,
@@ -756,8 +844,8 @@ describe('MobileAgentStorage', () => {
     await expect(current.getMessageWindowAround('conversation-1', {
       expectedRevision: firstTimeline.revision,
       focus: { kind: 'timeline-entry', entryId: firstEntry.entryId, cursor: firstEntry.cursor },
-      maxMessages: 80,
-      maxBytes: 1024 * 1024,
+      maxMessages: 50,
+      maxBytes: 256 * 1024,
     })).resolves.toMatchObject({ reset: true });
   }, 30_000);
 
@@ -778,6 +866,7 @@ describe('MobileAgentStorage', () => {
         messageId: `desktop-${index + 1}`,
         turnId: `desktop-${index + 1}`,
         role: 'user',
+        parts: [{ type: 'text', text: `event ${index + 1}` }],
         content: `event ${index + 1}`,
       },
       originNodeId: 'desktop',
@@ -806,7 +895,7 @@ describe('MobileAgentStorage', () => {
       eventId: 'valid-prefix',
       kind: 'message',
       lamportClock: 1,
-      message: { messageId: 'valid-prefix', turnId: 'valid-prefix', role: 'user', content: 'valid' },
+      message: { messageId: 'valid-prefix', turnId: 'valid-prefix', role: 'user', parts: [{ type: 'text', text: 'valid' }], content: 'valid' },
       originNodeId: 'desktop',
       originSequence: 1,
       timestamp: 1,
@@ -838,7 +927,7 @@ describe('MobileAgentStorage', () => {
       eventId: 'accessor',
       kind: 'message',
       lamportClock: 1,
-      message: { messageId: 'accessor', turnId: 'accessor', role: 'user', content: 'invalid', metadata },
+      message: { messageId: 'accessor', turnId: 'accessor', role: 'user', parts: [{ type: 'text', text: 'invalid' }], content: 'invalid', metadata },
       originNodeId: 'desktop',
       originSequence: 1,
       timestamp: 1,
@@ -869,7 +958,7 @@ describe('MobileAgentStorage', () => {
           eventId: 'corrupt',
           kind: 'message',
           lamportClock: 1,
-          message: { messageId: 'different-id', turnId: 'corrupt', role: 'user', content: 'corrupt' },
+          message: { messageId: 'different-id', turnId: 'corrupt', role: 'user', parts: [{ type: 'text', text: 'corrupt' }], content: 'corrupt' },
           originNodeId: 'desktop',
           originSequence: 1,
           timestamp: 1,
@@ -891,7 +980,7 @@ describe('MobileAgentStorage', () => {
     };
     await current.insertMessagesIfAbsent([toolMessage]);
 
-    const page = await current.getMessagePage('conversation-1', { limit: 80, maxBytes: 1024 * 1024 });
+    const page = await current.getMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 });
     if (page.reset) throw new Error('unexpected message-page reset');
     expect(page.items).toHaveLength(1);
     expect(Buffer.byteLength(JSON.stringify(page.items[0]), 'utf8')).toBeLessThanOrEqual(252 * 1024);
@@ -899,7 +988,7 @@ describe('MobileAgentStorage', () => {
     expect(page.items[0]?.metadata).toMatchObject({
       displayTruncation: {
         truncated: true,
-        capability: 'detail',
+        capability: 'export',
         contentTruncated: true,
       },
     });
@@ -938,6 +1027,7 @@ describe('MobileAgentStorage', () => {
       originNodeId: 'large-detail-origin',
       originSequence: 1,
       role: 'tool',
+      parts: [],
       timestamp: 1,
       turnId: 'large-detail-turn',
     };
@@ -1097,9 +1187,9 @@ describe('MobileAgentStorage', () => {
     await expect(current.getMessagePage('conversation-1', {
       afterCoveredVersion: coveredVersion,
       direction: 'forward',
-      limit: 80,
-      maxBytes: 1024 * 1024,
-    })).resolves.toMatchObject({ items: [message('tail', 1, 'tail')] });
+      limit: 50,
+      maxBytes: 256 * 1024,
+    })).resolves.toMatchObject({ items: [expect.objectContaining({ messageId: 'tail', content: 'tail' })] });
   });
 
   it('returns only dominating durable summaries and the uncovered version-vector tail', async () => {
@@ -1160,15 +1250,12 @@ describe('MobileAgentStorage', () => {
     const uncovered = await current.getMessagePage('conversation-1', {
       afterCoveredVersion: summary2.boundary.coveredVersion,
       direction: 'forward',
-      limit: 80,
-      maxBytes: 1024 * 1024,
+      limit: 50,
+      maxBytes: 256 * 1024,
     });
     if (uncovered.reset) throw new Error('unexpected uncovered-tail reset');
-    expect(uncovered.items).toEqual([
-      latest,
-      expect.objectContaining({ messageId: 'summary-2', content: 'newest summary' }),
-    ]);
-    const summaries = await current.getConversationTimelinePage('conversation-1', { limit: 64, maxBytes: 128 * 1024 });
+    expect(uncovered.items).toEqual([expect.objectContaining({ messageId: latest.messageId, content: latest.content })]);
+    const summaries = await current.getConversationTimelinePage('conversation-1', { limit: 50, maxBytes: 128 * 1024 });
     if (summaries.reset) throw new Error('unexpected timeline reset');
     expect(summaries.items.filter(anchor => anchor.kind === 'compaction')).toHaveLength(2);
   });
@@ -1186,7 +1273,7 @@ describe('MobileAgentStorage', () => {
       eventId: 'late-tool',
       kind: 'message',
       lamportClock: 20,
-      message: { messageId: 'late-tool', turnId: user.messageId, role: 'tool', content: 'late' },
+      message: { messageId: 'late-tool', turnId: user.messageId, role: 'tool', parts: [{ type: 'text', text: 'late' }], content: 'late' },
       originNodeId: 'desktop',
       originSequence: 1,
       timestamp: 20,
@@ -1196,31 +1283,31 @@ describe('MobileAgentStorage', () => {
     const audit = await current.getConversationEventPage('conversation-1', { direction: 'forward', limit: 20 });
     expect(audit.items.filter(event => event.kind === 'message')).toHaveLength(3);
     expect(audit.items.filter(event => event.kind === 'tombstone')).toHaveLength(1);
-    const deletedTimeline = await current.getConversationTimelinePage('conversation-1', { limit: 64, maxBytes: 128 * 1024 });
+    const deletedTimeline = await current.getConversationTimelinePage('conversation-1', { limit: 50, maxBytes: 128 * 1024 });
     if (deletedTimeline.reset) throw new Error('unexpected timeline reset');
     expect(deletedTimeline.items).toEqual([]);
   });
 
-  it('atomically seeks turn and compaction windows and resets stale revisions', async () => {
+  it('atomically seeks message and compaction windows and resets stale revisions', async () => {
     const current = storage();
     const user = { ...message('seek-turn', 1, 'remember this point'), turnId: 'seek-turn' };
     const assistant = { ...message('seek-answer', 2, 'bounded answer'), turnId: 'seek-turn' };
     const later = { ...message('later-turn', 3, 'later prompt'), role: 'user' as const, turnId: 'later-turn' };
     await current.insertMessagesIfAbsent([later, assistant, user]);
     const initialTimeline = await current.getConversationTimelinePage('conversation-1', {
-      limit: 64,
+      limit: 50,
       maxBytes: 128 * 1024,
     });
     if (initialTimeline.reset) throw new Error('unexpected timeline reset');
     await expect(current.getMessageWindowAround('conversation-1', {
       expectedRevision: initialTimeline.revision,
-      focus: { kind: 'turn', turnId: 'seek-turn', cursor: 'seek-turn' },
+      focus: { kind: 'message', messageId: 'seek-turn', turnId: 'seek-turn' },
       maxMessages: 2,
       maxBytes: 128 * 1024,
     })).resolves.toMatchObject({
       reset: false,
       revision: initialTimeline.revision,
-      focus: { kind: 'turn', turnId: 'seek-turn', cursor: 'seek-turn' },
+      focus: { kind: 'message', messageId: 'seek-turn', turnId: 'seek-turn' },
       items: [expect.objectContaining({ messageId: 'seek-turn' }), expect.objectContaining({ messageId: 'seek-answer' })],
       hasMoreAfter: true,
     });
@@ -1247,13 +1334,13 @@ describe('MobileAgentStorage', () => {
     await current.insertEventsIfAbsent([summary]);
     await expect(current.getMessageWindowAround('conversation-1', {
       expectedRevision: initialTimeline.revision,
-      focus: { kind: 'turn', turnId: 'seek-turn', cursor: 'seek-turn' },
+      focus: { kind: 'message', messageId: 'seek-turn', turnId: 'seek-turn' },
       maxMessages: 4,
       maxBytes: 128 * 1024,
     })).resolves.toEqual(expect.objectContaining({ reset: true, conversationId: 'conversation-1' }));
 
     const latestTimeline = await current.getConversationTimelinePage('conversation-1', {
-      limit: 64,
+      limit: 50,
       maxBytes: 128 * 1024,
     });
     if (latestTimeline.reset) throw new Error('unexpected timeline reset');
@@ -1408,6 +1495,7 @@ describe('MobileAgentStorage', () => {
       originNodeId: 'phone',
       timestamp: 3,
       role: 'user',
+      parts: [{ type: 'text' as const, text: 'fresh start' }],
       content: 'fresh start',
     })).resolves.toMatchObject({ lamportClock: 1, originSequence: 1 });
   });
@@ -1533,6 +1621,7 @@ describe('MobileAgentStorage', () => {
         messageId: candidate.turnId,
         role: 'user',
         turnId: candidate.turnId,
+        parts: source.parts,
       },
       originNodeId: 'phone',
     })).resolves.toMatchObject({ created: true, run: candidate });
@@ -1560,6 +1649,7 @@ describe('MobileAgentStorage', () => {
       messageId: candidate.turnId,
       role: 'user' as const,
       turnId: candidate.turnId,
+      parts: source.parts,
     };
     const fresh = {
       mode: 'fresh' as const,
@@ -1619,6 +1709,7 @@ describe('MobileAgentStorage', () => {
       messageId: candidate.turnId,
       role: 'user' as const,
       turnId: candidate.turnId,
+      parts: source.parts,
     };
     await expect(current.retryTurnAtomic({
       mode: 'fresh',
@@ -1690,6 +1781,7 @@ describe('MobileAgentStorage', () => {
         messageId: candidate.turnId,
         role: 'user',
         turnId: candidate.turnId,
+        parts: source.parts,
       },
       originNodeId: 'phone',
     })).rejects.toThrow('simulated replacement insert failure');
@@ -1709,6 +1801,7 @@ describe('MobileAgentStorage', () => {
       originNodeId: 'phone',
       timestamp: 401,
       role: 'user',
+      parts: [{ type: 'text' as const, text: 'causal counters recovered' }],
       content: 'causal counters recovered',
     })).resolves.toMatchObject({ lamportClock: 2, originSequence: 2 });
   });

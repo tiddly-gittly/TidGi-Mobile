@@ -7,6 +7,8 @@ import {
   type MobileConversationDirectoryClient,
   MobileConversationDirectoryController,
   mobileConversationDirectoryDirection,
+  mobileConversationDirectoryErrorCode,
+  mobileConversationDirectoryErrorMessageKey,
 } from '../conversationDirectory';
 
 function conversation(index: number): ConversationMeta {
@@ -160,5 +162,14 @@ describe('Mobile conversation directory direction', () => {
     expect(mobileConversationDirectoryDirection('rtl')).toBe('rtl');
     expect(mobileConversationDirectoryDirection('ltr')).toBe('ltr');
     expect(mobileConversationDirectoryDirection('auto')).toBe('ltr');
+  });
+});
+
+describe('Mobile conversation directory error presentation', () => {
+  it('maps stable storage/request conditions without exposing provider details', () => {
+    expect(mobileConversationDirectoryErrorCode(new Error('conversation_list_page_exceeds_byte_budget'))).toBe('too-large');
+    expect(mobileConversationDirectoryErrorCode(new Error('invalid_mobile_conversation_cursor'))).toBe('invalid-request');
+    expect(mobileConversationDirectoryErrorCode(new Error('Bearer super-secret-token'))).toBe('storage');
+    expect(mobileConversationDirectoryErrorMessageKey(new Error('Bearer super-secret-token'))).toBe('AgentChat.ConversationDirectoryError');
   });
 });

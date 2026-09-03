@@ -80,12 +80,13 @@ describe('mobile shared session boundary', () => {
         reset: false as const,
         conversationId: 'conversation',
         revision: 'revision-1',
-        focus: { kind: 'turn' as const, turnId: 'turn-1', cursor: 'turn-cursor' },
+        focus: { kind: 'message' as const, messageId: 'message-1', turnId: 'turn-1', cursor: 'turn-cursor' },
         items: [],
         hasMoreBefore: false,
         hasMoreAfter: false,
       }),
-      getTurnMessagePage: jest.fn().mockResolvedValue({
+      getTurnDetail: jest.fn().mockResolvedValue({
+        turnId: 'turn-1',
         items: [],
         hasMoreBefore: false,
         hasMoreAfter: false,
@@ -97,12 +98,11 @@ describe('mobile shared session boundary', () => {
       direction: 'backward',
       limit: 50,
       maxBytes: 256 * 1024,
-      mode: 'on-demand',
     });
     const window = await clients.conversationClient.getMessageWindowAround({
       conversationId: 'conversation',
       expectedRevision: 'revision-1',
-      focus: { kind: 'turn', turnId: 'turn-1', cursor: 'turn-cursor' },
+      focus: { kind: 'message', messageId: 'message-1', turnId: 'turn-1', cursor: 'turn-cursor' },
       maxMessages: 50,
       maxBytes: 256 * 1024,
     });
@@ -116,6 +116,25 @@ describe('mobile shared session boundary', () => {
     expectCanonicalAbsentCursors(page);
     expectCanonicalAbsentCursors(window);
     expectCanonicalAbsentCursors(detail);
+  });
+
+  it('rejects turn-detail budgets instead of silently clamping caller input', async () => {
+    const getTurnDetail = jest.fn();
+    const clients = createMobileAgentSessionClients({ getTurnDetail } as unknown as MobileAgentStorage, createExecutor());
+
+    await expect(clients.conversationClient.getTurnDetail({
+      conversationId: 'conversation',
+      turnId: 'turn-1',
+      limit: 51,
+      maxBytes: 256 * 1024,
+    })).rejects.toThrow('mobile_agent_message_page_limit_exceeded');
+    await expect(clients.conversationClient.getTurnDetail({
+      conversationId: 'conversation',
+      turnId: 'turn-1',
+      limit: 50,
+      maxBytes: 256 * 1024 + 1,
+    })).rejects.toThrow('mobile_agent_message_page_byte_budget_exceeded');
+    expect(getTurnDetail).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -136,7 +155,6 @@ describe('mobile shared session boundary', () => {
           direction: 'backward',
           limit: 50,
           maxBytes: 256 * 1024,
-          mode: 'on-demand',
         }),
     },
     {
@@ -146,7 +164,7 @@ describe('mobile shared session boundary', () => {
           reset: false as const,
           conversationId: 'conversation',
           revision: 'revision-1',
-          focus: { kind: 'turn' as const, turnId: 'turn-1', cursor: 'turn-cursor' },
+          focus: { kind: 'message' as const, messageId: 'message-1', turnId: 'turn-1', cursor: 'turn-cursor' },
           items: [],
           hasMoreBefore: false,
           hasMoreAfter: true,
@@ -156,31 +174,14 @@ describe('mobile shared session boundary', () => {
         clients.conversationClient.getMessageWindowAround({
           conversationId: 'conversation',
           expectedRevision: 'revision-1',
-          focus: { kind: 'turn', turnId: 'turn-1', cursor: 'turn-cursor' },
+          focus: { kind: 'message', messageId: 'message-1', turnId: 'turn-1', cursor: 'turn-cursor' },
           maxMessages: 50,
-          maxBytes: 256 * 1024,
-        }),
-    },
-    {
-      name: 'turn detail',
-      storage: {
-        getTurnMessagePage: jest.fn().mockResolvedValue({
-          items: [],
-          hasMoreBefore: true,
-          hasMoreAfter: false,
-        }),
-      },
-      invoke: (clients: ReturnType<typeof createMobileAgentSessionClients>) =>
-        clients.conversationClient.getTurnDetail({
-          conversationId: 'conversation',
-          turnId: 'turn-1',
-          limit: 50,
           maxBytes: 256 * 1024,
         }),
     },
   ])('fails closed when the $name host result omits a required boundary cursor', async ({ storage, invoke }) => {
     const clients = createMobileAgentSessionClients(storage as unknown as MobileAgentStorage, createExecutor());
 
-    await expect(invoke(clients)).rejects.toThrow('Mobile conversation host omitted a required boundary cursor');
+    await expect(invoke(clients)).rejects.toThrow('conversation_page_boundary_cursor_missing');
   });
 });
