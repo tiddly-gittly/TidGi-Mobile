@@ -1,5 +1,6 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
+const fs = require('fs');
 const path = require('path');
 
 /** @type {import('expo/metro-config').MetroConfig} */
@@ -11,11 +12,24 @@ const {
 
 // Get the project root
 const projectRoot = __dirname;
+const linkedPackageRoots = [
+  '@memeloop/libp2p',
+  '@memeloop/react-ui',
+  'memeloop',
+].flatMap((packageName) => {
+  try {
+    return [fs.realpathSync(path.join(projectRoot, 'node_modules', packageName))];
+  } catch {
+    return [];
+  }
+});
 
 module.exports = {
   ...config,
   projectRoot,
-  watchFolders: [projectRoot],
+  // pnpm links our shared MemeLoop packages outside this worktree. Metro must
+  // watch their real roots to resolve their exported subpaths on native.
+  watchFolders: [projectRoot, ...linkedPackageRoots],
   resolver: {
     ...resolver,
     unstable_enableSymlinks: true,
@@ -29,11 +43,15 @@ module.exports = {
       },
       {
         get: (target, name) => {
+          if (typeof name !== 'string') return undefined;
           if (target[name]) {
             return target[name];
           }
-          // Fallback to node_modules
-          return path.join(projectRoot, `node_modules/${name}`);
+          // Let Metro resolve package export subpaths (for example
+          // @memeloop/react-ui/native). Mapping a missing subpath directly
+          // would bypass the package's exports map.
+          const fallback = path.join(projectRoot, `node_modules/${name}`);
+          return fs.existsSync(fallback) ? fallback : undefined;
         },
       }
     ),
