@@ -12,6 +12,7 @@ import {
   ATTACHMENT_UPLOAD_LIMITS,
   type AttachmentReference,
   buildAttachmentUploadChunkRequest,
+  type ConversationForkRequest,
   RemoteAgentExecutionCoordinator,
   type RemoteAgentExecutionResult,
   type RemoteAgentExecutionSnapshot,
@@ -145,13 +146,20 @@ export class MobileRemoteExecutionAdapter {
           client,
           callOptions.signal,
         );
+        const replacement = await options.storage.getPendingConversationBranchReplacement(request.provenance.conversationId);
+        let pending = this.pendingUserMessage(request.message, attachment, request.wikiTiddlers);
+        if (replacement?.turnId === request.provenance.turnId) {
+          if (replacement.content !== request.message) throw new Error('conversation_branch_replacement_changed');
+          const { messageId: _messageId, turnId: _turnId, originNodeId: _originNodeId, timestamp: _timestamp, ...userMessage } = replacement;
+          pending = { userMessage };
+        }
         const accepted = await client.runTurn({
           conversationId: request.provenance.conversationId,
           definitionId: request.provenance.definitionId,
           message: request.message,
           requestId: request.provenance.requestId,
           turnId: request.provenance.turnId,
-          ...this.pendingUserMessage(request.message, attachment, request.wikiTiddlers),
+          ...pending,
         }, { signal: callOptions.signal });
         await this.trackRemoteRun({
           client,
@@ -279,6 +287,26 @@ export class MobileRemoteExecutionAdapter {
       ...(attachment === undefined ? {} : { attachment }),
       ...(wikiTiddlers === undefined ? {} : { wikiTiddlers }),
     }, { signal });
+  }
+
+  /** Resume the staged branch through the same coordinator and durable turn identity. */
+  public async executeBranch(request: ConversationForkRequest): Promise<RemoteAgentExecutionResult> {
+    const conversation = await this.options.storage.getConversationMeta(request.targetConversationId);
+    if (!conversation) throw new Error('conversation_branch_target_missing');
+    const target = this.currentTarget(request.targetConversationId);
+    if (target.kind === 'remote') {
+      await this.options.syncConversation(target.peerId, request.targetConversationId, new AbortController().signal);
+    }
+    return this.coordinator.execute({
+      target,
+      provenance: this.coordinator.prepareProvenance({
+        conversationId: request.targetConversationId,
+        definitionId: conversation.definitionId,
+        requestId: request.requestId,
+        turnId: request.replacementMessageId,
+      }),
+      message: request.text,
+    });
   }
 
   public async retry(
@@ -465,12 +493,13 @@ export class MobileRemoteExecutionAdapter {
       filename: stored.filename,
       mimeType: stored.mimeType,
       totalBytes: stored.size,
-      readChunk: (offset, maxBytes, options = {}) => this.options.storage.readAttachmentRange(
-        contentHash,
-        offset,
-        maxBytes,
-        { signal: options.signal },
-      ),
+      readChunk: (offset, maxBytes, options = {}) =>
+        this.options.storage.readAttachmentRange(
+          contentHash,
+          offset,
+          maxBytes,
+          { signal: options.signal },
+        ),
     };
   }
 

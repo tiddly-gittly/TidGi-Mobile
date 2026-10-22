@@ -771,6 +771,8 @@
     }
   },
   "AgentChat": {
+    "Prompt": "プロンプトプレビュー",
+    "ModelParameters": "モデルパラメーター",
     "Title": "エージェント",
     "Placeholder": "モバイルエージェントにメッセージを送信",
     "Empty": "モバイルエージェントとの会話を開始",
@@ -817,6 +819,8 @@
     "CloudNotConfigured": "ローカルエージェントを実行する前に、デバイスネットワーク設定で MemeLoop Cloud に接続してください。",
     "NewConversation": "新しい会話",
     "NewConversationTitle": "新しいモバイル会話",
+    "OpenMainConversation": "メイン会話を開く",
+    "NoMainConversation": "接続した端末でメイン会話を選択してください。",
     "OpenConversation": "会話 {{title}} を開く",
     "LoadNewerConversations": "新しい会話を読み込む",
     "LoadOlderConversations": "以前の会話を読み込む",

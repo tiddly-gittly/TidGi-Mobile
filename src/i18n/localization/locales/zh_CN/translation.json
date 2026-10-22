@@ -857,6 +857,18 @@
     }
   },
   "AgentChat": {
+    "Prompt": "提示词预览",
+    "ModelParameters": "模型参数",
+    "CopyMessage": "复制消息",
+    "EditMessage": "编辑并创建分支",
+    "SaveEditDraft": "保存草稿",
+    "NextBranch": "下一条历史",
+    "ReloadEditDraft": "载入已保存的草稿",
+    "EditDraftConflict": "草稿已在另一窗口更改。请载入已保存的草稿以解决冲突。",
+    "DiscardEdit": "放弃",
+    "SendEditedMessage": "发送",
+    "PreviousBranch": "上一条历史",
+    "EditMessageInput": "编辑消息",
     "Title": "智能体",
     "Placeholder": "向手机智能体发送消息",
     "Empty": "开始一段手机智能体对话",
@@ -903,6 +915,8 @@
     "CloudNotConfigured": "请先在“设备网络”设置中连接 MemeLoop 云端，再运行手机本地智能体。",
     "NewConversation": "新建对话",
     "NewConversationTitle": "新的手机对话",
+    "OpenMainConversation": "打开主会话",
+    "NoMainConversation": "请先在已连接的设备上设置主会话。",
     "OpenConversation": "打开对话 {{title}}",
     "LoadNewerConversations": "加载更新的对话",
     "LoadOlderConversations": "加载更早的对话",
@@ -911,7 +925,8 @@
     "ConversationDirectoryError": "无法加载对话，请点击“重试”后再试。",
     "ConversationDirectoryInvalidRequest": "对话请求无效，请点击“重试”后再试。",
     "ConversationDirectoryTooLarge": "对话列表过大，无法显示，请点击“重试”后再试。",
-    "RetryConversations": "重试对话"
+    "RetryConversations": "重试对话",
+    "RetryTurn": "重试回复"
   },
   "ScheduledTask": {
     "Title": "智能体计划任务",

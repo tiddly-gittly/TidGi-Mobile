@@ -4,8 +4,10 @@ import type {
   AgentFrameworkContext,
   AgentInstanceModel,
   AgentInstanceState,
+  AgentModelConfig,
   AttachmentReference,
   ChatMessage,
+  ConversationModelParameters,
   ILLMProvider,
   IToolRegistry,
   MemeLoopRunHandle,
@@ -13,7 +15,16 @@ import type {
   MemeLoopRuntimeUpdate,
   WikiTiddlerAttachment,
 } from 'memeloop/mobile';
-import { agentRunErrorFromUnknown, AgentRunFailure, createMemeLoopRuntime, getBuiltinLoopProfiles } from 'memeloop/mobile';
+import {
+  agentRunErrorFromUnknown,
+  AgentRunFailure,
+  assertAgentModelConfig,
+  createMemeLoopRuntime,
+  getBuiltinLoopProfiles,
+  prepareAgentExecutionModelRequest,
+  resolveAgentModelConfig,
+} from 'memeloop/mobile';
+import { EMBEDDED_MODEL_CATALOG } from 'memeloop/model-catalog';
 
 import { type MobileAgentStorage, mobileAgentStorage } from '../AgentStorageService';
 import { mobileSha256Hex } from '../MobileCryptoService';
@@ -117,6 +128,7 @@ export class MobileAgentLoopService {
   private readonly localNodeId: string;
   private readonly idFactory: DurableIdFactory;
   private readonly runtime: MemeLoopRuntime;
+  private readonly frameworkContext: AgentFrameworkContext;
   private readonly activeRuns = new Map<string, {
     cancelError?: unknown;
     cancelPromise?: Promise<void>;
@@ -181,6 +193,7 @@ export class MobileAgentLoopService {
         },
       },
       tools: createStubToolRegistry(),
+      promptPlugins: new Map(),
       syncAdapters: [],
       network: { start: async () => {}, stop: async () => {} },
       logger: {
@@ -206,17 +219,38 @@ export class MobileAgentLoopService {
           maxTokens: 128_000,
         },
       },
+      resolveAgentDefinition: async (definitionId, options) => {
+        options?.signal?.throwIfAborted();
+        const definition = getBuiltinLoopProfiles().find(candidate => candidate.id === definitionId) ??
+          await storage.getAgentDefinition(definitionId);
+        if (!definition) return null;
+        const resolvedDefinition = { ...definition, systemPrompt: definition.systemPrompt ?? '', tools: definition.tools ?? [], version: definition.version ?? '1' };
+        if (!options?.conversationId) return resolvedDefinition;
+        const metadata = await storage.getConversationMeta(options.conversationId);
+        options.signal?.throwIfAborted();
+        if (metadata && metadata.definitionId !== definitionId) throw new Error('conversation_definition_changed');
+        const delta = metadata?.instanceDelta;
+        const modelConfig = delta?.modelConfig ?? definition.modelConfig ?? context.defaultModelConfig;
+        if (modelConfig !== undefined) assertAgentModelConfig(modelConfig);
+        return {
+          ...resolvedDefinition,
+          ...(modelConfig ? { modelConfig } : {}),
+          ...(delta?.agentFrameworkConfig
+            ? { agentFrameworkConfig: { prompts: [], plugins: [], ...definition.agentFrameworkConfig, ...delta.agentFrameworkConfig } }
+            : {}),
+        };
+      },
       resolveAgentRuntimeView: async (conversationId, messages) => {
         const metadata = await storage.getConversationMeta(conversationId);
         if (!metadata) throw new Error(`mobile_conversation_not_found:${conversationId}`);
-        const profile = getBuiltinLoopProfiles().find(candidate => candidate.id === metadata.definitionId);
+        const profile = await context.resolveAgentDefinition!(metadata.definitionId, { conversationId });
         if (!profile) throw new Error(`mobile_agent_definition_not_found:${metadata.definitionId}`);
         return {
           ...profile,
           id: conversationId,
           agentDefId: profile.id,
           messages,
-          version: profile.version ?? '1',
+          version: profile.version,
           status: { state: 'working' as const, modified: new Date() },
           created: new Date(),
         } as AgentInstanceModel;
@@ -227,6 +261,46 @@ export class MobileAgentLoopService {
       runStateStore: storage,
       sha256Hex: mobileSha256Hex,
     });
+    this.frameworkContext = context;
+  }
+
+  public preparePromptPreview(conversationId: string, inputText: string | undefined, signal: AbortSignal) {
+    return prepareAgentExecutionModelRequest(this.frameworkContext, { conversationId, inputText, signal, stream: false });
+  }
+
+  public async getConversationModelParameters(conversationId: string): Promise<ConversationModelParameters> {
+    const meta = await this.storage.getConversationMeta(conversationId);
+    if (!meta) throw new Error('mobile_conversation_not_found');
+    const definition = getBuiltinLoopProfiles().find(profile => profile.id === meta.definitionId);
+    if (!definition) throw new Error('mobile_agent_definition_not_found');
+    const override = meta.instanceDelta?.modelConfig;
+    if (override !== undefined) assertAgentModelConfig(override);
+    const selection = resolveAgentModelConfig({
+      definition,
+      instanceDelta: override === undefined ? undefined : { modelConfig: override },
+      hostDefault: this.frameworkContext.defaultModelConfig,
+    });
+    const route = this.frameworkContext.modelProviderRegistry?.resolve(selection.providerId, selection.modelId);
+    const provider = EMBEDDED_MODEL_CATALOG.providers.find(value => value.id === selection.providerId);
+    const model = provider?.models.find(value => value.id === (route?.wireModelId ?? selection.modelId));
+    return { selection, ...(model ? { model } : {}) };
+  }
+
+  public async setConversationModelParameters(conversationId: string, selection: AgentModelConfig): Promise<ConversationModelParameters> {
+    assertAgentModelConfig(selection);
+    const current = await this.getConversationModelParameters(conversationId);
+    if (current.selection.providerId !== selection.providerId || current.selection.modelId !== selection.modelId) throw new Error('conversation_model_changed');
+    const meta = await this.storage.getConversationMeta(conversationId);
+    if (!meta) throw new Error('mobile_conversation_not_found');
+    await this.storage.appendLocalEvent({
+      kind: 'metadataPatch',
+      conversationId,
+      eventId: this.idFactory('model-parameters'),
+      originNodeId: this.localNodeId,
+      timestamp: Date.now(),
+      patch: { instanceDelta: { ...meta.instanceDelta, modelConfig: selection } },
+    });
+    return this.getConversationModelParameters(conversationId);
   }
 
   public onMessage(conversationId: string, callback: (message: ChatMessage) => void): () => void {
@@ -328,6 +402,9 @@ export class MobileAgentLoopService {
       input.requestId.trim() === '' ||
       typeof input.message !== 'string'
     ) throw new Error('invalid_prepared_mobile_agent_execution');
+    const pendingBranch = await this.storage.getPendingConversationBranchReplacement(input.conversationId);
+    const replacement = pendingBranch?.messageId === input.turnId ? pendingBranch : undefined;
+    if (replacement && replacement.content !== input.message) throw new Error('conversation_branch_replacement_mismatch');
     const userMessage: ChatMessage = {
       ...(input.attachment === undefined ? {} : {
         attachments: [input.attachment],
@@ -348,6 +425,7 @@ export class MobileAgentLoopService {
       ...(input.wikiTiddlers === undefined || input.wikiTiddlers.length === 0 ? {} : {
         metadata: { wikiTiddlers: input.wikiTiddlers.map(item => ({ ...item })) },
       }),
+      ...replacement,
     };
     return this.executeRuntimeTurn(
       input.conversationId,
@@ -525,8 +603,8 @@ export class MobileAgentLoopService {
       if (active?.controller === controller) {
         active.executionSettled = true;
         if (
-          !active.cancelRequested
-          || (active.cancelSettled === true && active.cancelError === undefined)
+          !active.cancelRequested ||
+          (active.cancelSettled === true && active.cancelError === undefined)
         ) this.activeRuns.delete(conversationId);
       }
     }

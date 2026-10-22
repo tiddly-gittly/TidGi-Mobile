@@ -82,6 +82,67 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
     openTestDatabases.clear();
   });
 
+  it('uses canonical conversation model and framework overrides in preview and actual execution', async () => {
+    installMobileCrypto();
+    const storage = new MobileAgentStorage(() => Promise.resolve(testDatabase()));
+    await storage.appendLocalEvent({
+      conversationId: 'override-conversation',
+      eventId: 'override-meta',
+      kind: 'metadataPatch',
+      originNodeId: 'phone-peer',
+      timestamp: 1,
+      patch: { definitionId: 'memeloop:general-assistant', isUserInitiated: true },
+    });
+    const requests: PortableLlmRequest[] = [];
+    const provider: ILLMProvider = {
+      name: 'test-provider',
+      async *chat(request): AsyncIterable<PortableLlmStreamPart> {
+        await Promise.resolve();
+        requests.push(request);
+        yield { type: 'text-delta', id: 'answer', text: 'done' };
+        yield { type: 'finish', finishReason: 'stop' };
+      },
+    };
+    let sequence = 0;
+    const service = new MobileAgentLoopService(provider, 'phone-peer', storage, namespace => `${namespace}:override-${++sequence}`, {
+      apiMode: 'chat-completions',
+      modelId: 'test-model',
+      wireModelId: 'wire-test',
+      providerId: provider.name,
+    });
+    try {
+      for (const temperature of [0.2, 0.8]) {
+        const parameters = { temperature, maxOutputTokens: 1234, reasoningEffort: 'low' as const };
+        await service.setConversationModelParameters('override-conversation', {
+          providerId: provider.name,
+          modelId: 'test-model',
+          parameters,
+        });
+        const metadata = await storage.getConversationMeta('override-conversation');
+        await storage.appendLocalEvent({
+          conversationId: 'override-conversation',
+          eventId: `framework-${temperature}`,
+          kind: 'metadataPatch',
+          originNodeId: 'phone-peer',
+          timestamp: Date.now(),
+          patch: {
+            instanceDelta: {
+              ...metadata?.instanceDelta,
+              agentFrameworkConfig: { prompts: [{ id: 'custom', role: 'system', text: `INSTANCE MARKER ${temperature}` }], plugins: [] },
+            },
+          },
+        });
+        const preview = await service.preparePromptPreview('override-conversation', 'preview', new AbortController().signal);
+        expect(preview.prepared.request).toMatchObject({ ...parameters, wireModelId: 'wire-test' });
+        expect(JSON.stringify(preview.prepared.request.messages)).toContain(`INSTANCE MARKER ${temperature}`);
+        expect(await service.sendMessage('override-conversation', `execute ${temperature}`)).toMatchObject({ state: 'completed' });
+        expect(requests.at(-1)).toMatchObject({ ...parameters, wireModelId: 'wire-test' });
+        expect(JSON.stringify(requests.at(-1)?.messages)).toContain(`INSTANCE MARKER ${temperature}`);
+      }
+    } finally {
+      await service.shutdown();
+    }
+  });
   it('sends, executes a tool round and atomically retries with Expo crypto only', async () => {
     const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
     Object.defineProperty(globalThis, 'crypto', {

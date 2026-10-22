@@ -20,6 +20,64 @@ function source(bytes: Uint8Array) {
 }
 
 describe('MobileRemoteExecutionAdapter attachment routing', () => {
+  it('syncs a fork before sending its stable replacement and preserved parts', async () => {
+    const order: string[] = [];
+    const replacement = {
+      messageId: 'replacement',
+      turnId: 'replacement',
+      originNodeId: 'phone-peer',
+      timestamp: 1,
+      role: 'user' as const,
+      content: 'edited',
+      parts: [{ type: 'text' as const, text: 'edited' }],
+    };
+    const runTurn = jest.fn((_request: unknown) => {
+      order.push('send');
+      return Promise.resolve({ runId: 'branch-run' });
+    });
+    const client = {
+      runTurn,
+      getRunStatus: jest.fn(() => Promise.resolve({ status: { state: 'completed' as const } })),
+    } as unknown as MobileAgentDeviceRpcClient;
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient: () => client,
+      defaultDefinitionId: 'definition',
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage: {
+        getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'definition' })),
+        getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(replacement)),
+      } as unknown as MobileAgentStorage,
+      syncConversation: jest.fn(() => {
+        order.push('sync');
+        return Promise.resolve();
+      }),
+    });
+    adapter.switchTarget('branch', { kind: 'remote', peerId: 'desktop-peer' });
+    await adapter.executeBranch({
+      conversationId: 'source',
+      targetConversationId: 'branch',
+      messageId: 'original',
+      sourceRevision: 'source-revision',
+      replacementMessageId: 'replacement',
+      requestId: 'stable-request',
+      text: 'edited',
+    });
+    expect(order).toEqual(['sync', 'send', 'sync']);
+    expect(runTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'branch',
+        requestId: 'stable-request',
+        turnId: 'replacement',
+        userMessage: { role: 'user', content: 'edited', parts: replacement.parts },
+      }),
+      expect.anything(),
+    );
+    await adapter.dispose();
+  });
+
   it('stages a local source in bounded chunks and preserves attachment/wiki provenance', async () => {
     const bytes = Uint8Array.from({ length: 700 * 1024 }, (_, index) => index % 251);
     const attachment = source(bytes);
@@ -178,7 +236,7 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: jest.fn(),
       localPeerId: 'phone-peer',
-      storage: {} as MobileAgentStorage,
+      storage: { getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(null)) } as unknown as MobileAgentStorage,
       syncConversation,
     });
     adapter.switchTarget('conversation', { kind: 'remote', peerId: 'desktop-peer' });
@@ -214,22 +272,26 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
       mimeType: 'application/octet-stream',
       size: bytes.byteLength,
     };
-    const beginAttachmentUpload = jest.fn(() => Promise.resolve({
-      ok: true as const,
-      conversationId: 'conversation',
-      maxChunkBytes: 4,
-      requestId: 'begin',
-      totalBytes: bytes.byteLength,
-      uploadId: 'remote-upload',
-    }));
+    const beginAttachmentUpload = jest.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        conversationId: 'conversation',
+        maxChunkBytes: 4,
+        requestId: 'begin',
+        totalBytes: bytes.byteLength,
+        uploadId: 'remote-upload',
+      })
+    );
     const uploadAttachmentChunk = jest.fn((_request: { byteLength: number; offset: number }) => Promise.resolve({ ok: true as const }));
-    const commitAttachmentUpload = jest.fn(() => Promise.resolve({
-      ok: true as const,
-      attachment: reference,
-      conversationId: 'conversation',
-      requestId: 'commit',
-      uploadId: 'remote-upload',
-    }));
+    const commitAttachmentUpload = jest.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        attachment: reference,
+        conversationId: 'conversation',
+        requestId: 'commit',
+        uploadId: 'remote-upload',
+      })
+    );
     const client = {
       beginAttachmentUpload,
       cancel: jest.fn(),
@@ -249,6 +311,7 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
       Parameters<MobileAgentStorage['verifyAttachment']>
     >(() => Promise.resolve(true));
     const storage = {
+      getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(null)),
       conversationReferencesAttachment,
       getAttachment: jest.fn(() => Promise.resolve(reference)),
       readAttachmentRange: jest.fn((hash: string, offset: number, maxBytes: number) => {

@@ -24,6 +24,9 @@ import {
 } from 'memeloop';
 import { runStorageConformance } from 'memeloop/testing';
 import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { type AgentSqlDatabase, MOBILE_AGENT_DATABASE_NAME, MobileAgentStorage } from '..';
 import type { MobileAttachmentFileStore } from '../attachmentFileStore';
 
@@ -31,8 +34,9 @@ function createTestDatabase(
   onRun?: (source: string) => void,
   onQuery?: (source: string) => void,
   onCreate?: (database: Database.Database) => void,
+  filename = ':memory:',
 ): AgentSqlDatabase {
-  const database = new Database(':memory:');
+  const database = new Database(filename);
   onCreate?.(database);
   return {
     execAsync(source) {
@@ -1520,14 +1524,17 @@ describe('MobileAgentStorage', () => {
       .rejects.toThrow();
 
     const running: AgentRunRecord = { ...accepted, state: 'running', startedAt: 2, updatedAt: 2 };
-    await expect(current.transition(accepted.runId, ['accepted'], running)).resolves.toBe(true);
+    const lease = await current.claimExecution(accepted.runId, 'executor', Date.now(), 60_000);
+    const queued: AgentRunRecord = { ...accepted, state: 'queued' };
+    await expect(current.transition(accepted.runId, ['accepted'], queued, { executionLease: lease })).resolves.toBe(true);
+    await expect(current.transition(accepted.runId, ['queued'], running, { executionLease: lease })).resolves.toBe(true);
     await expect(current.transition(accepted.runId, ['accepted'], { ...running, updatedAt: 3 })).resolves.toBe(false);
     await expect(storage().get(accepted.runId)).resolves.toEqual(running);
     await expect(current.getByTurn('conversation-1', 'turn-1', 'desktop')).resolves.toEqual(running);
     await expect(current.listActive()).resolves.toEqual([running]);
 
     const completed: AgentRunRecord = { ...running, state: 'completed', finishedAt: 3, updatedAt: 3 };
-    await expect(current.transition(accepted.runId, ['running'], completed)).resolves.toBe(true);
+    await expect(current.transition(accepted.runId, ['running'], completed, { executionLease: lease })).resolves.toBe(true);
     await current.prune({ finishedBefore: 4, maxRecords: 100 });
     await expect(current.get(accepted.runId)).resolves.toBeUndefined();
   });
@@ -1592,6 +1599,34 @@ describe('MobileAgentStorage', () => {
       originNodeId: 'phone',
       timestamp: candidate.acceptedAt + 1,
     });
+  });
+
+  it('fences stale execution owners after lease expiry and permits control-plane cancellation', async () => {
+    const current = storage();
+    const accepted: AgentRunRecord = {
+      runId: 'leased-run',
+      conversationId: 'conversation-1',
+      definitionId: 'memeloop:general-assistant',
+      turnId: 'leased-turn',
+      requestPeerId: 'phone',
+      requestId: 'leased-request',
+      payloadDigest: 'a'.repeat(64),
+      state: 'accepted',
+      acceptedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    await current.createOrGet(accepted);
+    const old = (await current.claimExecution(accepted.runId, 'old-owner', Date.now() - 100, 10))!;
+    const lease = (await storage().claimExecution(accepted.runId, 'new-owner', Date.now(), 60_000))!;
+    expect(lease.fencingEpoch).toBe(old.fencingEpoch + 1);
+    expect(await current.renewExecution(old, Date.now(), 60_000)).toBeUndefined();
+    await current.releaseExecution(old);
+    const queued = { ...accepted, state: 'queued' as const };
+    expect(await current.transition(accepted.runId, ['accepted'], queued, { executionLease: old })).toBe(false);
+    expect(await current.transition(accepted.runId, ['accepted'], queued, { executionLease: lease })).toBe(true);
+    expect(await current.claimExecution(accepted.runId, 'third-owner', Date.now(), 60_000)).toBeUndefined();
+    expect(await current.transition(accepted.runId, ['queued'], { ...queued, state: 'cancelled', finishedAt: Date.now() })).toBe(true);
+    expect(await current.renewExecution(lease, Date.now(), 60_000)).toBeUndefined();
   });
 
   it('passes the shared atomic retry store conformance contract', async () => {
@@ -1810,5 +1845,135 @@ describe('MobileAgentStorage', () => {
     const report = await runStorageConformance(storage(), { conversationId: 'mobile-storage-conformance' });
     expect(report.failures).toEqual([]);
     expect(report.passed).toBe(report.checks);
+  });
+
+  it('persists editing drafts through reopen, rejects stale CAS and fences discarded drafts', async () => {
+    const current = storage();
+    await current.appendMessage(message('edit-source', 1, 'complete source'));
+    const source = await current.loadConversationEditSource('conversation-1', 'edit-source');
+    expect(source.text).toBe('complete source');
+    expect(source.draft).toBeNull();
+    await expect(current.saveConversationEditDraft({
+      conversationId: 'conversation-1',
+      messageId: 'edit-source',
+      text: 'saved locally',
+      expectedRevision: 0,
+    })).resolves.toBe(1);
+    const reopened = storage();
+    expect((await reopened.loadConversationEditSource('conversation-1', 'edit-source')).draft).toEqual({ text: 'saved locally', revision: 1 });
+    await expect(reopened.saveConversationEditDraft({
+      conversationId: 'conversation-1',
+      messageId: 'edit-source',
+      text: 'stale write',
+      expectedRevision: 0,
+    })).rejects.toThrow('conversation_draft_conflict');
+    await expect(reopened.saveConversationEditDraft({
+      conversationId: 'conversation-1',
+      messageId: 'edit-source',
+      text: null,
+      expectedRevision: 1,
+    })).resolves.toBe(2);
+    await expect(current.saveConversationEditDraft({
+      conversationId: 'conversation-1',
+      messageId: 'edit-source',
+      text: 'delayed write',
+      expectedRevision: 1,
+    })).rejects.toThrow('conversation_draft_conflict');
+    expect((await storage().loadConversationEditSource('conversation-1', 'edit-source')).draft).toEqual({ text: null, revision: 2 });
+  });
+
+  it('recovers the edited draft after closing and reopening the physical SQLite database', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mobile-edit-draft-'));
+    const filename = join(directory, 'chat.db');
+    let connection: Database.Database | undefined;
+    const open = () =>
+      Promise.resolve(createTestDatabase(undefined, undefined, value => {
+        connection = value;
+      }, filename));
+    try {
+      const first = new MobileAgentStorage(open);
+      await first.appendMessage(message('physical-source', 1, 'canonical source'));
+      await first.saveConversationEditDraft({ conversationId: 'conversation-1', messageId: 'physical-source', text: 'durable draft', expectedRevision: 0 });
+      connection!.close();
+      const reopened = new MobileAgentStorage(open);
+      expect((await reopened.loadConversationEditSource('conversation-1', 'physical-source')).draft).toEqual({ text: 'durable draft', revision: 1 });
+    } finally {
+      if (connection?.open) connection.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('forks canonical prefix once, stages the replacement and discovers branches after event replication', async () => {
+    const current = storage();
+    const source = { ...message('edited-user', 3, 'original'), role: 'user' as const };
+    await current.insertMessagesIfAbsent([message('first-user', 1), message('first-answer', 2), source, message('old-answer', 4)]);
+    const loaded = await current.loadConversationEditSource('conversation-1', source.messageId);
+    const input = {
+      conversationId: 'conversation-1',
+      messageId: source.messageId,
+      sourceRevision: loaded.sourceRevision,
+      requestId: 'fork-request',
+      targetConversationId: 'branch',
+      replacementMessageId: 'edited-variant',
+      text: 'replacement',
+    };
+    await expect(current.forkConversation(input, 'phone')).resolves.toBe('branch');
+    await expect(current.forkConversation(input, 'phone')).resolves.toBe('branch');
+    await expect(current.forkConversation({ ...input, text: 'conflicting retry' }, 'phone')).rejects.toThrow('conversation_fork_request_conflict');
+    const prefix = await readAllMessagesForTest(current, 'branch');
+    expect(prefix.map(item => item.content)).toEqual(['first-user', 'first-answer']);
+    expect(await current.getMessageById('branch', input.replacementMessageId)).toBeNull();
+    const pending = (await storage().getPendingConversationBranchReplacement(input.targetConversationId))!;
+    expect(pending).toMatchObject({
+      messageId: input.replacementMessageId,
+      turnId: input.replacementMessageId,
+      content: input.text,
+      metadata: {
+        memeloopBranch: { rootConversationId: 'conversation-1', rootMessageId: source.messageId, variantConversationId: 'branch', variantMessageId: input.replacementMessageId },
+      },
+    });
+    // Simulate the existing run acceptance append, which alone owns this root.
+    await current.appendLocalMessage({
+      ...pending,
+      content: input.text,
+      messageId: input.replacementMessageId,
+      turnId: input.replacementMessageId,
+      role: 'user',
+      parts: pending.parts ?? [],
+      conversationId: 'branch',
+      originNodeId: 'phone',
+      timestamp: 10,
+    });
+    expect((await readAllMessagesForTest(current)).map(item => item.content)).toEqual(['first-user', 'first-answer', 'original', 'old-answer']);
+    const branches = await current.getConversationBranches('branch', [input.replacementMessageId]);
+    expect(branches[0].selected).toBe(1);
+    expect(branches[0].alternatives).toEqual([
+      { conversationId: 'conversation-1', messageId: source.messageId },
+      { conversationId: 'branch', messageId: input.replacementMessageId },
+    ]);
+    const peer = new MobileAgentStorage(() => Promise.resolve(createTestDatabase()));
+    for (const conversationId of ['conversation-1', 'branch']) {
+      const page = await current.getConversationEventPage(conversationId, { limit: 100 });
+      await peer.insertEventsIfAbsent(page.items);
+    }
+    expect(await peer.getConversationBranches('branch', [input.replacementMessageId])).toEqual(branches);
+    expect((await peer.loadConversationEditSource('conversation-1', source.messageId)).draft).toBeNull();
+  });
+
+  it('rolls back a failed fork and rejects changed source revisions', async () => {
+    const current = storage();
+    await current.appendMessage(message('source', 1));
+    const input = {
+      conversationId: 'conversation-1',
+      messageId: 'source',
+      sourceRevision: 'outdated',
+      requestId: 'fork-failed',
+      targetConversationId: 'failed-branch',
+      replacementMessageId: 'variant',
+      text: 'edit',
+    };
+    await expect(current.forkConversation(input, 'phone')).rejects.toThrow('conversation_edit_source_changed');
+    expect(await current.getConversationMeta('failed-branch')).toBeNull();
+    await expect(current.getPendingConversationBranchReplacement(input.targetConversationId)).resolves.toBeNull();
   });
 });

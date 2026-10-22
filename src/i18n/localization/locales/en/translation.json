@@ -879,6 +879,18 @@
     }
   },
   "AgentChat": {
+    "Prompt": "Prompt preview",
+    "ModelParameters": "Model parameters",
+    "CopyMessage": "Copy message",
+    "EditMessage": "Edit and branch",
+    "SaveEditDraft": "Save draft",
+    "NextBranch": "Next history",
+    "ReloadEditDraft": "Load saved draft",
+    "EditDraftConflict": "This draft changed in another window. Load the saved draft to resolve the conflict.",
+    "DiscardEdit": "Discard",
+    "SendEditedMessage": "Send",
+    "PreviousBranch": "Previous history",
+    "EditMessageInput": "Edit message",
     "Title": "Agent",
     "Placeholder": "Message the mobile agent",
     "Empty": "Start a mobile agent conversation",
@@ -925,6 +937,8 @@
     "CloudNotConfigured": "Connect MemeLoop Cloud in Device Network settings before running the local agent.",
     "NewConversation": "New conversation",
     "NewConversationTitle": "New mobile conversation",
+    "OpenMainConversation": "Open main conversation",
+    "NoMainConversation": "Choose a main conversation on the connected device first.",
     "OpenConversation": "Open conversation {{title}}",
     "LoadNewerConversations": "Load newer conversations",
     "LoadOlderConversations": "Load older conversations",
@@ -933,7 +947,8 @@
     "ConversationDirectoryError": "Unable to load conversations. Tap retry to try again.",
     "ConversationDirectoryInvalidRequest": "The conversation request was invalid. Tap retry to try again.",
     "ConversationDirectoryTooLarge": "The conversation list is too large to display. Tap retry to try again.",
-    "RetryConversations": "Retry conversations"
+    "RetryConversations": "Retry conversations",
+    "RetryTurn": "Retry response"
   },
   "ScheduledTask": {
     "Title": "Scheduled agent tasks",

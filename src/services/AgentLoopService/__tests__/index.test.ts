@@ -81,12 +81,7 @@ jest.mock('memeloop/mobile', () => ({
 import type { ChatMessage, ILLMProvider } from 'memeloop';
 
 import type { MobileAgentStorage } from '../../AgentStorageService';
-import {
-  getMobileAgentLoopService,
-  MobileAgentLoopService,
-  observeActiveMobileAgentMessages,
-  shutdownMobileAgentLoopService,
-} from '..';
+import { getMobileAgentLoopService, MobileAgentLoopService, observeActiveMobileAgentMessages, shutdownMobileAgentLoopService } from '..';
 
 function message(messageId: string, role: ChatMessage['role'], lamportClock: number): ChatMessage {
   return {
@@ -105,6 +100,7 @@ function message(messageId: string, role: ChatMessage['role'], lamportClock: num
 
 function createStorage(): MobileAgentStorage {
   return {
+    getPendingConversationBranchReplacement: jest.fn().mockResolvedValue(null),
     getConversationMeta: jest.fn().mockResolvedValue({
       conversationId: 'conversation',
       definitionId: 'memeloop:general-assistant',
@@ -277,6 +273,33 @@ describe('MobileAgentLoopService', () => {
     });
   });
 
+  it('uses staged canonical branch payload only for its matching replacement turn', async () => {
+    const storage = createStorage();
+    const attachment = { contentHash: `sha256:${'a'.repeat(64)}`, filename: 'source.txt', mimeType: 'text/plain', size: 7 };
+    const pending = {
+      messageId: 'branch-turn',
+      turnId: 'branch-turn',
+      content: 'edited',
+      parts: [{ type: 'text' as const, text: 'edited' }, { type: 'attachment' as const, attachment }],
+      attachments: [attachment],
+      metadata: { memeloopBranch: { rootConversationId: 'original', rootMessageId: 'source', variantConversationId: 'branch', variantMessageId: 'branch-turn' } },
+    };
+    jest.spyOn(storage, 'getPendingConversationBranchReplacement').mockResolvedValue(pending);
+    const service = new MobileAgentLoopService({} as ILLMProvider, 'phone-peer-id', storage);
+    const input = {
+      conversationId: 'branch',
+      definitionId: 'memeloop:general-assistant',
+      message: 'edited',
+      requestId: 'fork-request',
+      turnId: 'branch-turn',
+    };
+    await service.executePreparedMessage(input);
+    expect(mockSendMessage.mock.calls.at(-1)?.[0].userMessage).toMatchObject(pending);
+    await expect(service.executePreparedMessage({ ...input, message: 'different' })).rejects.toThrow('conversation_branch_replacement_mismatch');
+    await service.executePreparedMessage({ ...input, requestId: 'later', turnId: 'later-turn', message: 'follow-up' });
+    expect(mockSendMessage.mock.calls.at(-1)?.[0].userMessage).not.toHaveProperty('metadata.memeloopBranch');
+  });
+
   it('bridges transient messages only from the active process runtime', async () => {
     generatedMessage = message('generated-assistant', 'assistant', 2);
     const active = await getMobileAgentLoopService(
@@ -332,9 +355,13 @@ describe('MobileAgentLoopService', () => {
   it('serializes replacement and caller abort against one in-flight cancellation', async () => {
     mockGetRunStatus.mockResolvedValue({ runId: 'run-1', state: 'running' });
     let releaseCancellation!: () => void;
-    mockCancelRun.mockReturnValueOnce(new Promise<boolean>(resolve => {
-      releaseCancellation = () => { resolve(true); };
-    }));
+    mockCancelRun.mockReturnValueOnce(
+      new Promise<boolean>(resolve => {
+        releaseCancellation = () => {
+          resolve(true);
+        };
+      }),
+    );
     const first = await getMobileAgentLoopService(
       'test-configuration:replacement-source',
       () => new MobileAgentLoopService({} as ILLMProvider, 'phone-peer-id', createStorage()),

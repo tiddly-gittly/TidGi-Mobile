@@ -3,19 +3,23 @@ import {
   AgentSessionProvider,
   ConversationTimelineWindowController,
   createAgentRunLogDetailLoader,
-  NativeAgentChatView,
   type MemeLoopChatAdapter,
+  NativeAgentChatView,
   type NativeMemeLoopSendMessageInput,
   useAgentSession,
   useAgentSessionCoreAdapter,
 } from '@memeloop/react-ui/native';
 import type { StackScreenProps } from '@react-navigation/stack';
+import { setStringAsync } from 'expo-clipboard';
 import {
   type AgentDeviceRpcClient,
   agentRunErrorFromUnknown,
   AgentRunFailure,
   AgentSessionController,
+  type ConversationBranchState,
+  type ConversationMessageListProjection,
   createAgentDeviceRpcClient,
+  createConversationEditingAdapter,
   createMissingProviderSettingAgentRunError,
   type Device,
   type RemoteAgentExecutionTarget,
@@ -24,7 +28,7 @@ import { createFetchLLMProvider } from 'memeloop/mobile/providers';
 import { type FC, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { Button, useTheme } from 'react-native-paper';
 
 import type { RootStackParameterList } from '../../App';
 import { getMobileAgentLoopService, MobileAgentLoopService, observeActiveMobileAgentMessages } from '../../services/AgentLoopService';
@@ -41,11 +45,8 @@ import {
   prepareMobileSendMessage,
   releaseMobilePickedAttachment,
 } from './attachmentAdapter';
-import {
-  MobileConversationDirectoryController,
-  mobileConversationDirectoryDirection,
-  mobileConversationDirectoryErrorMessageKey,
-} from './conversationDirectory';
+import { MobileConversationDirectoryController, mobileConversationDirectoryDirection, mobileConversationDirectoryErrorMessageKey } from './conversationDirectory';
+import { ConversationSettings } from './ConversationSettings';
 import { resolveMobileAgentErrorPresentation } from './errorPresentation';
 import { formatMobileTimelineTimestamp } from './localizedFormatting';
 import { exportStoredMessage } from './messageExport';
@@ -58,6 +59,8 @@ const DEFAULT_AGENT_DEFINITION_ID = 'memeloop:general-assistant';
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  settingsToolbar: { flexDirection: 'row', flexWrap: 'wrap' },
+  conversationStrip: { flexGrow: 0 },
   conversationButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   conversationRow: { alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
   conversationRowRtl: { direction: 'rtl', flexDirection: 'row-reverse' },
@@ -136,6 +139,7 @@ interface AgentChatSessionProps {
   conversationId: string;
   localPeerId: string;
   setActiveExecutionTargetId: (value: string) => void;
+  onConversationChange: (conversationId: string) => Promise<void>;
 }
 
 function AgentChatSession({
@@ -144,6 +148,7 @@ function AgentChatSession({
   conversationId,
   localPeerId,
   setActiveExecutionTargetId,
+  onConversationChange,
 }: AgentChatSessionProps) {
   const [sessionStartError, setSessionStartError] = useState<Error>();
   const { activeServiceReference, getLoopService } = useMobileLoopService();
@@ -239,12 +244,15 @@ function AgentChatSession({
         sessionStartError={sessionStartError}
         setActiveExecutionTargetId={setActiveExecutionTargetId}
         timelineController={timelineController}
+        onConversationChange={onConversationChange}
+        getLoopService={getLoopService}
       />
     </AgentSessionProvider>
   );
 }
 
 interface AgentChatSessionViewProps extends AgentChatSessionProps {
+  getLoopService: () => Promise<MobileAgentLoopService>;
   executionAdapter: MobileRemoteExecutionAdapter;
   remoteClient: (peerId: string) => AgentDeviceRpcClient;
   sessionStartError?: Error;
@@ -261,9 +269,18 @@ function AgentChatSessionView({
   sessionStartError,
   setActiveExecutionTargetId,
   timelineController,
+  onConversationChange,
+  getLoopService,
 }: AgentChatSessionViewProps) {
   const { i18n, t } = useTranslation();
   const { controller } = useAgentSession();
+  const [settingsMode, setSettingsMode] = useState<'prompt' | 'parameters'>();
+  const [openingMain, setOpeningMain] = useState(false);
+  const [mainConversationError, setMainConversationError] = useState<Error>();
+  const settingsClient = useMemo(() =>
+    activeExecutionTargetId.startsWith(REMOTE_EXECUTION_TARGET_PREFIX)
+      ? remoteClient(activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length))
+      : undefined, [activeExecutionTargetId, remoteClient]);
   const subscribeToExecution = useCallback((listener: () => void) => executionAdapter.subscribe(conversationId, listener), [conversationId, executionAdapter]);
   const getExecutionSnapshot = useCallback(() => executionAdapter.getSnapshot(conversationId), [conversationId, executionAdapter]);
   const executionSnapshot = useSyncExternalStore(subscribeToExecution, getExecutionSnapshot, getExecutionSnapshot);
@@ -324,6 +341,43 @@ function AgentChatSessionView({
     loadMessageDetail,
     prepareSendMessage: prepareMobileSendMessage,
   });
+  const [branches, setBranches] = useState<ConversationBranchState[]>([]);
+  useEffect(() => {
+    let active = true;
+    void mobileAgentStorage.getConversationBranches(conversationId, baseAdapter.messages.filter(message => message.role === 'user').map(message => message.messageId))
+      .then(value => {
+        if (active) setBranches(value);
+      })
+      .catch((error: unknown) => {
+        console.warn('[AgentChat] Branch history unavailable', error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [conversationId, baseAdapter.messages]);
+  const editing = useMemo(() =>
+    createConversationEditingAdapter({
+      conversationId,
+      branches,
+      createId: createPortableRequestId,
+      port: {
+        loadConversationEditSource: (id, messageId) => mobileAgentStorage.loadConversationEditSource(id, messageId),
+        saveConversationEditDraft: input => mobileAgentStorage.saveConversationEditDraft(input),
+        forkConversation: input => mobileAgentStorage.forkConversation(input, localPeerId),
+      },
+      acceptBranch: async (request, draftRevision) => {
+        executionAdapter.switchTarget(request.targetConversationId, mobileExecutionTarget(activeExecutionTargetId));
+        await executionAdapter.executeBranch(request);
+        await mobileAgentStorage.saveConversationEditDraft({
+          conversationId,
+          messageId: request.messageId,
+          text: null,
+          expectedRevision: draftRevision,
+        });
+        await onConversationChange(request.targetConversationId);
+      },
+      switchBranch: async id => onConversationChange(id),
+    }), [conversationId, branches, localPeerId, executionAdapter, activeExecutionTargetId, onConversationChange]);
   const executionTargets = useMemo<AgentExecutionTarget[]>(() => [
     {
       value: mobileExecutionTarget(LOCAL_EXECUTION_TARGET_ID),
@@ -342,6 +396,7 @@ function AgentChatSessionView({
   ], [agentLoopDevices, localPeerId, t]);
   const adapter = useMemo(() => ({
     ...baseAdapter,
+    editing,
     executionTargets,
     activeExecutionTarget: mobileExecutionTarget(activeExecutionTargetId),
     setExecutionTarget: async (target: RemoteAgentExecutionTarget, options?: { restartCurrentTurn?: boolean }) => {
@@ -352,10 +407,11 @@ function AgentChatSessionView({
       if (latestTurnId) await baseAdapter.retryTurn(latestTurnId);
     },
     loadVisibleAttachments,
-    error: sessionStartError ?? executionSnapshot.error ?? baseAdapter.error,
+    error: mainConversationError ?? sessionStartError ?? executionSnapshot.error ?? baseAdapter.error,
   }), [
     activeExecutionTargetId,
     baseAdapter,
+    editing,
     conversationId,
     executionAdapter,
     executionSnapshot.error,
@@ -365,6 +421,19 @@ function AgentChatSessionView({
     setActiveExecutionTargetId,
   ]);
   const nativeLabels = useMemo(() => ({
+    copyMessage: t('AgentChat.CopyMessage'),
+    retryTurn: t('AgentChat.RetryTurn'),
+    editing: {
+      edit: t('AgentChat.EditMessage'),
+      input: t('AgentChat.EditMessageInput'),
+      send: t('AgentChat.SendEditedMessage'),
+      discard: t('AgentChat.DiscardEdit'),
+      saveDraft: t('AgentChat.SaveEditDraft'),
+      reloadDraft: t('AgentChat.ReloadEditDraft'),
+      conflict: t('AgentChat.EditDraftConflict'),
+      previousBranch: t('AgentChat.PreviousBranch'),
+      nextBranch: t('AgentChat.NextBranch'),
+    },
     user: t('AgentChat.User'),
     agent: t('AgentChat.Agent'),
     waitingPlaceholder: t('AgentChat.Waiting'),
@@ -396,40 +465,97 @@ function AgentChatSessionView({
   }), [t]);
 
   return (
-    <NativeAgentChatView
-      adapter={adapter}
-      title={t('AgentChat.Title')}
-      placeholder={t('AgentChat.Placeholder')}
-      emptyMessage={t('AgentChat.Empty')}
-      loadingMessage={t('AgentChat.Loading')}
-      labels={nativeLabels}
-      attachmentPolicy={{ allowedFileTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'], maxFileBytes: MOBILE_COMPOSER_ATTACHMENT_MAX_BYTES }}
-      pickAttachment={pickMobileAttachment}
-      releaseAttachment={releaseMobilePickedAttachment}
-      timelineLabels={timelineLabels}
-      genericErrorPresentation={{ title: t('AgentChat.GenericErrorTitle'), message: t('AgentChat.GenericErrorMessage') }}
-      resolveErrorPresentation={error =>
-        resolveMobileAgentErrorPresentation(error, {
-          localize: (messageKey, parameters) => ({ title: t('AgentChat.AgentRunErrorTitle'), message: t(messageKey, { ...parameters }) }),
-          settingActionLabel: () => t('AgentChat.ConfigureExternalAPI'),
-        })}
-      onErrorAction={presentation => {
-        if (!navigationReference.isReady() || presentation.actionId !== 'agent-run-setting' || !presentation.settingTarget) {
+    <>
+      <View style={styles.settingsToolbar}>
+        {settingsClient && (
+          <Button
+            loading={openingMain}
+            disabled={openingMain}
+            onPress={() => {
+              setOpeningMain(true);
+              setMainConversationError(undefined);
+              void (async () => {
+                const { conversation } = await settingsClient.getMainConversation({});
+                if (!conversation) throw new Error(t('AgentChat.NoMainConversation'));
+                const peerId = activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length);
+                await deviceNetworkService.syncWithDevice(peerId, { conversationIds: [conversation.conversationId] });
+                await onConversationChange(conversation.conversationId);
+              })().catch((error: unknown) => {
+                setMainConversationError(safeAgentFailure(error));
+              }).finally(() => {
+                setOpeningMain(false);
+              });
+            }}
+          >
+            {t('AgentChat.OpenMainConversation')}
+          </Button>
+        )}
+        <Button
+          onPress={() => {
+            setSettingsMode('prompt');
+          }}
+        >
+          {t('AgentChat.Prompt')}
+        </Button>
+        <Button
+          onPress={() => {
+            setSettingsMode('parameters');
+          }}
+        >
+          {t('AgentChat.ModelParameters')}
+        </Button>
+      </View>
+      {settingsMode && (
+        <ConversationSettings
+          conversationId={conversationId}
+          client={settingsClient}
+          getLoopService={getLoopService}
+          mode={settingsMode}
+          onClose={() => {
+            setSettingsMode(undefined);
+          }}
+        />
+      )}
+      <NativeAgentChatView
+        adapter={adapter}
+        title={t('AgentChat.Title')}
+        placeholder={t('AgentChat.Placeholder')}
+        emptyMessage={t('AgentChat.Empty')}
+        loadingMessage={t('AgentChat.Loading')}
+        labels={nativeLabels}
+        onCopyMessage={async (message: ConversationMessageListProjection) => {
+          const canonical = await mobileAgentStorage.getMessageById(message.conversationId, message.messageId);
+          if (!canonical) throw new Error('message_copy_source_not_found');
+          await setStringAsync(canonical.content);
+        }}
+        attachmentPolicy={{ allowedFileTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'], maxFileBytes: MOBILE_COMPOSER_ATTACHMENT_MAX_BYTES }}
+        pickAttachment={pickMobileAttachment}
+        releaseAttachment={releaseMobilePickedAttachment}
+        timelineLabels={timelineLabels}
+        genericErrorPresentation={{ title: t('AgentChat.GenericErrorTitle'), message: t('AgentChat.GenericErrorMessage') }}
+        resolveErrorPresentation={error =>
+          resolveMobileAgentErrorPresentation(error, {
+            localize: (messageKey, parameters) => ({ title: t('AgentChat.AgentRunErrorTitle'), message: t(messageKey, { ...parameters }) }),
+            settingActionLabel: () => t('AgentChat.ConfigureExternalAPI'),
+          })}
+        onErrorAction={presentation => {
+          if (!navigationReference.isReady() || presentation.actionId !== 'agent-run-setting' || !presentation.settingTarget) {
+            return Promise.resolve();
+          }
+          const target = presentation.settingTarget;
+          if (target.kind === 'provider') {
+            navigationReference.navigate('Config', {
+              focusItem: 'external-api',
+              focusField: target.field === 'apiKey' ? 'api-key' : target.field === 'baseUrl' ? 'base-url' : target.field === 'apiMode' ? 'api-mode' : 'model',
+            });
+          } else if (target.kind === 'model') navigationReference.navigate('Config', { focusItem: 'external-api', focusField: 'model' });
+          else if (target.section === 'network') {
+            navigationReference.navigate('Config', { focusItem: 'device-network', focusField: 'cloud-url' });
+          }
           return Promise.resolve();
-        }
-        const target = presentation.settingTarget;
-        if (target.kind === 'provider') {
-          navigationReference.navigate('Config', {
-            focusItem: 'external-api',
-            focusField: target.field === 'apiKey' ? 'api-key' : target.field === 'baseUrl' ? 'base-url' : target.field === 'apiMode' ? 'api-mode' : 'model',
-          });
-        } else if (target.kind === 'model') navigationReference.navigate('Config', { focusItem: 'external-api', focusField: 'model' });
-        else if (target.section === 'network') {
-          navigationReference.navigate('Config', { focusItem: 'device-network', focusField: 'cloud-url' });
-        }
-        return Promise.resolve();
-      }}
-    />
+        }}
+      />
+    </>
   );
 }
 
@@ -527,6 +653,7 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
     <View style={styles.container}>
       <ScrollView
         horizontal
+        style={styles.conversationStrip}
         contentContainerStyle={[styles.conversationRow, direction === 'rtl' && styles.conversationRowRtl]}
       >
         {directory.hasMoreNewer && (
@@ -622,12 +749,18 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
             conversationId={conversationId}
             localPeerId={localPeerId}
             setActiveExecutionTargetId={setActiveExecutionTargetId}
+            onConversationChange={async id => {
+              await directoryController.refresh();
+              setConversationId(id);
+            }}
           />
         )
         : initializationError || directory.error
-        ? <Text style={styles.initializationError}>
-          {initializationError ? t('AgentChat.GenericErrorMessage') : t(directoryErrorMessageKey)}
-        </Text>
+        ? (
+          <Text style={styles.initializationError}>
+            {initializationError ? t('AgentChat.GenericErrorMessage') : t(directoryErrorMessageKey)}
+          </Text>
+        )
         : null}
     </View>
   );

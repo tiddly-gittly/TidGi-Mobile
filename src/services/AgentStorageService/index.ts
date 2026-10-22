@@ -3,14 +3,16 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { Buffer } from 'buffer';
 import { openDatabaseAsync } from 'expo-sqlite';
 import {
-  type AgentConversationUpdate,
   type AgentConversationTurnDetailRequest,
   type AgentConversationTurnDetailResponse,
+  type AgentConversationUpdate,
   type AgentDefinition,
   type AgentInstanceMeta,
+  type AgentRunExecutionLease,
   type AgentRunRecord,
   AgentRunRequestConflictError,
   type AgentRunState,
+  type AgentRunTransitionOptions,
   assertAtomicAgentRetryResult,
   assertAtomicAgentRetrySourceMessage,
   assertCanonicalChatMessageProjection,
@@ -18,8 +20,6 @@ import {
   assertConversationFullContentMessagePage,
   assertConversationMessageWindowResult,
   assertConversationTimelinePage,
-  decodeConversationProjectionCursor,
-  encodeConversationProjectionCursor,
   type AtomicAgentRetryInput,
   type AtomicAgentRetryResult,
   type AtomicAgentRetryStore,
@@ -49,6 +49,8 @@ import {
   type ConversationReadCallOptions,
   type ConversationTombstoneEvent,
   createAtomicAgentRetryEventDrafts,
+  decodeConversationProjectionCursor,
+  encodeConversationProjectionCursor,
   type FullAgentStorage,
   type GetCompactionCandidatePageOptions,
   type GetConversationEventPageOptions,
@@ -66,6 +68,19 @@ import {
   type TodoItem,
   type TodoStateStore,
   type UploadAttachmentChunkResponse,
+} from 'memeloop';
+import {
+  assertConversationEditText,
+  conversationBranchIdentity,
+  type ConversationBranchState,
+  type ConversationDraftWrite,
+  type ConversationEditSource,
+  conversationEditSourceRevision,
+  type ConversationForkRequest,
+  copyConversationBranchPrefix,
+  createConversationBranchReplacement,
+  isContextCompactionSummary,
+  type PendingLocalChatMessage,
 } from 'memeloop';
 import {
   assertConversationMessageProjection,
@@ -95,6 +110,7 @@ import {
 import { createSecureDurableId, type DurableIdFactory } from '../SecureIdService';
 import { ExpoMobileAttachmentFileStore, type MobileAttachmentFileStore } from './attachmentFileStore';
 import { persistCausalClock, readCausalClockHighWatermarks, readContiguousOriginSequence, readMaxLamportClock } from './causalClock';
+import { conversationEditDigest, readConversationEditSource, readEditableMessage, writeConversationEditDraft } from './conversationEditing';
 import { type AgentSqlDatabase, type AgentSqlDatabaseFactory, type AgentSqlValue } from './storagePort';
 
 export type { AgentSqlDatabase, AgentSqlDatabaseFactory, AgentSqlValue } from './storagePort';
@@ -476,6 +492,186 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
       listeners.delete(listener);
       if (listeners.size === 0) this.conversationListeners.delete(conversationId);
     };
+  }
+
+  public async loadConversationEditSource(conversationId: string, messageId: string): Promise<ConversationEditSource> {
+    return this.enqueueMutation(async () => readConversationEditSource(await this.database(), conversationId, messageId));
+  }
+
+  public async saveConversationEditDraft(input: ConversationDraftWrite): Promise<number> {
+    let revision = 0;
+    await this.mutate(async database => {
+      revision = await writeConversationEditDraft(database, input);
+    });
+    return revision;
+  }
+
+  /** Prefix and pending replacement commit together; normal run acceptance owns the edited user event. */
+  public async forkConversation(input: ConversationForkRequest, originNodeId: string): Promise<string> {
+    assertConversationEditText(input.text);
+    for (const value of [input.conversationId, input.messageId, input.requestId, input.targetConversationId, input.replacementMessageId, originNodeId]) {
+      if (!value || value.length > 512) throw new Error('conversation_fork_identity_invalid');
+    }
+    const payloadDigest = conversationEditDigest(input);
+    let revision = '0';
+    const outcome = { replay: false };
+    await this.mutate(async database => {
+      const existing = await database.getFirstAsync<{ payloadDigest: string; targetConversationId: string }>(
+        'SELECT payloadDigest, targetConversationId FROM conversation_edit_forks WHERE requestId = ?',
+        [input.requestId],
+      );
+      if (existing) {
+        if (existing.payloadDigest !== payloadDigest) throw new Error('conversation_fork_request_conflict');
+        outcome.replay = true;
+        return;
+      }
+      const source = await readEditableMessage(database, input.conversationId, input.messageId);
+      if (conversationEditSourceRevision(source) !== input.sourceRevision) throw new Error('conversation_edit_source_changed');
+      const active = await database.getFirstAsync<{ runId: string }>(
+        "SELECT runId FROM agent_runs WHERE conversationId = ? AND state IN ('accepted', 'queued', 'running') LIMIT 1",
+        [input.conversationId],
+      );
+      if (active) throw new Error('conversation_branch_source_busy');
+      const target = await database.getFirstAsync<{ conversationId: string }>(
+        'SELECT conversationId FROM conversations WHERE conversationId = ?',
+        [input.targetConversationId],
+      );
+      if (target) throw new Error('conversation_branch_target_exists');
+      // Validate the exact immutable pending payload before any history writes.
+      const replacement = createConversationBranchReplacement(source, input);
+      const parent = await database.getFirstAsync<{ metadataJson: string }>(
+        'SELECT metadataJson FROM conversations WHERE conversationId = ?',
+        [input.conversationId],
+      );
+      const meta = parent ? parseJson(parent.metadataJson) as ConversationMeta : undefined;
+      const append = async (draft: ConversationEventDraft) => {
+        const event = await this.appendLocalEventInTransaction(database, normalizeLocalEventDraft(draft));
+        await this.projectEvent(database, event, false);
+      };
+      await append({
+        kind: 'metadataPatch',
+        eventId: `fork:${input.requestId}:metadata`,
+        conversationId: input.targetConversationId,
+        originNodeId,
+        timestamp: Date.now(),
+        patch: { definitionId: meta?.definitionId ?? 'memeloop:general-assistant', title: meta?.title ?? '' },
+      });
+      async function* prefix(): AsyncGenerator<ChatMessage> {
+        let cursor: ConversationMessageCursor | undefined;
+        for (;;) {
+          const rows = await database.getAllAsync<MessageRow>(
+            `SELECT messageJson FROM messages WHERE conversationId = ? AND visible = 1
+             AND COALESCE(json_extract(metadataJson, '$.isContextCompaction'), 0) = 0
+             AND (timestamp, lamportClock, originNodeId, messageId) < (?, ?, ?, ?)
+             ${cursor ? 'AND (timestamp, lamportClock, originNodeId, messageId) > (?, ?, ?, ?)' : ''}
+             ORDER BY timestamp, lamportClock, originNodeId, messageId LIMIT 64`,
+            [
+              input.conversationId,
+              source.timestamp,
+              source.lamportClock,
+              source.originNodeId,
+              source.messageId,
+              ...(cursor ? [cursor.timestamp, cursor.lamportClock, cursor.originNodeId, cursor.messageId] : []),
+            ],
+          );
+          if (!rows.length) return;
+          for (const row of rows) {
+            const item = parseCanonicalMessage(row.messageJson, input.conversationId);
+            cursor = messageCursor(item);
+            // Compaction controls are not copied into independently editable history.
+            if (isContextCompactionSummary(item)) continue;
+            yield item;
+          }
+        }
+      }
+      await copyConversationBranchPrefix({
+        sourceConversationId: input.conversationId,
+        targetConversationId: input.targetConversationId,
+        originNodeId,
+        messages: prefix(),
+        createId: sourceId => `fork:${conversationEditDigest([input.requestId, sourceId])}`,
+        append,
+      });
+      // The accepted replacement will project these again; authorize retained attachments now for normal acceptance.
+      const attachments = [...(replacement.attachments ?? []), ...(replacement.parts ?? []).flatMap(part => part.type === 'attachment' ? [part.attachment] : [])];
+      for (const attachment of attachments) {
+        const authorized = await database.getFirstAsync<{ contentHash: string }>(
+          'SELECT contentHash FROM conversation_attachment_references WHERE conversationId = ? AND contentHash = ? LIMIT 1',
+          [input.conversationId, attachment.contentHash],
+        );
+        if (!authorized) throw new Error('conversation_branch_attachment_unauthorized');
+        await database.runAsync(
+          'INSERT OR IGNORE INTO conversation_attachment_references (conversationId, contentHash, messageId) VALUES (?, ?, ?)',
+          [input.targetConversationId, attachment.contentHash, input.replacementMessageId],
+        );
+      }
+      await database.runAsync(
+        `INSERT INTO conversation_edit_forks (requestId, payloadDigest, targetConversationId, replacementMessageId, sourceJson, replacementText)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [input.requestId, payloadDigest, input.targetConversationId, input.replacementMessageId, strictJson(source), input.text],
+      );
+      await this.rebuildTimelineProjection(database, input.targetConversationId);
+      await this.refreshConversationMetadata(database, input.targetConversationId, originNodeId);
+      revision = await this.readConversationRevision(database, input.targetConversationId);
+    });
+    if (!outcome.replay) this.invalidateConversation(input.targetConversationId, '0', revision, 'reset', 0);
+    return input.targetConversationId;
+  }
+
+  public async getPendingConversationBranchReplacement(conversationId: string): Promise<PendingLocalChatMessage | null> {
+    return this.enqueueMutation(async () => {
+      const row = await (await this.database()).getFirstAsync<{
+        requestId: string;
+        sourceJson: string;
+        replacementText: string;
+        targetConversationId: string;
+        replacementMessageId: string;
+      }>('SELECT requestId, sourceJson, replacementText, targetConversationId, replacementMessageId FROM conversation_edit_forks WHERE targetConversationId = ?', [conversationId]);
+      if (!row) return null;
+      const source = parseJson(row.sourceJson) as ChatMessage;
+      return createConversationBranchReplacement(source, {
+        requestId: row.requestId,
+        conversationId: source.conversationId,
+        messageId: source.messageId,
+        sourceRevision: conversationEditSourceRevision(source),
+        targetConversationId: row.targetConversationId,
+        replacementMessageId: row.replacementMessageId,
+        text: row.replacementText,
+      });
+    });
+  }
+
+  /** Branch identity lives on canonical user events, so received events work without local fork records. */
+  public async getConversationBranches(conversationId: string, messageIds: readonly string[]): Promise<ConversationBranchState[]> {
+    return this.enqueueMutation(async () => {
+      const database = await this.database();
+      const result: ConversationBranchState[] = [];
+      for (const messageId of new Set(messageIds)) {
+        const row = await database.getFirstAsync<MessageRow>(
+          "SELECT messageJson FROM messages WHERE conversationId = ? AND messageId = ? AND role = 'user' AND visible = 1",
+          [conversationId, messageId],
+        );
+        if (!row) continue;
+        const identity = conversationBranchIdentity(parseCanonicalMessage(row.messageJson, conversationId));
+        const variants = await database.getAllAsync<{ conversationId: string; messageId: string }>(
+          `SELECT conversationId, messageId FROM messages WHERE role = 'user' AND visible = 1 AND
+           ((conversationId = ? AND messageId = ?) OR (
+             json_extract(metadataJson, '$.memeloopBranch.rootConversationId') = ?
+             AND json_extract(metadataJson, '$.memeloopBranch.rootMessageId') = ?
+             AND json_extract(metadataJson, '$.memeloopBranch.variantConversationId') = conversationId
+             AND json_extract(metadataJson, '$.memeloopBranch.variantMessageId') = messageId))
+           ORDER BY timestamp, conversationId, messageId`,
+          [identity.rootConversationId, identity.rootMessageId, identity.rootConversationId, identity.rootMessageId],
+        );
+        if (variants.length < 2) continue;
+        result.push({
+          messageId,
+          selected: Math.max(0, variants.findIndex(item => item.conversationId === identity.variantConversationId && item.messageId === identity.variantMessageId)),
+          alternatives: variants,
+        });
+      }
+      return result;
+    });
   }
 
   public async listConversationsPage(
@@ -1591,6 +1787,9 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
         }
         await database.execAsync(`
           DELETE FROM agent_runs;
+          DELETE FROM agent_run_execution_leases;
+          DELETE FROM conversation_edit_drafts;
+          DELETE FROM conversation_edit_forks;
           DELETE FROM agent_instances;
           DELETE FROM agent_todos;
           DELETE FROM attachments;
@@ -2949,6 +3148,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     runId: string,
     expectedStates: readonly AgentRunState[],
     next: AgentRunRecord,
+    options: AgentRunTransitionOptions = {},
   ): Promise<boolean> {
     if (runId !== next.runId || expectedStates.length === 0) return false;
     let transitioned = false;
@@ -2966,14 +3166,79 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
         existing.definitionId !== next.definitionId || existing.payloadDigest !== next.payloadDigest ||
         existing.retrySourceTurnId !== next.retrySourceTurnId
       ) throw new Error('agent_run_immutable_identity_changed');
+      const legal: Record<AgentRunState, readonly AgentRunState[]> = {
+        accepted: ['queued', 'failed', 'cancelled'],
+        queued: ['running', 'failed', 'cancelled'],
+        running: ['completed', 'failed', 'cancelled'],
+        completed: [],
+        failed: [],
+        cancelled: [],
+      };
+      if (!legal[existing.state].includes(next.state)) return;
+      const lease = options.executionLease;
+      if (next.state !== 'cancelled') {
+        if (!lease || lease.runId !== runId) return;
+        const current = await database.getFirstAsync<{ runId: string }>(
+          `SELECT runId FROM agent_run_execution_leases WHERE runId = ? AND ownerId = ? AND fencingEpoch = ? AND expiresAt = ? AND expiresAt > ?`,
+          [runId, lease.ownerId, lease.fencingEpoch, lease.expiresAt, Date.now()],
+        );
+        if (!current) return;
+      }
       const result = await database.runAsync(
         `UPDATE agent_runs SET state = ?, updatedAt = ?, finishedAt = ?, recordJson = ?
          WHERE runId = ? AND state IN (${expectedStates.map(() => '?').join(', ')})`,
         [next.state, next.updatedAt, next.finishedAt ?? null, strictJson(next), runId, ...expectedStates],
       );
       transitioned = result.changes === 1;
+      if (transitioned && ['completed', 'failed', 'cancelled'].includes(next.state)) {
+        await database.runAsync('DELETE FROM agent_run_execution_leases WHERE runId = ?', [runId]);
+      }
     });
     return transitioned;
+  }
+
+  public async claimExecution(runId: string, ownerId: string, now: number, leaseMs: number): Promise<AgentRunExecutionLease | undefined> {
+    let lease: AgentRunExecutionLease | undefined;
+    await this.mutate(async database => {
+      const active = await database.getFirstAsync<{ runId: string }>(
+        "SELECT runId FROM agent_runs WHERE runId = ? AND state IN ('accepted', 'queued', 'running')",
+        [runId],
+      );
+      if (!active) return;
+      const written = await database.runAsync(
+        `INSERT INTO agent_run_execution_leases (runId, ownerId, fencingEpoch, expiresAt) VALUES (?, ?, 1, ?)
+         ON CONFLICT(runId) DO UPDATE SET ownerId = excluded.ownerId,
+         fencingEpoch = CASE WHEN agent_run_execution_leases.ownerId = excluded.ownerId AND agent_run_execution_leases.expiresAt > ?
+           THEN agent_run_execution_leases.fencingEpoch ELSE agent_run_execution_leases.fencingEpoch + 1 END,
+         expiresAt = excluded.expiresAt
+         WHERE agent_run_execution_leases.ownerId = excluded.ownerId OR agent_run_execution_leases.expiresAt <= ?`,
+        [runId, ownerId, now + leaseMs, now, now],
+      );
+      if (written.changes !== 1) return;
+      lease = await database.getFirstAsync<AgentRunExecutionLease>('SELECT * FROM agent_run_execution_leases WHERE runId = ?', [runId]) ?? undefined;
+    });
+    return lease;
+  }
+
+  public async renewExecution(lease: AgentRunExecutionLease, now: number, leaseMs: number): Promise<AgentRunExecutionLease | undefined> {
+    let renewed: AgentRunExecutionLease | undefined;
+    await this.mutate(async database => {
+      const expiresAt = now + leaseMs;
+      const written = await database.runAsync(
+        `UPDATE agent_run_execution_leases SET expiresAt = ?
+         WHERE runId = ? AND ownerId = ? AND fencingEpoch = ? AND expiresAt = ? AND expiresAt > ?
+         AND EXISTS (SELECT 1 FROM agent_runs WHERE runId = agent_run_execution_leases.runId AND state IN ('accepted', 'queued', 'running'))`,
+        [expiresAt, lease.runId, lease.ownerId, lease.fencingEpoch, lease.expiresAt, now],
+      );
+      if (written.changes === 1) renewed = { ...lease, expiresAt };
+    });
+    return renewed;
+  }
+
+  public async releaseExecution(lease: AgentRunExecutionLease): Promise<void> {
+    await this.mutate(async database => {
+      await database.runAsync('DELETE FROM agent_run_execution_leases WHERE runId = ? AND ownerId = ? AND fencingEpoch = ?', [lease.runId, lease.ownerId, lease.fencingEpoch]);
+    });
   }
 
   public async listActive(): Promise<AgentRunRecord[]> {
@@ -3002,6 +3267,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
           [excess],
         );
       }
+      await database.runAsync('DELETE FROM agent_run_execution_leases WHERE runId NOT IN (SELECT runId FROM agent_runs)');
     });
   }
 
@@ -3365,6 +3631,22 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
       await database.execAsync(`
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
+        CREATE TABLE IF NOT EXISTS conversation_edit_drafts (
+          conversationId TEXT NOT NULL,
+          messageId TEXT NOT NULL,
+          text TEXT,
+          revision INTEGER NOT NULL,
+          PRIMARY KEY (conversationId, messageId)
+        );
+        CREATE TABLE IF NOT EXISTS conversation_edit_forks (
+          requestId TEXT PRIMARY KEY,
+          payloadDigest TEXT NOT NULL,
+          targetConversationId TEXT NOT NULL,
+          replacementMessageId TEXT NOT NULL,
+          sourceJson TEXT NOT NULL,
+          replacementText TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS conversation_edit_forks_target ON conversation_edit_forks(targetConversationId);
         CREATE TABLE IF NOT EXISTS conversation_events (
           conversationId TEXT NOT NULL,
           eventId TEXT NOT NULL,
@@ -3401,6 +3683,10 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
         );
         CREATE INDEX IF NOT EXISTS messages_conversation_cursor
           ON messages (conversationId, visible, timestamp, lamportClock, originNodeId, messageId);
+        CREATE INDEX IF NOT EXISTS messages_branch_root ON messages (
+          json_extract(metadataJson, '$.memeloopBranch.rootConversationId'),
+          json_extract(metadataJson, '$.memeloopBranch.rootMessageId')
+        ) WHERE role = 'user' AND visible = 1;
         CREATE INDEX IF NOT EXISTS messages_conversation_role_cursor
           ON messages (conversationId, visible, role, timestamp, lamportClock, originNodeId, messageId);
         CREATE INDEX IF NOT EXISTS messages_conversation_turn
@@ -3554,6 +3840,12 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
           ON agent_runs (conversationId, turnId, requestPeerId, updatedAt DESC);
         CREATE INDEX IF NOT EXISTS agent_runs_active
           ON agent_runs (state, updatedAt);
+        CREATE TABLE IF NOT EXISTS agent_run_execution_leases (
+          runId TEXT PRIMARY KEY,
+          ownerId TEXT NOT NULL,
+          fencingEpoch INTEGER NOT NULL,
+          expiresAt INTEGER NOT NULL
+        );
       `);
       return database;
     });
