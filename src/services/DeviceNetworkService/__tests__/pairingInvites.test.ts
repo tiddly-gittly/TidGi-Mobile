@@ -32,29 +32,40 @@ describe('Mobile signed pairing invites', () => {
     expect(mockCreateSignedInvite).not.toHaveBeenCalled();
   });
 
-  it('refuses to sign an invite that advertises public cleartext WebSocket transport', async () => {
+  it('signs only supported transport addresses', async () => {
     const identity = { peerId: 'peer-a' } as LocalDeviceIdentity;
 
-    await expect(createMobilePairingInvite(identity, ['/ip4/203.0.113.9/tcp/9000/ws/p2p/peer-a'], dependencies))
-      .rejects.toThrow('pairing_invite_cleartext_requires_private_lan');
-    expect(mockCreateSignedInvite).not.toHaveBeenCalled();
+    mockCreateSignedInvite.mockResolvedValue({ peerId: 'peer-a', multiaddrs: [privateAddress] });
+    await createMobilePairingInvite(identity, ['/ip4/192.168.1.8/tcp/9001/p2p/peer-a', privateAddress], dependencies);
+    expect(mockCreateSignedInvite).toHaveBeenCalledWith({ identity, multiaddrs: [privateAddress] });
   });
 
   it('only returns invites accepted by the shared identity verifier and Mobile transport policy', async () => {
     const verifiedInvite = { peerId: 'peer-a', multiaddrs: [privateAddress], signature: 'verified' } as DevicePairingInvite;
     mockParseVerifiedInvite.mockResolvedValue(verifiedInvite);
 
-    await expect(parseMobilePairingInvite('serialized', dependencies)).resolves.toBe(verifiedInvite);
+    await expect(parseMobilePairingInvite('serialized', dependencies)).resolves.toEqual({
+      peerId: 'peer-a',
+      multiaddrs: [privateAddress],
+    });
     expect(mockParseVerifiedInvite).toHaveBeenCalledWith('serialized');
   });
 
-  it('rejects a verified invite that asks Mobile to use public cleartext WebSocket', async () => {
+  it('selects WebSocket paths from a verified desktop invite containing TCP and Tailnet addresses', async () => {
     mockParseVerifiedInvite.mockResolvedValue({
       peerId: 'peer-a',
-      multiaddrs: ['/ip4/203.0.113.9/tcp/9000/ws/p2p/peer-a'],
+      multiaddrs: ['/ip4/100.64.0.2/tcp/9001/p2p/peer-a', '/ip4/100.64.0.2/tcp/9000/ws/p2p/peer-a', privateAddress],
       signature: 'verified',
     });
 
-    await expect(parseMobilePairingInvite('serialized', dependencies)).rejects.toThrow('pairing_invite_cleartext_requires_private_lan');
+    await expect(parseMobilePairingInvite('serialized', dependencies)).resolves.toMatchObject({
+      peerId: 'peer-a',
+      multiaddrs: ['/ip4/100.64.0.2/tcp/9000/ws/p2p/peer-a', privateAddress],
+    });
+  });
+
+  it('does not accept addresses from an invite with an invalid signature', async () => {
+    mockParseVerifiedInvite.mockRejectedValue(new Error('invalid_signature'));
+    await expect(parseMobilePairingInvite('tampered', dependencies)).rejects.toThrow('invalid_signature');
   });
 });

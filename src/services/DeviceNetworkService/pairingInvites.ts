@@ -1,6 +1,6 @@
 import type { DevicePairingInvite, LocalDeviceIdentity } from 'memeloop/device-network';
 
-import { assertMobilePairingMultiaddrs } from './pairingNetworkPolicy';
+import { selectMobilePairingMultiaddrs } from './pairingNetworkPolicy';
 
 export interface MobilePairingInviteDependencies {
   createSignedInvite(input: {
@@ -17,15 +17,14 @@ export async function createMobilePairingInvite(
   dependencies: MobilePairingInviteDependencies,
 ): Promise<string> {
   if (multiaddrs.length === 0) throw new Error('pairing_invite_unreachable');
-  assertMobilePairingMultiaddrs(multiaddrs);
-  return dependencies.encodeInvite(await dependencies.createSignedInvite({ identity, multiaddrs }));
+  const addresses = selectMobilePairingMultiaddrs(multiaddrs);
+  return dependencies.encodeInvite(await dependencies.createSignedInvite({ identity, multiaddrs: addresses }));
 }
 
 export async function parseMobilePairingInvite(
   serializedInvite: string,
   dependencies: Pick<MobilePairingInviteDependencies, 'parseVerifiedInvite'>,
-): Promise<DevicePairingInvite> {
+): Promise<Pick<DevicePairingInvite, 'peerId' | 'multiaddrs'>> {
   const invite = await dependencies.parseVerifiedInvite(serializedInvite);
-  assertMobilePairingMultiaddrs(invite.multiaddrs);
-  return invite;
+  return { peerId: invite.peerId, multiaddrs: selectMobilePairingMultiaddrs(invite.multiaddrs) };
 }

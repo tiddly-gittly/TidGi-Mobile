@@ -1,24 +1,19 @@
-import { assertMobilePairingMultiaddrs } from '../pairingNetworkPolicy';
+import { selectMobilePairingMultiaddrs } from '../pairingNetworkPolicy';
 
-describe('mobile pairing network policy', () => {
+describe('mobile pairing transports', () => {
   it.each([
     '/ip4/192.168.1.8/tcp/9000/ws/p2p/peer-a',
-    '/ip4/172.20.0.2/tcp/9000/ws/p2p/peer-a',
+    '/ip4/100.64.0.2/tcp/9000/ws/p2p/peer-a',
     '/ip6/fd00::1/tcp/9000/ws/p2p/peer-a',
     '/dns4/tidgi.local/tcp/9000/ws/p2p/peer-a',
     '/dns4/relay.example.com/tcp/443/wss/p2p/peer-a',
-  ])('accepts a private-LAN WS or authenticated WSS address: %s', (multiaddr) => {
-    expect(() => {
-      assertMobilePairingMultiaddrs([multiaddr]);
-    }).not.toThrow();
+    '/ip4/203.0.113.10/tcp/9000/ws/p2p/peer-a',
+  ])('retains a supported transport for an authenticated peer: %s', (address) => {
+    expect(selectMobilePairingMultiaddrs([address])).toEqual([address]);
   });
 
-  it.each([
-    '/ip4/203.0.113.10/tcp/9000/ws/p2p/peer-a',
-    '/dns4/example.com/tcp/9000/ws/p2p/peer-a',
-  ])('rejects cleartext WebSocket transport outside the private LAN: %s', (multiaddr) => {
-    expect(() => {
-      assertMobilePairingMultiaddrs([multiaddr]);
-    }).toThrow('pairing_invite_cleartext_requires_private_lan');
+  it('reports when none of the signed addresses can be dialed on Mobile', () => {
+    expect(() => selectMobilePairingMultiaddrs(['/ip4/192.168.1.8/tcp/9000/p2p/peer-a']))
+      .toThrow('pairing_invite_requires_websocket');
   });
 });
