@@ -771,6 +771,17 @@
     }
   },
   "AgentChat": {
+    "CopyMessage": "メッセージをコピー",
+    "EditMessage": "編集して分岐を作成",
+    "SaveEditDraft": "下書きを保存",
+    "NextBranch": "次の履歴",
+    "ReloadEditDraft": "保存した下書きを読み込む",
+    "EditDraftConflict": "別の画面で下書きが変更されました。保存した下書きを読み込んでください。",
+    "DiscardEdit": "破棄",
+    "SendEditedMessage": "送信",
+    "PreviousBranch": "前の履歴",
+    "EditMessageInput": "メッセージを編集",
+    "RetryTurn": "応答を再試行",
     "Prompt": "プロンプトプレビュー",
     "ModelParameters": "モデルパラメーター",
     "Title": "エージェント",
