@@ -3,9 +3,9 @@ packages:
   - plugins
 
 overrides:
-  '@memeloop/libp2p': 0.3.2
+  '@memeloop/libp2p': 0.3.5
   memeloop: 0.3.9
-  '@memeloop/react-ui': 0.2.8
+  '@memeloop/react-ui': 0.2.9
 
 allowBuilds:
   '@ipshipyard/node-datachannel': true
@@ -24,8 +24,11 @@ peerDependencyRules:
     memeloop: '>=0.3.0'
 
 minimumReleaseAgeExclude:
+  - '@memeloop/libp2p@0.3.5'
+  - '@memeloop/react-ui@0.2.9'
+  - '@memeloop/libp2p@0.3.4'
   - '@memeloop/react-ui@0.2.8'
-  - '@memeloop/libp2p@0.3.2'
+  - '@memeloop/libp2p@0.3.2 || 0.3.3'
   - 'memeloop-cli@0.3.5'
   - 'memeloop@0.3.9'
   - expo-tiddlywiki-filesystem-android-external-storage@2.12.3

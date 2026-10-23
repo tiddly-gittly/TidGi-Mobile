@@ -879,6 +879,38 @@
     }
   },
   "AgentChat": {
+    "Parameters": {
+      "ReasoningEffort": "Reasoning effort",
+      "Temperature": "Temperature",
+      "MaxOutputTokens": "Maximum output tokens",
+      "Default": "Model default",
+      "Unavailable": "No adjustable parameters available for this model."
+    },
+    "Preview": {
+      "Tree": "Tree",
+      "Flat": "Messages",
+      "Request": "Model request",
+      "Back": "Back",
+      "Earlier": "Previous",
+      "Later": "Next",
+      "Empty": "No messages",
+      "EditSource": "Edit source",
+      "Sources": {
+        "prompt": "Instructions",
+        "system": "System",
+        "tool": "Tools",
+        "conversation-message": "Conversation",
+        "context-compaction-summary": "Conversation summary",
+        "preview-input": "Current message"
+      },
+      "Roles": {
+        "system": "System",
+        "user": "You",
+        "assistant": "Assistant",
+        "tool": "Tool",
+        "developer": "Developer"
+      }
+    },
     "Prompt": "Prompt preview",
     "ModelParameters": "Model parameters",
     "CopyMessage": "Copy message",

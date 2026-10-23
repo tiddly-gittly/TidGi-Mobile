@@ -48,6 +48,7 @@ import { parseStoredIdentity, parseTrustedDeviceStoreEnvelope, type StoredIdenti
 
 const IDENTITY_KEY = 'device_network_identity_v1';
 const TRUSTED_DEVICES_KEY = 'device_network_trusted_devices_v2';
+const pairingAddressKey = (peerId: string) => `device_network_addresses_${peerId}`;
 const RELAY_RENEWAL_WINDOW_MS = 2 * 60_000;
 
 export type DeviceNetworkCloudStatus = DeviceCloudConnectionSnapshot;
@@ -242,11 +243,25 @@ export class DeviceNetworkService {
 
     const capabilities = this.buildCapabilities();
     const identity = this.requireIdentity();
+    const trusted = await this.trustStore.loadTrustedDevices();
+    const bootstrapMultiaddrs = (await Promise.all(trusted.map(async device => {
+      const stored = await SecureStore.getItemAsync(pairingAddressKey(device.peerId));
+      const addresses = stored === null ? [] : JSON.parse(stored) as string[];
+      // Pairing advertises transport addresses without a destination PeerId.
+      // Bootstrap discovery needs the authenticated peer suffix on each address.
+      return addresses.filter(address => /\/wss?(?:\/|$)/u.test(address))
+        .flatMap(address => {
+          const target = /\/p2p\/([^/]+)$/u.exec(address)?.[1];
+          if (target) return target === device.peerId ? [address] : [];
+          return [`${address}/p2p/${device.peerId}`];
+        });
+    }))).flat();
     this.core = new Libp2pDeviceNetworkService({
       identity,
       capabilities,
       trustStore: this.trustStore,
       authorizer: this.authorizer,
+      bootstrapMultiaddrs,
       // js-libp2p mDNS is not available in React Native. Pairing uses a
       // signed identity exchange over a QR/multiaddr invite instead.
       enableMdns: false,
@@ -484,7 +499,12 @@ export class DeviceNetworkService {
   }
 
   public async acceptPairing(sessionId: string): Promise<void> {
-    return this.requireCore().acceptPairing(sessionId);
+    const core = this.requireCore();
+    const session = (await core.listPairingSessions()).find(candidate => candidate.sessionId === sessionId);
+    if (session) {
+      await SecureStore.setItemAsync(pairingAddressKey(session.remotePeerId), JSON.stringify(session.remoteMultiaddrs));
+    }
+    await core.acceptPairing(sessionId);
   }
 
   public async rejectPairing(sessionId: string): Promise<void> {
@@ -492,7 +512,8 @@ export class DeviceNetworkService {
   }
 
   public async removeTrustedDevice(peerId: string): Promise<void> {
-    return this.requireCore().removeTrustedDevice(peerId);
+    await this.requireCore().removeTrustedDevice(peerId);
+    await SecureStore.deleteItemAsync(pairingAddressKey(peerId));
   }
 
   public async openStream(

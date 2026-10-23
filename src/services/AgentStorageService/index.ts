@@ -699,7 +699,8 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     callOptions.signal?.throwIfAborted();
     const database = await this.database();
     let page: ConversationListPage | undefined;
-    await database.withTransactionAsync(async () => {
+    await this.readSnapshot(database, async () => {
+      callOptions.signal?.throwIfAborted();
       const state = await database.getFirstAsync<{ revision: number }>(
         'SELECT revision FROM conversation_list_v2_state WHERE id = 1',
       );
@@ -816,7 +817,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     callOptions.signal?.throwIfAborted();
     const database = await this.database();
     let page: ConversationMessagePage | undefined;
-    await database.withTransactionAsync(async () => {
+    await this.readSnapshot(database, async () => {
       callOptions.signal?.throwIfAborted();
       const state = await database.getFirstAsync<TimelineStateRow>(
         'SELECT revision FROM conversation_timeline_v2_states WHERE conversationId = ?',
@@ -952,7 +953,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     callOptions.signal?.throwIfAborted();
     const database = await this.database();
     let page: ConversationFullContentMessagePage | undefined;
-    await database.withTransactionAsync(async () => {
+    await this.readSnapshot(database, async () => {
       callOptions.signal?.throwIfAborted();
       const state = await database.getFirstAsync<TimelineStateRow>(
         'SELECT revision FROM conversation_timeline_v2_states WHERE conversationId = ?',
@@ -1096,7 +1097,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     callOptions.signal?.throwIfAborted();
     const database = await this.database();
     let result: ConversationMessageWindowResult | undefined;
-    await database.withTransactionAsync(async () => {
+    await this.readSnapshot(database, async () => {
       callOptions.signal?.throwIfAborted();
       const state = await database.getFirstAsync<TimelineStateRow>(
         `SELECT revision, totalMessages, totalTurns, totalEntries
@@ -1290,7 +1291,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     callOptions.signal?.throwIfAborted();
     const database = await this.database();
     let page: ConversationTimelinePage | undefined;
-    await database.withTransactionAsync(async () => {
+    await this.readSnapshot(database, async () => {
       callOptions.signal?.throwIfAborted();
       const state = await database.getFirstAsync<TimelineStateRow>(
         `SELECT revision, totalMessages, totalTurns, totalEntries
@@ -1623,7 +1624,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     const database = await this.database();
     let response: AgentConversationTurnDetailResponse | undefined;
 
-    await database.withTransactionAsync(async () => {
+    await this.readSnapshot(database, async () => {
       callOptions.signal?.throwIfAborted();
       const cursorExists = async (value: TurnDetailProjectionCursor): Promise<boolean> =>
         await database.getFirstAsync<{ messageId: string }>(
@@ -3994,6 +3995,10 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
       !['high', 'medium', 'low'].includes(item.priority) || !Number.isSafeInteger(item.createdAt) || item.createdAt < 0 ||
       !Number.isSafeInteger(item.updatedAt) || item.updatedAt < item.createdAt
     ) throw new Error('mobile_todo_item_invalid');
+  }
+
+  private async readSnapshot(database: AgentSqlDatabase, reader: () => Promise<void>): Promise<void> {
+    await this.enqueueMutation(() => database.withTransactionAsync(reader));
   }
 
   private async enqueueMutation<Result>(operation: () => Promise<Result>): Promise<Result> {

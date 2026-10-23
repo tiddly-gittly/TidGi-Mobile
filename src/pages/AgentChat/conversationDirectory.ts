@@ -22,7 +22,8 @@ export function mobileConversationDirectoryErrorCode(error: Error | null): Mobil
 export function mobileConversationDirectoryErrorMessageKey(error: Error | null):
   | 'AgentChat.ConversationDirectoryError'
   | 'AgentChat.ConversationDirectoryInvalidRequest'
-  | 'AgentChat.ConversationDirectoryTooLarge' {
+  | 'AgentChat.ConversationDirectoryTooLarge'
+{
   switch (mobileConversationDirectoryErrorCode(error)) {
     case 'invalid-request':
       return 'AgentChat.ConversationDirectoryInvalidRequest';

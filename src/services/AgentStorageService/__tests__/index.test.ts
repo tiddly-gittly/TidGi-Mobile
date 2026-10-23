@@ -175,6 +175,61 @@ describe('MobileAgentStorage', () => {
 
   const storage = () => new MobileAgentStorage(() => Promise.resolve(database));
 
+  it('serializes concurrent chat snapshots and writes on the same native connection', async () => {
+    const current = storage();
+    await current.insertMessagesIfAbsent([message('user', 1, 'Initial prompt')]);
+    const initial = await current.getMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 });
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const transaction = database.withTransactionAsync.bind(database);
+    let pauseFirst = true;
+    database.withTransactionAsync = task =>
+      transaction(async () => {
+        if (pauseFirst) {
+          pauseFirst = false;
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        await task();
+      });
+    const directory = current.listConversationsPage({ limit: 20, maxBytes: 256 * 1024 });
+    await entered.promise;
+    const reads = Promise.all([
+      directory,
+      current.getMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 }),
+      current.getFullContentMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 }),
+      current.getMessageWindowAround('conversation-1', {
+        expectedRevision: initial.revision,
+        focus: { kind: 'message', messageId: 'user', turnId: 'user' },
+        maxMessages: 50,
+        maxBytes: 256 * 1024,
+      }),
+      current.getConversationTimelinePage('conversation-1', { limit: 50, maxBytes: 128 * 1024 }),
+      current.getTurnDetail({ conversationId: 'conversation-1', turnId: 'user' }),
+      current.getConversationBranches('conversation-1', ['user']),
+    ]);
+    const write = current.insertMessagesIfAbsent([message('assistant', 2, 'Durable response')]);
+    release.resolve(undefined);
+    const snapshots = await reads;
+    await write;
+    for (const index of [0, 1, 2, 4, 5]) expect(snapshots[index]).not.toMatchObject({ reset: true });
+    const window = snapshots[3];
+    if (window.reset) {
+      const latest = await current.getMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 });
+      expect(window.revision).toBe(latest.revision);
+      expect(window.revision).not.toBe(initial.revision);
+    } else {
+      expect(window.items[0].messageId).toBe('user');
+      expect(window.revision).toBe(initial.revision);
+    }
+    expect((await readAllMessagesForTest(current)).map(item => item.content)).toEqual(['Initial prompt', 'Durable response']);
+
+    jest.spyOn(database, 'getFirstAsync').mockRejectedValueOnce(new Error('read failed'));
+    await expect(current.getMessagePage('conversation-1', { limit: 50, maxBytes: 256 * 1024 })).rejects.toThrow('read failed');
+    await current.insertMessagesIfAbsent([message('later', 3)]);
+    expect((await readAllMessagesForTest(current)).at(-1)?.messageId).toBe('later');
+  });
+
   it('opens only the fresh MemeLoop v3 database name', async () => {
     jest.mocked(openDatabaseAsync).mockResolvedValueOnce(database as never);
     const current = new MobileAgentStorage();

@@ -771,6 +771,38 @@
     }
   },
   "AgentChat": {
+    "Parameters": {
+      "ReasoningEffort": "推論の強度",
+      "Temperature": "温度",
+      "MaxOutputTokens": "最大出力トークン数",
+      "Default": "モデルの既定値",
+      "Unavailable": "このモデルに調整可能なパラメーターはありません。"
+    },
+    "Preview": {
+      "Tree": "ツリー",
+      "Flat": "メッセージ",
+      "Request": "モデルリクエスト",
+      "Back": "戻る",
+      "Earlier": "前へ",
+      "Later": "次へ",
+      "Empty": "メッセージなし",
+      "EditSource": "ソースを編集",
+      "Sources": {
+        "prompt": "指示",
+        "system": "システム",
+        "tool": "ツール",
+        "conversation-message": "会話",
+        "context-compaction-summary": "会話の要約",
+        "preview-input": "現在のメッセージ"
+      },
+      "Roles": {
+        "system": "システム",
+        "user": "あなた",
+        "assistant": "アシスタント",
+        "tool": "ツール",
+        "developer": "開発者"
+      }
+    },
     "CopyMessage": "メッセージをコピー",
     "EditMessage": "編集して分岐を作成",
     "SaveEditDraft": "下書きを保存",

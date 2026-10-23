@@ -857,6 +857,38 @@
     }
   },
   "AgentChat": {
+    "Parameters": {
+      "ReasoningEffort": "推理强度",
+      "Temperature": "温度",
+      "MaxOutputTokens": "最大输出 token 数",
+      "Default": "模型默认值",
+      "Unavailable": "当前模型没有可调整的参数。"
+    },
+    "Preview": {
+      "Tree": "树形",
+      "Flat": "消息",
+      "Request": "模型请求",
+      "Back": "返回",
+      "Earlier": "上一页",
+      "Later": "下一页",
+      "Empty": "暂无消息",
+      "EditSource": "编辑来源",
+      "Sources": {
+        "prompt": "指令",
+        "system": "系统",
+        "tool": "工具",
+        "conversation-message": "对话",
+        "context-compaction-summary": "对话摘要",
+        "preview-input": "当前消息"
+      },
+      "Roles": {
+        "system": "系统",
+        "user": "你",
+        "assistant": "助手",
+        "tool": "工具",
+        "developer": "开发者"
+      }
+    },
     "Prompt": "提示词预览",
     "ModelParameters": "模型参数",
     "CopyMessage": "复制消息",

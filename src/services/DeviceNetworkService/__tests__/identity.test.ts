@@ -6,6 +6,9 @@ const mockSetItem = jest.fn((key: string, value: string) => {
 });
 const mockCoreStart = jest.fn(() => Promise.resolve());
 const mockCoreStop = jest.fn(() => Promise.resolve());
+const mockPairingSessions = jest.fn();
+const mockAcceptPairing = jest.fn(() => Promise.resolve());
+const mockRemoveTrustedDevice = jest.fn(() => Promise.resolve());
 const mockCreateIdentity = jest.fn();
 const mockSignIdentity = jest.fn();
 
@@ -27,6 +30,9 @@ jest.mock('@memeloop/libp2p/browser', () => {
     Libp2pDeviceNetworkService: jest.fn().mockImplementation(() => ({
       start: mockCoreStart,
       stop: mockCoreStop,
+      listPairingSessions: mockPairingSessions,
+      acceptPairing: mockAcceptPairing,
+      removeTrustedDevice: mockRemoveTrustedDevice,
     })),
     createDeviceIdentity: (...arguments_: unknown[]) => mockCreateIdentity(...arguments_) as Promise<RawSeedDeviceIdentity>,
     createSignedDevicePairingInvite: jest.fn(),
@@ -36,7 +42,7 @@ jest.mock('@memeloop/libp2p/browser', () => {
   };
 }, { virtual: true });
 
-import type { RawSeedDeviceIdentity } from '@memeloop/libp2p/browser';
+import { Libp2pDeviceNetworkService, type RawSeedDeviceIdentity } from '@memeloop/libp2p/browser';
 
 import { DeviceNetworkService, validateMobileIdentity } from '../index';
 
@@ -178,5 +184,57 @@ describe('Mobile device identity persistence', () => {
     await expect(service.start()).resolves.toBeUndefined();
     expect(mockCoreStart).toHaveBeenCalledTimes(1);
     await service.stop();
+  });
+
+  it('reconnects to an accepted peer after restart and forgets its addresses when removed', async () => {
+    const peerId = 'paired-desktop';
+    const addresses = [
+      '/ip4/192.168.1.5/tcp/32562',
+      '/ip4/192.168.1.5/tcp/32563/ws',
+      `/dns4/desktop.example.com/tcp/443/wss/p2p/${peerId}`,
+      '/dns4/relay.example.com/tcp/443/wss/p2p/relay/p2p-circuit',
+      '/dns4/other.example.com/tcp/443/wss/p2p/other',
+    ];
+    mockPairingSessions.mockResolvedValue([{
+      sessionId: 'pairing-session',
+      remotePeerId: peerId,
+      remoteMultiaddrs: addresses,
+    }]);
+    const service = new DeviceNetworkService();
+    await service.start();
+    await service.acceptPairing('pairing-session');
+    expect(mockAcceptPairing).toHaveBeenCalledWith('pairing-session');
+    expect(JSON.parse(mockSecureValues.get(`device_network_addresses_${peerId}`)!)).toEqual(addresses);
+    // The shared network core persists trust when both peers accept.
+    mockSecureValues.set(
+      'device_network_trusted_devices_v2',
+      JSON.stringify({
+        epoch: 'accepted',
+        generation: 0,
+        records: [{
+          peerId,
+          publicKeyMultibase: 'z-desktop',
+          deviceName: 'Desktop',
+          platform: 'desktop',
+          trustMode: 'local-pairing',
+          createdAt: 1,
+        }],
+      }),
+    );
+    await service.stop();
+
+    const restarted = new DeviceNetworkService();
+    await restarted.start();
+    expect(Libp2pDeviceNetworkService).toHaveBeenLastCalledWith(expect.objectContaining({
+      bootstrapMultiaddrs: [
+        `/ip4/192.168.1.5/tcp/32563/ws/p2p/${peerId}`,
+        `/dns4/desktop.example.com/tcp/443/wss/p2p/${peerId}`,
+        `/dns4/relay.example.com/tcp/443/wss/p2p/relay/p2p-circuit/p2p/${peerId}`,
+      ],
+    }));
+    await restarted.removeTrustedDevice(peerId);
+    expect(mockRemoveTrustedDevice).toHaveBeenCalledWith(peerId);
+    expect(mockSecureValues.has(`device_network_addresses_${peerId}`)).toBe(false);
+    await restarted.stop();
   });
 });

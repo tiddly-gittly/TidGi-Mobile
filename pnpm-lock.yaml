@@ -5,9 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@memeloop/libp2p': 0.3.2
+  '@memeloop/libp2p': 0.3.5
   memeloop: 0.3.9
-  '@memeloop/react-ui': 0.2.8
+  '@memeloop/react-ui': 0.2.9
 
 importers:
 
@@ -20,11 +20,11 @@ importers:
         specifier: ^15.0.3
         version: 15.0.3(expo-font@14.0.11(expo@54.0.33(@babel/core@7.26.8(supports-color@8.1.1))(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(supports-color@8.1.1))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       '@memeloop/libp2p':
-        specifier: 0.3.2
-        version: 0.3.2(memeloop@0.3.9(@ai-sdk/openai@4.0.20(zod@4.4.3)))
+        specifier: 0.3.5
+        version: 0.3.5(memeloop@0.3.9(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
-        specifier: 0.2.8
-        version: 0.2.8(e51a31bcaa8998d386451ea75e476d13)
+        specifier: 0.2.9
+        version: 0.2.9(e51a31bcaa8998d386451ea75e476d13)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -2567,13 +2567,13 @@ packages:
   '@libp2p/websockets@10.1.21':
     resolution: {integrity: sha512-2iItZGEfTlGFUEcFCghtlsIiQ+fBowopysBB/8ya0MvZkRic/6o9oSklWT5pWDmXtmqmbp1Dko/iLcBOhDOgFw==}
 
-  '@memeloop/libp2p@0.3.2':
-    resolution: {integrity: sha512-Funguu9aM8P8aF+runC8J3MIEnkUGA8D5n4Lu1v3+5Sk4S81mbUs/gksnJ1xgeYLAY7NfdlQLg+rabsuFf4m1Q==}
+  '@memeloop/libp2p@0.3.5':
+    resolution: {integrity: sha512-lgK+LSx3hhmJKSS8aQS1AS4TY3xlWCAu11A2lqlXi31nNIpJDroSHTGeUObVgXknYrA0aFj3LOPpyh3tY/3PLA==}
     peerDependencies:
       memeloop: 0.3.9
 
-  '@memeloop/react-ui@0.2.8':
-    resolution: {integrity: sha512-NeUB9zBUuQoLP7pewp/uJvXPyV/rKysWjYQS8tirrt03gxhKHQCs9uKvNEEqTAWTRYr765aqmC8WzywBl9DAHw==}
+  '@memeloop/react-ui@0.2.9':
+    resolution: {integrity: sha512-dgUhi90L0pHdKPmL7uOh3TGgnDDFduhOi7u93zxXgZWqjXjSKm2FPnCwdQMoxmAg3thlEdC6XX086NnqkpbDxw==}
     peerDependencies:
       '@assistant-ui/react': ^0.15.16
       '@emotion/react': '>=11.0.0 <12.0.0'
@@ -12592,7 +12592,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/libp2p@0.3.2(memeloop@0.3.9(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
+  '@memeloop/libp2p@0.3.5(memeloop@0.3.9(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
       '@chainsafe/libp2p-yamux': 8.0.1
@@ -12610,6 +12610,7 @@ snapshots:
       '@libp2p/websockets': 10.1.21
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
+      '@noble/hashes': 2.4.0
       libp2p: 3.3.11
       memeloop: 0.3.9(@ai-sdk/openai@4.0.20(zod@4.4.3))
       uint8arrays: 6.1.1
@@ -12617,7 +12618,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.2.8(e51a31bcaa8998d386451ea75e476d13)':
+  '@memeloop/react-ui@0.2.9(e51a31bcaa8998d386451ea75e476d13)':
     dependencies:
       '@assistant-ui/react': 0.15.17(@types/react@19.1.17)(immer@10.1.1)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.2.2(react@19.1.0))
       '@emotion/react': 11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)

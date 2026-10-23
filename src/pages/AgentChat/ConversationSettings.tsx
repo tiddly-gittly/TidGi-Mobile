@@ -1,7 +1,7 @@
-import { NativeModelParameterFields, NativePromptExecutionInspector } from '@memeloop/react-ui/native';
+import { NativeModelParameterFields, NativePromptExecutionInspector, type NativePromptExecutionInspectorHandle } from '@memeloop/react-ui/native';
 import type { AgentDeviceRpcClient, ConversationModelParameters, PromptPreviewPreparedExecution } from 'memeloop/mobile';
 import { PromptPreviewAuditSessionStore } from 'memeloop/mobile';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Text } from 'react-native-paper';
@@ -10,6 +10,7 @@ import { createSecureDurableId } from '../../services/SecureIdService';
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
+  scroll: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });
 
@@ -25,6 +26,7 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
   const [model, setModel] = useState<ConversationModelParameters>();
   const [busy, setBusy] = useState(true);
   const [failed, setFailed] = useState(false);
+  const inspectorReference = useRef<NativePromptExecutionInspectorHandle>(null);
   const store = useMemo(() =>
     new PromptPreviewAuditSessionStore({
       createSessionId: () => createSecureDurableId('prompt-preview'),
@@ -79,7 +81,13 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
     }
   };
   return (
-    <Modal visible animationType='slide' onRequestClose={onClose}>
+    <Modal
+      visible
+      animationType='slide'
+      onRequestClose={() => {
+        if (!inspectorReference.current?.handleBack()) onClose();
+      }}
+    >
       <View style={styles.container}>
         <View style={styles.header}>
           <Text variant='titleMedium'>
@@ -90,18 +98,42 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
         {failed && <Text accessibilityRole='alert'>{t('AgentChat.GenericErrorMessage')}</Text>}
         {busy && <ActivityIndicator />}
         {audit && (
-          <NativePromptExecutionInspector
-            audit={audit}
-            controller={{
-              getAuditPage: async (request, options) => client ? client.getPromptPreviewAuditPage({ ...request, conversationId }, options) : store.getPage(request),
-              getAuditDetail: async (request, options) => client ? client.getPromptPreviewAuditDetail({ ...request, conversationId }, options) : store.getDetail(request),
-            }}
-          />
+          <ScrollView style={styles.scroll} keyboardShouldPersistTaps='handled'>
+            <NativePromptExecutionInspector
+              ref={inspectorReference}
+              labels={{
+                tree: t('AgentChat.Preview.Tree'),
+                flat: t('AgentChat.Preview.Flat'),
+                request: t('AgentChat.Preview.Request'),
+                back: t('AgentChat.Preview.Back'),
+                earlier: t('AgentChat.Preview.Earlier'),
+                later: t('AgentChat.Preview.Later'),
+                loading: t('AgentChat.Loading'),
+                error: t('AgentChat.GenericErrorMessage'),
+                empty: t('AgentChat.Preview.Empty'),
+                editSource: t('AgentChat.Preview.EditSource'),
+                source: source => t(`AgentChat.Preview.Sources.${source}`),
+                role: role => t(`AgentChat.Preview.Roles.${role}`, { defaultValue: role }),
+              }}
+              audit={audit}
+              controller={{
+                getAuditPage: async (request, options) => client ? client.getPromptPreviewAuditPage({ ...request, conversationId }, options) : store.getPage(request),
+                getAuditDetail: async (request, options) => client ? client.getPromptPreviewAuditDetail({ ...request, conversationId }, options) : store.getDetail(request),
+              }}
+            />
+          </ScrollView>
         )}
         {model && (
-          <ScrollView>
+          <ScrollView keyboardShouldPersistTaps='handled'>
             <Text>{model.model?.name ?? model.selection.modelId}</Text>
             <NativeModelParameterFields
+              labels={{
+                reasoningEffort: t('AgentChat.Parameters.ReasoningEffort'),
+                temperature: t('AgentChat.Parameters.Temperature'),
+                maxOutputTokens: t('AgentChat.Parameters.MaxOutputTokens'),
+                defaultValue: t('AgentChat.Parameters.Default'),
+                unavailable: t('AgentChat.Parameters.Unavailable'),
+              }}
               model={model.model}
               value={model.selection.parameters ?? {}}
               disabled={busy}

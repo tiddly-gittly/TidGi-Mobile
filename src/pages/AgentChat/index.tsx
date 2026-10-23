@@ -391,7 +391,7 @@ function AgentChatSessionView({
         platform: device.platform,
         reachability: t(`DeviceNetwork.Reachability.${device.reachability.state}`),
       }),
-      disabled: !device.trusted || device.reachability.state === 'offline',
+      disabled: !device.trusted,
     })),
   ], [agentLoopDevices, localPeerId, t]);
   const adapter = useMemo(() => ({
@@ -421,6 +421,7 @@ function AgentChatSessionView({
     setActiveExecutionTargetId,
   ]);
   const nativeLabels = useMemo(() => ({
+    send: t('AgentChat.SendEditedMessage'),
     copyMessage: t('AgentChat.CopyMessage'),
     retryTurn: t('AgentChat.RetryTurn'),
     editing: {
@@ -617,7 +618,11 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
         setConversationId(current => items.some(item => item.conversationId === current) ? current : items[0].conversationId);
         setLocalPeerId(identity.peerId);
         const devices = await deviceNetworkService.listDevices();
-        const selectDevices = (values: readonly Device[]) => values.filter(device => device.peerId !== identity.peerId && device.trusted && device.capabilities.agentLoop);
+        const selectDevices = (values: readonly Device[]) =>
+          values.filter(device =>
+            device.peerId !== identity.peerId && device.trusted &&
+            (device.capabilities.agentLoop || device.platform === 'desktop' || device.platform === 'cli')
+          );
         setAgentLoopDevices(selectDevices(devices));
         unsubscribe = deviceNetworkService.observeDevices(values => {
           setAgentLoopDevices(selectDevices(values));
