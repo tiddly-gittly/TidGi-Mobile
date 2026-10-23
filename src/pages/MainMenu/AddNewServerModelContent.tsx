@@ -8,6 +8,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { QRCodeScanner } from '../../components/QRCodeScanner';
 import { useQRCodeScanner } from '../../hooks/useQRCodeScanner';
+import { gitBackgroundSyncService } from '../../services/BackgroundSyncService';
 import { useServerStore } from '../../store/server';
 import { IHtmlWorkspace, IWikiServerSync, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { extractServerFieldsFromQR, ServerFieldsFromQR } from '../../utils/importQRCode';
@@ -87,6 +88,9 @@ export function AddNewServerModelContent({ id, onClose }: WikiEditModalProps): J
     const serverUrl = new URL(serverUrlString);
     const newServer = addServer({ uri: serverUrl.origin, name: serverName, useStandardGitProtocol });
     addServerToWiki(id, newServer.id, scannedAuth);
+    // Keep the newly added endpoint disconnected until this real reachability
+    // probe succeeds. The store's default is intentionally fail-closed.
+    void gitBackgroundSyncService.updateServerOnlineStatus([newServer.id]);
     onClose();
   }, [addServer, addServerToWiki, id, onClose, scannedAuth, serverName, serverUrlString, useStandardGitProtocol]);
 

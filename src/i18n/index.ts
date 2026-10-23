@@ -4,13 +4,14 @@ import { initReactI18next } from 'react-i18next';
 
 import { useConfigStore } from '../store/config';
 import en from './localization/locales/en/translation.json';
+import ja from './localization/locales/ja/translation.json';
 import zh_CN from './localization/locales/zh_CN/translation.json';
 
 export const defaultLanguage = 'zh_CN';
 export const supportedLanguages = [
   { label: 'English', value: 'en' },
   { label: '中文（简体）', value: defaultLanguage },
-  // ... Add other languages here
+  { label: '日本語', value: 'ja' },
 ];
 export const detectedLanguage = getLocales()[0].languageCode;
 void i18n.use(initReactI18next).init({
@@ -18,6 +19,9 @@ void i18n.use(initReactI18next).init({
   resources: {
     en: {
       translation: en,
+    },
+    ja: {
+      translation: ja,
     },
     zh_CN: {
       translation: zh_CN,

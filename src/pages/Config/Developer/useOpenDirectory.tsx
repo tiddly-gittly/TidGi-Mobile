@@ -5,9 +5,11 @@ import { useCallback, useState } from 'react';
 import { Linking, Platform } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { WIKI_FOLDER_PATH } from '../../../constants/paths';
+import { logFor } from '../../../services/LoggerService';
 import { normalizeDirectoryUri } from '../../../services/StoragePermissionService';
 
 const FLAG_ACTIVITY_NEW_TASK = 0x10000000;
+const directoryLogger = logFor('directory-open');
 
 /**
  * Convert a plain filesystem path like /storage/emulated/0/Documents/TidGi
@@ -78,8 +80,8 @@ export function useOpenDirectory() {
               await Linking.openURL(contentUri);
               return;
             }
-          } catch {
-            // ignore
+          } catch (error) {
+            directoryLogger.warn('Documents provider fallback failed', error);
           }
           // Last resort: show path to user
           setOpenDocumentDirectorySnackBarVisible(true);
@@ -93,8 +95,8 @@ export function useOpenDirectory() {
         try {
           await shareAsync(normalizedDirectoryUri, { dialogTitle: 'Open folder with...' });
           return;
-        } catch {
-          // ignore and fall through
+        } catch (error) {
+          directoryLogger.warn('Sharing directory URI failed; trying URL handler', error);
         }
       }
 

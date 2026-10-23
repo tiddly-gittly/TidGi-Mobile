@@ -14,12 +14,15 @@ import { RootStackParameterList } from '../../App';
 import { useQRCodeScanner } from '../../hooks/useQRCodeScanner';
 import { IBatchImportItem, useGitImport } from '../../services/GitService/useGitImport';
 import { fetchHtmlSyncInfo, importHtmlWorkspace } from '../../services/HtmlWorkspaceService';
+import { logFor } from '../../services/LoggerService';
 import { importBundledWikiTemplate, normalizeGitCloneUrl } from '../../services/WikiImportService';
 import { IServerInfo, useServerStore } from '../../store/server';
 import { IHtmlWorkspace, IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { GitQRData, ImportQRData, isHtmlQRData, isImportQRData, parseImportQRCode } from '../../utils/importQRCode';
 import { isWikiWorkspace } from '../../utils/workspaceRelations';
 import { ImporterServerConfigs } from './components/ImporterServerConfigs';
+
+const importerLogger = logFor('importer');
 
 function areStringArraysEqual(arrayA: string[], arrayB: string[]): boolean {
   if (arrayA.length !== arrayB.length) return false;
@@ -275,8 +278,10 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
       if (isImportQRData(parsed)) {
         fillFromQRCodeData(parsed);
       }
-    } catch {
-      // Invalid JSON, ignore
+    } catch (error) {
+      // Manual input is edited incrementally; retain the current form state but
+      // make malformed input observable for diagnostics.
+      importerLogger.warn('Manual import JSON is not valid yet', error);
     }
   }, [fillFromQRCodeData]);
 
@@ -331,8 +336,9 @@ export const Importer: FC<StackScreenProps<RootStackParameterList, 'Importer'>> 
         setManualEdit(false);
         setShowSavedServers(false);
         return;
-      } catch {
+      } catch (error) {
         // Not an HTML workspace endpoint; fall through to existing Git import.
+        importerLogger.log('Saved server is not an HTML workspace endpoint', error);
       }
       const endpoint = `${server.uri.replace(/\/$/, '')}/tw-mobile-sync/git/mobile-sync-info`;
       const response = await fetch(endpoint);
