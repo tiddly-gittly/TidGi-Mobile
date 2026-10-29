@@ -980,7 +980,9 @@
     "ConversationDirectoryInvalidRequest": "The conversation request was invalid. Tap retry to try again.",
     "ConversationDirectoryTooLarge": "The conversation list is too large to display. Tap retry to try again.",
     "RetryConversations": "Retry conversations",
-    "RetryTurn": "Retry response"
+    "RetryTurn": "Retry response",
+    "Conversations": "Conversations",
+    "ConversationActions": "Conversation options"
   },
   "ScheduledTask": {
     "Title": "Scheduled agent tasks",

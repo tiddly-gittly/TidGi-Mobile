@@ -32,13 +32,14 @@
     "setup:git-hooks": "zx scripts/setupGitHooks.mjs",
     "postinstall": "pnpm run init-submodules && pnpm run build:wiki-template && pnpm run setup:git-hooks",
     "detox:test": "node scripts/runDetox.mjs android.usb.dev-client",
+    "detox:test:agent-ui": "node scripts/runDetox.mjs android.usb.dev-client --profile agentui",
     "detox:test:ios": "node scripts/runDetox.mjs ios.simulator.dev-client"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.20",
     "@expo/vector-icons": "^15.0.3",
     "@memeloop/libp2p": "0.3.5",
-    "@memeloop/react-ui": "0.2.9",
+    "@memeloop/react-ui": "0.2.10",
     "@noble/ed25519": "^2.2.3",
     "@noble/hashes": "^1.7.0",
     "@react-native-community/datetimepicker": "~8.4.4",

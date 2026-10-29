@@ -872,7 +872,9 @@
     "ConversationDirectoryError": "会話を読み込めません。再試行をタップしてください。",
     "ConversationDirectoryInvalidRequest": "会話リクエストが無効です。再試行をタップしてください。",
     "ConversationDirectoryTooLarge": "会話一覧が大きすぎます。再試行をタップしてください。",
-    "RetryConversations": "会話を再試行"
+    "RetryConversations": "会話を再試行",
+    "Conversations": "会話",
+    "ConversationActions": "会話の設定"
   },
   "ScheduledTask": {
     "Title": "エージェントのスケジュール",

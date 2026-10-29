@@ -4,14 +4,14 @@ import { PromptPreviewAuditSessionStore } from 'memeloop/mobile';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Text } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Button, Text, useTheme } from 'react-native-paper';
 import type { MobileAgentLoopService } from '../../services/AgentLoopService';
 import { createSecureDurableId } from '../../services/SecureIdService';
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  container: { flex: 1 },
+  content: { padding: 16, gap: 16 },
   scroll: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });
 
 export function ConversationSettings({ conversationId, client, getLoopService, mode, onClose }: {
@@ -22,6 +22,7 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [audit, setAudit] = useState<PromptPreviewPreparedExecution>();
   const [model, setModel] = useState<ConversationModelParameters>();
   const [busy, setBusy] = useState(true);
@@ -88,17 +89,20 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
         if (!inspectorReference.current?.handleBack()) onClose();
       }}
     >
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text variant='titleMedium'>
-            {t(mode === 'prompt' ? 'AgentChat.Prompt' : 'AgentChat.ModelParameters')}
-          </Text>
-          <Button onPress={onClose}>{t('AgentChat.Close')}</Button>
-        </View>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Appbar.Header>
+          <Appbar.BackAction
+            accessibilityLabel={t('AgentChat.Preview.Back')}
+            onPress={() => {
+              if (!inspectorReference.current?.handleBack()) onClose();
+            }}
+          />
+          <Appbar.Content title={t(mode === 'prompt' ? 'AgentChat.Prompt' : 'AgentChat.ModelParameters')} />
+        </Appbar.Header>
         {failed && <Text accessibilityRole='alert'>{t('AgentChat.GenericErrorMessage')}</Text>}
         {busy && <ActivityIndicator />}
         {audit && (
-          <ScrollView style={styles.scroll} keyboardShouldPersistTaps='handled'>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps='handled'>
             <NativePromptExecutionInspector
               ref={inspectorReference}
               labels={{
@@ -124,8 +128,8 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
           </ScrollView>
         )}
         {model && (
-          <ScrollView keyboardShouldPersistTaps='handled'>
-            <Text>{model.model?.name ?? model.selection.modelId}</Text>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps='handled'>
+            <Text variant='titleMedium'>{model.model?.name ?? model.selection.modelId}</Text>
             <NativeModelParameterFields
               labels={{
                 reasoningEffort: t('AgentChat.Parameters.ReasoningEffort'),
@@ -142,6 +146,7 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
               }}
             />
             <Button
+              mode='contained'
               disabled={busy}
               onPress={() => {
                 void save();

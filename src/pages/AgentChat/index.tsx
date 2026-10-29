@@ -25,10 +25,10 @@ import {
   type RemoteAgentExecutionTarget,
 } from 'memeloop/mobile';
 import { createFetchLLMProvider } from 'memeloop/mobile/providers';
-import { type FC, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { type FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, useTheme } from 'react-native-paper';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, Dialog, IconButton, List, Menu, Portal, useTheme } from 'react-native-paper';
 
 import type { RootStackParameterList } from '../../App';
 import { getMobileAgentLoopService, MobileAgentLoopService, observeActiveMobileAgentMessages } from '../../services/AgentLoopService';
@@ -45,7 +45,7 @@ import {
   prepareMobileSendMessage,
   releaseMobilePickedAttachment,
 } from './attachmentAdapter';
-import { MobileConversationDirectoryController, mobileConversationDirectoryDirection, mobileConversationDirectoryErrorMessageKey } from './conversationDirectory';
+import { MobileConversationDirectoryController, mobileConversationDirectoryErrorMessageKey } from './conversationDirectory';
 import { ConversationSettings } from './ConversationSettings';
 import { resolveMobileAgentErrorPresentation } from './errorPresentation';
 import { formatMobileTimelineTimestamp } from './localizedFormatting';
@@ -59,17 +59,9 @@ const DEFAULT_AGENT_DEFINITION_ID = 'memeloop:general-assistant';
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  settingsToolbar: { flexDirection: 'row', flexWrap: 'wrap' },
-  conversationStrip: { flexGrow: 0 },
-  conversationButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  conversationRow: { alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
-  conversationRowRtl: { direction: 'rtl', flexDirection: 'row-reverse' },
-  conversationTitle: { maxWidth: 180 },
-  directoryButton: { borderRadius: 8, minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 6 },
-  directoryButtonDisabled: { opacity: 0.5 },
-  directoryStatus: { paddingHorizontal: 4 },
-  newConversationButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  scheduleButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  headerTitle: { maxWidth: '100%' },
+  headerTitleContent: { flexDirection: 'row-reverse' },
+  historyScroll: { maxHeight: '70%' },
   initializationError: { padding: 16 },
 });
 
@@ -274,6 +266,7 @@ function AgentChatSessionView({
 }: AgentChatSessionViewProps) {
   const { i18n, t } = useTranslation();
   const { controller } = useAgentSession();
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [settingsMode, setSettingsMode] = useState<'prompt' | 'parameters'>();
   const [openingMain, setOpeningMain] = useState(false);
   const [mainConversationError, setMainConversationError] = useState<Error>();
@@ -467,45 +460,6 @@ function AgentChatSessionView({
 
   return (
     <>
-      <View style={styles.settingsToolbar}>
-        {settingsClient && (
-          <Button
-            loading={openingMain}
-            disabled={openingMain}
-            onPress={() => {
-              setOpeningMain(true);
-              setMainConversationError(undefined);
-              void (async () => {
-                const { conversation } = await settingsClient.getMainConversation({});
-                if (!conversation) throw new Error(t('AgentChat.NoMainConversation'));
-                const peerId = activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length);
-                await deviceNetworkService.syncWithDevice(peerId, { conversationIds: [conversation.conversationId] });
-                await onConversationChange(conversation.conversationId);
-              })().catch((error: unknown) => {
-                setMainConversationError(safeAgentFailure(error));
-              }).finally(() => {
-                setOpeningMain(false);
-              });
-            }}
-          >
-            {t('AgentChat.OpenMainConversation')}
-          </Button>
-        )}
-        <Button
-          onPress={() => {
-            setSettingsMode('prompt');
-          }}
-        >
-          {t('AgentChat.Prompt')}
-        </Button>
-        <Button
-          onPress={() => {
-            setSettingsMode('parameters');
-          }}
-        >
-          {t('AgentChat.ModelParameters')}
-        </Button>
-      </View>
       {settingsMode && (
         <ConversationSettings
           conversationId={conversationId}
@@ -519,7 +473,71 @@ function AgentChatSessionView({
       )}
       <NativeAgentChatView
         adapter={adapter}
-        title={t('AgentChat.Title')}
+        headerActions={
+          <Menu
+            visible={actionsOpen}
+            onDismiss={() => {
+              setActionsOpen(false);
+            }}
+            anchor={
+              <IconButton
+                icon='dots-vertical'
+                accessibilityLabel={t('AgentChat.ConversationActions')}
+                onPress={() => {
+                  setActionsOpen(true);
+                }}
+              />
+            }
+          >
+            {settingsClient && (
+              <Menu.Item
+                leadingIcon='sync'
+                title={t('AgentChat.OpenMainConversation')}
+                disabled={openingMain}
+                onPress={() => {
+                  setActionsOpen(false);
+                  setOpeningMain(true);
+                  setMainConversationError(undefined);
+                  void (async () => {
+                    const { conversation } = await settingsClient.getMainConversation({});
+                    if (!conversation) throw new Error(t('AgentChat.NoMainConversation'));
+                    const peerId = activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length);
+                    await deviceNetworkService.syncWithDevice(peerId, { conversationIds: [conversation.conversationId] });
+                    await onConversationChange(conversation.conversationId);
+                  })().catch((error: unknown) => {
+                    setMainConversationError(safeAgentFailure(error));
+                  }).finally(() => {
+                    setOpeningMain(false);
+                  });
+                }}
+              />
+            )}
+            <Menu.Item
+              leadingIcon='tune-variant'
+              title={t('AgentChat.ModelParameters')}
+              onPress={() => {
+                setActionsOpen(false);
+                setSettingsMode('parameters');
+              }}
+            />
+            <Menu.Item
+              leadingIcon='text-box-search-outline'
+              title={t('AgentChat.Prompt')}
+              onPress={() => {
+                setActionsOpen(false);
+                setSettingsMode('prompt');
+              }}
+            />
+            <Menu.Item
+              leadingIcon='calendar-clock'
+              title={t('ScheduledTask.Open')}
+              onPress={() => {
+                setActionsOpen(false);
+                navigationReference.navigate('AgentSchedule', { conversationId });
+              }}
+            />
+          </Menu>
+        }
         placeholder={t('AgentChat.Placeholder')}
         emptyMessage={t('AgentChat.Empty')}
         loadingMessage={t('AgentChat.Loading')}
@@ -561,9 +579,10 @@ function AgentChatSessionView({
 }
 
 export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>> = ({ navigation }) => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const theme = useTheme();
   const [conversationId, setConversationId] = useState(INITIAL_CONVERSATION_ID);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [localPeerId, setLocalPeerId] = useState<string>();
   const [agentLoopDevices, setAgentLoopDevices] = useState<Device[]>([]);
   const [activeExecutionTargetId, setActiveExecutionTargetId] = useState(LOCAL_EXECUTION_TARGET_ID);
@@ -574,16 +593,7 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
     directoryController.getSnapshot,
     directoryController.getSnapshot,
   );
-  const direction = mobileConversationDirectoryDirection(i18n.dir());
   const directoryErrorMessageKey = mobileConversationDirectoryErrorMessageKey(directory.error);
-  const colors = useMemo(() => ({
-    activeButton: { backgroundColor: theme.colors.primary },
-    activeTitle: { color: theme.colors.onPrimary },
-    button: { backgroundColor: theme.colors.surfaceVariant },
-    title: { color: theme.colors.onSurfaceVariant },
-    newButton: { backgroundColor: theme.colors.secondaryContainer },
-    newTitle: { color: theme.colors.onSecondaryContainer },
-  }), [theme]);
 
   useEffect(() => () => {
     directoryController.dispose();
@@ -654,97 +664,106 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
     setConversationId(nextConversationId);
   }, [directoryController, localPeerId, t]);
 
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        horizontal
-        style={styles.conversationStrip}
-        contentContainerStyle={[styles.conversationRow, direction === 'rtl' && styles.conversationRowRtl]}
-      >
-        {directory.hasMoreNewer && (
-          <Pressable
-            accessibilityRole='button'
-            accessibilityLabel={t('AgentChat.LoadNewerConversations')}
-            disabled={directory.loadingNewer || directory.loadingOlder}
-            onPress={() => {
-              void directoryController.loadNewer();
-            }}
-            style={[styles.directoryButton, colors.button, (directory.loadingNewer || directory.loadingOlder) && styles.directoryButtonDisabled]}
-          >
-            <Text style={colors.title}>{directory.loadingNewer ? t('AgentChat.LoadingConversations') : t('AgentChat.LoadNewerConversations')}</Text>
-          </Pressable>
-        )}
-        {directory.items.map(conversation => (
-          <Pressable
-            key={conversation.conversationId}
-            accessibilityRole='button'
-            accessibilityLabel={t('AgentChat.OpenConversation', { title: conversation.title })}
-            onPress={() => {
-              setConversationId(conversation.conversationId);
-            }}
-            style={[styles.conversationButton, colors.button, conversation.conversationId === conversationId && colors.activeButton]}
-          >
-            <Text numberOfLines={1} style={[styles.conversationTitle, colors.title, conversation.conversationId === conversationId && colors.activeTitle]}>
-              {conversation.title}
-            </Text>
-          </Pressable>
-        ))}
-        {directory.hasMoreOlder && (
-          <Pressable
-            accessibilityRole='button'
-            accessibilityLabel={t('AgentChat.LoadOlderConversations')}
-            disabled={directory.loadingNewer || directory.loadingOlder}
-            onPress={() => {
-              void directoryController.loadOlder();
-            }}
-            style={[styles.directoryButton, colors.button, (directory.loadingNewer || directory.loadingOlder) && styles.directoryButtonDisabled]}
-          >
-            <Text style={colors.title}>{directory.loadingOlder ? t('AgentChat.LoadingConversations') : t('AgentChat.LoadOlderConversations')}</Text>
-          </Pressable>
-        )}
-        <Text accessibilityRole='summary' style={[styles.directoryStatus, colors.title]}>
-          {directory.loadingInitial
-            ? t('AgentChat.LoadingConversations')
-            : t('AgentChat.ConversationDirectoryStatus', { resident: directory.items.length, total: directory.total })}
-        </Text>
-        {directory.error && (
-          <>
-            <Text accessibilityRole='alert' style={styles.directoryStatus}>{t(directoryErrorMessageKey)}</Text>
-            <Pressable
-              accessibilityRole='button'
-              accessibilityLabel={t('AgentChat.RetryConversations')}
-              disabled={directory.loadingInitial || directory.loadingNewer || directory.loadingOlder}
-              onPress={() => {
-                void directoryController.refresh();
-              }}
-              style={[styles.directoryButton, colors.button, (directory.loadingInitial || directory.loadingNewer || directory.loadingOlder) && styles.directoryButtonDisabled]}
-            >
-              <Text style={colors.title}>{t('AgentChat.RetryConversations')}</Text>
-            </Pressable>
-          </>
-        )}
-        <Pressable
-          accessibilityRole='button'
+  const activeTitle = directory.items.find(item => item.conversationId === conversationId)?.title;
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => (
+        <Button
+          icon='chevron-down'
+          style={styles.headerTitle}
+          accessibilityLabel={t('AgentChat.Conversations')}
+          contentStyle={styles.headerTitleContent}
+          onPress={() => {
+            setHistoryOpen(true);
+          }}
+        >
+          {activeTitle && activeTitle !== DEFAULT_AGENT_DEFINITION_ID ? activeTitle : t('AgentChat.Conversations')}
+        </Button>
+      ),
+      headerRight: () => (
+        <IconButton
+          icon='chat-plus-outline'
           accessibilityLabel={t('AgentChat.NewConversation')}
-          onPress={() =>
+          onPress={() => {
             void createConversation().catch((error: unknown) => {
               setInitializationError(safeAgentFailure(error));
-            })}
-          style={[styles.newConversationButton, colors.newButton]}
-        >
-          <Text style={colors.newTitle}>{t('AgentChat.NewConversation')}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole='button'
-          accessibilityLabel={t('ScheduledTask.Open')}
-          onPress={() => {
-            navigation.navigate('AgentSchedule', { conversationId });
+            });
           }}
-          style={[styles.scheduleButton, colors.newButton]}
+        />
+      ),
+    });
+  }, [activeTitle, createConversation, navigation, t]);
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Portal>
+        <Dialog
+          visible={historyOpen}
+          onDismiss={() => {
+            setHistoryOpen(false);
+          }}
         >
-          <Text style={colors.newTitle}>{t('ScheduledTask.Open')}</Text>
-        </Pressable>
-      </ScrollView>
+          <Dialog.Title>{t('AgentChat.Conversations')}</Dialog.Title>
+          <Dialog.ScrollArea style={styles.historyScroll}>
+            <ScrollView keyboardShouldPersistTaps='handled'>
+              {directory.hasMoreNewer && (
+                <Button
+                  loading={directory.loadingNewer}
+                  disabled={directory.loadingNewer || directory.loadingOlder}
+                  onPress={() => {
+                    void directoryController.loadNewer();
+                  }}
+                >
+                  {t('AgentChat.LoadNewerConversations')}
+                </Button>
+              )}
+              {directory.items.map(conversation => (
+                <List.Item
+                  key={conversation.conversationId}
+                  title={conversation.title === DEFAULT_AGENT_DEFINITION_ID ? t('AgentChat.NewConversationTitle') : conversation.title}
+                  titleNumberOfLines={2}
+                  description={conversation.lastMessagePreview || undefined}
+                  descriptionNumberOfLines={1}
+                  left={props => <List.Icon {...props} icon={conversation.conversationId === conversationId ? 'chat' : 'chat-outline'} />}
+                  onPress={() => {
+                    setConversationId(conversation.conversationId);
+                    setHistoryOpen(false);
+                  }}
+                />
+              ))}
+              {directory.hasMoreOlder && (
+                <Button
+                  loading={directory.loadingOlder}
+                  disabled={directory.loadingNewer || directory.loadingOlder}
+                  onPress={() => {
+                    void directoryController.loadOlder();
+                  }}
+                >
+                  {t('AgentChat.LoadOlderConversations')}
+                </Button>
+              )}
+              {directory.error && (
+                <Button
+                  onPress={() => {
+                    void directoryController.refresh();
+                  }}
+                >
+                  {t('AgentChat.RetryConversations')}
+                </Button>
+              )}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setHistoryOpen(false);
+              }}
+            >
+              {t('AgentChat.Close')}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       {localPeerId
         ? (
           <AgentChatSession

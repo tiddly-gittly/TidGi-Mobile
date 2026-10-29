@@ -958,7 +958,9 @@
     "ConversationDirectoryInvalidRequest": "对话请求无效，请点击“重试”后再试。",
     "ConversationDirectoryTooLarge": "对话列表过大，无法显示，请点击“重试”后再试。",
     "RetryConversations": "重试对话",
-    "RetryTurn": "重试回复"
+    "RetryTurn": "重试回复",
+    "Conversations": "对话",
+    "ConversationActions": "对话选项"
   },
   "ScheduledTask": {
     "Title": "智能体计划任务",
