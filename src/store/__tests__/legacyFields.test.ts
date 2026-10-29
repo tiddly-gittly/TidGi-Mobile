@@ -30,10 +30,6 @@ function productionFiles(directory: string): string[] {
   });
 }
 
-function propertyName(node: ts.PropertyName): string | undefined {
-  return ts.isIdentifier(node) || ts.isStringLiteralLike(node) ? node.text : undefined;
-}
-
 function findLegacyReferences(filePath: string): LegacyReference[] {
   const source = readFileSync(filePath, 'utf8');
   const sourceFile = ts.createSourceFile(
@@ -51,17 +47,6 @@ function findLegacyReferences(filePath: string): LegacyReference[] {
     }
     if (ts.isStringLiteralLike(node) && RETIRED_IDENTIFIERS.has(node.text)) {
       references.push({ filePath, kind: 'string literal', name: node.text });
-    }
-    if (ts.isPropertyAssignment(node) && propertyName(node.name) === 'migrate') {
-      references.push({ filePath, kind: 'persist migrate property', name: 'migrate' });
-    }
-    if (
-      ts.isPropertyAssignment(node) &&
-      propertyName(node.name) === 'version' &&
-      ts.isNumericLiteral(node.initializer) &&
-      node.initializer.text === '2'
-    ) {
-      references.push({ filePath, kind: 'persist version literal', name: 'version' });
     }
     ts.forEachChild(node, visit);
   };

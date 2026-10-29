@@ -406,6 +406,12 @@ export const useWorkspaceStore = create<WikiState & WikiActions>()(
       {
         name: 'wiki-storage',
         storage: expoFileSystemStorage,
+        // Version 2 was already persisted by released builds. Removing it
+        // resets Zustand's version to 0 and discards those saved workspaces.
+        version: 2,
+        // Earlier records use the same workspace shape. Keep their IDs, paths,
+        // and sync credentials intact; persist's merge supplies new defaults.
+        migrate: (persistedState: unknown) => persistedState as WikiState & WikiActions,
       },
     ),
   )),
