@@ -48,8 +48,15 @@ describe('AgentChat localization coverage', () => {
     'User',
     'Agent',
     'Waiting',
+    'Working',
+    'CompletedWork',
+    'ToolGroup',
+    'ToolInput',
+    'ToolResult',
+    'ToolInputTruncated',
     'LoadDetails',
     'ReloadDetails',
+    'LoadMoreDetails',
     'NoDetails',
     'Attachment',
     'DetailTruncated',
@@ -133,6 +140,28 @@ describe('AgentChat localization coverage', () => {
   it('does not silently fall back to the English participant label', () => {
     expect(ja.AgentChat.TimelineMoreResponses).not.toBe(en.AgentChat.TimelineMoreResponses);
     expect(zhCN.AgentChat.TimelineMoreResponses).not.toBe(en.AgentChat.TimelineMoreResponses);
+  });
+
+  it.each(
+    [
+      ['en', en, 'Completed work · 3 steps', '2 tool calls'],
+      ['zh_CN', zhCN, '已完成 · 3 步', '2 次工具调用'],
+      ['ja', ja, '完了 · 3 ステップ', '2 回のツール呼び出し'],
+    ] as const,
+  )('%s renders localized work and tool counts without a fallback locale', async (locale, translation, completed, tools) => {
+    const instance = createInstance();
+    await instance.init({
+      fallbackLng: false,
+      lng: locale,
+      resources: { [locale]: { translation } },
+    });
+
+    expect(instance.t('AgentChat.CompletedWork', { steps: 3 })).toBe(completed);
+    expect(instance.t('AgentChat.ToolGroup', { steps: 2 })).toBe(tools);
+    for (const key of ['Working', 'ToolInput', 'ToolResult', 'ToolInputTruncated', 'LoadMoreDetails'] as const) {
+      expect(instance.t(`AgentChat.${key}`)).toBe(translation.AgentChat[key]);
+      if (locale !== 'en') expect(translation.AgentChat[key]).not.toBe(en.AgentChat[key]);
+    }
   });
 
   it.each(
