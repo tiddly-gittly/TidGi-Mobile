@@ -2,18 +2,40 @@ packages:
   - .
   - plugins
 
+overrides:
+  '@memeloop/libp2p': 0.3.5
+  memeloop: 0.3.9
+  '@memeloop/react-ui': 0.2.10
+
 allowBuilds:
-  '@parcel/watcher': true
+  '@ipshipyard/node-datachannel': true
+  '@parcel/watcher': false
+  better-sqlite3: true
   detox: true
-  dprint: true
-  dtrace-provider: true
-  esbuild: true
-  less: true
+  dprint: false
+  dtrace-provider: false
+  esbuild: false
+  less: false
   svelte-preprocess: true
-  unrs-resolver: true
+  unrs-resolver: false
+
+peerDependencyRules:
+  allowedVersions:
+    memeloop: '>=0.3.0'
 
 minimumReleaseAgeExclude:
+  - '@memeloop/react-ui@0.2.10'
+  - '@memeloop/libp2p@0.3.5'
+  - '@memeloop/react-ui@0.2.9'
+  - '@memeloop/libp2p@0.3.4'
+  - '@memeloop/react-ui@0.2.8'
+  - '@memeloop/libp2p@0.3.2 || 0.3.3'
+  - 'memeloop-cli@0.3.5'
+  - 'memeloop@0.3.9'
   - expo-tiddlywiki-filesystem-android-external-storage@2.12.3
+  - '@memeloop/libp2p@0.3.0'
+  - '@memeloop/react-ui@0.2.0 || 0.2.1 || 0.2.2'
+  - memeloop@0.3.0 || 0.3.1
 
 onlyBuiltDependencies:
   - '@parcel/watcher'

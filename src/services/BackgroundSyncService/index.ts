@@ -330,14 +330,6 @@ export class GitBackgroundSyncService {
   }
 
   /**
-   * Get online server for workspace (public method for UI)
-   * Returns first online server for compatibility
-   */
-  public getOnlineServerForWiki(workspace: IWikiWorkspace): IServerInfo | undefined {
-    return this.getOnlineServerForWorkspace(workspace);
-  }
-
-  /**
    * Sync workspace with specific server (public method for UI)
    */
   public async syncWikiWithServer(workspace: IWikiWorkspace, server: IServerInfo): Promise<IWikiSyncResult> {
@@ -371,23 +363,6 @@ export class GitBackgroundSyncService {
       console.error('Failed to get change logs:', error);
       return [];
     }
-  }
-
-  /**
-   * Get first online server for workspace (for backward compatibility)
-   */
-  private getOnlineServerForWorkspace(workspace: IWikiWorkspace): IServerInfo | undefined {
-    const servers = this.#serverStore.getState().servers;
-    const syncConfigurationWorkspace = getSyncConfigurationWorkspace(workspace, this.#workspaceStore.getState().workspaces);
-
-    for (const syncedServer of syncConfigurationWorkspace.syncedServers) {
-      const server = servers[syncedServer.serverID] as IServerInfo | undefined;
-      if (server !== undefined && server.status === ServerStatus.online) {
-        return server;
-      }
-    }
-
-    return undefined;
   }
 
   /**
@@ -547,7 +522,7 @@ export class GitBackgroundSyncService {
     if (needsPush) {
       workspaceLogger.log('Pushing to mobile-incoming', {
         baseUrl: remote.baseUrl,
-        remoteWorkspaceId: remote.workspaceId,
+        workspaceId: remote.workspaceId,
         serverId: server.id,
         hasLocalChanges,
         aheadCount,
@@ -692,14 +667,9 @@ export class GitBackgroundSyncService {
       console.log(`No authentication configured for workspace ${workspace.name} and server ${server.id}; using anonymous access`);
     }
 
-    const legacyRemoteWorkspaceId = (resolvedSyncedServer as unknown as { remoteWorkspaceId?: string }).remoteWorkspaceId;
-    const workspaceId = typeof legacyRemoteWorkspaceId === 'string' && legacyRemoteWorkspaceId.length > 0
-      ? legacyRemoteWorkspaceId
-      : workspace.id;
-
     return {
       baseUrl: server.uri,
-      workspaceId,
+      workspaceId: workspace.id,
       token,
       tokenAuthHeaderName,
       tokenAuthHeaderValue,
@@ -745,4 +715,3 @@ export class GitBackgroundSyncService {
 }
 
 export const gitBackgroundSyncService = new GitBackgroundSyncService();
-export const backgroundSyncService = gitBackgroundSyncService; // Alias for compatibility

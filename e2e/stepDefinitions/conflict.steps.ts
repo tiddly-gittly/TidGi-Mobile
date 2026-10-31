@@ -20,7 +20,7 @@
 
 import { Given, Then, When } from '@cucumber/cucumber';
 import { execFileSync, execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, watch, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { getMockServerWikiPath } from '../mock-server/setup';
@@ -90,18 +90,80 @@ function getDesktopHead(): string {
 }
 
 /**
+ * Resolve when git's observable ref/log files report a new HEAD. This keeps
+ * conflict tests event-driven instead of sleeping for a guessed watcher delay.
+ */
+async function waitForGitHeadChange(
+  repositoryPath: string,
+  previousHead: string,
+  readHead: () => string,
+  timeoutMs: number,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const watchers: Array<{ close: () => void }> = [];
+    const timeout = setTimeout(() => finish(undefined), timeoutMs);
+
+    const finish = (head: string | undefined): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      for (const watcher of watchers) watcher.close();
+      resolve(head);
+    };
+
+    const check = (): void => {
+      try {
+        const head = readHead();
+        if (head !== previousHead) finish(head);
+      } catch (error) {
+        console.error('[conflict] Failed to inspect git HEAD while waiting for watcher', error);
+      }
+    };
+
+    const gitDirectory = join(repositoryPath, '.git');
+    const watchTargets = [
+      join(gitDirectory, 'HEAD'),
+      join(gitDirectory, 'index'),
+      join(gitDirectory, 'logs', 'HEAD'),
+      join(gitDirectory, 'refs', 'heads'),
+    ];
+    for (const target of watchTargets) {
+      if (!existsSync(target)) continue;
+      try {
+        const watcher = watch(target, { persistent: false }, check);
+        watcher.on('error', (error) => {
+          console.error(`[conflict] Git watcher failed for ${target}`, error);
+        });
+        watchers.push(watcher);
+      } catch (error) {
+        console.error(`[conflict] Failed to watch git path ${target}`, error);
+      }
+    }
+
+    check();
+    // A platform may not expose all git ref paths to fs.watch. Yield to the
+    // event loop until the deadline in that case, without a fixed sleep.
+    if (watchers.length === 0) {
+      const retry = (): void => {
+        if (settled) return;
+        check();
+        if (!settled) setImmediate(retry);
+      };
+      setImmediate(retry);
+    }
+  });
+}
+
+/**
  * Wait for a new commit to appear in the desktop wiki repo (file-watcher auto-commit).
  * If no new commit appears within timeoutMs, falls back to an explicit git commit.
  */
 async function waitForDesktopCommit(previousHead: string, timeoutMs = 20_000): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const head = getDesktopHead();
-    if (head !== previousHead) {
-      console.log(`[conflict] Desktop auto-committed: ${head.slice(0, 8)}`);
-      return head;
-    }
-    await new Promise<void>(resolve => setTimeout(resolve, 800));
+  const changedHead = await waitForGitHeadChange(DESKTOP_WIKI_PATH, previousHead, getDesktopHead, timeoutMs);
+  if (changedHead !== undefined) {
+    console.log(`[conflict] Desktop auto-committed: ${changedHead.slice(0, 8)}`);
+    return changedHead;
   }
 
   // File-watcher didn't commit within the timeout — commit manually.
@@ -272,8 +334,8 @@ When(
       `[conflict] Mobile wrote "${tiddlerFilename}" with modified: ${mobileModifiedTimestamp}, appended: "${appendLine}"`,
     );
 
-    // Give the app's filesystem watcher a moment to notice the new file.
-    await new Promise<void>(resolve => setTimeout(resolve, 1_500));
+    // The subsequent sync action observes the filesystem through the normal
+    // app path; no guessed watcher delay is needed here.
   },
 );
 
@@ -345,14 +407,10 @@ function getMockServerHead(): string {
 }
 
 async function waitForMockServerCommit(previousHead: string, timeoutMs = 20_000): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const head = getMockServerHead();
-    if (head !== previousHead) {
-      console.log(`[conflict] Mock server auto-committed: ${head.slice(0, 8)}`);
-      return head;
-    }
-    await new Promise<void>(resolve => setTimeout(resolve, 800));
+  const changedHead = await waitForGitHeadChange(MOCK_SERVER_WIKI_PATH, previousHead, getMockServerHead, timeoutMs);
+  if (changedHead !== undefined) {
+    console.log(`[conflict] Mock server auto-committed: ${changedHead.slice(0, 8)}`);
+    return changedHead;
   }
   console.log('[conflict] Mock server file-watcher did not commit; committing manually...');
   try {

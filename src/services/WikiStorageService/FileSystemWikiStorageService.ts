@@ -145,8 +145,8 @@ export class FileSystemWikiStorageService {
         // Try native batch parsing first — a single bridge call that parses all
         // files in parallel using Java ForkJoinPool, ~100x faster than per-file
         // JS reads through the bridge.
-        const nativeBatchParser = Platform.OS === 'android'
-          ? (ExternalStorage as unknown as Record<string, unknown>).batchParseTidFiles as ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined
+        const nativeBatchParser = Platform.OS === 'android' && typeof ExternalStorage.batchParseTidFiles === 'function'
+          ? ExternalStorage.batchParseTidFiles.bind(ExternalStorage)
           : undefined;
 
         for (const workspace of workspaces) {
@@ -199,32 +199,53 @@ export class FileSystemWikiStorageService {
       for (let index = 0; index < absolutePaths.length; index += BATCH_SIZE) {
         const batch = absolutePaths.slice(index, index + BATCH_SIZE);
         const jsonString = await batchParser(batch, true);
-        const tiddlers = JSON.parse(jsonString) as Array<{ title?: string; _filepath?: string; [key: string]: unknown }>;
-        for (let index = 0; index < tiddlers.length; index++) {
-          const title = tiddlers[index].title;
-          if (typeof title === 'string' && title.length > 0) {
-            // Use _filepath from the native result (authoritative) as the primary source,
-            // fall back to batch[index] for backward compatibility with older native modules
-            // that don't include _filepath in the result.
-            const plainPath: string = (typeof tiddlers[index]._filepath === 'string' && tiddlers[index]._filepath!.length > 0)
-              ? tiddlers[index]._filepath!
-              : batch[index];
-            const isMetaFile = plainPath.endsWith('.meta');
-            // For .meta companions, register the body file path, not the .meta file.
-            const bodyPlainPath = isMetaFile ? getBodyFilePathFromMetaPath(plainPath) : plainPath;
-            // Store file:// URI for internal paths so ensureDirectory / File() work
-            const storedPath = isExternal ? bodyPlainPath : `file://${bodyPlainPath}`;
-            this.#tiddlerFilePathByTitle.set(title, storedPath);
-            this.#titleByFilePath.set(bodyPlainPath, title);
-            // Also map the .meta path so metadata-only changes are detected.
-            if (isMetaFile) {
-              this.#titleByFilePath.set(plainPath, title);
-            }
+        const parsed = JSON.parse(jsonString) as unknown;
+        if (!Array.isArray(parsed)) throw new Error('native batch parser returned a non-array result');
+        const tiddlers = parsed as unknown[];
+        if (tiddlers.length !== batch.length && tiddlers.some(tiddler =>
+          !isNativeTiddlerRecord(tiddler) || typeof tiddler._filepath !== 'string',
+        )) {
+          throw new Error(`native batch parser result count ${tiddlers.length} does not match input count ${batch.length}`);
+        }
+        for (let resultIndex = 0; resultIndex < tiddlers.length; resultIndex++) {
+          const tiddler = tiddlers[resultIndex];
+          if (!isNativeTiddlerRecord(tiddler)) {
+            throw new Error(`native batch parser returned an invalid tiddler at index ${resultIndex}`);
+          }
+          const title = tiddler.title;
+          if (typeof title !== 'string' || title.length === 0) {
+            throw new Error(`native batch parser returned a tiddler without a title at index ${resultIndex}`);
+          }
+
+          // Current native modules tag each result with its source path. Older
+          // modules preserved input ordering but omitted `_filepath`; use the
+          // corresponding batch entry only when that fallback exists.
+          const taggedPath = typeof tiddler._filepath === 'string' && tiddler._filepath.length > 0
+            ? tiddler._filepath
+            : batch[resultIndex];
+          if (typeof taggedPath !== 'string' || taggedPath.length === 0) {
+            throw new Error(`native batch parser omitted source path at index ${resultIndex}`);
+          }
+          const plainPath = toPlainPath(taggedPath);
+          if (!plainPath.startsWith('/')) {
+            throw new Error(`native batch parser returned a non-absolute source path at index ${resultIndex}`);
+          }
+          const isMetaFile = plainPath.endsWith('.meta');
+          // For .meta companions, register the body file path, not the .meta file.
+          const bodyPlainPath = isMetaFile ? getBodyFilePathFromMetaPath(plainPath) : plainPath;
+          // Store file:// URI for internal paths so ensureDirectory / File() work
+          const storedPath = isExternal ? bodyPlainPath : `file://${bodyPlainPath}`;
+          this.#tiddlerFilePathByTitle.set(title, storedPath);
+          this.#titleByFilePath.set(bodyPlainPath, title);
+          // Also map the .meta path so metadata-only changes are detected.
+          if (isMetaFile) {
+            this.#titleByFilePath.set(plainPath, title);
           }
         }
       }
     } catch (error) {
       console.warn(`buildFileIndex (native): failed to scan ${plainFolderPath}: ${(error as Error).message}`);
+      throw error;
     }
   }
 
@@ -266,7 +287,9 @@ export class FileSystemWikiStorageService {
           this.#titleByFilePath.set(toPlainPath(filePath), title);
         }
       }
-    } catch { /* skip unreadable files */ }
+    } catch (error) {
+      this.#logger.warn(`buildFileIndex: skipped unreadable tiddler file ${filePath}`, error);
+    }
   }
 
   /**
@@ -887,5 +910,6 @@ export class FileSystemWikiStorageService {
   }
 }
 
-// Export alias for compatibility
-export { FileSystemWikiStorageService as WikiStorageService };
+function isNativeTiddlerRecord(value: unknown): value is { title?: unknown; _filepath?: unknown } {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}

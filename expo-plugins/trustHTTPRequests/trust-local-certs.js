@@ -35,6 +35,9 @@ async function setCustomConfigAsync(config, androidManifest) {
 
   const mainApplication = getMainApplicationOrThrow(androidManifest);
   mainApplication.$['android:networkSecurityConfig'] = '@xml/network_security_config';
+  // Direct MemeLoop pairing may use ws:// on private LAN addresses. The
+  // TypeScript pairing policy rejects public cleartext endpoints.
+  mainApplication.$['android:usesCleartextTraffic'] = 'true';
 
   return androidManifest;
 }

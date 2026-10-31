@@ -374,8 +374,8 @@ async function dismissExpoOverlays(initialWaitMs = 40_000) {
     } catch {
       // Ignore — pressBack can fail if the app is mid-transition.
     }
-    // Brief pause for the dismissal animation, then check.
-    await new Promise(resolve => setTimeout(resolve, 2_000));
+    // Check the observable main-menu state; Detox waits through any dismissal
+    // animation before resolving this assertion.
     if (await isMainMenuVisible(5_000)) return;
   }
 
@@ -522,7 +522,9 @@ Before({ timeout: 120_000 }, async (message: ITestCaseHookParameter) => {
     url: EXPO_DEV_CLIENT_URL,
     launchArgs: getDetoxLaunchArguments(),
   });
-  await device.disableSynchronization().catch(() => {});
+  await device.disableSynchronization().catch((error) => {
+    console.error('[E2E] disableSynchronization cleanup failed', error);
+  });
   await dismissExpoOverlays(15_000);
   await waitFor(element(by.id(MAIN_MENU_ID)))
     .toBeVisible()
