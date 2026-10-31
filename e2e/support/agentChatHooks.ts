@@ -23,6 +23,7 @@ Before({ timeout: 90_000 }, async ({ pickle }) => {
 
 Given('the app has launched', async () => {
   await waitFor(element(by.label('Agent'))).toBeVisible().withTimeout(30_000);
+  await device.enableSynchronization();
 });
 
 After(async ({ pickle, result }) => {
