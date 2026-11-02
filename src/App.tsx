@@ -14,6 +14,8 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { styled, ThemeProvider } from 'styled-components/native';
 import { useShallow } from 'zustand/react/shallow';
 import { darkTheme, lightTheme } from './constants/theme';
+import { AgentChat } from './pages/AgentChat';
+import { AgentSchedule } from './pages/AgentSchedule';
 import { Config } from './pages/Config';
 import { CreateWorkspace } from './pages/CreateWorkspace/Index';
 import { PreviewWebView, type PreviewWebViewProps } from './pages/CreateWorkspace/PreviewWebView';
@@ -45,13 +47,16 @@ const AppSafeArea = styled(SafeAreaView)`
   flex: 1;
 `;
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
+import { initializeDeviceNetworkRuntime } from './services/DeviceNetworkService/runtime';
 import { initializeMobileLogger } from './services/LoggerService';
 import { useRegisterReceivingShareIntent } from './services/NativeService/hooks';
 import { useConfigStore } from './store/config';
 import { navigationReference } from './utils/RootNavigation';
 
 export type RootStackParameterList = {
-  Config: undefined;
+  AgentChat: undefined;
+  AgentSchedule: { conversationId: string };
+  Config: { focusField?: 'access-token' | 'api-key' | 'api-mode' | 'base-url' | 'cloud-url' | 'model'; focusItem?: string } | undefined;
   CreateWorkspace: undefined;
   Importer: ImporterProps;
   MainMenu: MainMenuProps | undefined;
@@ -85,8 +90,22 @@ export const App: React.FC = () => {
     initializeMobileLogger();
     const cleanupAnalytics = initializeMobileAnalytics();
     void trackMobileAppLaunch();
+    let cleanupDeviceNetwork: (() => void) | undefined;
+    let disposed = false;
+    void initializeDeviceNetworkRuntime()
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else cleanupDeviceNetwork = cleanup;
+      })
+      .catch((error: unknown) => {
+        console.warn('[DeviceNetwork] failed to initialize', error);
+      });
 
-    return cleanupAnalytics;
+    return () => {
+      disposed = true;
+      cleanupDeviceNetwork?.();
+      cleanupAnalytics();
+    };
   }, []);
 
   return (
@@ -136,6 +155,22 @@ export const App: React.FC = () => {
                           }}
                         />
                       ),
+                    })}
+                  />
+                  <Stack.Screen
+                    name='AgentChat'
+                    component={AgentChat}
+                    options={() => ({
+                      headerTitle: 'Agent',
+                      headerTitleStyle: { color: theme.colors.primary },
+                    })}
+                  />
+                  <Stack.Screen
+                    name='AgentSchedule'
+                    component={AgentSchedule}
+                    options={() => ({
+                      headerTitle: t('ScheduledTask.Title'),
+                      headerTitleStyle: { color: theme.colors.primary },
                     })}
                   />
                   <Stack.Screen

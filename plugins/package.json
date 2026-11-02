@@ -1,4 +1,6 @@
 {
+  "name": "tidgi-mobile-plugins",
+  "private": true,
   "license": "MIT",
   "version": "0.0.2",
   "scripts": {

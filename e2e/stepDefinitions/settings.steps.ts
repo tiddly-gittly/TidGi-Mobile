@@ -55,6 +55,23 @@ async function scrollConfigUntilVisible(text: string) {
     .withTimeout(5_000);
 }
 
+async function scrollConfigUntilTestIdIsVisible(testID: string) {
+  for (let index = 0; index < 15; index++) {
+    try {
+      await waitFor(element(by.id(testID)))
+        .toBeVisible()
+        .withTimeout(600);
+      return;
+    } catch {
+      try {
+        execSync('adb shell input swipe 540 1800 540 1000 300', { stdio: 'ignore', timeout: 3_000 });
+      } catch { /* non-fatal */ }
+      await delay(800);
+    }
+  }
+  await waitForElement(by.id(testID), 5_000, testID, 'visible');
+}
+
 // ── State for toggle-change assertions ───────────────────────────────────────
 
 let translucentSwitchWasChecked: boolean | null = null;
@@ -167,6 +184,20 @@ Then('I should see the language section header', async () => {
   await waitFor(element(by.text('语言/Lang')))
     .toBeVisible()
     .withTimeout(UI_TIMEOUT);
+});
+
+// ── MemeLoop device network ─────────────────────────────────────────────────
+
+Then('I should see the local MemeLoop device identity', async () => {
+  await scrollConfigUntilTestIdIsVisible('device-network-local-device');
+});
+
+Then('I should see the signed MemeLoop pairing invite action', async () => {
+  await scrollConfigUntilTestIdIsVisible('device-network-generate-pairing-invite');
+});
+
+Then('I should see the MemeLoop pairing scanner entry', async () => {
+  await scrollConfigUntilTestIdIsVisible('device-network-pairing-invite-scanner');
 });
 
 When(/^I clear and type "([^"]*)" into the username field$/, async (text: string) => {

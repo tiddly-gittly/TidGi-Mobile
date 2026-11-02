@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useMergedReference } from 'react-native-postmessage-cat';
+import type { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { IWikiWorkspace } from '../store/workspace';
 import { AppDataServiceIPCDescriptor } from './AppDataService/descriptor';
 import { useAppDataService } from './AppDataService/hooks';
@@ -26,6 +27,9 @@ var wikiHookService = window.PostMessageCat(${JSON.stringify(WikiHookServiceIPCD
 window.service.wikiHookService = wikiHookService;
 `;
 
+type WebViewReference = { current: WebView | null };
+type OnMessageReference = { current: (event: WebViewMessageEvent) => void };
+
 export function useRegisterService(workspace: IWikiWorkspace) {
   const [wikiStorageServiceWebViewReference, wikiStorageServiceOnMessageReference, wikiStorageService] = useWikiStorageService(workspace);
   const [backgroundSyncServiceWebViewReference, backgroundSyncServiceOnMessageReference] = useBackgroundSyncService();
@@ -33,7 +37,7 @@ export function useRegisterService(workspace: IWikiWorkspace) {
   const [appDataServiceWebViewReference, appDataServiceOnMessageReference] = useAppDataService();
   const [wikiHookServiceWebViewReference, wikiHookServiceOnMessageReference, wikiHookService] = useWikiHookService(workspace);
 
-  const mergedWebViewReference = useMergedReference(
+  const mergedWebViewReference = useMergedReference<WebViewReference>(
     wikiStorageServiceWebViewReference,
     backgroundSyncServiceWebViewReference,
     nativeServiceWebViewReference,
@@ -41,7 +45,7 @@ export function useRegisterService(workspace: IWikiWorkspace) {
     wikiHookServiceWebViewReference,
   );
 
-  const mergedOnMessageReference = useMergedReference(
+  const mergedOnMessageReference = useMergedReference<OnMessageReference>(
     wikiStorageServiceOnMessageReference,
     backgroundSyncServiceOnMessageReference,
     nativeServiceOnMessageReference,

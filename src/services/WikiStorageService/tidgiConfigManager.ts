@@ -193,26 +193,3 @@ export async function syncWorkspaceToConfig(workspace: IWikiWorkspace): Promise<
 
   await writeTidgiConfig(workspace, updates);
 }
-
-// Alias exports for compatibility with UI components
-export { readTidgiConfig as getTidgiConfig };
-export async function saveTidgiConfig(wikiFolderPath: string, config: ITidgiConfig): Promise<void> {
-  try {
-    const configPath = `${wikiFolderPath}/tidgi.config.json`;
-
-    // Read existing config to preserve unknown fields
-    let existingConfig: Record<string, unknown> = {};
-    if (await fileExists(configPath)) {
-      const existingContent = await readTextFile(configPath);
-      existingConfig = JSON.parse(existingContent) as Record<string, unknown>;
-    }
-
-    // Merge new config with existing, preserving unknown fields
-    const mergedConfig = { ...existingConfig, version: 1, ...config };
-    const content = JSON.stringify(mergedConfig, null, 2);
-    await writeTextFile(configPath, content);
-  } catch (error) {
-    console.error(`Failed to save tidgi.config.json: ${(error as Error).message}`);
-    throw error;
-  }
-}

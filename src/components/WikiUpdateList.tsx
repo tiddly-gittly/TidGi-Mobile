@@ -85,7 +85,7 @@ const ChangeDetailsModal: React.FC<{
                 })}
               </ScrollableContent>
             )
-            : <Text>No details available</Text>}
+            : <Text>{i18n.t('WikiUpdate.NoDetails')}</Text>}
         </Card.Content>
         <Card.Actions>
           <Button onPress={onDismiss}>{i18n.t('Close')}</Button>
