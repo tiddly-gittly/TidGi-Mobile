@@ -5,6 +5,9 @@ jest.mock('expo-file-system', () => ({
   Paths: { document: {} },
 }));
 jest.mock('expo-sqlite', () => ({ openDatabaseAsync: jest.fn() }));
+jest.mock('react-native', () => ({
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: jest.fn() }) },
+}));
 jest.mock('expo-crypto', () => {
   const { randomFillSync, randomUUID, webcrypto } = jest.requireActual<typeof import('node:crypto')>('node:crypto');
   return {
@@ -80,6 +83,81 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
       if (connection.open) connection.close();
     }
     openTestDatabases.clear();
+  });
+
+  it('continues a persisted local goal after orderly runtime replacement and finishes through the actual goal tool', async () => {
+    installMobileCrypto();
+    const storage = new MobileAgentStorage(() => Promise.resolve(testDatabase()));
+    const conversationId = 'goal-restart-conversation';
+    await storage.appendLocalEvent({
+      conversationId,
+      eventId: 'goal-restart-meta',
+      kind: 'metadataPatch',
+      originNodeId: 'phone-peer',
+      timestamp: 1,
+      patch: { definitionId: 'memeloop:general-assistant', isUserInitiated: true },
+    });
+    let requests = 0;
+    const provider: ILLMProvider = {
+      name: 'test-provider',
+      async *chat(request): AsyncIterable<PortableLlmStreamPart> {
+        requests += 1;
+        expect(JSON.stringify(request.tools)).toContain('"goal"');
+        if (requests === 1) {
+          yield { type: 'text-delta', id: 'progress', text: 'First goal round started' };
+          await new Promise<void>(resolve => {
+            if (request.signal?.aborted) resolve();
+            else {request.signal?.addEventListener('abort', () => {
+                resolve();
+              }, { once: true });}
+          });
+          request.signal?.throwIfAborted();
+        } else if (requests === 2) {
+          yield {
+            type: 'tool-call',
+            toolCallId: 'finish-mobile-goal',
+            toolName: 'goal',
+            input: { action: 'complete', evidence: 'Verified the restored local goal and saved its result.' },
+          };
+          yield { type: 'finish', finishReason: 'tool-calls' };
+          return;
+        } else {
+          yield { type: 'text-delta', id: 'done', text: 'MOBILE_LOCAL_GOAL_COMPLETED' };
+        }
+        yield { type: 'finish', finishReason: 'stop' };
+      },
+    };
+    let sequence = 0;
+    const createService = () => new MobileAgentLoopService(provider, 'phone-peer', storage, namespace => `${namespace}:goal-${++sequence}`);
+    const first = createService();
+    await first.goals.start({ conversationId, definitionId: 'memeloop:general-assistant', objective: 'Keep the objective across restart.' });
+    const waitFor = async (predicate: () => Promise<boolean>) => {
+      const deadline = Date.now() + 5000;
+      while (!await predicate()) {
+        if (Date.now() >= deadline) throw new Error('local goal acceptance timed out');
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    };
+    await waitFor(() => Promise.resolve(requests === 1));
+    await first.shutdown();
+    expect(await storage.goals.get(conversationId)).toMatchObject({ status: 'active', objective: 'Keep the objective across restart.' });
+    expect((await storage.goals.get(conversationId))?.pendingRound).toBeUndefined();
+    const second = createService();
+    try {
+      await second.initializeGoals();
+      await waitFor(async () => {
+        const page = await storage.getMessagePage(conversationId, { limit: 50, maxBytes: 262_144 });
+        return 'items' in page && page.items.some(item => item.content === 'MOBILE_LOCAL_GOAL_COMPLETED');
+      });
+      expect(await second.goals.get(conversationId)).toMatchObject({
+        status: 'completed',
+        round: 2,
+        objective: 'Keep the objective across restart.',
+        evidence: 'Verified the restored local goal and saved its result.',
+      });
+    } finally {
+      await second.shutdown();
+    }
   });
 
   it('uses canonical conversation model and framework overrides in preview and actual execution', async () => {

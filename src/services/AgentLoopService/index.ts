@@ -21,6 +21,7 @@ import {
   assertAgentModelConfig,
   createMemeLoopRuntime,
   getBuiltinLoopProfiles,
+  GoalCoordinator,
   prepareAgentExecutionModelRequest,
   resolveAgentModelConfig,
 } from 'memeloop/mobile';
@@ -29,6 +30,7 @@ import { EMBEDDED_MODEL_CATALOG } from 'memeloop/model-catalog';
 import { type MobileAgentStorage, mobileAgentStorage } from '../AgentStorageService';
 import { mobileSha256Hex } from '../MobileCryptoService';
 import { createSecureDurableId, type DurableIdFactory } from '../SecureIdService';
+import { initializeMobileGoalLifecycle } from './goalLifecycle';
 
 export interface SendMessageResult {
   messages: ChatMessage[];
@@ -125,6 +127,7 @@ function terminalState(state: string): state is 'cancelled' | 'completed' | 'fai
 }
 
 export class MobileAgentLoopService {
+  public readonly goals: GoalCoordinator;
   private readonly localNodeId: string;
   private readonly idFactory: DurableIdFactory;
   private readonly runtime: MemeLoopRuntime;
@@ -146,6 +149,8 @@ export class MobileAgentLoopService {
   private shutdownRequested = false;
   private shutdownPromise: Promise<void> | undefined;
   private shutdownCompleted = false;
+  private goalLifecycle?: () => void;
+  private goalInitialization?: Promise<void>;
 
   public constructor(
     llmProvider: ILLMProvider,
@@ -168,7 +173,17 @@ export class MobileAgentLoopService {
       name: modelRoute.providerId,
       models: [{ modelId: modelRoute.modelId, wireModelId: modelRoute.wireModelId, apiMode: modelRoute.apiMode }],
     } as const;
+    this.goals = new GoalCoordinator({
+      store: storage.goals,
+      executionNodeId: this.localNodeId,
+      idFactory: () => this.idFactory('mobile-agent-goal'),
+      getRuntime: () => Promise.resolve(this.runtime),
+      onError: error => {
+        console.warn('[MobileAgentLoop] Goal continuation failed', error);
+      },
+    });
     const context: AgentFrameworkContext = {
+      goals: this.goals,
       storage,
       todoStore: storage,
       localNodeId: this.localNodeId,
@@ -264,6 +279,15 @@ export class MobileAgentLoopService {
     this.frameworkContext = context;
   }
 
+  public initializeGoals(): Promise<void> {
+    this.goalInitialization ??= initializeMobileGoalLifecycle(this.goals, error => {
+      console.warn('[MobileAgentLoop] Goal foreground recovery failed', error);
+    }).then(dispose => {
+      this.goalLifecycle = dispose;
+    });
+    return this.goalInitialization;
+  }
+
   public preparePromptPreview(conversationId: string, inputText: string | undefined, signal: AbortSignal) {
     return prepareAgentExecutionModelRequest(this.frameworkContext, { conversationId, inputText, signal, stream: false });
   }
@@ -338,6 +362,11 @@ export class MobileAgentLoopService {
   }
 
   public async cancel(conversationId: string): Promise<void> {
+    await this.goals.pauseConversation(conversationId);
+    await this.cancelCurrentRun(conversationId);
+  }
+
+  private async cancelCurrentRun(conversationId: string): Promise<void> {
     const active = this.activeRuns.get(conversationId);
     if (active) {
       await this.cancelActiveRun(active, new Error('agent_run_cancelled'));
@@ -531,7 +560,7 @@ export class MobileAgentLoopService {
   ): Promise<SendMessageResult> {
     signal?.throwIfAborted();
     if (this.isShuttingDown()) throw new Error('mobile_agent_runtime_shutting_down');
-    await this.cancel(conversationId);
+    await this.cancelCurrentRun(conversationId);
     signal?.throwIfAborted();
     if (this.isShuttingDown()) throw new Error('mobile_agent_runtime_shutting_down');
     const turnMessages: ChatMessage[] = [];
@@ -658,6 +687,8 @@ export class MobileAgentLoopService {
   }
 
   private async performShutdown(): Promise<void> {
+    this.goalLifecycle?.();
+    await this.goals.suspend();
     const reason = new Error('agent_runtime_reconfigured');
     // A runtime start may not have returned its run handle yet. Wait for those
     // starts before detaching subscriptions so a late handle cannot escape the
@@ -686,6 +717,7 @@ export class MobileAgentLoopService {
       throw new AggregateError(failures, 'mobile_agent_shutdown_cancel_failed');
     }
 
+    await this.runtime.dispose();
     for (const unsubscribe of this.progressSubscriptions.values()) unsubscribe();
     this.progressSubscriptions.clear();
     this.onMessageCallbacks.clear();
@@ -730,6 +762,12 @@ export function getMobileAgentLoopService(
       if (singleton?.service === previous) singleton = undefined;
     }
     const service = create();
+    try {
+      await service.initializeGoals();
+    } catch (error) {
+      await service.shutdown();
+      throw error;
+    }
     singleton = { configurationIdentity, service };
     return service;
   });

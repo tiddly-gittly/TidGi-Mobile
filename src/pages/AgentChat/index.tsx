@@ -1,10 +1,11 @@
-import { createOpenAI } from '@ai-sdk/openai';
 import {
   AgentSessionProvider,
   ConversationTimelineWindowController,
   createAgentRunLogDetailLoader,
+  getGoalPanelLabels,
   type MemeLoopChatAdapter,
   NativeAgentChatView,
+  NativeGoalDialog,
   type NativeMemeLoopSendMessageInput,
   useAgentSession,
   useAgentSessionCoreAdapter,
@@ -16,25 +17,24 @@ import {
   agentRunErrorFromUnknown,
   AgentRunFailure,
   AgentSessionController,
-  type ConversationBranchState,
   type ConversationMessageListProjection,
   createAgentDeviceRpcClient,
   createConversationEditingAdapter,
-  createMissingProviderSettingAgentRunError,
   type Device,
+  type GoalClient,
   type RemoteAgentExecutionTarget,
 } from 'memeloop/mobile';
-import { createFetchLLMProvider } from 'memeloop/mobile/providers';
 import { type FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Dialog, IconButton, List, Menu, Portal, useTheme } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { RootStackParameterList } from '../../App';
-import { getMobileAgentLoopService, MobileAgentLoopService, observeActiveMobileAgentMessages } from '../../services/AgentLoopService';
+import { type MobileAgentLoopService, observeActiveMobileAgentMessages } from '../../services/AgentLoopService';
+import { getConfiguredMobileAgentLoopService } from '../../services/AgentLoopService/configuredRuntime';
 import { mobileAgentStorage } from '../../services/AgentStorageService';
 import { deviceNetworkService } from '../../services/DeviceNetworkService';
-import { loadExternalAPIConfig } from '../../services/ExternalAPIService/config';
 import { createSecureDurableId } from '../../services/SecureIdService';
 import { navigationReference } from '../../utils/RootNavigation';
 import { createMobileAgentSessionClients, startMobileAgentSession } from './agentSessionClients';
@@ -51,6 +51,7 @@ import { resolveMobileAgentErrorPresentation } from './errorPresentation';
 import { formatMobileTimelineTimestamp } from './localizedFormatting';
 import { exportStoredMessage } from './messageExport';
 import { mobileExecutionTarget, MobileRemoteExecutionAdapter } from './remoteExecutionAdapter';
+import { useConversationBranches } from './useConversationBranches';
 
 const LOCAL_EXECUTION_TARGET_ID = 'local';
 const REMOTE_EXECUTION_TARGET_PREFIX = 'peer:';
@@ -82,43 +83,7 @@ function safeAgentFailure(error: unknown): AgentRunFailure {
 function useMobileLoopService() {
   const activeServiceReference = useRef<MobileAgentLoopService | undefined>(undefined);
   const getLoopService = useCallback(async (): Promise<MobileAgentLoopService> => {
-    const identity = await deviceNetworkService.getLocalIdentity();
-    const connection = await loadExternalAPIConfig();
-    if (!connection) {
-      throw new AgentRunFailure(createMissingProviderSettingAgentRunError({
-        providerId: 'selected',
-        field: 'apiKey',
-      }));
-    }
-    const openai = createOpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey });
-    const provider = createFetchLLMProvider({
-      name: connection.providerId,
-      modelId: connection.modelId,
-      apiMode: connection.apiMode,
-      createModel: requestedModelId => {
-        const modelId = requestedModelId ?? connection.wireModelId;
-        return connection.apiMode === 'responses' ? openai.responses(modelId) : openai.chat(modelId);
-      },
-    });
-    const configurationIdentity = JSON.stringify([
-      identity.peerId,
-      connection.providerId,
-      connection.modelId,
-      connection.wireModelId,
-      connection.apiMode,
-      connection.baseURL,
-      connection.apiKey,
-    ]);
-    const service = await getMobileAgentLoopService(
-      configurationIdentity,
-      () =>
-        new MobileAgentLoopService(provider, identity.peerId, mobileAgentStorage, createSecureDurableId, {
-          apiMode: connection.apiMode,
-          modelId: connection.modelId,
-          wireModelId: connection.wireModelId,
-          providerId: connection.providerId,
-        }),
-    );
+    const service = await getConfiguredMobileAgentLoopService();
     activeServiceReference.current = service;
     return service;
   }, []);
@@ -265,7 +230,10 @@ function AgentChatSessionView({
   getLoopService,
 }: AgentChatSessionViewProps) {
   const { i18n, t } = useTranslation();
-  const { controller } = useAgentSession();
+  const { controller, snapshot } = useAgentSession();
+  const goalLabels = getGoalPanelLabels(i18n.language);
+  const insets = useSafeAreaInsets();
+  const [goalOpen, setGoalOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [settingsMode, setSettingsMode] = useState<'prompt' | 'parameters'>();
   const [openingMain, setOpeningMain] = useState(false);
@@ -274,6 +242,14 @@ function AgentChatSessionView({
     activeExecutionTargetId.startsWith(REMOTE_EXECUTION_TARGET_PREFIX)
       ? remoteClient(activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length))
       : undefined, [activeExecutionTargetId, remoteClient]);
+  const goalClient = useMemo<GoalClient>(() =>
+    settingsClient?.goals ?? ({
+      get: async id => (await getLoopService()).goals.get(id),
+      start: async input => (await getLoopService()).goals.start(input),
+      pause: async input => (await getLoopService()).goals.pause(input),
+      resume: async input => (await getLoopService()).goals.resume(input),
+      complete: async input => (await getLoopService()).goals.complete(input),
+    }), [settingsClient, getLoopService]);
   const subscribeToExecution = useCallback((listener: () => void) => executionAdapter.subscribe(conversationId, listener), [conversationId, executionAdapter]);
   const getExecutionSnapshot = useCallback(() => executionAdapter.getSnapshot(conversationId), [conversationId, executionAdapter]);
   const executionSnapshot = useSyncExternalStore(subscribeToExecution, getExecutionSnapshot, getExecutionSnapshot);
@@ -334,20 +310,13 @@ function AgentChatSessionView({
     loadMessageDetail,
     prepareSendMessage: prepareMobileSendMessage,
   });
-  const [branches, setBranches] = useState<ConversationBranchState[]>([]);
-  useEffect(() => {
-    let active = true;
-    void mobileAgentStorage.getConversationBranches(conversationId, baseAdapter.messages.filter(message => message.role === 'user').map(message => message.messageId))
-      .then(value => {
-        if (active) setBranches(value);
-      })
-      .catch((error: unknown) => {
-        console.warn('[AgentChat] Branch history unavailable', error);
-      });
-    return () => {
-      active = false;
-    };
-  }, [conversationId, baseAdapter.messages]);
+  const branches = useConversationBranches(
+    conversationId,
+    baseAdapter.messages,
+    baseAdapter.timeline,
+    snapshot.revision,
+    baseAdapter.isRunning || ['queued', 'running', 'cancelling'].includes(executionSnapshot.status),
+  );
   const editing = useMemo(() =>
     createConversationEditingAdapter({
       conversationId,
@@ -467,6 +436,20 @@ function AgentChatSessionView({
 
   return (
     <>
+      {goalOpen && snapshot.agent && (
+        <NativeGoalDialog
+          key={`${activeExecutionTargetId}:${conversationId}`}
+          client={goalClient}
+          conversationId={conversationId}
+          definitionId={snapshot.agent.agentDefId}
+          labels={goalLabels}
+          topInset={insets.top}
+          bottomInset={insets.bottom}
+          onClose={() => {
+            setGoalOpen(false);
+          }}
+        />
+      )}
       {settingsMode && (
         <ConversationSettings
           conversationId={conversationId}
@@ -519,6 +502,15 @@ function AgentChatSessionView({
                 }}
               />
             )}
+            <Menu.Item
+              leadingIcon='flag-outline'
+              title={goalLabels.title}
+              disabled={!snapshot.agent}
+              onPress={() => {
+                setActionsOpen(false);
+                setGoalOpen(true);
+              }}
+            />
             <Menu.Item
               leadingIcon='tune-variant'
               title={t('AgentChat.ModelParameters')}

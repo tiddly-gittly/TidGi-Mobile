@@ -111,6 +111,7 @@ import { createSecureDurableId, type DurableIdFactory } from '../SecureIdService
 import { ExpoMobileAttachmentFileStore, type MobileAttachmentFileStore } from './attachmentFileStore';
 import { persistCausalClock, readCausalClockHighWatermarks, readContiguousOriginSequence, readMaxLamportClock } from './causalClock';
 import { conversationEditDigest, readConversationEditSource, readEditableMessage, writeConversationEditDraft } from './conversationEditing';
+import { MobileGoalStore } from './goalStore';
 import { type AgentSqlDatabase, type AgentSqlDatabaseFactory, type AgentSqlValue } from './storagePort';
 
 export type { AgentSqlDatabase, AgentSqlDatabaseFactory, AgentSqlValue } from './storagePort';
@@ -461,6 +462,7 @@ function requireOriginNodeId(...candidates: Array<string | null | undefined>): s
  * clean append-only log, while old JSON data remains inert and non-blocking.
  */
 export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetryStore, AttachmentUploadStore, TodoStateStore {
+  public readonly goals = new MobileGoalStore(() => this.database(), operation => this.enqueueMutation(operation));
   private readonly attachmentFiles: MobileAttachmentFileStore;
   private readonly databaseFactory: AgentSqlDatabaseFactory;
   private readonly idFactory: DurableIdFactory;
@@ -1788,6 +1790,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
         }
         await database.execAsync(`
           DELETE FROM agent_runs;
+          DELETE FROM agent_goals;
           DELETE FROM agent_run_execution_leases;
           DELETE FROM conversation_edit_drafts;
           DELETE FROM conversation_edit_forks;
@@ -3837,6 +3840,15 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
           recordJson TEXT NOT NULL,
           UNIQUE (requestPeerId, requestId)
         );
+        CREATE TABLE IF NOT EXISTS agent_goals (
+          conversationId TEXT PRIMARY KEY,
+          executionNodeId TEXT NOT NULL,
+          status TEXT NOT NULL,
+          revision INTEGER NOT NULL,
+          goalJson TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS agent_goals_active
+          ON agent_goals (executionNodeId, status, conversationId);
         CREATE INDEX IF NOT EXISTS agent_runs_turn
           ON agent_runs (conversationId, turnId, requestPeerId, updatedAt DESC);
         CREATE INDEX IF NOT EXISTS agent_runs_active

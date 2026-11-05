@@ -8,6 +8,10 @@ let runtimeContext: {
 } | undefined;
 let generatedMessage: ChatMessage | undefined;
 const mockCancelAgent = jest.fn(() => Promise.resolve());
+const mockDisposeRuntime = jest.fn(() => Promise.resolve());
+const mockSuspendGoals = jest.fn(() => Promise.resolve());
+const mockRestoreGoals = jest.fn(() => Promise.resolve());
+const mockPauseGoal = jest.fn(() => Promise.resolve(null));
 const mockCancelRun = jest.fn(() => Promise.resolve(true));
 const mockGetRunStatus = jest.fn(() =>
   Promise.resolve({
@@ -51,7 +55,16 @@ jest.mock('expo-file-system', () => ({
   Paths: { document: {} },
 }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'secure-uuid' }));
+jest.mock('react-native', () => ({
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: jest.fn() }) },
+}));
 jest.mock('memeloop/mobile', () => ({
+  GoalCoordinator: class {
+    dispose = jest.fn();
+    suspend = mockSuspendGoals;
+    restore = mockRestoreGoals;
+    pauseConversation = mockPauseGoal;
+  },
   agentRunErrorFromUnknown: (error: unknown) => ({
     code: 'UNKNOWN',
     message: error instanceof Error ? error.message : String(error),
@@ -62,6 +75,7 @@ jest.mock('memeloop/mobile', () => ({
     runtimeContext = context;
     return {
       cancelAgent: mockCancelAgent,
+      dispose: mockDisposeRuntime,
       cancelRun: mockCancelRun,
       getRunStatus: mockGetRunStatus,
       retryTurn: mockRetryTurn,
@@ -168,6 +182,29 @@ describe('MobileAgentLoopService', () => {
 
     expect(second).toBe(first);
     expect(factory).toHaveBeenCalledTimes(1);
+    expect(mockRestoreGoals).toHaveBeenCalledTimes(1);
+  });
+
+  it('suspends the persisted goal before disposing the durable runtime', async () => {
+    const service = new MobileAgentLoopService({} as ILLMProvider, 'phone-peer-id', createStorage());
+    const ordering: string[] = [];
+    mockSuspendGoals.mockImplementationOnce(() => {
+      ordering.push('goals');
+      return Promise.resolve();
+    });
+    mockDisposeRuntime.mockImplementationOnce(() => {
+      ordering.push('runtime');
+      return Promise.resolve();
+    });
+    await service.shutdown();
+    expect(ordering).toEqual(['goals', 'runtime']);
+  });
+
+  it('pauses the current goal when the user stops the conversation', async () => {
+    const service = new MobileAgentLoopService({} as ILLMProvider, 'phone-peer-id', createStorage());
+    await service.cancel('conversation');
+    expect(mockPauseGoal).toHaveBeenCalledWith('conversation');
+    expect(mockCancelAgent).toHaveBeenCalledWith('conversation');
   });
 
   it('emits only a turn delta even when the durable store represents a 100k-message conversation', async () => {

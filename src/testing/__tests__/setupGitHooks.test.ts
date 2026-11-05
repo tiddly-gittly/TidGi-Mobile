@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -94,7 +94,7 @@ describe('setupGitHooks', () => {
       ? reportedHooksPath
       : resolve(linkedProject, reportedHooksPath);
     expect(readFileSync(join(hooksPath, 'pre-commit'), 'utf8')).toBe(hookContents);
-    expect(hooksPath).toBe(join(mainProject, '.git/hooks'));
+    expect(realpathSync.native(hooksPath)).toBe(realpathSync.native(join(mainProject, '.git/hooks')));
   });
 
   it('skips safely when installed outside a Git repository', () => {

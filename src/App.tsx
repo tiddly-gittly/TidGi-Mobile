@@ -46,6 +46,7 @@ const SettingsIcon = styled(Ionicons)`
 const AppSafeArea = styled(SafeAreaView)`
   flex: 1;
 `;
+import { restoreConfiguredMobileGoals } from './services/AgentLoopService/configuredRuntime';
 import { initializeMobileAnalytics, trackMobileAppLaunch } from './services/AnalyticsService';
 import { initializeDeviceNetworkRuntime } from './services/DeviceNetworkService/runtime';
 import { initializeMobileLogger } from './services/LoggerService';
@@ -100,6 +101,9 @@ export const App: React.FC = () => {
       .catch((error: unknown) => {
         console.warn('[DeviceNetwork] failed to initialize', error);
       });
+    void restoreConfiguredMobileGoals().catch((error: unknown) => {
+      console.warn('[MobileAgentLoop] failed to restore local goals', error);
+    });
 
     return () => {
       disposed = true;
