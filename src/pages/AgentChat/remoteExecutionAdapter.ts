@@ -14,6 +14,7 @@ import {
   buildAttachmentUploadChunkRequest,
   type ConversationForkRequest,
   RemoteAgentExecutionCoordinator,
+  RemoteAgentExecutionError,
   type RemoteAgentExecutionResult,
   type RemoteAgentExecutionSnapshot,
   type RemoteAgentExecutionTarget,
@@ -38,7 +39,6 @@ export type MobileAgentDeviceRpcClient = Pick<
 export interface MobileRemoteExecutionAdapterOptions {
   createId(): string;
   createRemoteClient(peerId: string): MobileAgentDeviceRpcClient;
-  defaultDefinitionId: string;
   getActiveLocalLoopService(): MobileAgentLoopService | undefined;
   getLocalLoopService(): Promise<MobileAgentLoopService>;
   localPeerId: string;
@@ -276,12 +276,14 @@ export class MobileRemoteExecutionAdapter {
     wikiTiddlers?: readonly WikiTiddlerAttachment[],
     signal?: AbortSignal,
   ): Promise<RemoteAgentExecutionResult> {
-    const target = this.currentTarget(conversationId);
+    const { generation } = this.coordinator.getSnapshot(conversationId);
+    const definitionId = await this.definitionId(conversationId, signal);
+    const target = this.currentTarget(conversationId, generation);
     return this.coordinator.execute({
       target,
       provenance: this.coordinator.prepareProvenance({
         conversationId,
-        definitionId: this.options.defaultDefinitionId,
+        definitionId,
       }),
       message,
       ...(attachment === undefined ? {} : { attachment }),
@@ -291,11 +293,13 @@ export class MobileRemoteExecutionAdapter {
 
   /** Resume the staged branch through the same coordinator and durable turn identity. */
   public async executeBranch(request: ConversationForkRequest): Promise<RemoteAgentExecutionResult> {
+    const { generation } = this.coordinator.getSnapshot(request.targetConversationId);
     const conversation = await this.options.storage.getConversationMeta(request.targetConversationId);
     if (!conversation) throw new Error('conversation_branch_target_missing');
-    const target = this.currentTarget(request.targetConversationId);
+    const target = this.currentTarget(request.targetConversationId, generation);
     if (target.kind === 'remote') {
       await this.options.syncConversation(target.peerId, request.targetConversationId, new AbortController().signal);
+      this.currentTarget(request.targetConversationId, generation);
     }
     return this.coordinator.execute({
       target,
@@ -313,13 +317,15 @@ export class MobileRemoteExecutionAdapter {
     request: AgentConversationRetryTurnRequest,
     signal?: AbortSignal,
   ): Promise<AgentConversationRetryTurnResponse> {
-    const target = this.currentTarget(request.conversationId);
+    const { generation } = this.coordinator.getSnapshot(request.conversationId);
+    const definitionId = await this.definitionId(request.conversationId, signal);
+    const target = this.currentTarget(request.conversationId, generation);
     const fingerprint = this.retryFingerprint(target, request.conversationId, request.turnId, request.newTurnId);
     await this.coordinator.retry({
       target,
       provenance: this.coordinator.prepareProvenance({
         conversationId: request.conversationId,
-        definitionId: request.definitionId ?? this.options.defaultDefinitionId,
+        definitionId,
         requestId: request.requestId,
         turnId: request.newTurnId,
       }),
@@ -332,13 +338,15 @@ export class MobileRemoteExecutionAdapter {
     request: AgentConversationDeleteTurnRequest,
     signal?: AbortSignal,
   ): Promise<AgentConversationDeleteTurnResponse> {
-    const target = this.currentTarget(request.conversationId);
+    const { generation } = this.coordinator.getSnapshot(request.conversationId);
+    const definitionId = await this.definitionId(request.conversationId, signal);
+    const target = this.currentTarget(request.conversationId, generation);
     const fingerprint = this.deleteFingerprint(target, request.conversationId, request.turnId);
     await this.coordinator.delete({
       target,
       provenance: this.coordinator.prepareProvenance({
         conversationId: request.conversationId,
-        definitionId: this.options.defaultDefinitionId,
+        definitionId,
         requestId: request.requestId,
         turnId: request.turnId,
       }),
@@ -348,12 +356,20 @@ export class MobileRemoteExecutionAdapter {
 
   public async cancel(conversationId: string, signal?: AbortSignal): Promise<void> {
     const snapshot = this.coordinator.getSnapshot(conversationId);
-    const target = snapshot.target ?? { kind: 'local' as const };
     const provenance = snapshot.provenance ?? this.coordinator.prepareProvenance({
       conversationId,
-      definitionId: this.options.defaultDefinitionId,
+      definitionId: await this.definitionId(conversationId, signal),
     });
+    const target = this.currentTarget(conversationId, snapshot.generation);
     await this.coordinator.cancel({ target, provenance }, { signal });
+  }
+
+  private async definitionId(conversationId: string, signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted();
+    const metadata = await this.options.storage.getConversationMeta(conversationId);
+    signal?.throwIfAborted();
+    if (!metadata) throw new Error('mobile_conversation_not_found');
+    return metadata.definitionId;
   }
 
   public async dispose(): Promise<void> {
@@ -558,8 +574,9 @@ export class MobileRemoteExecutionAdapter {
     };
   }
 
-  private currentTarget(conversationId: string): RemoteAgentExecutionTarget {
-    const target = this.coordinator.getSnapshot(conversationId).target;
+  private currentTarget(conversationId: string, expectedGeneration: number): RemoteAgentExecutionTarget {
+    const { target, generation } = this.coordinator.getSnapshot(conversationId);
+    if (generation !== expectedGeneration) throw new RemoteAgentExecutionError('STALE_OPERATION', false);
     if (!target) throw new Error('mobile_agent_execution_target_not_selected');
     return target;
   }

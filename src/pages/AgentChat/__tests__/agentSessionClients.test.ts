@@ -18,6 +18,40 @@ function expectCanonicalAbsentCursors(value: unknown): void {
 }
 
 describe('mobile shared session boundary', () => {
+  it('restores a synchronized custom conversation using its remote definition instead of builtins', async () => {
+    const definition = {
+      id: 'personal-mjs',
+      name: 'Personal planning loop',
+      description: 'A saved desktop script',
+      systemPrompt: '',
+      tools: [],
+      version: '1',
+      loopId: 'agent-agent-loop',
+      scriptReference: { kind: 'source' as const, name: 'plan.mjs', source: 'export default async function run(ctx) { ctx.finish("done"); }' },
+    };
+    const sendRpc = jest.fn((_peer: string, method: string) => {
+      expect(method).toBe(AGENT_DEVICE_RPC_METHODS.getDefinitions);
+      return Promise.resolve({ definitions: [definition] });
+    });
+    const remote = createAgentDeviceRpcClient({ peerId: 'mac-peer', createRequestId: () => 'request', sendRpc });
+    const clients = createMobileAgentSessionClients({
+      getConversationMeta: jest.fn(() => Promise.resolve({ conversationId: 'synced-main', definitionId: definition.id, lastMessageTimestamp: 1 })),
+    } as unknown as MobileAgentStorage, {
+      ...createExecutor(),
+      resolveDefinition: async (id, signal) => (await remote.getDefinitions({}, { signal })).definitions.find(item => item.id === id) ?? null,
+    });
+    expect(await clients.instanceClient.fetchAgent('synced-main')).toMatchObject({
+      id: 'synced-main',
+      agentDefId: definition.id,
+      name: definition.name,
+    });
+    expect(sendRpc).toHaveBeenCalledTimes(1);
+    const abort = new AbortController();
+    abort.abort(new Error('target changed'));
+    await expect(clients.instanceClient.fetchAgent('synced-main', { signal: abort.signal })).rejects.toThrow('target changed');
+    expect(sendRpc).toHaveBeenCalledTimes(1);
+  });
+
   it('contains an unexpected controller start rejection instead of creating an unhandled promise', async () => {
     const failure = new Error('invalid session target');
     const onUnexpectedError = jest.fn();
@@ -185,3 +219,4 @@ describe('mobile shared session boundary', () => {
     await expect(invoke(clients)).rejects.toThrow('conversation_page_boundary_cursor_missing');
   });
 });
+import { AGENT_DEVICE_RPC_METHODS, createAgentDeviceRpcClient } from 'memeloop/mobile';

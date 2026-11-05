@@ -14,6 +14,7 @@ import type {
   AgentConversationRetryTurnRequest,
   AgentConversationRetryTurnResponse,
   AgentConversationUpdate,
+  AgentDefinition,
   AgentInstanceClient,
   AgentRuntimeView,
   ChatMessage,
@@ -28,6 +29,7 @@ const MOBILE_RESIDENT_BYTE_LIMIT = 256 * 1024;
 const MOBILE_RESIDENT_MESSAGE_PROJECTION_LIMIT = 124 * 1024;
 
 export interface MobileAgentSessionExecutor {
+  resolveDefinition?(definitionId: string, signal?: AbortSignal): Promise<Pick<AgentDefinition, 'id' | 'name'> | null>;
   cancel(conversationId: string, signal?: AbortSignal): Promise<void>;
   delete(request: AgentConversationDeleteTurnRequest, signal?: AbortSignal): Promise<AgentConversationDeleteTurnResponse>;
   retry(request: AgentConversationRetryTurnRequest, signal?: AbortSignal): Promise<AgentConversationRetryTurnResponse>;
@@ -89,10 +91,12 @@ export function createMobileAgentSessionClients(
     statusByAgent.set(agentId, status);
     for (const listener of statusListeners.get(agentId) ?? []) listener({ status });
   };
-  const runtimeView = async (agentId: string): Promise<AgentRuntimeView> => {
+  const runtimeView = async (agentId: string, signal?: AbortSignal): Promise<AgentRuntimeView> => {
     const metadata = await storage.getConversationMeta(agentId);
     if (!metadata) throw new Error(`mobile_conversation_not_found:${agentId}`);
-    const profile = getBuiltinLoopProfiles().find(candidate => candidate.id === metadata.definitionId);
+    const profile = executor.resolveDefinition
+      ? await executor.resolveDefinition(metadata.definitionId, signal)
+      : getBuiltinLoopProfiles().find(candidate => candidate.id === metadata.definitionId) ?? await storage.getAgentDefinition(metadata.definitionId);
     if (!profile) throw new Error(`mobile_agent_definition_not_found:${metadata.definitionId}`);
     return {
       id: agentId,
@@ -209,7 +213,7 @@ export function createMobileAgentSessionClients(
     },
     fetchAgent: async (agentId, options) => {
       throwIfAborted(options?.signal);
-      const view = await runtimeView(agentId);
+      const view = await runtimeView(agentId, options?.signal);
       throwIfAborted(options?.signal);
       return view;
     },
@@ -235,7 +239,7 @@ export function createMobileAgentSessionClients(
     },
     getAgentFrameworkId: async (agentId, options) => {
       throwIfAborted(options?.signal);
-      return (await runtimeView(agentId)).agentDefId;
+      return (await runtimeView(agentId, options?.signal)).agentDefId;
     },
     getFrameworkConfigSchema: (_frameworkId, options) => {
       throwIfAborted(options?.signal);

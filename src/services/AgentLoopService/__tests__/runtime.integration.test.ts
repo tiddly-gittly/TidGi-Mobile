@@ -27,7 +27,7 @@ jest.mock('expo-crypto', () => {
 });
 
 import Database from 'better-sqlite3';
-import type { ILLMProvider, PortableLlmRequest, PortableLlmStreamPart } from 'memeloop/mobile';
+import type { AgentDefinition, ILLMProvider, PortableLlmRequest, PortableLlmStreamPart } from 'memeloop/mobile';
 
 import { type AgentSqlDatabase, MobileAgentStorage } from '../../AgentStorageService';
 import { installMobileCrypto } from '../../MobileCryptoService';
@@ -85,6 +85,61 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
     openTestDatabases.clear();
   });
 
+  it.each(['builtin', 'source'] as const)('preserves a SQLite-saved %s script reference and applies the native module boundary', async kind => {
+    installMobileCrypto();
+    const database = testDatabase();
+    const storage = new MobileAgentStorage(() => Promise.resolve(database));
+    const definition: AgentDefinition = {
+      id: `saved-${kind}-definition`,
+      name: `Saved ${kind} workflow`,
+      description: 'Native module boundary fixture',
+      systemPrompt: '',
+      tools: [],
+      version: '1',
+      loopId: 'agent-tool-loop',
+      scriptReference: kind === 'builtin'
+        ? { kind: 'builtin', id: 'builtin:agent-tool-loop/default' }
+        : { kind: 'source', name: 'saved-personal-loop.mjs', source: 'export default async function run(ctx) { ctx.finish("CUSTOM_MJS_EXECUTED"); }' },
+    };
+    const conversationId = `saved-${kind}-conversation`;
+    await storage.appendLocalEvent({
+      conversationId,
+      eventId: `saved-${kind}-metadata`,
+      kind: 'metadataPatch',
+      originNodeId: 'phone-peer',
+      timestamp: 1,
+      patch: { definitionId: definition.id, isUserInitiated: true },
+    });
+    await database.runAsync('INSERT INTO definitions (id, definitionJson) VALUES (?, ?)', [definition.id, JSON.stringify(definition)]);
+    expect(await storage.getAgentDefinition(definition.id)).toEqual(definition);
+    let calls = 0;
+    const provider: ILLMProvider = {
+      name: 'test-provider',
+      async *chat(): AsyncIterable<PortableLlmStreamPart> {
+        await Promise.resolve();
+        calls += 1;
+        yield { type: 'text-delta', id: 'saved-definition', text: 'STATIC_BUILTIN_EXECUTED' };
+        yield { type: 'finish', finishReason: 'stop' };
+      },
+    };
+    let sequence = 0;
+    const service = new MobileAgentLoopService(provider, 'phone-peer', storage, namespace => `${namespace}:${kind}-${++sequence}`);
+    try {
+      const result = await service.sendMessage(conversationId, 'Run the saved workflow');
+      expect(result.state).toBe(kind === 'builtin' ? 'completed' : 'failed');
+      expect(calls).toBe(kind === 'builtin' ? 1 : 0);
+      const page = await storage.getMessagePage(conversationId, { limit: 50, maxBytes: 262_144 });
+      expect('items' in page).toBe(true);
+      if ('items' in page) {
+        expect(page.items.some(item => item.content === 'STATIC_BUILTIN_EXECUTED')).toBe(kind === 'builtin');
+        expect(page.items.some(item => item.content === 'CUSTOM_MJS_EXECUTED')).toBe(false);
+      }
+      expect((await storage.getAgentDefinition(definition.id))?.scriptReference).toEqual(definition.scriptReference);
+    } finally {
+      await service.shutdown();
+    }
+  });
+
   it('continues a persisted local goal after orderly runtime replacement and finishes through the actual goal tool', async () => {
     installMobileCrypto();
     const storage = new MobileAgentStorage(() => Promise.resolve(testDatabase()));
@@ -102,7 +157,7 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
       name: 'test-provider',
       async *chat(request): AsyncIterable<PortableLlmStreamPart> {
         requests += 1;
-        expect(JSON.stringify(request.tools)).toContain('"goal"');
+        if (requests <= 2) expect(JSON.stringify(request.tools)).toContain('"goal"');
         if (requests === 1) {
           yield { type: 'text-delta', id: 'progress', text: 'First goal round started' };
           await new Promise<void>(resolve => {

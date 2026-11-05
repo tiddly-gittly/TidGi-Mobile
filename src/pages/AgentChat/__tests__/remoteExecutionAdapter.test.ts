@@ -1,3 +1,4 @@
+import { AGENT_DEVICE_RPC_METHODS, createAgentDeviceRpcClient } from 'memeloop/mobile';
 import { createHash } from 'node:crypto';
 
 import type { MobileAgentLoopService } from '../../../services/AgentLoopService';
@@ -20,6 +21,172 @@ function source(bytes: Uint8Array) {
 }
 
 describe('MobileRemoteExecutionAdapter attachment routing', () => {
+  it.each(['execute', 'retry', 'delete', 'cancel', 'branch'] as const)('retains the selected target generation while %s loads canonical metadata', async action => {
+    let release!: (metadata: { definitionId: string }) => void;
+    const getConversationMeta = jest.fn(() =>
+      new Promise<{ definitionId: string }>(resolve => {
+        release = resolve;
+      })
+    );
+    const createRemoteClient = jest.fn();
+    const syncConversation = jest.fn();
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient,
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage: { getConversationMeta } as unknown as MobileAgentStorage,
+      syncConversation,
+    });
+    adapter.switchTarget('custom-main', { kind: 'remote', peerId: 'host-a' });
+    const operations = {
+      execute: () => adapter.execute('custom-main', 'Run this'),
+      retry: () => adapter.retry({ conversationId: 'custom-main', turnId: 'old', newTurnId: 'new', requestId: 'retry' }),
+      delete: () => adapter.delete({ conversationId: 'custom-main', turnId: 'old', requestId: 'delete' }),
+      cancel: () => adapter.cancel('custom-main'),
+      branch: () =>
+        adapter.executeBranch({
+          conversationId: 'source',
+          targetConversationId: 'custom-main',
+          messageId: 'old',
+          sourceRevision: 'r1',
+          requestId: 'branch',
+          replacementMessageId: 'replacement',
+          text: 'Edited',
+        }),
+    };
+    const pending = operations[action]();
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'STALE_OPERATION' });
+    adapter.switchTarget('custom-main', { kind: 'remote', peerId: 'host-b' });
+    release({ definitionId: 'personal-mjs' });
+    await rejected;
+    expect(createRemoteClient).not.toHaveBeenCalled();
+    expect(syncConversation).not.toHaveBeenCalled();
+    expect(adapter.getSnapshot('custom-main')).toMatchObject({ target: { kind: 'remote', peerId: 'host-b' }, status: 'idle' });
+    await adapter.dispose();
+  });
+
+  it('stops a branch dispatch when the target changes during its initial synchronization', async () => {
+    let release!: () => void;
+    const syncConversation = jest.fn(() =>
+      new Promise<void>(resolve => {
+        release = resolve;
+      })
+    );
+    const createRemoteClient = jest.fn();
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient,
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage: { getConversationMeta: () => Promise.resolve({ definitionId: 'personal-mjs' }) } as unknown as MobileAgentStorage,
+      syncConversation,
+    });
+    adapter.switchTarget('custom-main', { kind: 'remote', peerId: 'host-a' });
+    const pending = adapter.executeBranch({
+      conversationId: 'source',
+      targetConversationId: 'custom-main',
+      messageId: 'old',
+      sourceRevision: 'r1',
+      requestId: 'branch',
+      replacementMessageId: 'replacement',
+      text: 'Edited',
+    });
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'STALE_OPERATION' });
+    await Promise.resolve();
+    adapter.switchTarget('custom-main', { kind: 'remote', peerId: 'host-b' });
+    release();
+    await rejected;
+    expect(createRemoteClient).not.toHaveBeenCalled();
+    expect(adapter.getSnapshot('custom-main').target).toEqual({ kind: 'remote', peerId: 'host-b' });
+    await adapter.dispose();
+  });
+
+  it('runs a synchronized custom definition through the real RPC client and preserves its conversation identity', async () => {
+    let run: { requestId: string; turnId: string; definitionId: string; conversationId: string } | undefined;
+    const sendRpc = jest.fn((_peer: string, method: string, parameters: unknown) => {
+      if (method === AGENT_DEVICE_RPC_METHODS.runTurn) {
+        run = parameters as NonNullable<typeof run>;
+        return Promise.resolve({ ok: true, runId: 'custom-run', requestId: run.requestId, turnId: run.turnId, conversationId: run.conversationId, state: 'accepted' });
+      }
+      if (method === AGENT_DEVICE_RPC_METHODS.getRunStatus) {
+        return Promise.resolve({
+          status: {
+            requestId: run?.requestId,
+            turnId: run?.turnId,
+            definitionId: run?.definitionId,
+            conversationId: run?.conversationId,
+            runId: 'custom-run',
+            requestPeerId: 'phone-peer',
+            payloadDigest: 'digest',
+            state: 'completed',
+            acceptedAt: 1,
+            updatedAt: 2,
+          },
+        });
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+    const client = createAgentDeviceRpcClient({ peerId: 'mac-peer', createRequestId: durableIds(), sendRpc });
+    const syncConversation = jest.fn(() => Promise.resolve());
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient: () => client,
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage: {
+        getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'personal-mjs' })),
+        getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(null)),
+      } as unknown as MobileAgentStorage,
+      syncConversation,
+    });
+    adapter.switchTarget('custom-main', { kind: 'remote', peerId: 'mac-peer' });
+    await adapter.execute('custom-main', 'Continue the saved script');
+    expect(run).toMatchObject({ definitionId: 'personal-mjs', conversationId: 'custom-main', message: 'Continue the saved script' });
+    expect(adapter.getSnapshot('custom-main').provenance?.definitionId).toBe('personal-mjs');
+    expect(syncConversation).toHaveBeenCalledWith('mac-peer', 'custom-main', expect.any(AbortSignal));
+    await adapter.dispose();
+  });
+
+  it('uses canonical custom identity for retry, delete and cancellation even when the caller supplies an old definition', async () => {
+    const retryTurn = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        requestId: 'retry-request',
+        conversationId: 'custom-main',
+        runId: 'retry-run',
+        turnId: 'old-turn',
+        newTurnId: 'replacement',
+      })
+    );
+    const deleteTurn = jest.fn(() => Promise.resolve({ ok: true, requestId: 'delete-request', conversationId: 'custom-main', turnId: 'old-turn' }));
+    const client = {
+      retryTurn,
+      deleteTurn,
+      getRunStatus: jest.fn(() => Promise.resolve({ status: { state: 'completed' as const } })),
+    } as unknown as MobileAgentDeviceRpcClient;
+    const adapter = new MobileRemoteExecutionAdapter({
+      createId: durableIds(),
+      createRemoteClient: () => client,
+      getActiveLocalLoopService: () => undefined,
+      getLocalLoopService: jest.fn(),
+      localPeerId: 'phone-peer',
+      storage: { getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'personal-mjs' })) } as unknown as MobileAgentStorage,
+      syncConversation: jest.fn(() => Promise.resolve()),
+    });
+    adapter.switchTarget('custom-main', { kind: 'remote', peerId: 'mac-peer' });
+    await adapter.retry({ conversationId: 'custom-main', turnId: 'old-turn', newTurnId: 'replacement', requestId: 'retry-request', definitionId: 'old-default' });
+    expect(retryTurn).toHaveBeenCalledWith(expect.objectContaining({ definitionId: 'personal-mjs' }), expect.anything());
+    await adapter.delete({ conversationId: 'custom-main', turnId: 'old-turn', requestId: 'delete-request' });
+    expect(adapter.getSnapshot('custom-main').provenance?.definitionId).toBe('personal-mjs');
+    await adapter.cancel('custom-main');
+    expect(adapter.getSnapshot('custom-main').provenance?.definitionId).toBe('personal-mjs');
+    await adapter.dispose();
+  });
+
   it('syncs a fork before sending its stable replacement and preserved parts', async () => {
     const order: string[] = [];
     const replacement = {
@@ -42,7 +209,6 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     const adapter = new MobileRemoteExecutionAdapter({
       createId: durableIds(),
       createRemoteClient: () => client,
-      defaultDefinitionId: 'definition',
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: jest.fn(),
       localPeerId: 'phone-peer',
@@ -96,6 +262,7 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     );
     const abortAttachmentUpload = jest.fn(() => Promise.resolve());
     const storage = {
+      getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'memeloop:general-assistant' })),
       abortAttachmentUpload,
       beginAttachmentUpload: jest.fn(() =>
         Promise.resolve({
@@ -121,7 +288,6 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     const adapter = new MobileRemoteExecutionAdapter({
       createId: durableIds(),
       createRemoteClient: jest.fn(),
-      defaultDefinitionId: 'memeloop:general-assistant',
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: () => Promise.resolve({ executePreparedMessage } as unknown as MobileAgentLoopService),
       localPeerId: 'phone-peer',
@@ -232,11 +398,13 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     const adapter = new MobileRemoteExecutionAdapter({
       createId: durableIds(),
       createRemoteClient: () => client,
-      defaultDefinitionId: 'memeloop:general-assistant',
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: jest.fn(),
       localPeerId: 'phone-peer',
-      storage: { getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(null)) } as unknown as MobileAgentStorage,
+      storage: {
+        getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'memeloop:general-assistant' })),
+        getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(null)),
+      } as unknown as MobileAgentStorage,
       syncConversation,
     });
     adapter.switchTarget('conversation', { kind: 'remote', peerId: 'desktop-peer' });
@@ -311,6 +479,7 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
       Parameters<MobileAgentStorage['verifyAttachment']>
     >(() => Promise.resolve(true));
     const storage = {
+      getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'memeloop:general-assistant' })),
       getPendingConversationBranchReplacement: jest.fn(() => Promise.resolve(null)),
       conversationReferencesAttachment,
       getAttachment: jest.fn(() => Promise.resolve(reference)),
@@ -323,7 +492,6 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     const adapter = new MobileRemoteExecutionAdapter({
       createId: durableIds(),
       createRemoteClient: () => client,
-      defaultDefinitionId: 'memeloop:general-assistant',
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: jest.fn(),
       localPeerId: 'phone-peer',
@@ -372,11 +540,11 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     const adapter = new MobileRemoteExecutionAdapter({
       createId: durableIds(),
       createRemoteClient: () => client,
-      defaultDefinitionId: 'memeloop:general-assistant',
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: jest.fn(),
       localPeerId: 'phone-peer',
       storage: {
+        getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'memeloop:general-assistant' })),
         conversationReferencesAttachment: jest.fn(() => Promise.resolve(false)),
       } as unknown as MobileAgentStorage,
       syncConversation: jest.fn(() => Promise.resolve()),
@@ -394,11 +562,11 @@ describe('MobileRemoteExecutionAdapter attachment routing', () => {
     const adapter = new MobileRemoteExecutionAdapter({
       createId: durableIds(),
       createRemoteClient: jest.fn(),
-      defaultDefinitionId: 'memeloop:general-assistant',
       getActiveLocalLoopService: () => undefined,
       getLocalLoopService: jest.fn(),
       localPeerId: 'phone-peer',
       storage: {
+        getConversationMeta: jest.fn(() => Promise.resolve({ definitionId: 'memeloop:general-assistant' })),
         abortAttachmentUpload,
         beginAttachmentUpload: jest.fn(() =>
           Promise.resolve({

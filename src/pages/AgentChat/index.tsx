@@ -21,6 +21,7 @@ import {
   createAgentDeviceRpcClient,
   createConversationEditingAdapter,
   type Device,
+  getBuiltinLoopProfiles,
   type GoalClient,
   type RemoteAgentExecutionTarget,
 } from 'memeloop/mobile';
@@ -50,6 +51,7 @@ import { ConversationSettings } from './ConversationSettings';
 import { resolveMobileAgentErrorPresentation } from './errorPresentation';
 import { formatMobileTimelineTimestamp } from './localizedFormatting';
 import { exportStoredMessage } from './messageExport';
+import { RemoteAgentPicker } from './RemoteAgentPicker';
 import { mobileExecutionTarget, MobileRemoteExecutionAdapter } from './remoteExecutionAdapter';
 import { useConversationBranches } from './useConversationBranches';
 
@@ -121,7 +123,6 @@ function AgentChatSession({
     const adapter = new MobileRemoteExecutionAdapter({
       createId: createPortableRequestId,
       createRemoteClient: remoteClient,
-      defaultDefinitionId: DEFAULT_AGENT_DEFINITION_ID,
       getActiveLocalLoopService: () => activeServiceReference.current,
       getLocalLoopService: getLoopService,
       localPeerId,
@@ -136,6 +137,14 @@ function AgentChatSession({
 
   const clients = useMemo(() =>
     createMobileAgentSessionClients(mobileAgentStorage, {
+      resolveDefinition: async (definitionId, signal) => {
+        const target = executionAdapter.getSnapshot(conversationId).target;
+        if (target?.kind === 'remote') {
+          const { definitions } = await remoteClient(target.peerId).getDefinitions({}, { signal });
+          return definitions.find(definition => definition.id === definitionId) ?? null;
+        }
+        return getBuiltinLoopProfiles().find(definition => definition.id === definitionId) ?? await mobileAgentStorage.getAgentDefinition(definitionId);
+      },
       send: async (targetConversationId, content, attachment, wikiTiddlers, signal) => {
         await executionAdapter.execute(targetConversationId, content, attachment, wikiTiddlers, signal);
       },
@@ -143,7 +152,7 @@ function AgentChatSession({
       delete: (request, signal) => executionAdapter.delete(request, signal),
       retry: (request, signal) => executionAdapter.retry(request, signal),
       subscribeToTransientMessages: observeActiveMobileAgentMessages,
-    }), [executionAdapter]);
+    }), [conversationId, executionAdapter, remoteClient]);
 
   const controller = useMemo(() =>
     new AgentSessionController({
@@ -172,7 +181,7 @@ function AgentChatSession({
       mounted = false;
       controller.stop();
     };
-  }, [controller, conversationId]);
+  }, [activeExecutionTargetId, controller, conversationId]);
 
   useEffect(() => {
     terminalCleanupGeneration.current += 1;
@@ -234,6 +243,7 @@ function AgentChatSessionView({
   const goalLabels = getGoalPanelLabels(i18n.language);
   const insets = useSafeAreaInsets();
   const [goalOpen, setGoalOpen] = useState(false);
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [settingsMode, setSettingsMode] = useState<'prompt' | 'parameters'>();
   const [openingMain, setOpeningMain] = useState(false);
@@ -436,6 +446,28 @@ function AgentChatSessionView({
 
   return (
     <>
+      {agentPickerOpen && settingsClient && (
+        <RemoteAgentPicker
+          key={activeExecutionTargetId}
+          client={settingsClient}
+          createConversationId={() => createSecureDurableId('mobile-conversation')}
+          syncConversation={async (id, signal) => {
+            await deviceNetworkService.syncWithDevice(activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length), { conversationIds: [id], signal });
+          }}
+          onCreated={onConversationChange}
+          onClose={() => {
+            setAgentPickerOpen(false);
+          }}
+          labels={{
+            title: t('AgentChat.SelectAgent'),
+            loading: t('AgentChat.LoadingAgents'),
+            empty: t('AgentChat.NoAgents'),
+            error: t('AgentChat.AgentSelectionFailed'),
+            retry: t('AgentChat.RetryConversations'),
+            close: t('AgentChat.Close'),
+          }}
+        />
+      )}
       {goalOpen && snapshot.agent && (
         <NativeGoalDialog
           key={`${activeExecutionTargetId}:${conversationId}`}
@@ -479,6 +511,16 @@ function AgentChatSessionView({
               />
             }
           >
+            {settingsClient && (
+              <Menu.Item
+                leadingIcon='robot-outline'
+                title={t('AgentChat.NewConversationWithAgent')}
+                onPress={() => {
+                  setActionsOpen(false);
+                  setAgentPickerOpen(true);
+                }}
+              />
+            )}
             {settingsClient && (
               <Menu.Item
                 leadingIcon='sync'
