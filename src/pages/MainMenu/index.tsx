@@ -1,10 +1,9 @@
 import { useIsFocused } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import { FC, useState } from 'react';
-import { Button } from 'react-native-paper';
 import { styled } from 'styled-components/native';
 import type { RootStackParameterList } from '../../App';
-import { CreateWorkspaceButton } from '../../components/NavigationButtons';
+import { AgentChatButton, CreateWorkspaceButton } from '../../components/NavigationButtons';
 import { WorkspaceList } from '../../components/WorkspaceList';
 import { useAutoOpenDefaultWiki } from '../../hooks/useAutoOpenDefaultWiki';
 import { useWorkspaceStore } from '../../store/workspace';
@@ -67,15 +66,7 @@ export const MainMenu: FC<StackScreenProps<RootStackParameterList, 'MainMenu'>> 
         }}
       />
       <ButtonButtonsContainer>
-        <Button
-          icon='robot-outline'
-          mode='outlined'
-          onPress={() => {
-            navigation.navigate('AgentChat');
-          }}
-        >
-          Agent
-        </Button>
+        <AgentChatButton />
         <CreateWorkspaceButton />
       </ButtonButtonsContainer>
     </Container>
