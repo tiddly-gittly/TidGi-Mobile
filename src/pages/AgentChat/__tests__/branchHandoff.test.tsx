@@ -1,8 +1,9 @@
 import type { ConversationForkRequest } from 'memeloop/mobile';
-import React, { StrictMode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { StrictMode, useEffect, useMemo, useState } from 'react';
 
 import type { MobileAgentStorage } from '../../../services/AgentStorageService';
 import { type MobileAgentDeviceRpcClient, MobileRemoteExecutionAdapter } from '../remoteExecutionAdapter';
+import { useMobileExecutionSnapshot } from '../useMobileExecutionSnapshot';
 import { useSessionResource } from '../useSessionResource';
 
 interface TestRenderer {
@@ -64,9 +65,7 @@ it('opens an accepted edited branch with running state, retains its execution ac
   const resources = new Map<string, { dispose: jest.Mock }>();
   adapter.switchTarget('source', { kind: 'remote', peerId: 'mac-peer' });
   function ConversationView({ conversationId, edit }: { conversationId: string; edit: () => Promise<void> }) {
-    const subscribe = useCallback((listener: () => void) => adapter.subscribe(conversationId, listener), [conversationId]);
-    const read = useCallback(() => adapter.getSnapshot(conversationId), [conversationId]);
-    const snapshot = useSyncExternalStore(subscribe, read, read);
+    const snapshot = useMobileExecutionSnapshot(adapter, conversationId);
     return React.createElement('Chat', {
       conversationId,
       running: snapshot.status === 'running',

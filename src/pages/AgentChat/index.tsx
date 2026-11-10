@@ -11,6 +11,7 @@ import {
   useAgentSession,
   useAgentSessionCoreAdapter,
 } from '@memeloop/react-ui/native';
+import { useIsFocused } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import { setStringAsync } from 'expo-clipboard';
 import {
@@ -55,6 +56,8 @@ import { exportStoredMessage } from './messageExport';
 import { RemoteAgentPicker } from './RemoteAgentPicker';
 import { mobileExecutionTarget, MobileRemoteExecutionAdapter } from './remoteExecutionAdapter';
 import { useConversationBranches } from './useConversationBranches';
+import { useMobileExecutionSnapshot } from './useMobileExecutionSnapshot';
+import { useRemoteConversationSync } from './useRemoteConversationSync';
 import { useSessionResource } from './useSessionResource';
 
 const LOCAL_EXECUTION_TARGET_ID = 'local';
@@ -228,6 +231,7 @@ function AgentChatSessionView({
   getLoopService,
 }: AgentChatSessionViewProps) {
   const { i18n, t } = useTranslation();
+  const isFocused = useIsFocused();
   const { controller, snapshot } = useAgentSession();
   const goalLabels = getGoalPanelLabels(i18n.language);
   const insets = useSafeAreaInsets();
@@ -241,6 +245,11 @@ function AgentChatSessionView({
     activeExecutionTargetId.startsWith(REMOTE_EXECUTION_TARGET_PREFIX)
       ? remoteClient(activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length))
       : undefined, [activeExecutionTargetId, remoteClient]);
+  useRemoteConversationSync(
+    isFocused ? settingsClient : undefined,
+    conversationId,
+    settingsClient ? activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length) : undefined,
+  );
   const goalClient = useMemo<GoalClient>(() =>
     settingsClient?.goals ?? ({
       get: async id => (await getLoopService()).goals.get(id),
@@ -277,9 +286,7 @@ function AgentChatSessionView({
     }
     return Promise.resolve();
   }, []);
-  const subscribeToExecution = useCallback((listener: () => void) => executionAdapter.subscribe(conversationId, listener), [conversationId, executionAdapter]);
-  const getExecutionSnapshot = useCallback(() => executionAdapter.getSnapshot(conversationId), [conversationId, executionAdapter]);
-  const executionSnapshot = useSyncExternalStore(subscribeToExecution, getExecutionSnapshot, getExecutionSnapshot);
+  const executionSnapshot = useMobileExecutionSnapshot(executionAdapter, conversationId);
   const loadMessageDetail = useMemo(() =>
     createAgentRunLogDetailLoader({
       pull: async ({ cursor, limit, maxBytes, message, signal }) => {

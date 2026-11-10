@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@memeloop/libp2p': 0.3.5
-  memeloop: 0.3.11
+  memeloop: 0.3.12
   '@memeloop/react-ui': 0.2.13
 
 importers:
@@ -21,10 +21,10 @@ importers:
         version: 15.0.3(expo-font@14.0.11(expo@54.0.33(@babel/core@7.26.8(supports-color@8.1.1))(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)(supports-color@8.1.1))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       '@memeloop/libp2p':
         specifier: 0.3.5
-        version: 0.3.5(memeloop@0.3.11(@ai-sdk/openai@4.0.20(zod@4.4.3)))
+        version: 0.3.5(memeloop@0.3.12(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
         specifier: 0.2.13
-        version: 0.2.13(585351924e59c1565ba0f1444af8a426)
+        version: 0.2.13(5eeb6842c293095bbb2af878cedc0d97)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -45,7 +45,7 @@ importers:
         version: 2.2.6(@react-navigation/native@7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       '@react-navigation/material-bottom-tabs':
         specifier: ^6.2.29
-        version: 6.2.29(@react-navigation/native@7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-paper@5.13.1(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
+        version: 6.2.29(@react-navigation/native@7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-paper@5.15.3(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       '@react-navigation/native':
         specifier: ^7.0.15
         version: 7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
@@ -161,8 +161,8 @@ importers:
         specifier: ^4.17.21
         version: 4.17.21
       memeloop:
-        specifier: 0.3.11
-        version: 0.3.11(@ai-sdk/openai@4.0.20(zod@4.4.3))
+        specifier: 0.3.12
+        version: 0.3.12(@ai-sdk/openai@4.0.20(zod@4.4.3))
       p-timeout:
         specifier: ^6.1.4
         version: 6.1.4
@@ -188,8 +188,8 @@ importers:
         specifier: ^3.4.1
         version: 3.4.1(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       react-native-paper:
-        specifier: ^5.13.1
-        version: 5.13.1(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
+        specifier: 5.15.3
+        version: 5.15.3(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       react-native-postmessage-cat:
         specifier: ^0.3.3
         version: 0.3.3(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react@19.1.0)(rxjs@7.8.2)
@@ -2570,7 +2570,7 @@ packages:
   '@memeloop/libp2p@0.3.5':
     resolution: {integrity: sha512-lgK+LSx3hhmJKSS8aQS1AS4TY3xlWCAu11A2lqlXi31nNIpJDroSHTGeUObVgXknYrA0aFj3LOPpyh3tY/3PLA==}
     peerDependencies:
-      memeloop: 0.3.11
+      memeloop: 0.3.12
 
   '@memeloop/react-ui@0.2.13':
     resolution: {integrity: sha512-C/ixFTuNMN4wiowCNFgzVrdxSInnmRmm2el+NKaRCro1NyYvZKwGuPibyy9IP1QfuwLF1it3LgUOTyyNF+rEvA==}
@@ -2585,7 +2585,7 @@ packages:
       '@rjsf/utils': '>=6.0.0'
       '@rjsf/validator-ajv8': '>=6.0.0'
       material-ui-cron: '>=2.0.0'
-      memeloop: 0.3.11
+      memeloop: 0.3.12
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
       react-native: '>=0.78.0'
@@ -7326,8 +7326,8 @@ packages:
   mdn-data@2.0.14:
     resolution: {integrity: sha512-dn6wd0uw5GsdswPFfsgMp5NSB0/aDe6fK94YJV/AJDYXL6HVLWBsxeq7js7Ad+mU2K9LAlwpk6kN2D5mwCPVow==}
 
-  memeloop@0.3.11:
-    resolution: {integrity: sha512-wNU2B5M7/vIB/bSNO/2EbcosItI/jT78gYG+C5IuV0/w5p2AVN3V/qy4opfEvNo8XUiYE4pa4+0pmz5FBI1J3w==}
+  memeloop@0.3.12:
+    resolution: {integrity: sha512-ladqAA6PtR4qaw21m80T1AEZ8/YN6bwL7EasramNKZIR+ryxOxNIR/lSC+cTGT8wTIMYAADOEd2eoodCWQmJEw==}
     peerDependencies:
       '@ai-sdk/anthropic': ^4.0.19
       '@ai-sdk/azure': ^4.0.0
@@ -8280,13 +8280,12 @@ packages:
       react-native-macos:
         optional: true
 
-  react-native-paper@5.13.1:
-    resolution: {integrity: sha512-8frKVKJ5JBd8WL1G3tpcYzOgK40kxkD/U+yLHGKNeLnD6v1Qc9W6DxWTHWN7lsX/DPYnhgvw1aKkYaPTmDj5pg==}
+  react-native-paper@5.15.3:
+    resolution: {integrity: sha512-GEyNTmWElIZgnYw09AjjCNupRYzCmP79uAAyGSyCEUZz7KBz1wtJcC0wVUkozR1Rn3PK/td/9LlR6+F1hzmYvA==}
     peerDependencies:
       react: '*'
       react-native: '*'
       react-native-safe-area-context: '*'
-      react-native-vector-icons: '*'
 
   react-native-parsed-text@0.0.22:
     resolution: {integrity: sha512-hfD83RDXZf9Fvth3DowR7j65fMnlqM9PpxZBGWkzVcUTFtqe6/yPcIoIAgrJbKn6YmtzkivmhWE2MCE4JKBXrQ==}
@@ -9580,11 +9579,6 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
-
-  use-latest-callback@0.1.9:
-    resolution: {integrity: sha512-CL/29uS74AwreI/f2oz2hLTW7ZqVeV5+gxFeGudzQrgkCytrHw33G4KbnQOrRlAEzzAFXi7dDLMC9zhWcVpzmw==}
-    peerDependencies:
-      react: '>=16.8'
 
   use-latest-callback@0.2.3:
     resolution: {integrity: sha512-7vI3fBuyRcP91pazVboc4qu+6ZqM8izPWX9k7cRnT8hbD5svslcknsh3S9BUhaK11OmgTV4oWZZVSeQAiV53SQ==}
@@ -12592,7 +12586,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/libp2p@0.3.5(memeloop@0.3.11(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
+  '@memeloop/libp2p@0.3.5(memeloop@0.3.12(@ai-sdk/openai@4.0.20(zod@4.4.3)))':
     dependencies:
       '@chainsafe/libp2p-noise': 17.0.0
       '@chainsafe/libp2p-yamux': 8.0.1
@@ -12612,26 +12606,26 @@ snapshots:
       '@multiformats/multiaddr-matcher': 3.0.2
       '@noble/hashes': 2.4.0
       libp2p: 3.3.11
-      memeloop: 0.3.11(@ai-sdk/openai@4.0.20(zod@4.4.3))
+      memeloop: 0.3.12(@ai-sdk/openai@4.0.20(zod@4.4.3))
       uint8arrays: 6.1.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.2.13(585351924e59c1565ba0f1444af8a426)':
+  '@memeloop/react-ui@0.2.13(5eeb6842c293095bbb2af878cedc0d97)':
     dependencies:
       '@assistant-ui/react': 0.15.17(@types/react@19.1.17)(immer@10.1.1)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.2.2(react@19.1.0))
       '@emotion/react': 11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
       '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
       '@mui/icons-material': 9.4.0(@mui/material@9.4.0(@emotion/react@11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@types/react@19.1.17)(react-dom@18.2.0(react@19.1.0))(react@19.1.0))(@types/react@19.1.17)(react@19.1.0)
       '@mui/material': 9.4.0(@emotion/react@11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(@types/react@19.1.17)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)
-      memeloop: 0.3.11(@ai-sdk/openai@4.0.20(zod@4.4.3))
+      memeloop: 0.3.12(@ai-sdk/openai@4.0.20(zod@4.4.3))
       react: 19.1.0
     optionalDependencies:
       react-dom: 18.2.0(react@19.1.0)
       react-native: 0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
       react-native-gifted-chat: 2.8.1(cbf1cc5a28725504e3a2570f73e9f399)
-      react-native-paper: 5.13.1(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
+      react-native-paper: 5.15.3(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
 
   '@modern-js/tsconfig@3.0.2': {}
 
@@ -13753,13 +13747,13 @@ snapshots:
       react-native: 0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
       react-native-safe-area-context: 5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
 
-  '@react-navigation/material-bottom-tabs@6.2.29(@react-navigation/native@7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-paper@5.13.1(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)':
+  '@react-navigation/material-bottom-tabs@6.2.29(@react-navigation/native@7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-paper@5.15.3(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)':
     dependencies:
       '@react-navigation/elements': 1.3.31(@react-navigation/native@7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       '@react-navigation/native': 7.0.15(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
-      react-native-paper: 5.13.1(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
+      react-native-paper: 5.15.3(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       react-native-safe-area-context: 5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
       react-native-vector-icons: 10.0.3
 
@@ -18243,7 +18237,7 @@ snapshots:
 
   mdn-data@2.0.14: {}
 
-  memeloop@0.3.11(@ai-sdk/openai@4.0.20(zod@4.4.3)):
+  memeloop@0.3.12(@ai-sdk/openai@4.0.20(zod@4.4.3)):
     dependencies:
       '@types/json-schema': 7.0.15
       acorn: 8.17.0
@@ -19281,15 +19275,14 @@ snapshots:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
 
-  react-native-paper@5.13.1(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native-vector-icons@10.0.3)(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0):
+  react-native-paper@5.15.3(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0))(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0):
     dependencies:
       '@callstack/react-theme-provider': 3.0.9(react@19.1.0)
       color: 3.2.1
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
       react-native-safe-area-context: 5.6.2(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0)
-      react-native-vector-icons: 10.0.3
-      use-latest-callback: 0.1.9(react@19.1.0)
+      use-latest-callback: 0.2.3(react@19.1.0)
 
   react-native-parsed-text@0.0.22(react-native@0.81.5(@babel/core@7.26.8(supports-color@8.1.1))(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1))(react@19.1.0):
     dependencies:
@@ -20806,10 +20799,6 @@ snapshots:
       react: 19.1.0
     optionalDependencies:
       '@types/react': 19.1.17
-
-  use-latest-callback@0.1.9(react@19.1.0):
-    dependencies:
-      react: 19.1.0
 
   use-latest-callback@0.2.3(react@19.1.0):
     dependencies:

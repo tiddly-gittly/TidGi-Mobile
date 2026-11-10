@@ -45,7 +45,7 @@ function createTestDatabase(
     },
     getAllAsync<T>(source: string, parameters = []) {
       onQuery?.(source);
-      return Promise.resolve(database.prepare(source).all(...parameters) as T[]);
+      return Promise.resolve(Array.from(database.prepare(source).all(...parameters)) as T[]);
     },
     getFirstAsync<T>(source: string, parameters = []) {
       onQuery?.(source);

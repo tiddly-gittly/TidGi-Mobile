@@ -4,7 +4,7 @@ packages:
 
 overrides:
   '@memeloop/libp2p': 0.3.5
-  memeloop: 0.3.11
+  memeloop: 0.3.12
   '@memeloop/react-ui': 0.2.13
 
 allowBuilds:
@@ -24,6 +24,7 @@ peerDependencyRules:
     memeloop: '>=0.3.0'
 
 minimumReleaseAgeExclude:
+  - 'memeloop@0.3.12'
   - 'memeloop@0.3.11'
   - '@memeloop/react-ui@0.2.13'
   - 'memeloop@0.3.10'
