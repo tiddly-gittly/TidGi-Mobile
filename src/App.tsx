@@ -165,7 +165,7 @@ export const App: React.FC = () => {
                     name='AgentChat'
                     component={AgentChat}
                     options={() => ({
-                      headerTitle: 'Agent',
+                      headerTitle: t('AgentChat.Title'),
                       headerTitleStyle: { color: theme.colors.primary },
                     })}
                   />
