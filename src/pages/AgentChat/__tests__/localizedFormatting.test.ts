@@ -1,4 +1,13 @@
-import { formatMobileTimelineTimestamp } from '../localizedFormatting';
+import { formatMobileTimelineTimestamp, mobileMessageRoleKey } from '../localizedFormatting';
+
+it.each([
+  ['assistant', 'AgentChat.Agent'],
+  ['user', 'AgentChat.User'],
+  ['tool', 'AgentChat.Tool'],
+  ['system', 'AgentChat.Agent'],
+])('uses the shared detail role translation for %s', (role, key) => {
+  expect(mobileMessageRoleKey(role)).toBe(key);
+});
 
 describe('formatMobileTimelineTimestamp', () => {
   const timestamp = Date.UTC(2026, 7, 26, 9, 7);

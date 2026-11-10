@@ -32,6 +32,35 @@ describe('mobile agent configurable error routing', () => {
     });
   });
 
+  it('locates provider settings on the execution device for a remote run', () => {
+    const error = new AgentRunFailure(createMissingApiKeyAgentRunError({ providerId: 'siliconflow', diagnosticId: 'remote-goal-1' }));
+    const presentation = resolveMobileAgentErrorPresentation(error, {
+      ...options,
+      remoteSettingsHint: 'Configure Intel Mac, then resume.',
+    });
+    expect(presentation).toMatchObject({
+      message: 'localized:agent.run.error.providerAuthMissing Configure Intel Mac, then resume.',
+      diagnosticId: 'remote-goal-1',
+      settingTarget: { kind: 'provider', providerId: 'siliconflow', field: 'apiKey' },
+    });
+    expect(presentation?.actionId).toBeUndefined();
+    expect(presentation?.actionLabel).toBeUndefined();
+  });
+
+  it.each(['agent', 'storage'] as const)('keeps %s runtime guidance and diagnostics without a mismatched settings action', section => {
+    const failure = new AgentRunFailure(createAgentRunError({
+      code: 'RUNNER_UNAVAILABLE',
+      messageKey: 'agent.run.error.runnerUnavailable',
+      retryable: true,
+      diagnosticId: 'runtime-issue',
+      settingTarget: { kind: 'runtime', section },
+    }));
+    const presentation = resolveMobileAgentErrorPresentation(failure, options);
+    expect(presentation).toMatchObject({ message: 'localized:agent.run.error.runnerUnavailable', diagnosticId: 'runtime-issue' });
+    expect(presentation?.actionId).toBeUndefined();
+    expect(presentation?.actionLabel).toBeUndefined();
+  });
+
   it.each(
     [
       ['USER_MESSAGE_TOO_LARGE', 'agent.run.error.userMessageTooLarge', { limit: 131_072, requested: 131_073 }],

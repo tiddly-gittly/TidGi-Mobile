@@ -7,6 +7,7 @@ export interface MobileAgentErrorPresentationOptions {
     parameters: AgentRunErrorLocalizationParameters,
   ) => AgentRunErrorLocalizedText;
   settingActionLabel: (target: AgentRunErrorSettingTarget) => string;
+  remoteSettingsHint?: string;
 }
 
 /**
@@ -17,5 +18,15 @@ export function resolveMobileAgentErrorPresentation(
   error: Error | ChatMessage | ConversationMessageListProjection,
   options: MobileAgentErrorPresentationOptions,
 ): AgentRunErrorPresentation | null {
-  return resolveAgentRunErrorPresentation(error, options);
+  const presentation = resolveAgentRunErrorPresentation(error, {
+    localize: options.localize,
+    settingActionLabel: options.settingActionLabel,
+  });
+  if (presentation?.settingTarget && options.remoteSettingsHint) {
+    return { ...presentation, actionId: undefined, actionLabel: undefined, message: `${presentation.message} ${options.remoteSettingsHint}` };
+  }
+  if (presentation?.settingTarget?.kind === 'runtime' && presentation.settingTarget.section !== 'network') {
+    return { ...presentation, actionId: undefined, actionLabel: undefined };
+  }
+  return presentation;
 }

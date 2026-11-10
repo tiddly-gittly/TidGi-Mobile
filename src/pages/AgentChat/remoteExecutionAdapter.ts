@@ -83,27 +83,44 @@ async function waitForRemoteRun(
   client: MobileAgentDeviceRpcClient,
   runId: string,
   signal: AbortSignal,
+  syncProgress: () => Promise<void>,
 ): Promise<void> {
+  let failures = 0;
   for (;;) {
     signal.throwIfAborted();
-    const { status } = await client.getRunStatus({ runId }, { signal });
+    let response: Awaited<ReturnType<MobileAgentDeviceRpcClient['getRunStatus']>>;
+    try {
+      response = await client.getRunStatus({ runId }, { signal });
+      if (response.status?.state === 'running' || response.status?.state === 'accepted') await syncProgress();
+      failures = 0;
+    } catch {
+      signal.throwIfAborted();
+      await waitForNextPoll(Math.min(500 * 2 ** failures++, 15_000), signal);
+      continue;
+    }
+    const { status } = response;
     if (!status) throw new Error('mobile_remote_run_status_missing');
     if (status.state === 'completed') return;
     if (status.state === 'failed') throw safeRemoteRunError(status.error);
     if (status.state === 'cancelled') throw new Error('mobile_remote_run_cancelled');
-    await new Promise<void>((resolve, reject) => {
-      const onAbort = () => {
-        clearTimeout(timeout);
-        signal.removeEventListener('abort', onAbort);
-        reject(signal.reason instanceof Error ? signal.reason : new Error('mobile_remote_run_cancelled'));
-      };
-      const timeout = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, 500);
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
+    await waitForNextPoll(500, signal);
   }
+}
+
+function waitForNextPoll(milliseconds: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason instanceof Error ? signal.reason : new Error('mobile_remote_run_cancelled'));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /**
@@ -113,6 +130,7 @@ async function waitForRemoteRun(
  */
 export class MobileRemoteExecutionAdapter {
   private readonly activeRemoteRuns = new Map<string, ActiveRemoteRun>();
+  private readonly branchAcceptances = new Map<string, () => void>();
   private readonly coordinator: RemoteAgentExecutionCoordinator;
   private readonly mutationResults = new Map<string, MutationResult>();
 
@@ -127,7 +145,9 @@ export class MobileRemoteExecutionAdapter {
           request.attachment,
           callOptions.signal,
         );
-        const result = await (await options.getLocalLoopService()).executePreparedMessage({
+        const service = await options.getLocalLoopService();
+        this.branchAcceptances.get(request.provenance.requestId)?.();
+        const result = await service.executePreparedMessage({
           ...request.provenance,
           ...(attachment === undefined ? {} : { attachment }),
           message: request.message,
@@ -161,6 +181,7 @@ export class MobileRemoteExecutionAdapter {
           turnId: request.provenance.turnId,
           ...pending,
         }, { signal: callOptions.signal });
+        this.branchAcceptances.get(request.provenance.requestId)?.();
         await this.trackRemoteRun({
           client,
           conversationId: request.provenance.conversationId,
@@ -292,6 +313,17 @@ export class MobileRemoteExecutionAdapter {
   }
 
   /** Resume the staged branch through the same coordinator and durable turn identity. */
+  public startBranch(request: ConversationForkRequest): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.branchAcceptances.set(request.requestId, resolve);
+      void this.executeBranch(request).then(() => {
+        resolve();
+      }, reject).finally(() => {
+        this.branchAcceptances.delete(request.requestId);
+      });
+    });
+  }
+
   public async executeBranch(request: ConversationForkRequest): Promise<RemoteAgentExecutionResult> {
     const { generation } = this.coordinator.getSnapshot(request.targetConversationId);
     const conversation = await this.options.storage.getConversationMeta(request.targetConversationId);
@@ -584,7 +616,7 @@ export class MobileRemoteExecutionAdapter {
   private async trackRemoteRun(run: ActiveRemoteRun, signal: AbortSignal): Promise<void> {
     this.activeRemoteRuns.set(run.conversationId, run);
     try {
-      await waitForRemoteRun(run.client, run.runId, signal);
+      await waitForRemoteRun(run.client, run.runId, signal, () => this.options.syncConversation(run.peerId, run.conversationId, signal));
     } finally {
       const active = this.takeRemoteRun(run.conversationId, run.peerId, run.runId);
       if (active && signal.aborted) await active.client.cancel({ runId: active.runId }).catch(() => undefined);

@@ -1,3 +1,4 @@
+import type { MemeLoopChatErrorPresentation } from '@memeloop/react-ui/chat/core';
 import {
   AgentSessionProvider,
   ConversationTimelineWindowController,
@@ -49,11 +50,12 @@ import {
 import { MobileConversationDirectoryController, mobileConversationDirectoryErrorMessageKey } from './conversationDirectory';
 import { ConversationSettings } from './ConversationSettings';
 import { resolveMobileAgentErrorPresentation } from './errorPresentation';
-import { formatMobileTimelineTimestamp } from './localizedFormatting';
+import { formatMobileTimelineTimestamp, mobileMessageRoleKey } from './localizedFormatting';
 import { exportStoredMessage } from './messageExport';
 import { RemoteAgentPicker } from './RemoteAgentPicker';
 import { mobileExecutionTarget, MobileRemoteExecutionAdapter } from './remoteExecutionAdapter';
 import { useConversationBranches } from './useConversationBranches';
+import { useSessionResource } from './useSessionResource';
 
 const LOCAL_EXECUTION_TARGET_ID = 'local';
 const REMOTE_EXECUTION_TARGET_PREFIX = 'peer:';
@@ -165,7 +167,8 @@ function AgentChatSession({
     () => new ConversationTimelineWindowController(clients.timelineClient),
     [clients.timelineClient],
   );
-  const terminalCleanupGeneration = useRef(0);
+  useSessionResource(timelineController);
+  useSessionResource(executionAdapter);
 
   useEffect(() => {
     executionAdapter.switchTarget(conversationId, mobileExecutionTarget(activeExecutionTargetId));
@@ -183,24 +186,10 @@ function AgentChatSession({
     };
   }, [activeExecutionTargetId, controller, conversationId]);
 
-  useEffect(() => {
-    terminalCleanupGeneration.current += 1;
-    return () => {
-      terminalCleanupGeneration.current += 1;
-      const cleanupGeneration = terminalCleanupGeneration.current;
-      queueMicrotask(() => {
-        // React strict effects immediately set up the same resource again.
-        // Only a genuine unmount leaves this cleanup generation current.
-        if (terminalCleanupGeneration.current !== cleanupGeneration) return;
-        timelineController.dispose();
-        void executionAdapter.dispose();
-      });
-    };
-  }, [executionAdapter, timelineController]);
-
   return (
     <AgentSessionProvider controller={controller}>
       <AgentChatSessionView
+        key={conversationId}
         activeExecutionTargetId={activeExecutionTargetId}
         agentLoopDevices={agentLoopDevices}
         conversationId={conversationId}
@@ -260,6 +249,34 @@ function AgentChatSessionView({
       resume: async input => (await getLoopService()).goals.resume(input),
       complete: async input => (await getLoopService()).goals.complete(input),
     }), [settingsClient, getLoopService]);
+  const resolveErrorPresentation = useCallback((error: Parameters<typeof resolveMobileAgentErrorPresentation>[0]) =>
+    resolveMobileAgentErrorPresentation(error, {
+      localize: (messageKey, parameters) => ({ title: t('AgentChat.AgentRunErrorTitle'), message: t(messageKey, { ...parameters }) }),
+      settingActionLabel: () => t('AgentChat.ConfigureExternalAPI'),
+      ...(settingsClient
+        ? {
+          remoteSettingsHint: t('AgentChat.ConfigureOnExecutionDevice', {
+            deviceName: agentLoopDevices.find(device => remoteExecutionTargetId(device.peerId) === activeExecutionTargetId)?.displayName ??
+              activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length),
+          }),
+        }
+        : {}),
+    }), [t, settingsClient, agentLoopDevices, activeExecutionTargetId]);
+  const handleErrorAction = useCallback((presentation: MemeLoopChatErrorPresentation) => {
+    if (!navigationReference.isReady() || presentation.actionId !== 'agent-run-setting' || !presentation.settingTarget) return Promise.resolve();
+    setGoalOpen(false);
+    const target = presentation.settingTarget;
+    if (target.kind === 'provider') {
+      navigationReference.navigate('Config', {
+        focusItem: 'external-api',
+        focusField: target.field === 'apiKey' ? 'api-key' : target.field === 'baseUrl' ? 'base-url' : target.field === 'apiMode' ? 'api-mode' : 'model',
+      });
+    } else if (target.kind === 'model') navigationReference.navigate('Config', { focusItem: 'external-api', focusField: 'model' });
+    else if (target.section === 'network') {
+      navigationReference.navigate('Config', { focusItem: 'device-network', focusField: 'cloud-url' });
+    }
+    return Promise.resolve();
+  }, []);
   const subscribeToExecution = useCallback((listener: () => void) => executionAdapter.subscribe(conversationId, listener), [conversationId, executionAdapter]);
   const getExecutionSnapshot = useCallback(() => executionAdapter.getSnapshot(conversationId), [conversationId, executionAdapter]);
   const executionSnapshot = useSyncExternalStore(subscribeToExecution, getExecutionSnapshot, getExecutionSnapshot);
@@ -279,7 +296,7 @@ function AgentChatSessionView({
           return {
             items: result.messages.map(entry => ({
               content: entry.content,
-              label: t(`AgentChat.${entry.role === 'assistant' ? 'Agent' : entry.role[0].toUpperCase()}${entry.role.slice(1)}`),
+              label: t(mobileMessageRoleKey(entry.role)),
             })),
             truncated: result.hasMoreAfter,
             ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
@@ -292,11 +309,7 @@ function AgentChatSessionView({
         return {
           items: (result?.items ?? []).map(entry => ({
             content: entry.content,
-            label: entry.role === 'user'
-              ? t('AgentChat.User')
-              : entry.role === 'tool'
-              ? t('AgentChat.Tool')
-              : t('AgentChat.Agent'),
+            label: t(mobileMessageRoleKey(entry.role)),
           })),
           truncated: result?.hasMoreAfter ?? false,
           ...(result?.nextCursor ? { nextCursor: result.nextCursor } : {}),
@@ -339,7 +352,7 @@ function AgentChatSessionView({
       },
       acceptBranch: async (request, draftRevision) => {
         executionAdapter.switchTarget(request.targetConversationId, mobileExecutionTarget(activeExecutionTargetId));
-        await executionAdapter.executeBranch(request);
+        await executionAdapter.startBranch(request);
         await mobileAgentStorage.saveConversationEditDraft({
           conversationId,
           messageId: request.messageId,
@@ -368,6 +381,7 @@ function AgentChatSessionView({
   ], [agentLoopDevices, localPeerId, t]);
   const adapter = useMemo(() => ({
     ...baseAdapter,
+    isRunning: baseAdapter.isRunning || ['queued', 'running', 'cancelling'].includes(executionSnapshot.status),
     editing,
     executionTargets,
     activeExecutionTarget: mobileExecutionTarget(activeExecutionTargetId),
@@ -387,6 +401,7 @@ function AgentChatSessionView({
     conversationId,
     executionAdapter,
     executionSnapshot.error,
+    executionSnapshot.status,
     executionTargets,
     loadVisibleAttachments,
     sessionStartError,
@@ -475,6 +490,8 @@ function AgentChatSessionView({
           conversationId={conversationId}
           definitionId={snapshot.agent.agentDefId}
           labels={goalLabels}
+          resolveErrorPresentation={resolveErrorPresentation}
+          onErrorAction={handleErrorAction}
           topInset={insets.top}
           bottomInset={insets.bottom}
           onClose={() => {
@@ -593,27 +610,8 @@ function AgentChatSessionView({
         releaseAttachment={releaseMobilePickedAttachment}
         timelineLabels={timelineLabels}
         genericErrorPresentation={{ title: t('AgentChat.GenericErrorTitle'), message: t('AgentChat.GenericErrorMessage') }}
-        resolveErrorPresentation={error =>
-          resolveMobileAgentErrorPresentation(error, {
-            localize: (messageKey, parameters) => ({ title: t('AgentChat.AgentRunErrorTitle'), message: t(messageKey, { ...parameters }) }),
-            settingActionLabel: () => t('AgentChat.ConfigureExternalAPI'),
-          })}
-        onErrorAction={presentation => {
-          if (!navigationReference.isReady() || presentation.actionId !== 'agent-run-setting' || !presentation.settingTarget) {
-            return Promise.resolve();
-          }
-          const target = presentation.settingTarget;
-          if (target.kind === 'provider') {
-            navigationReference.navigate('Config', {
-              focusItem: 'external-api',
-              focusField: target.field === 'apiKey' ? 'api-key' : target.field === 'baseUrl' ? 'base-url' : target.field === 'apiMode' ? 'api-mode' : 'model',
-            });
-          } else if (target.kind === 'model') navigationReference.navigate('Config', { focusItem: 'external-api', focusField: 'model' });
-          else if (target.section === 'network') {
-            navigationReference.navigate('Config', { focusItem: 'device-network', focusField: 'cloud-url' });
-          }
-          return Promise.resolve();
-        }}
+        resolveErrorPresentation={resolveErrorPresentation}
+        onErrorAction={handleErrorAction}
       />
     </>
   );
@@ -808,7 +806,6 @@ export const AgentChat: FC<StackScreenProps<RootStackParameterList, 'AgentChat'>
       {localPeerId
         ? (
           <AgentChatSession
-            key={conversationId}
             activeExecutionTargetId={activeExecutionTargetId}
             agentLoopDevices={agentLoopDevices}
             conversationId={conversationId}
