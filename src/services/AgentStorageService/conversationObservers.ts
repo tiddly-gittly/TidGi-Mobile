@@ -74,10 +74,8 @@ export class MobileConversationObservers {
               try {
                 listener(update);
               } catch (error) {
-                // Observer failures are host/UI failures, not storage failures.
-                // Keep the observer isolated while still surfacing the failure through
-                // the app's console logger (which is persisted by LoggerService once
-                // the mobile logger is initialized).
+                // Report observer failures through the persisted app console and
+                // continue delivering updates to the remaining observers.
                 console.error('[AgentStorageService] Conversation observer failed', error);
               }
             }

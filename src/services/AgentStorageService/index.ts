@@ -242,7 +242,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     return this.conversationEditingStore.getPendingConversationBranchReplacement(conversationId);
   }
 
-  /** Branch identity lives on canonical user events, so received events work without local fork records. */
+  /** Read branch identity from canonical user events, including synchronized events. */
   public async getConversationBranches(conversationId: string, messageIds: readonly string[]): Promise<ConversationBranchState[]> {
     return this.conversationEditingStore.getConversationBranches(conversationId, messageIds);
   }
@@ -294,7 +294,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     return this.messageDetails.getMessageById(conversationId, messageId, callOptions);
   }
 
-  /** Exact durable user-root payload for retry; never reconstructed from a resident/UI projection. */
+  /** Read the exact durable user-root payload for retry from canonical storage. */
   public async getUserMessageForTurn(
     conversationId: string,
     turnId: string,
@@ -353,7 +353,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     return this.eventMutations.deleteTurn(conversationId, turnId, originNodeId);
   }
 
-  /** Merge a UI snapshot; never delete or overwrite peer-synchronized events. */
+  /** Merge a UI snapshot while preserving peer-synchronized events. */
   public async replaceMessages(_conversationId: string, messages: readonly ChatMessage[]): Promise<void> {
     return this.eventMutations.replaceMessages(_conversationId, messages);
   }
@@ -366,11 +366,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     return this.eventMutations.insertMessagesIfAbsent(messages);
   }
 
-  /**
-   * Clear only the current MemeLoop chat store. Legacy database filenames are
-   * deliberately never opened or migrated, so a corrupt prerelease store
-   * cannot block this operation or application startup.
-   */
+  /** Clear the current chat store and notify observers after the transaction commits. */
   public async clearAllAgentChatData(): Promise<void> {
     const observed = this.conversationObservers.observedConversationIds();
     const previousRevisions = new Map<string, string>();
@@ -504,7 +500,7 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
     return this.attachmentReader.getAttachment(contentHash, options);
   }
 
-  /** Return only a hash-verified, app-owned content-addressed object URI. */
+  /** Return a hash-verified, app-owned content-addressed object URI. */
   public async getVerifiedAttachmentFileUri(
     contentHash: string,
     options: ConversationReadCallOptions = {},
@@ -615,12 +611,9 @@ export class MobileAgentStorage implements FullAgentStorage, AtomicAgentRetrySto
   }
 
   /**
-   * Mobile's physical retry transaction. The peer/request row is always read
-   * first: an existing exact request is a replay, while a missing replay is
-   * rejected. A genuinely fresh request then point-reads the old user root,
-   * compares the complete canonical row observed by Core, and persists the
-   * run plus deterministic tombstone/replacement pair in the same SQLite
-   * transaction.
+   * Read peer/request identity first to replay exact requests. Fresh retries compare
+   * the canonical user-root row and commit the run plus deterministic tombstone
+   * and replacement events in one SQLite transaction.
    */
   public async retryTurnAtomic(input: AtomicAgentRetryInput): Promise<AtomicAgentRetryResult> {
     return this.runStore.retryTurnAtomic(input);

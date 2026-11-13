@@ -196,8 +196,7 @@ export class MobileEventMutations {
 
   public async insertEventsIfAbsent(events: readonly ConversationEvent[]): Promise<void> {
     if (events.length === 0) return;
-    // Validate the complete batch before opening a transaction so an invalid
-    // later event cannot leave an earlier prefix durable.
+    // Normalize the complete batch before its atomic transaction.
     const normalizedEvents = normalizeCanonicalConversationEvents(events);
     const revisions = new Map<string, { previous: string; revision: string }>();
     const appendedCounts = new Map<string, number>();
@@ -261,9 +260,8 @@ export class MobileEventMutations {
           appendedCounts.set(conversationId, projectedByConversation.get(conversationId)?.length ?? 0);
         }
       });
-      // Queue the notification only after SQLite commits, but before this
-      // serialized mutation resolves. Concurrent queued sync batches can then
-      // merge into one bounded invalidation without exposing uncommitted rows.
+      // Queue notifications after SQLite commits and before this serialized
+      // mutation resolves, coalescing concurrent sync batches into one bounded update.
       for (const [conversationId, snapshot] of revisions) {
         this.context.invalidateConversation(
           conversationId,

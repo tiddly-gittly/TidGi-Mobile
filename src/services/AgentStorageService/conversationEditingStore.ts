@@ -122,7 +122,7 @@ export class MobileConversationEditingStore {
           for (const row of rows) {
             const item = parseCanonicalMessage(row.messageJson, input.conversationId);
             cursor = messageCursor(item);
-            // Compaction controls are not copied into independently editable history.
+            // Copy editable messages while compaction controls remain scoped to the source history.
             if (isContextCompactionSummary(item)) continue;
             yield item;
           }
