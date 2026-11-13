@@ -44,6 +44,7 @@ const defaultConfig: ConfigState = {
   translucentStatusBar: false,
   userName: '',
 };
+const configKeys = new Set(Object.keys(defaultConfig));
 interface ConfigActions {
   set: (newConfig: Partial<ConfigState>) => void;
 }
@@ -55,11 +56,8 @@ export const useConfigStore = create<ConfigState & ConfigActions>()(
         ...defaultConfig,
         set: (newConfig) => {
           set((state) => {
-            for (const key in newConfig) {
-              if (key in state) {
-                state[key as keyof ConfigState] = newConfig[key as keyof ConfigState] as never;
-              }
-            }
+            const acceptedEntries = Object.entries(newConfig).filter(([key]) => configKeys.has(key));
+            Object.assign(state, Object.fromEntries(acceptedEntries));
           });
         },
       }),

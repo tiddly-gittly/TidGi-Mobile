@@ -56,10 +56,13 @@ export const useServerStore = create<ServerState & ServerActions>()(
           const name = partialServer.name || `TidGi-Desktop ${id}`;
           let newServer: IServerInfo = {
             id,
-            status: ServerStatus.online,
             provider: ServerProvider.TidGiDesktop,
             ...partialServer,
             name,
+            // Reachability is established by the async status probe. A newly
+            // saved endpoint must never be presented as online optimistically,
+            // even if a stale caller supplied a status field.
+            status: ServerStatus.disconnected,
           };
           set((state) => {
             const existingServerWithSameOrigin = Object.values(state.servers).find(

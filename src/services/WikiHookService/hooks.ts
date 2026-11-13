@@ -3,9 +3,7 @@ import { useRegisterProxy } from 'react-native-postmessage-cat';
 import { WebView } from 'react-native-webview';
 import { IWikiWorkspace } from '../../store/workspace';
 import { nativeService } from '../NativeService';
-import { WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
-
-export { WikiStorageService };
+import { FileSystemWikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
 import { WikiHookService } from '.';
 import { WikiHookServiceIPCDescriptor } from './descriptor';
 
@@ -16,7 +14,7 @@ export function useWikiHookService(workspace: IWikiWorkspace) {
 }
 
 export function useSetWebViewReferenceToService(
-  servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: WikiStorageService } | undefined>,
+  servicesOfWorkspace: RefObject<{ wikiHookService: WikiHookService; wikiStorageService: FileSystemWikiStorageService } | undefined>,
   webViewReference: RefObject<WebView | null>,
 ) {
   useEffect(() => {

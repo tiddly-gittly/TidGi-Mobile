@@ -35,7 +35,7 @@ export const WikiWebView: React.FC<StackScreenProps<RootStackParameterList, 'Wik
         // without waiting for the WebView content to load (which can take 30-90 s).
         <Container testID='wiki-webview-screen'>
           {(activeWorkspace !== undefined) && (
-            <WikiViewer wikiWorkspace={activeWorkspace} webviewSideReceiver={getWebviewSideReceiver() as unknown as string} quickLoad={quickLoad ?? false} />
+            <WikiViewer wikiWorkspace={activeWorkspace} webviewSideReceiver={getWebviewSideReceiver()} quickLoad={quickLoad ?? false} />
           )}
         </Container>
       );

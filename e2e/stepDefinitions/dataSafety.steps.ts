@@ -128,7 +128,9 @@ When('I navigate back to the main menu', { timeout: 30_000 }, async () => {
     await delay(1_000);
   }
   // Final fallback
-  await device.disableSynchronization().catch(() => {});
+  await device.disableSynchronization().catch((error) => {
+    console.error('[E2E] disableSynchronization cleanup failed', error);
+  });
   await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(10_000);
 });
 

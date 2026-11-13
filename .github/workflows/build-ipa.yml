@@ -2,6 +2,14 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/build-ipa.yml'
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'src/**'
   push:
     tags:
       - 'ipa-v*.*.*'
@@ -22,10 +30,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11.17.0
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.15.0
           cache: pnpm
 
       - name: Get pnpm store directory
@@ -42,7 +50,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Type check and lint
         run: |
@@ -56,18 +64,65 @@ jobs:
           pnpm run build:wiki-template
 
       - name: Expo prebuild (iOS)
-        run: pnpm exec expo prebuild -p ios --clean
+        run: pnpm exec expo prebuild -p ios --clean --no-install
+
+      - name: Verify generated iOS local-network policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLIST_PATH=$(grep -rl "NSLocalNetworkUsageDescription" ios --include='Info.plist' | head -1)
+          if [ -z "$PLIST_PATH" ]; then
+            echo "Generated application Info.plist was not found"
+            exit 1
+          fi
+          test "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -o - "$PLIST_PATH")" = "true"
+          DESCRIPTION=$(plutil -extract NSLocalNetworkUsageDescription raw -o - "$PLIST_PATH")
+          if [ -z "$DESCRIPTION" ]; then
+            echo "NSLocalNetworkUsageDescription must not be empty"
+            exit 1
+          fi
+          echo "Verified generated policy in $PLIST_PATH"
+
+      - uses: actions/cache@v5
+        name: Restore CocoaPods cache
+        with:
+          # CocoaPods projects embed the resolved pnpm React Native path. Restore
+          # only a cache built from the same native and JavaScript dependency graph.
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile', 'ios/Podfile.properties.json', 'package.json', 'pnpm-lock.yaml') }}
 
       - name: Install CocoaPods dependencies
         run: cd ios && pod install --repo-update
 
-      - uses: actions/cache@v5
-        name: Cache CocoaPods
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
+      - name: Verify React Native pod script path
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ios
+          WORKSPACE=$(find . -maxdepth 1 -type d -name '*.xcworkspace' -print -quit)
+          if [ -z "$WORKSPACE" ]; then
+            echo "CocoaPods workspace was not generated"
+            exit 1
+          fi
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          BUILD_SETTINGS=$(xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -showBuildSettings)
+          REACT_NATIVE_PATH=$(printf '%s\n' "$BUILD_SETTINGS" | sed -n 's/^[[:space:]]*REACT_NATIVE_PATH = //p' | head -1)
+          if [ -z "$REACT_NATIVE_PATH" ]; then
+            echo "REACT_NATIVE_PATH was not present in generated Xcode build settings"
+            exit 1
+          fi
+          SCRIPT_PATH="$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh"
+          if [ ! -f "$SCRIPT_PATH" ]; then
+            echo "React Native pod scripts are stale or incomplete: $SCRIPT_PATH"
+            echo "The CocoaPods cache must be regenerated for the current pnpm lockfile."
+            exit 1
+          fi
+          echo "Verified React Native pod script: $SCRIPT_PATH"
 
       - name: Build unsigned iOS app
         run: |
@@ -99,7 +154,16 @@ jobs:
             exit 1
           fi
 
+          BUILT_PLIST="$APP_PATH/Info.plist"
+          test "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -o - "$BUILT_PLIST")" = "true"
+          DESCRIPTION=$(plutil -extract NSLocalNetworkUsageDescription raw -o - "$BUILT_PLIST")
+          if [ -z "$DESCRIPTION" ]; then
+            echo "Built NSLocalNetworkUsageDescription must not be empty"
+            exit 1
+          fi
+
           mkdir -p /tmp/ios-artifacts
+          cp "$BUILT_PLIST" /tmp/ios-artifacts/TidGi-Info.plist
           STAGING_DIR="$RUNNER_TEMP/ipa-staging"
           rm -rf "$STAGING_DIR"
           mkdir -p "$STAGING_DIR/Payload"
@@ -112,6 +176,7 @@ jobs:
           name: ios-ipa-${{ github.run_number }}-${{ github.sha }}
           path: |
             /tmp/ios-artifacts/TidGi.ipa
+            /tmp/ios-artifacts/TidGi-Info.plist
           if-no-files-found: error
 
       - name: Create Release
