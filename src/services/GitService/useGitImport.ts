@@ -128,7 +128,7 @@ export function useGitImport() {
 
       workspaceLogger.log('Start git clone', {
         baseUrl: remote.baseUrl,
-        remoteWorkspaceId: remote.workspaceId,
+        workspaceId: remote.workspaceId,
         wikiFolderLocation,
       });
 

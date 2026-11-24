@@ -14,6 +14,12 @@
 const hasCliTags = process.argv.includes('--tags') || process.argv.some(arg => arg.startsWith('--tags='));
 
 module.exports = {
+  agentui: {
+    require: ['e2e/support/agentChatHooks.ts', 'e2e/stepDefinitions/agentChat.steps.ts'],
+    paths: ['e2e/features/agent-chat-controls.feature'],
+    format: ['progress', 'html:e2e/reports/agent-chat-report.html'],
+    requireModule: ['ts-node/register'],
+  },
   default: {
     require: ['e2e/support/hooks.ts', 'e2e/stepDefinitions/**/*.ts'],
     paths: ['e2e/features/**/*.feature'],

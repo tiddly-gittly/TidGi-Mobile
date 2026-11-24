@@ -50,7 +50,9 @@ Given('the app is on the main menu screen', async () => {
 });
 
 async function navigateToImporterScreen(): Promise<void> {
-  await device.disableSynchronization().catch(() => {});
+  await device.disableSynchronization().catch((error) => {
+    console.error('[E2E] disableSynchronization cleanup failed', error);
+  });
   // MainMenu's bottom button opens CreateWorkspace with ScanQRCode as the first tab,
   // which renders the Importer. This is the natural user flow for adding/importing a wiki.
   await element(by.id('create-workspace-button')).tap();
@@ -178,14 +180,18 @@ async function navigateBackToMainMenuScreen(): Promise<void> {
   for (let index = 0; index < 15; index++) {
     try {
       await waitFor(element(by.id('main-menu-screen'))).toBeVisible().withTimeout(1_500);
-      await device.disableSynchronization().catch(() => {});
+      await device.disableSynchronization().catch((error) => {
+        console.error('[E2E] disableSynchronization cleanup failed', error);
+      });
       return;
     } catch {
       adbKeyEvent(4);
       await delay(1_500);
     }
   }
-  await device.disableSynchronization().catch(() => {});
+  await device.disableSynchronization().catch((error) => {
+    console.error('[E2E] disableSynchronization cleanup failed', error);
+  });
   await waitForElement(by.id('main-menu-screen'), 10_000, 'main-menu-screen after back navigation');
 }
 
@@ -499,7 +505,9 @@ async function tapSyncButtonForImportedWiki(): Promise<void> {
 
   // After tapping sync, immediately disable synchronization so a failure Alert
   // does not cause an "App seems idle" hang. Individual waits still work.
-  await device.disableSynchronization().catch(() => {});
+  await device.disableSynchronization().catch((error) => {
+    console.error('[E2E] disableSynchronization cleanup failed', error);
+  });
 }
 
 Then('the sync should complete successfully', { timeout: NETWORK_TIMEOUT + 30_000 }, async () => {

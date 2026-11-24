@@ -75,15 +75,14 @@ export const GitSyncStatus: FC<IGitSyncStatusProps> = ({ workspace }) => {
     setSyncError(null);
 
     try {
-      await gitBackgroundSyncService.updateServerOnlineStatus();
-      const server = gitBackgroundSyncService.getOnlineServerForWiki(workspace);
-      if (server === undefined) {
+      const target = await gitBackgroundSyncService.refreshOnlineServerForWorkspace(workspace.id);
+      if (target === undefined || target.server === undefined || target.workspace.type === 'html') {
         setSnackbarMessage(t('Sync.NoServerConnected'));
         setSnackbarVisible(true);
         return;
       }
 
-      const result = await gitBackgroundSyncService.syncWikiWithServer(workspace, server);
+      const result = await gitBackgroundSyncService.syncWikiWithServer(target.workspace, target.server);
 
       if (!result.succeeded) {
         setSnackbarMessage(t('Sync.SyncFailed'));

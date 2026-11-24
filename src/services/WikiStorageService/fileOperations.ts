@@ -12,6 +12,13 @@ import { Directory, File } from 'expo-file-system';
 import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android-external-storage';
 import { Platform } from 'react-native';
 
+function reportFileOperationFailure(message: string, error: unknown): void {
+  // LoggerService itself depends on these low-level file helpers. Use the
+  // console sink here to avoid a circular module dependency; initialized
+  // mobile logging persists console output to the app log files.
+  console.error(`[file-operations] ${message}`, error);
+}
+
 function isExternalPath(filepath: string): boolean {
   const plain = toPlainPath(filepath);
   return plain.startsWith('/storage/') || plain.startsWith('/sdcard/');
@@ -50,7 +57,8 @@ async function isDirectoryEmpty(path: string): Promise<boolean> {
   if (!directory.exists) return true;
   try {
     return directory.list().length === 0;
-  } catch {
+  } catch (error) {
+    reportFileOperationFailure('Failed to inspect directory while deleting empty parents', error);
     return false;
   }
 }
@@ -78,7 +86,8 @@ export async function deleteEmptyParents(startDirectoryPath: string, stopAtPath?
           directory.delete();
         }
       }
-    } catch {
+    } catch (error) {
+      reportFileOperationFailure('Failed to remove an empty parent directory', error);
       break;
     }
 
@@ -290,8 +299,8 @@ export async function findFileRecursively(
           return `${plain}${plain.endsWith('/') ? '' : '/'}${relative}`;
         }
       }
-    } catch {
-      // ignore unreadable dirs
+    } catch (error) {
+      reportFileOperationFailure(`Failed to search external directory ${plain}`, error);
     }
     return undefined;
   }
@@ -309,7 +318,9 @@ export async function findFileRecursively(
           }
         }
       }
-    } catch { /* ignore unreadable dirs */ }
+    } catch (error) {
+      reportFileOperationFailure('Failed to search internal directory', error);
+    }
     return undefined;
   };
 

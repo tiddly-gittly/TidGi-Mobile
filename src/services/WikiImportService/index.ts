@@ -9,7 +9,7 @@ import { ExternalStorage, toPlainPath } from 'expo-tiddlywiki-filesystem-android
 import { WIKI_FOLDER_PATH } from '../../constants/paths';
 import { type IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { gitCloneToDirectory, IGitRemote } from '../GitService';
-import { saveTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
+import { writeTidgiConfig } from '../WikiStorageService/tidgiConfigManager';
 import { extractZipToDirectory } from '../WikiTemplateService/extractLocalWikiTemplate';
 import { getGitCloneCacheDirectory, hasValidGitRepository, normalizeGitCloneUrl, toFileCloneUrl, updateGitCloneCache } from './gitCloneCache';
 
@@ -210,8 +210,14 @@ export async function importBundledWikiTemplate({
     // tidgi.config.json, but extractZipToDirectory intentionally skips that file
     // (the desktop's config is not valid on mobile). Create a mobile-proper
     // tidgi.config.json so git doesn't report it as deleted.
-    await saveTidgiConfig(targetDirectory, {
-      version: 1,
+    await writeTidgiConfig({
+      id: workspaceId,
+      name: templateName,
+      type: 'wiki',
+      wikiFolderLocation: targetDirectory,
+      syncedServers: [],
+      useExternalStorage,
+    }, {
       id: workspaceId,
       name: templateName,
     });

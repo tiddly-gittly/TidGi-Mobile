@@ -34,10 +34,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11.17.0
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.15.0
           cache: pnpm
       - name: Set Up JDK
         uses: actions/setup-java@v5
@@ -66,13 +66,14 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Type check, lint, and unit test
         run: |
           pnpm run check
           pnpm run lint
           pnpm run test:unit
+          pnpm run test:bundle:android
 
       ## configure cash for gradle : will help to reduce build time
       - uses: actions/cache@v5
@@ -124,9 +125,17 @@ jobs:
 
       - name: Collect APKs into flat staging dir
         run: |
+          set -euo pipefail
           mkdir -p /tmp/apk-artifacts
-          cp android/app/build/outputs/apk/release/app-release-signed.apk /tmp/apk-artifacts/app-release-signed.apk || true
-          cp android/app/build/outputs/apk/release/app-release.apk /tmp/apk-artifacts/app-release.apk || true
+          shopt -s nullglob
+          apk_files=(android/app/build/outputs/apk/release/*.apk)
+          if (( ${#apk_files[@]} == 0 )); then
+            echo 'No release APK was generated.' >&2
+            exit 1
+          fi
+          for apk_file in "${apk_files[@]}"; do
+            cp "$apk_file" /tmp/apk-artifacts/
+          done
 
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v5
@@ -136,7 +145,7 @@ jobs:
             /tmp/apk-artifacts/app-release-signed.apk
             /tmp/apk-artifacts/app-release.apk
             /tmp/apk-artifacts/AndroidManifest-release.xml
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Create Release (release APK)
         uses: softprops/action-gh-release@v1

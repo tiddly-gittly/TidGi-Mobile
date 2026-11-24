@@ -118,6 +118,29 @@ export const preferenceSections: PreferenceSectionSchema[] = [
     ],
   },
   {
+    id: 'external-api',
+    titleKey: 'Preference.ExternalAPI',
+    items: [{
+      type: 'custom',
+      key: 'external-api',
+      titleKey: 'Preference.ExternalAPI',
+      customKey: 'external-api',
+    }],
+  },
+  {
+    id: 'device-network',
+    titleKey: 'Preference.DeviceNetwork',
+    items: [
+      {
+        type: 'custom',
+        key: 'device-network',
+        titleKey: 'Preference.DeviceNetwork',
+        descriptionKey: 'Preference.DeviceNetworkDescription',
+        customKey: 'device-network',
+      },
+    ],
+  },
+  {
     id: 'privacy',
     titleKey: 'Preference.PrivacyAndSecurity',
     items: [
@@ -127,6 +150,17 @@ export const preferenceSections: PreferenceSectionSchema[] = [
         titleKey: 'Preference.AnalyticsOptOut',
         descriptionKey: 'Preference.AnalyticsOptOutDescription',
         configKey: 'analyticsOptOut',
+      },
+      {
+        type: 'action',
+        key: 'clear-agent-chat-data',
+        titleKey: 'Preference.ClearAgentChatData',
+        descriptionKey: 'Preference.ClearAgentChatDataDescription',
+        buttonTitleKey: 'Preference.ClearAgentChatData',
+        buttonMode: 'outlined',
+        confirmTitleKey: 'Preference.ClearAgentChatData',
+        confirmMessageKey: 'Preference.ClearAgentChatDataConfirm',
+        actionId: 'clear-agent-chat-data',
       },
     ],
   },

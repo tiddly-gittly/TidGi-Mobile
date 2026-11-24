@@ -150,7 +150,13 @@ exports.startup = function startup() {
       const filePath = path.join(ensureWorkspacePath(workspaceId), '.git', path.basename(fileName));
       try {
         fs.unlinkSync(filePath);
-      } catch {
+      } catch (error) {
+        // An already-missing temp Git file is idempotent; surface every other
+        // cleanup failure so the mock cannot hide a broken test fixture.
+        const isMissing = Boolean(error && typeof error === 'object' && error.code === 'ENOENT');
+        if (!isMissing) {
+          console.error('[mock-server] Failed to remove temporary Git file', error);
+        }
       }
     },
   };
@@ -358,8 +364,8 @@ export async function startServer(): Promise<void> {
 
   // Health-check via node:http (avoids global fetch which may be unavailable
   // in ts-node/esm worker context).
+  let retryDelayMs = 100;
   for (let index = 0; index < 30; index++) {
-    await new Promise(r => setTimeout(r, 1000));
     try {
       const ok = await new Promise<boolean>((resolve) => {
         const request = httpGet(`${getMockServerUrl()}/status`, {
@@ -381,7 +387,15 @@ export async function startServer(): Promise<void> {
         console.log('[mock-server] Ready.');
         return;
       }
-    } catch { /* waiting */ }
+    } catch (error) {
+      console.error('[mock-server] Health-check request failed', error);
+    }
+    if (index < 29) {
+      // The request itself is the readiness probe; use bounded exponential
+      // backoff between probes rather than a fixed E2E sleep.
+      await new Promise<void>(resolve => setTimeout(resolve, retryDelayMs));
+      retryDelayMs = Math.min(retryDelayMs * 2, 1_000);
+    }
   }
 
   // Diagnostics: print server output on failure

@@ -234,8 +234,7 @@ When('I tap the settings icon on the first workspace', async () => {
     // Fallback: tap the first settings icon (may be help workspace).
     await element(by.label('workspace-settings-icon')).atIndex(0).tap();
   }
-  // Allow navigation animation to complete (sync is disabled for WebView apps).
-  await new Promise(resolve => setTimeout(resolve, 1_000));
+  await waitForElement(by.id('workspace-detail-screen'), UI_TIMEOUT, 'workspace-detail-screen after settings tap');
 });
 
 Then('I should see the workspace detail screen', async () => {

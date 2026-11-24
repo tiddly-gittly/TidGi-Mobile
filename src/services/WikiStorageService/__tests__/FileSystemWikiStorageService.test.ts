@@ -512,6 +512,33 @@ describe('FileSystemWikiStorageService storage safety', () => {
     expect(service.getTrackedTiddlerFilePath('User')).toBe(userPath);
   });
 
+  it('normalizes a native file URI before indexing a batch result', async () => {
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const userPath = `${workspace.wikiFolderLocation}/tiddlers/Uri_User.tid`;
+    mockFileSystem.writeFileSync(userPath, 'title: Uri User\n\ncontent');
+    mockExternalStorage.batchParseTidFiles.mockImplementationOnce(() =>
+      Promise.resolve(JSON.stringify([{ _filepath: `file://${userPath}`, title: 'Uri User' }])),
+    );
+
+    const service = new FileSystemWikiStorageService(workspace);
+    await service.buildFileIndex();
+
+    expect(service.getTrackedTiddlerFilePath('Uri User')).toBe(userPath);
+  });
+
+  it('fails the native index when its batch response is not an array', async () => {
+    const workspace = createWorkspace();
+    mockWorkspaces = [workspace];
+    const userPath = `${workspace.wikiFolderLocation}/tiddlers/Malformed.tid`;
+    mockFileSystem.writeFileSync(userPath, 'title: Malformed\n\ncontent');
+    mockExternalStorage.batchParseTidFiles.mockResolvedValueOnce(JSON.stringify({ ok: true }));
+
+    const service = new FileSystemWikiStorageService(workspace);
+    await expect(service.buildFileIndex()).rejects.toThrow('native batch parser returned a non-array result');
+    expect(service.getTrackedTiddlerFilePath('Malformed')).toBeUndefined();
+  });
+
   it('saves plugin-typed tiddlers using runtime contentTypeInfo instead of fallback .tid', async () => {
     const workspace = createWorkspace();
     mockWorkspaces = [workspace];

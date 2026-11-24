@@ -11,7 +11,7 @@ import { useConfigStore } from '../../store/config';
 import { IWikiWorkspace, useWorkspaceStore } from '../../store/workspace';
 import { navigateIfNotAlreadyThere, navigationReference } from '../../utils/RootNavigation';
 import type { WikiHookService } from '../WikiHookService';
-import { FileSystemWikiStorageService as WikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
+import { FileSystemWikiStorageService } from '../WikiStorageService/FileSystemWikiStorageService';
 import { wikiStorageServiceRegistry } from '../WikiStorageService/registry';
 import { importBinaryTiddlers, importTextTiddlers } from './wikiOperations';
 
@@ -56,9 +56,9 @@ export class NativeService {
   }
 
   #wikiHookServices?: WikiHookService;
-  #currentWikiStorageService?: WikiStorageService;
+  #currentWikiStorageService?: FileSystemWikiStorageService;
 
-  setCurrentWikiServices(wikiHookServices: WikiHookService, wikiStorageService: WikiStorageService) {
+  setCurrentWikiServices(wikiHookServices: WikiHookService, wikiStorageService: FileSystemWikiStorageService) {
     this.#wikiHookServices = wikiHookServices;
     this.#currentWikiStorageService = wikiStorageService;
   }
@@ -91,7 +91,7 @@ export class NativeService {
     return this.#getCurrentRouteWiki() ?? this.#getDefaultWiki();
   }
 
-  async #getStorageServiceForWorkspace(workspace: IWikiWorkspace): Promise<WikiStorageService> {
+  async #getStorageServiceForWorkspace(workspace: IWikiWorkspace): Promise<FileSystemWikiStorageService> {
     const currentWikiStorageService = this.#currentWikiStorageService;
     const currentRouteWiki = this.#getCurrentRouteWiki();
     if (currentWikiStorageService !== undefined && currentRouteWiki?.id === workspace.id) {

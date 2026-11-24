@@ -34,11 +34,9 @@ const timestamp = () => new Date().toISOString();
  */
 const getNativeBatchParser = (): ((filePaths: string[], quickLoadMode: boolean) => Promise<string>) | undefined => {
   if (Platform.OS !== 'android') return undefined;
-  const nativeModule = ExternalStorage as unknown as Record<string, unknown>;
-  if (typeof nativeModule.batchParseTidFiles === 'function') {
-    return nativeModule.batchParseTidFiles as (filePaths: string[], quickLoadMode: boolean) => Promise<string>;
-  }
-  return undefined;
+  return typeof ExternalStorage.batchParseTidFiles === 'function'
+    ? (filePaths, quickLoadMode) => ExternalStorage.batchParseTidFiles(filePaths, quickLoadMode)
+    : undefined;
 };
 
 function safeDecodePath(path: string): string {
@@ -273,7 +271,7 @@ export class FileSystemTiddlersReadStream extends Readable {
         } else {
           console.log(`${timestamp()} [FileSystemTiddlersReadStream] JS fallback batch: ${batch.length} files, index=${this.currentIndex}`);
           // JS fallback: read files in parallel batches via individual bridge calls.
-          const chunk: Array<Record<string, string | string[]>> = [];
+          const chunk: Array<ITiddlerFields | ReturnType<typeof makeSkinnyTiddler>> = [];
           const results = await Promise.all(
             batch.map(({ filePath, workspace }) => this.readTiddlerFromFile(filePath, workspace)),
           );
@@ -282,7 +280,7 @@ export class FileSystemTiddlersReadStream extends Readable {
               const tiddlers = Array.isArray(result) ? result : [result];
               for (const tiddler of tiddlers) {
                 const tiddlerToSave = shouldSaveFullTiddler(tiddler) ? tiddler : makeSkinnyTiddler(tiddler);
-                chunk.push(tiddlerToSave as Record<string, string | string[]>);
+                chunk.push(tiddlerToSave);
                 this.tiddlerCount++;
               }
             }
@@ -359,35 +357,24 @@ export class FileSystemTiddlersReadStream extends Readable {
           // JSON may be a single tiddler or an array of tiddlers
           if (Array.isArray(parsed)) {
             const results = parsed
-              .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object' && 'title' in item)
-              .map(item => item as unknown as ITiddlerFields);
+              .map(item => normalizeJsonTiddler(item))
+              .filter((item): item is ITiddlerFields => item !== undefined);
             if (results.length > 0) {
               return results;
             }
-            return {
-              title: fallbackTitle,
-              type: 'application/json',
-              text: content,
-            } as ITiddlerFields;
+            return createTiddlerFields({}, fallbackTitle, 'application/json', content);
           }
-          if (parsed !== null && typeof parsed === 'object' && 'title' in parsed && typeof parsed.title === 'string') {
-            return parsed as unknown as ITiddlerFields;
+          const normalized = normalizeJsonTiddler(parsed);
+          if (normalized) {
+            return normalized;
           }
           if (parsed !== null && typeof parsed === 'object' && 'tiddlers' in parsed) {
             // Plugin bundle format is loaded via its .meta companion file.
             return null;
           }
-          return {
-            title: fallbackTitle,
-            type: 'application/json',
-            text: content,
-          } as ITiddlerFields;
+          return createTiddlerFields({}, fallbackTitle, 'application/json', content);
         } catch {
-          return {
-            title: fallbackTitle,
-            type: 'application/json',
-            text: content,
-          } as ITiddlerFields;
+          return createTiddlerFields({}, fallbackTitle, 'application/json', content);
         }
       } else if (filename.endsWith('.meta')) {
         // .meta file accompanies another file; load metadata from .meta
@@ -397,8 +384,12 @@ export class FileSystemTiddlersReadStream extends Readable {
         if (!metaFields.title) {
           metaFields.title = getTitleFromFilename(filename.replace(/\.meta$/, ''));
         }
+        const metadataTitle = metaFields.title;
+        if (typeof metadataTitle !== 'string' || metadataTitle.length === 0) {
+          throw new Error('.meta file must have a title');
+        }
         if (await fileExists(companionPath)) {
-          const tiddlerType = (metaFields.type as string | undefined) ?? 'text/vnd.tiddlywiki';
+          const tiddlerType = typeof metaFields.type === 'string' ? metaFields.type : 'text/vnd.tiddlywiki';
           // Determine if the companion is a text-based file whose content should
           // be loaded as the tiddler's "text" field. JS modules (.js), stylesheets
           // (.css), JSON (.json), and other text formats must have their content
@@ -419,12 +410,9 @@ export class FileSystemTiddlersReadStream extends Readable {
           if (isTextCompanion) {
             const textContent = await readText(companionPath);
             // For skinny loading, only include text for boot-critical tiddlers
-            if (typeof metaFields.title !== 'string') {
-              throw new Error('.meta file must have a title');
-            }
-            const headerFields = metaFields as Record<string, unknown> & { title: string; type?: string };
+            const headerFields = { ...metaFields, title: metadataTitle };
             if (this.quickLoadMode && !shouldPreserveFullTextInQuickLoad(headerFields)) {
-              (metaFields as Record<string, string>)._is_skinny = 'yes';
+              metaFields._is_skinny = 'yes';
             } else {
               metaFields.text = textContent;
             }
@@ -434,10 +422,7 @@ export class FileSystemTiddlersReadStream extends Readable {
             metaFields._canonical_uri = companionPath.replace(workspaceBase + '/', '');
           }
         }
-        if (!metaFields.title) {
-          throw new Error('.meta file must have a title');
-        }
-        return metaFields as unknown as ITiddlerFields;
+        return createTiddlerFields(metaFields, metadataTitle, typeof metaFields.type === 'string' ? metaFields.type : 'text/vnd.tiddlywiki', typeof metaFields.text === 'string' ? metaFields.text : '');
       } else {
         // .tid file — parse headers first to check if full text is needed.
         // This avoids creating the (potentially large) text substring for skinny tiddlers.
@@ -452,17 +437,39 @@ export class FileSystemTiddlersReadStream extends Readable {
         if (shouldIncludeFullText) {
           // Need full text — parse the body
           if (bodyOffset >= 0 && estimatedBodyLength > 0) {
-            (headerFields as Record<string, string>).text = content.substring(bodyOffset);
+            return createTiddlerFields({ ...headerFields, text: content.substring(bodyOffset) }, headerFields.title, headerFields.type, content.substring(bodyOffset));
           }
-          return headerFields;
+          return createTiddlerFields(headerFields, headerFields.title, headerFields.type, '');
         }
         // Skinny: return header-only with _is_skinny marker.
         // The text body is intentionally NOT loaded — it will be lazy-loaded by the syncadaptor.
-        return makeSkinnyTiddler(headerFields) as unknown as ITiddlerFields;
+        return createTiddlerFields(makeSkinnyTiddler(headerFields), headerFields.title, headerFields.type, '');
       }
     } catch (error) {
       console.error(`Error reading tiddler file ${filePath}: ${(error as Error).message}`);
       return null;
     }
   }
+}
+
+function readObjectField(value: object, key: string): unknown {
+  return Reflect.get(value, key);
+}
+
+function normalizeJsonTiddler(value: unknown): ITiddlerFields | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const title = readObjectField(value, 'title');
+  if (typeof title !== 'string' || title.length === 0) return undefined;
+  const type = readObjectField(value, 'type');
+  const text = readObjectField(value, 'text');
+  return createTiddlerFields(value, title, typeof type === 'string' ? type : 'application/json', typeof text === 'string' ? text : '');
+}
+
+function createTiddlerFields(value: object, fallbackTitle: string, fallbackType: string | undefined, fallbackText: string): ITiddlerFields {
+  return {
+    ...value,
+    title: fallbackTitle,
+    type: fallbackType ?? 'text/vnd.tiddlywiki',
+    text: fallbackText,
+  };
 }

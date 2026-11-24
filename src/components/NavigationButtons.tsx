@@ -49,3 +49,23 @@ export function CreateWorkspaceButton() {
     </MainFeatureButton>
   );
 }
+
+export function AgentChatButton() {
+  const { t } = useTranslation();
+  const navigation = useNavigation<StackScreenProps<RootStackParameterList, 'MainMenu'>['navigation']>();
+
+  return (
+    <MainFeatureButton
+      testID='agent-chat-button'
+      icon='robot-outline'
+      contentStyle={{ minHeight: ButtonMinHeight }}
+      mode='outlined'
+      onPress={() => {
+        navigation.navigate('AgentChat');
+      }}
+      labelStyle={{ padding: ButtonLabelPadding }}
+    >
+      <Text>{t('AgentChat.Title')}</Text>
+    </MainFeatureButton>
+  );
+}
