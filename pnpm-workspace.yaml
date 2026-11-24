@@ -5,7 +5,7 @@ packages:
 overrides:
   '@memeloop/libp2p': 0.3.5
   memeloop: 0.3.15
-  '@memeloop/react-ui': 0.2.14
+  '@memeloop/react-ui': 0.2.15
 
 allowBuilds:
   '@ipshipyard/node-datachannel': true
@@ -27,6 +27,7 @@ minimumReleaseAgeExclude:
   - 'memeloop@0.3.15'
   - 'memeloop@0.3.11'
   - '@memeloop/react-ui@0.2.14'
+  - '@memeloop/react-ui@0.2.15'
   - 'memeloop@0.3.10'
   - '@memeloop/react-ui@0.2.12'
   - '@memeloop/react-ui@0.2.11'

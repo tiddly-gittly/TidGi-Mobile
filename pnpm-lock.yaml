@@ -7,7 +7,7 @@ settings:
 overrides:
   '@memeloop/libp2p': 0.3.5
   memeloop: 0.3.15
-  '@memeloop/react-ui': 0.2.14
+  '@memeloop/react-ui': 0.2.15
 
 importers:
 
@@ -23,8 +23,8 @@ importers:
         specifier: 0.3.5
         version: 0.3.5(memeloop@0.3.15(@ai-sdk/openai@4.0.20(zod@4.4.3)))
       '@memeloop/react-ui':
-        specifier: 0.2.14
-        version: 0.2.14(2a081e5bcf6f064d71bbf4bd9b28f875)
+        specifier: 0.2.15
+        version: 0.2.15(2a081e5bcf6f064d71bbf4bd9b28f875)
       '@noble/ed25519':
         specifier: ^2.2.3
         version: 2.3.0
@@ -2572,8 +2572,8 @@ packages:
     peerDependencies:
       memeloop: 0.3.15
 
-  '@memeloop/react-ui@0.2.14':
-    resolution: {integrity: sha512-l0rbbNNo6VeDshgHp85QOmTZ2DSi74kkGwCYu8TbO5QoiE4d8sxdYj3HxRq+ON1t/gkiP0F/b9V2qRYtP6QgWQ==}
+  '@memeloop/react-ui@0.2.15':
+    resolution: {integrity: sha512-BFyzBzVMg2MCuNbFsLtVZIUjCu5ed3+d18CU4hHDOJroEv+aX0H/J22OdS6iYq9DCPppbudweiJyh003QDBHdA==}
     peerDependencies:
       '@assistant-ui/react': ^0.15.16
       '@emotion/react': '>=11.0.0 <12.0.0'
@@ -12612,7 +12612,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@memeloop/react-ui@0.2.14(2a081e5bcf6f064d71bbf4bd9b28f875)':
+  '@memeloop/react-ui@0.2.15(2a081e5bcf6f064d71bbf4bd9b28f875)':
     dependencies:
       '@assistant-ui/react': 0.15.17(@types/react@19.1.17)(immer@10.1.1)(react-dom@18.2.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.2.2(react@19.1.0))
       '@emotion/react': 11.14.0(@types/react@19.1.17)(react@19.1.0)(supports-color@8.1.1)
