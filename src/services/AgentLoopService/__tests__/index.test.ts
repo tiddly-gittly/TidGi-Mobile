@@ -11,6 +11,8 @@ const mockCancelAgent = jest.fn(() => Promise.resolve());
 const mockDisposeRuntime = jest.fn(() => Promise.resolve());
 const mockSuspendGoals = jest.fn(() => Promise.resolve());
 const mockRestoreGoals = jest.fn(() => Promise.resolve());
+const mockResolveCapabilities = jest.fn((..._arguments: unknown[]) => Promise.resolve({ goal: true }));
+let goalOptions: { supportsGoal?: (input: { conversationId: string; definitionId: string }) => Promise<boolean> } | undefined;
 const mockPauseGoal = jest.fn(() => Promise.resolve(null));
 const mockCancelRun = jest.fn(() => Promise.resolve(true));
 const mockGetRunStatus = jest.fn(() =>
@@ -59,7 +61,11 @@ jest.mock('react-native', () => ({
   AppState: { currentState: 'active', addEventListener: () => ({ remove: jest.fn() }) },
 }));
 jest.mock('memeloop/mobile', () => ({
+  resolveAgentLoopCapabilities: (...arguments_: unknown[]) => mockResolveCapabilities(...arguments_),
   GoalCoordinator: class {
+    constructor(options: typeof goalOptions) {
+      goalOptions = options;
+    }
     dispose = jest.fn();
     suspend = mockSuspendGoals;
     restore = mockRestoreGoals;
@@ -134,6 +140,16 @@ describe('MobileAgentLoopService', () => {
     mockGetRunStatus.mockResolvedValue({ runId: 'run-1', state: 'completed' });
     generatedMessage = undefined;
     runtimeContext = undefined;
+  });
+
+  it('uses the same effective workflow query for Goal UI and local scheduling', async () => {
+    const service = new MobileAgentLoopService({} as ILLMProvider, 'phone-peer-id', createStorage());
+    const input = { conversationId: 'conversation', definitionId: 'selected' };
+    mockResolveCapabilities.mockResolvedValueOnce({ goal: true }).mockResolvedValueOnce({ goal: false });
+    expect(await service.supportsGoal(input)).toBe(true);
+    expect(await goalOptions!.supportsGoal!(input)).toBe(false);
+    expect(mockResolveCapabilities).toHaveBeenNthCalledWith(1, runtimeContext, input);
+    expect(mockResolveCapabilities).toHaveBeenNthCalledWith(2, runtimeContext, input);
   });
 
   it('requires the real DeviceNetwork PeerId and assembles one durable runtime', () => {

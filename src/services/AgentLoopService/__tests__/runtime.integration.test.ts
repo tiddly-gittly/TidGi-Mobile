@@ -125,6 +125,9 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
     let sequence = 0;
     const service = new MobileAgentLoopService(provider, 'phone-peer', storage, namespace => `${namespace}:${kind}-${++sequence}`);
     try {
+      const capability = service.supportsGoal({ conversationId, definitionId: definition.id });
+      if (kind === 'builtin') expect(await capability).toBe(true);
+      else await expect(capability).rejects.toThrow();
       const result = await service.sendMessage(conversationId, 'Run the saved workflow');
       expect(result.state).toBe(kind === 'builtin' ? 'completed' : 'failed');
       expect(calls).toBe(kind === 'builtin' ? 1 : 0);
@@ -135,6 +138,42 @@ describe('Mobile real MemeLoop runtime without WebCrypto', () => {
         expect(page.items.some(item => item.content === 'CUSTOM_MJS_EXECUTED')).toBe(false);
       }
       expect((await storage.getAgentDefinition(definition.id))?.scriptReference).toEqual(definition.scriptReference);
+    } finally {
+      await service.shutdown();
+    }
+  });
+
+  it('rejects local Goal creation for a plain workflow and refreshes capabilities after its MJS changes', async () => {
+    installMobileCrypto();
+    const database = testDatabase();
+    const storage = new MobileAgentStorage(() => Promise.resolve(database));
+    const definition: AgentDefinition = { id: 'plain', name: 'Plain', description: 'Plain workflow', tools: [], systemPrompt: '', version: '1', loopId: 'agent-tool-loop' };
+    const conversationId = 'plain-chat';
+    await storage.appendLocalEvent({
+      conversationId,
+      eventId: 'plain-meta',
+      kind: 'metadataPatch',
+      originNodeId: 'phone-peer',
+      timestamp: 1,
+      patch: { definitionId: definition.id },
+    });
+    await database.runAsync('INSERT INTO definitions (id, definitionJson) VALUES (?, ?)', [definition.id, JSON.stringify(definition)]);
+    const provider: ILLMProvider = {
+      name: 'test-provider',
+      async *chat() {
+        await Promise.resolve();
+        yield { type: 'finish', finishReason: 'stop' };
+      },
+    };
+    const service = new MobileAgentLoopService(provider, 'phone-peer', storage, namespace => namespace);
+    try {
+      const input = { conversationId, definitionId: definition.id };
+      expect(await service.supportsGoal(input)).toBe(false);
+      await expect(service.goals.start({ ...input, objective: 'Do the work' })).rejects.toThrow('goal_workflow_unsupported');
+      expect(await storage.goals.get(conversationId)).toBeNull();
+      definition.scriptReference = { kind: 'builtin', id: 'builtin:agent-tool-loop/default' };
+      await database.runAsync('UPDATE definitions SET definitionJson = ? WHERE id = ?', [JSON.stringify(definition), definition.id]);
+      expect(await service.supportsGoal(input)).toBe(true);
     } finally {
       await service.shutdown();
     }

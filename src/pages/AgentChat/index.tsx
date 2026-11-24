@@ -56,6 +56,7 @@ import { exportStoredMessage } from './messageExport';
 import { RemoteAgentPicker } from './RemoteAgentPicker';
 import { mobileExecutionTarget, MobileRemoteExecutionAdapter } from './remoteExecutionAdapter';
 import { useConversationBranches } from './useConversationBranches';
+import { useLocalGoalAvailability } from './useLocalGoalAvailability';
 import { useMobileExecutionSnapshot } from './useMobileExecutionSnapshot';
 import { useRemoteConversationSync } from './useRemoteConversationSync';
 import { useSessionResource } from './useSessionResource';
@@ -250,6 +251,17 @@ function AgentChatSessionView({
     conversationId,
     settingsClient ? activeExecutionTargetId.slice(REMOTE_EXECUTION_TARGET_PREFIX.length) : undefined,
   );
+  const goalAvailable = useLocalGoalAvailability({
+    conversationId,
+    definitionId: snapshot.agent?.agentDefId,
+    remoteClient: settingsClient,
+    focused: isFocused,
+    refreshKey: actionsOpen,
+    getLoopService,
+  });
+  useEffect(() => {
+    if (!goalAvailable) setGoalOpen(false);
+  }, [goalAvailable]);
   const goalClient = useMemo<GoalClient>(() =>
     settingsClient?.goals ?? ({
       get: async id => (await getLoopService()).goals.get(id),
@@ -490,7 +502,7 @@ function AgentChatSessionView({
           }}
         />
       )}
-      {goalOpen && snapshot.agent && (
+      {goalOpen && goalAvailable && snapshot.agent && (
         <NativeGoalDialog
           key={`${activeExecutionTargetId}:${conversationId}`}
           client={goalClient}
@@ -568,15 +580,17 @@ function AgentChatSessionView({
                 }}
               />
             )}
-            <Menu.Item
-              leadingIcon='flag-outline'
-              title={goalLabels.title}
-              disabled={!snapshot.agent}
-              onPress={() => {
-                setActionsOpen(false);
-                setGoalOpen(true);
-              }}
-            />
+            {goalAvailable && (
+              <Menu.Item
+                leadingIcon='flag-outline'
+                title={goalLabels.title}
+                disabled={!snapshot.agent}
+                onPress={() => {
+                  setActionsOpen(false);
+                  setGoalOpen(true);
+                }}
+              />
+            )}
             <Menu.Item
               leadingIcon='tune-variant'
               title={t('AgentChat.ModelParameters')}

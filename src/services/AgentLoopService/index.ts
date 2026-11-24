@@ -23,6 +23,7 @@ import {
   getBuiltinLoopProfiles,
   GoalCoordinator,
   prepareAgentExecutionModelRequest,
+  resolveAgentLoopCapabilities,
   resolveAgentModelConfig,
 } from 'memeloop/mobile';
 import { EMBEDDED_MODEL_CATALOG } from 'memeloop/model-catalog';
@@ -178,6 +179,7 @@ export class MobileAgentLoopService {
       executionNodeId: this.localNodeId,
       idFactory: () => this.idFactory('mobile-agent-goal'),
       getRuntime: () => Promise.resolve(this.runtime),
+      supportsGoal: input => this.supportsGoal(input),
       onError: error => {
         console.warn('[MobileAgentLoop] Goal continuation failed', error);
       },
@@ -271,12 +273,17 @@ export class MobileAgentLoopService {
         } as AgentInstanceModel;
       },
     };
+    this.frameworkContext = context;
     this.runtime = createMemeLoopRuntime(context, {
       idFactory: () => this.idFactory('mobile-agent-runtime'),
       runStateStore: storage,
       sha256Hex: mobileSha256Hex,
     });
-    this.frameworkContext = context;
+  }
+
+  /** UI and local continuation both inspect the effective admitted MJS workflow. */
+  public async supportsGoal(input: { conversationId: string; definitionId: string }): Promise<boolean> {
+    return (await resolveAgentLoopCapabilities(this.frameworkContext, input)).goal === true;
   }
 
   public initializeGoals(): Promise<void> {

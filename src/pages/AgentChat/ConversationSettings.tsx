@@ -1,4 +1,4 @@
-import { NativeModelParameterFields, NativePromptExecutionInspector, type NativePromptExecutionInspectorHandle } from '@memeloop/react-ui/native';
+import { getReasoningEffortLabels, NativeModelParameterFields, NativePromptExecutionInspector, type NativePromptExecutionInspectorHandle } from '@memeloop/react-ui/native';
 import type { AgentDeviceRpcClient, ConversationModelParameters, PromptPreviewPreparedExecution } from 'memeloop/mobile';
 import { PromptPreviewAuditSessionStore } from 'memeloop/mobile';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -21,7 +21,7 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
   mode: 'prompt' | 'parameters';
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const theme = useTheme();
   const [audit, setAudit] = useState<PromptPreviewPreparedExecution>();
   const [model, setModel] = useState<ConversationModelParameters>();
@@ -131,6 +131,7 @@ export function ConversationSettings({ conversationId, client, getLoopService, m
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps='handled'>
             <Text variant='titleMedium'>{model.model?.name ?? model.selection.modelId}</Text>
             <NativeModelParameterFields
+              reasoningEffortLabels={getReasoningEffortLabels(i18n.language)}
               labels={{
                 reasoningEffort: t('AgentChat.Parameters.ReasoningEffort'),
                 temperature: t('AgentChat.Parameters.Temperature'),
